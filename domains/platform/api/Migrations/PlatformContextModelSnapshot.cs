@@ -11,13 +11,14 @@ using Tsr.Platform.Api;
 namespace Tsr.Platform.Api.Migrations
 {
     [DbContext(typeof(PlatformContext))]
-    internal partial class PlatformContextModelSnapshot : ModelSnapshot
+    partial class PlatformContextModelSnapshot : ModelSnapshot
     {
         protected override void BuildModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
                 .HasDefaultSchema("platform")
+                .HasAnnotation("Npgsql:CollationDefinition:public.geo_ci_ai", "und-u-ks-level1,und-u-ks-level1,icu,False")
                 .HasAnnotation("ProductVersion", "10.0.14")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
@@ -74,6 +75,126 @@ namespace Tsr.Platform.Api.Migrations
                     b.ToTable("feedback", "platform", t =>
                         {
                             t.HasCheckConstraint("ck_feedback_client_id_length", "char_length(\"client_id\") <= 36");
+                        });
+                });
+
+            modelBuilder.Entity("Tsr.Platform.Api.GeoCity", b =>
+                {
+                    b.Property<int>("GeonameId")
+                        .HasColumnType("integer")
+                        .HasColumnName("geoname_id");
+
+                    b.Property<string>("CountryCode")
+                        .IsRequired()
+                        .HasMaxLength(2)
+                        .HasColumnType("citext")
+                        .HasColumnName("country_code");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("text")
+                        .HasColumnName("name")
+                        .UseCollation("geo_ci_ai");
+
+                    b.Property<int>("Population")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("population");
+
+                    b.Property<string>("State")
+                        .HasMaxLength(150)
+                        .HasColumnType("citext")
+                        .HasColumnName("state");
+
+                    b.HasKey("GeonameId");
+
+                    b.HasIndex("CountryCode", "Name")
+                        .HasDatabaseName("idx_geo_cities_country_name");
+
+                    b.ToTable("geo_cities", "platform", t =>
+                        {
+                            t.HasCheckConstraint("ck_geo_cities_country_code_length", "char_length(\"country_code\") <= 2");
+
+                            t.HasCheckConstraint("ck_geo_cities_name_length", "char_length(\"name\") <= 200");
+
+                            t.HasCheckConstraint("ck_geo_cities_state_length", "char_length(\"state\") <= 150");
+                        });
+                });
+
+            modelBuilder.Entity("Tsr.Platform.Api.GeoCountry", b =>
+                {
+                    b.Property<string>("Code")
+                        .HasMaxLength(2)
+                        .HasColumnType("citext")
+                        .HasColumnName("code");
+
+                    b.Property<bool>("HasPostalCodes")
+                        .HasColumnType("boolean")
+                        .HasColumnName("has_postal_codes");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("text")
+                        .HasColumnName("name")
+                        .UseCollation("geo_ci_ai");
+
+                    b.Property<string>("PostalCodeRegex")
+                        .HasMaxLength(255)
+                        .HasColumnType("citext")
+                        .HasColumnName("postal_code_regex");
+
+                    b.HasKey("Code");
+
+                    b.HasIndex("Name")
+                        .HasDatabaseName("idx_geo_countries_name");
+
+                    b.ToTable("geo_countries", "platform", t =>
+                        {
+                            t.HasCheckConstraint("ck_geo_countries_code_length", "char_length(\"code\") <= 2");
+
+                            t.HasCheckConstraint("ck_geo_countries_name_length", "char_length(\"name\") <= 100");
+
+                            t.HasCheckConstraint("ck_geo_countries_postal_code_regex_length", "char_length(\"postal_code_regex\") <= 255");
+                        });
+                });
+
+            modelBuilder.Entity("Tsr.Platform.Api.GeoPostalCode", b =>
+                {
+                    b.Property<string>("CountryCode")
+                        .HasMaxLength(2)
+                        .HasColumnType("citext")
+                        .HasColumnName("country_code");
+
+                    b.Property<string>("PostalCode")
+                        .HasMaxLength(20)
+                        .HasColumnType("text")
+                        .HasColumnName("postal_code")
+                        .UseCollation("geo_ci_ai");
+
+                    b.Property<string>("City")
+                        .HasMaxLength(255)
+                        .HasColumnType("citext")
+                        .HasColumnName("city");
+
+                    b.Property<string>("State")
+                        .HasMaxLength(150)
+                        .HasColumnType("citext")
+                        .HasColumnName("state");
+
+                    b.HasKey("CountryCode", "PostalCode");
+
+                    b.ToTable("geo_postal_codes", "platform", t =>
+                        {
+                            t.HasCheckConstraint("ck_geo_postal_codes_city_length", "char_length(\"city\") <= 255");
+
+                            t.HasCheckConstraint("ck_geo_postal_codes_country_code_length", "char_length(\"country_code\") <= 2");
+
+                            t.HasCheckConstraint("ck_geo_postal_codes_postal_code_length", "char_length(\"postal_code\") <= 20");
+
+                            t.HasCheckConstraint("ck_geo_postal_codes_state_length", "char_length(\"state\") <= 150");
                         });
                 });
 

@@ -163,3 +163,27 @@ Open after phase 2:
 - [ ] `tsr_app` can write every table, the permission tables included: production setup undecided.
 - [ ] 5 `unknown` cells in `permission-map.csv`.
 
+- [ ] Copied from PHP, flagged by the commit security review: on a create route a verified email re-binds
+      an existing member to the caller's Firebase uid even when another uid is already bound
+      (`domains/identity/api/domain/MemberDirectory.cs`, `FindAsync`). Safe only while Firebase allows one
+      account per email and every provider really verifies the email. Decide after the baseline: refuse
+      when a different uid is bound, or keep.
+
+## Checkpoint 3 (2026-11-10): phase 3a, platform
+
+Design: `phase-3-platform-design.md` (approved). Five operations built and at parity: `GET /app-version`,
+`GET /release-notes`, `GET /geo/countries`, `POST /geo/postal`, `POST /geo/cities`. Platform is 7 of 9;
+the two access-log operations wait for `membership`. Re-run by the orchestrator after review fixes: build
+0 warnings; NUnit platform 211, identity 60, access 64, API boundary 17, site 12, database 115; Hurl 11
+files, 173 requests on the new API. On PHP (run by the build agent): platform 6 of 6 files. Accent- and
+case-insensitive text: one ICU collation, proven in `phase-3-collation-proof.md`. Platform's foreign keys
+into `identity.users` are gone; the cross-schema guard has no exceptions.
+
+Open after phase 3a:
+
+- [ ] Access log (two operations), the interface other domains use to write it, and the xlsx/PDF generator.
+- [ ] City prefix search filters a country's rows (the index narrows to the country only); a faster index if measured slow on the full data.
+- [ ] Deliberate differences from PHP, written in `php-parity-feedback.md`: 1 MiB catalog cap, 413 over 16 KiB, only a missing geo table answers empty, partial HTML entity table.
+- [ ] Public responses carry no `Cache-Control` or `nosniff` header (as PHP); decide after the baseline.
+- [ ] The full GeoNames load (rehearsal), and the trailing-space difference of the collation.
+- [ ] Hurl files assert fields, not whole bodies.

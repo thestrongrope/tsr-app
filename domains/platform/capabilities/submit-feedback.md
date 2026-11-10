@@ -68,7 +68,9 @@ Locations: `C` = `spec/tests/SubmitFeedbackContractTests.cs`, `U` = `api/domain/
 - **Table:** `feedback` (owned by `platform`): `user_id`, `client_id`, `message`, `created_at`, `handled_at`, `handled_by`;
   unique `(user_id, client_id)`.
 - **PII:** `message` is member-written free text and may contain personal data.
-- **Account deletion:** the foreign key sets `user_id` to NULL; the message text is kept (see section 9).
+- **Account deletion:** `user_id` and `handled_by` are plain integers, not foreign keys (a domain never references another
+  domain's tables), so deleting the `identity.users` row does not touch the message. Clearing `user_id` and the text is the job
+  of identity's erasure event, which platform does not handle yet (see section 9).
 
 ## 8. Decisions in force
 | ID | Decision | Reason |
@@ -79,6 +81,6 @@ Locations: `C` = `spec/tests/SubmitFeedbackContractTests.cs`, `U` = `api/domain/
 
 ## 9. Known limitations, gaps and open questions
 - **Test gaps:** FEEDBACK-R3, R4, R6, R11, R12, R13; Q2 (automated PII check of logs and telemetry); Q3 (concurrent sends).
-- **Open (privacy):** on account deletion, the message text stays with `user_id` NULL. Erase it, or keep it as
+- **Open (privacy):** account deletion does not yet erase or anonymise a member's feedback: `user_id` and the text stay (no foreign key clears it any more; domains/CLAUDE.md rule 11 says the erasure event must). Erase it, or keep it as
   anonymised feedback? The text itself may identify the member.
 - **Not built:** review and handled state (issue 891).

@@ -1,6 +1,12 @@
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
+using Tsr.Platform.Api.Domain;
+using Tsr.Platform.Api.Features.AppVersion;
+using Tsr.Platform.Api.Features.GeoCities;
+using Tsr.Platform.Api.Features.GeoCountries;
+using Tsr.Platform.Api.Features.GeoPostal;
 using Tsr.Platform.Api.Features.Health;
+using Tsr.Platform.Api.Features.ReleaseNotes;
 using Tsr.Platform.Api.Features.SubmitFeedback;
 using Tsr.Shared.Api;
 
@@ -20,6 +26,14 @@ public static class PlatformModule
     {
         services.AddDomainContext<PlatformContext>(PlatformContext.SchemaName);
         services.AddScoped<SubmitFeedbackHandler>();
+        services.AddSingleton<AppCatalogSource>();
+        services.AddScoped<AppVersionHandler>();
+        services.AddScoped<ReleaseNotesHandler>();
+        services.AddSingleton<GeoRateLimit>();
+        services.AddScoped<GeoGate>();
+        services.AddScoped<GeoCountriesHandler>();
+        services.AddScoped<GeoPostalHandler>();
+        services.AddScoped<GeoCitiesHandler>();
         return services;
     }
 
@@ -27,6 +41,11 @@ public static class PlatformModule
     {
         routes.MapHealth();
         routes.MapSubmitFeedback();
+        routes.MapAppVersion();
+        routes.MapReleaseNotes();
+        routes.MapGeoCountries();
+        routes.MapGeoPostal();
+        routes.MapGeoCities();
         return routes;
     }
 }

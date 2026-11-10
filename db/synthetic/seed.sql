@@ -102,3 +102,9 @@ FROM (VALUES
    TIMESTAMPTZ '2099-01-01 00:00:00+00')
 ) AS v (slug, title, body, published_at)
 WHERE NOT EXISTS (SELECT 1 FROM content.articles a WHERE a.slug = v.slug);
+
+-- Geo rows (countries, postal codes, cities): one file shared with the PHP parity stack's MariaDB, so both sides
+-- hold identical rows (tools/platform-contract.sh). It replaces the three geo tables' content, in schema platform.
+SET search_path = platform, public;
+\ir geo-fixtures.sql
+RESET search_path;

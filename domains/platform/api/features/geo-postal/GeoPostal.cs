@@ -1,0 +1,83 @@
+using System.Text.Json.Nodes;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Routing;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Tsr.Platform.Api.Domain;
+using Tsr.Shared.Api;
+
+namespace Tsr.Platform.Api.Features.GeoPostal;
+
+// Slice: POST /geo/postal {country, code} -> {found, city, state}. A POST so what a member types stays out of access logs.
+// Signed in, no permission, rate limited (the 429 comes before body validation). Contract: spec/api.yaml.
+// PHP: routes/geo.php route_geo_postal, models/location.php byPostalCode().
+
+internal static class GeoPostalEndpoint
+{
+    public static IEndpointRouteBuilder MapGeoPostal(this IEndpointRouteBuilder routes)
+    {
+        routes.MapPost(
+            "/geo/postal",
+            (HttpContext context, GeoPostalHandler handler) =>
+                handler.HandleAsync(context.GetCaller(), context.Request, context.RequestAborted))
+            .RequireMember(createsMember: true);
+        return routes;
+    }
+}
+
+internal sealed class GeoPostalHandler(PlatformContext db, GeoGate gate, ILogger<GeoPostalHandler> logger)
+{
+    public async Task<IResult> HandleAsync(Caller? caller, HttpRequest request, CancellationToken ct)
+    {
+        if (gate.Refuse(caller) is { } refused)
+        {
+            return refused;
+        }
+
+        var raw = await GeoBodyReader.ReadAsync(request, ct);
+        if (raw is null)
+        {
+            return Problem.Detail(StatusCodes.Status413PayloadTooLarge, "Request body too large");
+        }
+
+        var body = GeoBody.Parse(raw);
+        if (!body.IsSuccess)
+        {
+            return Problem.Detail(StatusCodes.Status422UnprocessableEntity, body.Error!);
+        }
+
+        var country = GeoField.Read(body.Value!, "country", 2);
+        if (!country.IsSuccess)
+        {
+            return Problem.Detail(StatusCodes.Status422UnprocessableEntity, country.Error!);
+        }
+
+        var code = GeoField.Read(body.Value!, "code", 20);
+        if (!code.IsSuccess)
+        {
+            return Problem.Detail(StatusCodes.Status422UnprocessableEntity, code.Error!);
+        }
+
+        var found = await GeoTables.OrEmptyAsync(
+            () => FindAsync(PhpText.ToUpperAscii(country.Value!), PhpText.ToUpperAscii(code.Value!), ct), null, logger);
+        return Results.Json(new JsonObject { ["found"] = found is not null, ["city"] = found?.City, ["state"] = found?.State });
+    }
+
+    /// <summary>The first hit among the tries; a code of exactly "0" is never looked up (GeoLookup.PostalCodeTries).</summary>
+    private async Task<GeoPostalCode?> FindAsync(string country, string code, CancellationToken ct)
+    {
+        foreach (var attempt in GeoLookup.PostalCodeTries(code))
+        {
+            var row = await db.GeoPostalCodes.AsNoTracking()
+                .Where(p => p.CountryCode == country && p.PostalCode == attempt)
+                .FirstOrDefaultAsync(ct);
+            if (row is not null)
+            {
+                return row;
+            }
+        }
+
+        return null;
+    }
+}

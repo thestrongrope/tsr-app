@@ -86,6 +86,10 @@ services:
       TSR_DB: "Host=db;Port=5432;Database=tsr;Username=tsr_app;Password=local-only-app"
       TSR_FIREBASE_PROJECT_ID: demo-tsr-app
       TSR_AUTH_EMULATOR_HOST: firebase-emulator:9099
+      # The synthetic catalog GET /app-version and /release-notes read (the parity stack mounts the same file).
+      TSR_APP_VERSIONS_FILE: /etc/tsr/app_versions.json
+    volumes:
+      - ./domains/platform/spec/tests/app_versions.synthetic.json:/etc/tsr/app_versions.json:ro
     depends_on:
       seed:
         condition: service_completed_successfully

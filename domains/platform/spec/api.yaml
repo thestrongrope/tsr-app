@@ -60,6 +60,150 @@ paths:
           $ref: "#/components/responses/Problem"
         "422":
           $ref: "#/components/responses/Problem"
+  /app-version:
+    get:
+      operationId: getAppVersion
+      summary: The minimum and recommended app build per platform
+      description: |
+        Public on purpose: an app build old enough to need updating may hold an expired token, so the update prompt cannot
+        need one (domains/platform/CLAUDE.md, "Public routes"). Reads one catalog file and FAILS OPEN: a missing, unreadable
+        or malformed file, or a platform without an integer minimumBuild, gives minimumBuild 1 and recommendedBuild 1 for
+        that platform (a build number of 1 blocks nobody), never an error. An integer is a JSON integer: a quoted "12"
+        and 12.0 are not. Keys are in the order android, ios, announcement; `latest` and `announcement` are ABSENT, not
+        null, when there is nothing to say. Behaviour: capabilities/app-version.md.
+      security: []
+      responses:
+        "200":
+          description: Always 200
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppVersion"
+  /release-notes:
+    get:
+      operationId: getReleaseNotes
+      summary: Every release's notes, in the order the catalog lists them
+      description: |
+        Public for the same reason as /app-version, and read from the same catalog by the same rules. Malformed releases are
+        dropped one by one; an unusable catalog is an empty list, never an error. The order is the file's (newest first by
+        convention), not sorted. `builds` and `notes` are always present; an empty `builds` is the JSON list [], not {}
+        (a quirk of the PHP API, kept for parity). Behaviour: capabilities/release-notes.md.
+      security: []
+      responses:
+        "200":
+          description: Always 200
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [releases]
+                properties:
+                  releases:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Release"
+  /geo/countries:
+    get:
+      operationId: getGeoCountries
+      summary: Every country, sorted by name
+      description: |
+        Any signed-in member (a guest finishing sign-up is already a member row), no permission. Rate limited: 60 geo calls
+        in any 60 seconds per member, counted across the three geo operations and counting calls that later fail
+        validation; the 61st is 429. Order of checks: signed in (401), rate limit (429), then the body (422). Names sort
+        ignoring case and accents ("Åland Islands" among the A names). If the geo table is missing the list is empty.
+        Behaviour: capabilities/location-lookup.md.
+      security:
+        - memberToken: []
+      responses:
+        "200":
+          description: The list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [countries]
+                properties:
+                  countries:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/GeoCountry"
+        "401":
+          $ref: "#/components/responses/Problem"
+        "429":
+          $ref: "#/components/responses/Problem"
+  /geo/postal:
+    post:
+      operationId: lookupGeoPostal
+      summary: The state and a suggested city for a postal code
+      description: |
+        A POST so what a member types stays out of access logs. Same sign-in, rate limit and order of checks as
+        /geo/countries. Fields are checked country first, then code. A code with a space is tried whole, then by the part
+        before the first space (UK "SW1A 1AA" finds "SW1A"). A code of exactly "0" is never looked up. An unknown country
+        is "not found", not an error. Values are the stored strings (an empty string stays empty; only a missing value is
+        null). Body limit 16 KiB (413 above; PHP has none).
+      security:
+        - memberToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GeoPostalRequest"
+      responses:
+        "200":
+          description: Found or not
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GeoPostalResponse"
+        "401":
+          $ref: "#/components/responses/Problem"
+        "413":
+          $ref: "#/components/responses/Problem"
+        "422":
+          $ref: "#/components/responses/Problem"
+        "429":
+          $ref: "#/components/responses/Problem"
+  /geo/cities:
+    post:
+      operationId: searchGeoCities
+      summary: Cities of a country starting with a text, biggest first
+      description: |
+        A POST so what a member types stays out of access logs. Same sign-in, rate limit and order of checks as
+        /geo/countries. A prefix match ignoring case and accents; `%`, `_` and `|` in the query are literal. At most 10,
+        by population descending then name; the same name in several states is returned once per state. Names have HTML
+        entities decoded; an empty or missing state is null. An unknown country or no match is an empty list.
+        Body limit 16 KiB (413 above; PHP has none).
+      security:
+        - memberToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GeoCitiesRequest"
+      responses:
+        "200":
+          description: The matches
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [cities]
+                properties:
+                  cities:
+                    type: array
+                    maxItems: 10
+                    items:
+                      $ref: "#/components/schemas/GeoCity"
+        "401":
+          $ref: "#/components/responses/Problem"
+        "413":
+          $ref: "#/components/responses/Problem"
+        "422":
+          $ref: "#/components/responses/Problem"
+        "429":
+          $ref: "#/components/responses/Problem"
 components:
   securitySchemes:
     memberToken:
@@ -71,6 +215,129 @@ components:
         `Authorization: Bearer <token>`. The dev stack uses the Firebase Auth emulator
         (tools/identity-contract.sh shows how a synthetic member signs in).
   schemas:
+    AppVersion:
+      type: object
+      required: [android, ios]
+      properties:
+        android:
+          $ref: "#/components/schemas/PlatformVersion"
+        ios:
+          $ref: "#/components/schemas/PlatformVersion"
+        announcement:
+          $ref: "#/components/schemas/Announcement"
+    PlatformVersion:
+      type: object
+      required: [minimumBuild, recommendedBuild, storeUrl]
+      properties:
+        minimumBuild:
+          type: integer
+          description: Builds below this must update. 1 when the catalog has no integer for this platform.
+        recommendedBuild:
+          type: integer
+          description: The newest build a member can install; the catalog's integer, else minimumBuild.
+        storeUrl:
+          type: string
+          description: The catalog's non-empty string, else the platform's fixed store URL.
+        latest:
+          type: object
+          description: Absent unless a release whose build for this platform equals recommendedBuild exists (first in file order).
+          required: [version, notes]
+          properties:
+            version:
+              type: string
+            notes:
+              type: array
+              items:
+                type: string
+    Announcement:
+      type: object
+      description: Absent unless the catalog holds one with a non-empty string id and title. A new id makes the app show it again.
+      required: [id, title, body]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        body:
+          type: string
+          description: The catalog's string, else "".
+    Release:
+      type: object
+      required: [version, date, notes, builds]
+      properties:
+        version:
+          type: string
+        date:
+          type: string
+          description: Checked for the shape YYYY-MM-DD only (2030-99-99 passes); returned as written.
+        notes:
+          type: array
+          items:
+            type: string
+        builds:
+          description: Integer build numbers per platform; platforms without one are left out. EMPTY IS THE LIST [], not an object.
+          oneOf:
+            - type: object
+              properties:
+                android:
+                  type: integer
+                ios:
+                  type: integer
+            - type: array
+              maxItems: 0
+    GeoCountry:
+      type: object
+      required: [code, name, hasPostalCodes]
+      properties:
+        code:
+          type: string
+          maxLength: 2
+        name:
+          type: string
+        hasPostalCodes:
+          type: boolean
+    GeoPostalRequest:
+      type: object
+      required: [country, code]
+      properties:
+        country:
+          $ref: "#/components/schemas/GeoText2"
+        code:
+          description: A postal code, at most 20 characters measured before trimming. Case does not matter.
+          type: string
+          maxLength: 20
+    GeoCitiesRequest:
+      type: object
+      required: [country, query]
+      properties:
+        country:
+          $ref: "#/components/schemas/GeoText2"
+        query:
+          description: The start of a city name, at most 100 characters measured before trimming. Case and accents do not matter.
+          type: string
+          maxLength: 100
+    GeoText2:
+      description: A country code. At most 2 characters, measured BEFORE trimming (so " CH" is refused), counted as Unicode code points. Not checked against the country list. Case does not matter.
+      type: string
+      maxLength: 2
+    GeoPostalResponse:
+      type: object
+      required: [found, city, state]
+      properties:
+        found:
+          type: boolean
+        city:
+          type: [string, "null"]
+        state:
+          type: [string, "null"]
+    GeoCity:
+      type: object
+      required: [name, state]
+      properties:
+        name:
+          type: string
+        state:
+          type: [string, "null"]
     SubmitFeedbackRequest:
       type: object
       required: [clientId, text]
@@ -105,10 +372,10 @@ components:
         detail:
           type: string
           description: A short, human-readable reason. Never contains member data.
-          examples: ["Sign in required", "Not allowed", "text is required", "clientId is required"]
+          examples: ["Sign in required", "Not allowed", "text is required", "clientId is required", "Too many lookups; try again in a minute"]
   responses:
     Problem:
-      description: Expected failure (401 not signed in, 403 not allowed, 422 invalid body)
+      description: Expected failure (401 not signed in, 403 not allowed, 413 body too large, 422 invalid body, 429 too many geo calls)
       content:
         application/json:
           schema:

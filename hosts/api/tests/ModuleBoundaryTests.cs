@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Hosting.Internal;
@@ -44,6 +45,9 @@ public sealed class ModuleBoundaryTests
         var services = new ServiceCollection();
         services.AddSingleton(new DbSettings("Host=localhost;Database=unused"));
         services.AddSingleton(TimeProvider.System);
+        // The host always provides logging and configuration; a module may rely on them (shared plumbing, not a dependency).
+        services.AddLogging();
+        services.AddSingleton<IConfiguration>(new ConfigurationBuilder().Build());
 
         Register(services, name);
         foreach (var dependency in module.Dependencies)

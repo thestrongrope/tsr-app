@@ -1,0 +1,46 @@
+{
+  "_comment": "SYNTHETIC catalog for the contract tests (app-version.hurl, release-notes.hurl). Mounted over the PHP image's web/data/app_versions.json on the parity stack and read by the new API on the dev stack: one file, both sides. Invented numbers; each oddity below is a fail-open rule the Hurl files pin.",
+  "releases": [
+    {
+      "version": "9.2.0",
+      "date": "2030-02-02",
+      "notes": ["Second note", "", "Third note", 7],
+      "builds": { "ios": "51", "android": 52 }
+    },
+    {
+      "version": "9.1.0",
+      "date": "2030-01-01",
+      "notes": [],
+      "builds": { "android": 51, "ios": 50 }
+    },
+    {
+      "version": "9.0.0",
+      "date": "2030-99-99",
+      "notes": ["A date is checked for its shape only"],
+      "builds": {}
+    },
+    {
+      "version": "8.9.0",
+      "date": "30-01-01",
+      "notes": ["Dropped: the date has the wrong shape"],
+      "builds": { "android": 40 }
+    },
+    {
+      "version": "",
+      "date": "2029-01-01",
+      "notes": ["Dropped: no version"],
+      "builds": { "android": 39 }
+    }
+  ],
+  "announcement": { "id": "synthetic-1", "title": "A synthetic announcement", "body": 7 },
+  "android": {
+    "minimumBuild": 50,
+    "recommendedBuild": 52,
+    "storeUrl": "https://example.invalid/android"
+  },
+  "ios": {
+    "minimumBuild": "12",
+    "recommendedBuild": 50,
+    "storeUrl": "https://example.invalid/ios"
+  }
+}

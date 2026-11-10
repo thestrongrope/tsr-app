@@ -82,6 +82,9 @@ services:
       FIREBASE_PROJECT_ID: ${PARITY_FIREBASE_PROJECT_ID}
       FIREBASE_AUTH_EMULATOR_HOST: firebase-emulator:9099
       FIREBASE_SERVICE_ACCOUNT_B64: ""
+    volumes:
+      # The one synthetic app-version catalog both sides read (domains/platform/spec/tests); it replaces the file baked into the image.
+      - ../../domains/platform/spec/tests/app_versions.synthetic.json:/var/www/html/web/data/app_versions.json:ro
     networks: [parity]
     depends_on:
       db:

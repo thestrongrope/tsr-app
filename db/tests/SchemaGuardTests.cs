@@ -18,14 +18,25 @@ public sealed class SchemaGuardTests
 {
     private const string MigrationHistoryTable = "__ef_migrations_history";
 
-    /// <summary>"schema.table.column" to the reason it is case-sensitive. Empty today: no plain text column is.</summary>
-    private static readonly Dictionary<string, string> CaseSensitive = [];
+    private const string GeoCollation = "geo_ci_ai";
+
+    private const string GeoReason =
+        "geo lookups search, sort and compare this column ignoring case AND accents, as MariaDB did; citext ignores case only "
+        + "(docs/specs/initial-build/phase-3-collation-proof.md)";
 
     /// <summary>
-    /// Foreign keys that still cross schemas, with the reason. Platform's first migration added two to identity.users;
-    /// a later change removes them (the ratchet: no new ones).
+    /// "schema.table.column" to the reason it is not citext. Only the three geo columns the lookups search, sort and compare:
+    /// they use the ICU collation geo_ci_ai, which is still case-insensitive, so the rule's intent holds (see the test below).
     /// </summary>
-    private static readonly HashSet<string> CrossSchemaForeignKeys = ["fk_feedback_user", "fk_feedback_handled_by"];
+    private static readonly Dictionary<string, string> NotCitext = new()
+    {
+        ["platform.geo_countries.name"] = GeoReason,
+        ["platform.geo_postal_codes.postal_code"] = GeoReason,
+        ["platform.geo_cities.name"] = GeoReason,
+    };
+
+    /// <summary>Foreign keys that may cross schemas. Empty: platform's two into identity.users were dropped by its DropIdentityForeignKeys migration.</summary>
+    private static readonly HashSet<string> CrossSchemaForeignKeys = [];
 
     [Test]
     public void Every_domain_has_exactly_one_context()
@@ -39,7 +50,7 @@ public sealed class SchemaGuardTests
     [Test]
     public void Allow_list_entries_carry_a_reason()
     {
-        Assert.That(CaseSensitive.Where(e => string.IsNullOrWhiteSpace(e.Value)).Select(e => e.Key), Is.Empty);
+        Assert.That(NotCitext.Where(e => string.IsNullOrWhiteSpace(e.Value)).Select(e => e.Key), Is.Empty);
     }
 
     [Test]
@@ -78,11 +89,38 @@ public sealed class SchemaGuardTests
         var columns = await TextColumnsAsync();
 
         var offenders = columns
-            .Where(c => c.Type != "citext" && !CaseSensitive.ContainsKey(c.Name))
+            .Where(c => c.Type != "citext" && !NotCitext.ContainsKey(c.Name))
             .Select(c => c.Name + " is " + c.Type);
 
         Assert.That(columns, Is.Not.Empty);
         Assert.That(offenders, Is.Empty, "Text columns that are not citext");
+    }
+
+    [Test]
+    public async Task Columns_that_are_not_citext_use_the_case_and_accent_insensitive_collation()
+    {
+        await using var connection = new NpgsqlConnection(TestDatabase.OwnerConnection);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            """
+            select a.attcollation::regcollation::text, c.collprovider::text, c.collisdeterministic
+            from pg_attribute a
+            join pg_class t on t.oid = a.attrelid
+            join pg_namespace n on n.oid = t.relnamespace
+            join pg_collation c on c.oid = a.attcollation
+            where n.nspname || '.' || t.relname || '.' || a.attname = @column
+            """,
+            connection);
+        command.Parameters.Add(new NpgsqlParameter("column", NpgsqlTypes.NpgsqlDbType.Text));
+        foreach (var column in NotCitext.Keys)
+        {
+            command.Parameters["column"].Value = column;
+            await using var reader = await command.ExecuteReaderAsync();
+            Assert.That(await reader.ReadAsync(), Is.True, column + " has a collation");
+            Assert.That(reader.GetString(0), Does.EndWith(GeoCollation), column);
+            Assert.That(reader.GetString(1), Is.EqualTo("i"), column + " uses ICU");
+            Assert.That(reader.GetBoolean(2), Is.False, column + " is nondeterministic, so it ignores case and accents");
+        }
     }
 
     [Test]

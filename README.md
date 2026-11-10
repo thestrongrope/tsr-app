@@ -14,6 +14,7 @@ You need Docker, the .NET 10 SDK, Hurl (contract tests) and Flutter (3.38 or lat
 ```
 docker compose -f docker-compose.dev.yml up -d --build   # PostgreSQL, API, gateway on :8088
 tools/identity-contract.sh dev                           # mint a dev token, refresh fixtures, run the sign-in contract
+tools/platform-contract.sh dev                           # platform contract (app version, release notes, geo, feedback); also: parity
 hurl --test --glob "domains/*/spec/tests/*.hurl" --variable base_url=http://localhost:8088 --variables-file build/dev/token.vars --variables-file domains/identity/spec/tests/fixtures.vars --variables-file domains/access/spec/tests/fixtures.vars   # every contract file
 dotnet test domains/platform/api/tests                   # unit tests
 dotnet test hosts/api/tests                              # module-boundary tests

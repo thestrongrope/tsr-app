@@ -11,14 +11,27 @@ internal sealed class PlatformContext(DbContextOptions<PlatformContext> options)
 {
     public const string SchemaName = "platform";
 
+    private const string GeoCollation = "geo_ci_ai";
+
+    // In public, not platform: a column definition names the collation unqualified, and only public is on the migration connection's search_path.
+    private const string GeoCollationSchema = "public";
+
     public DbSet<Feedback> Feedback => Set<Feedback>();
 
     public DbSet<OutboxMessage> Outbox => Set<OutboxMessage>();
 
+    public DbSet<GeoCountry> GeoCountries => Set<GeoCountry>();
+
+    public DbSet<GeoPostalCode> GeoPostalCodes => Set<GeoPostalCode>();
+
+    public DbSet<GeoCity> GeoCities => Set<GeoCity>();
+
     protected override void Configure(ModelBuilder modelBuilder)
     {
-        // user_id and handled_by also reference identity.users(id) ON DELETE SET NULL; added by hand
-        // in the first migration (a foreign key may not cross two contexts in the model).
+        ConfigureGeo(modelBuilder);
+
+        // user_id and handled_by are plain integers: a domain never references another domain's tables. (The first migration
+        // added foreign keys to identity.users by hand; DropIdentityForeignKeys removed them.)
         modelBuilder.Entity<Feedback>(feedback =>
         {
             feedback.Property(f => f.ClientId).HasMaxLength(36);
@@ -35,6 +48,88 @@ internal sealed class PlatformContext(DbContextOptions<PlatformContext> options)
             outbox.HasIndex(o => new { o.PublishedAt, o.CreatedAt }).HasDatabaseName("idx_outbox_unpublished");
         });
     }
+
+    private static void ConfigureGeo(ModelBuilder modelBuilder)
+    {
+        // Written exception to "every text column is citext" (db/tests/SchemaGuardTests.cs allow-list): the geo name, code and city
+        // columns the lookups search, sort and compare use ONE ICU collation that ignores case and accents, as MariaDB's
+        // utf8mb4_unicode_520_ci does (docs/specs/initial-build/phase-3-collation-proof.md). Their length checks are written here
+        // because TsrConvention adds them only to citext columns. The other geo text columns stay citext.
+        modelBuilder.HasCollation(GeoCollationSchema, GeoCollation, "und-u-ks-level1", "icu", false);
+
+        modelBuilder.Entity<GeoCountry>(country =>
+        {
+            country.ToTable("geo_countries");
+            country.HasKey(c => c.Code);
+            country.Property(c => c.Code).HasMaxLength(2);
+            country.Property(c => c.Name).HasColumnType("text").UseCollation(GeoCollation).HasMaxLength(100);
+            country.Property(c => c.PostalCodeRegex).HasMaxLength(255);
+            country.ToTable(t => t.HasCheckConstraint("ck_geo_countries_name_length", "char_length(\"name\") <= 100"));
+            country.HasIndex(c => c.Name).HasDatabaseName("idx_geo_countries_name");
+        });
+
+        modelBuilder.Entity<GeoPostalCode>(postal =>
+        {
+            postal.ToTable("geo_postal_codes");
+            postal.HasKey(p => new { p.CountryCode, p.PostalCode });
+            postal.Property(p => p.CountryCode).HasMaxLength(2);
+            postal.Property(p => p.PostalCode).HasColumnType("text").UseCollation(GeoCollation).HasMaxLength(20);
+            postal.Property(p => p.City).HasMaxLength(255);
+            postal.Property(p => p.State).HasMaxLength(150);
+            postal.ToTable(t => t.HasCheckConstraint("ck_geo_postal_codes_postal_code_length", "char_length(\"postal_code\") <= 20"));
+        });
+
+        modelBuilder.Entity<GeoCity>(city =>
+        {
+            city.ToTable("geo_cities");
+            city.HasKey(c => c.GeonameId);
+            city.Property(c => c.GeonameId).ValueGeneratedNever();
+            city.Property(c => c.CountryCode).HasMaxLength(2);
+            city.Property(c => c.Name).HasColumnType("text").UseCollation(GeoCollation).HasMaxLength(200);
+            city.Property(c => c.State).HasMaxLength(150);
+            city.Property(c => c.Population).HasDefaultValue(0);
+            city.ToTable(t => t.HasCheckConstraint("ck_geo_cities_name_length", "char_length(\"name\") <= 200"));
+            city.HasIndex(c => new { c.CountryCode, c.Name }).HasDatabaseName("idx_geo_cities_country_name");
+        });
+    }
+}
+
+/// <summary>One country of the geo lists (read only at run time). Loaded from GeoNames, public data, never member data.</summary>
+internal sealed class GeoCountry
+{
+    public string Code { get; set; } = string.Empty;
+
+    public string Name { get; set; } = string.Empty;
+
+    public bool HasPostalCodes { get; set; }
+
+    public string? PostalCodeRegex { get; set; }
+}
+
+/// <summary>A postal code of a country, with the city it suggests and its state. Primary key (country code, postal code).</summary>
+internal sealed class GeoPostalCode
+{
+    public string CountryCode { get; set; } = string.Empty;
+
+    public string PostalCode { get; set; } = string.Empty;
+
+    public string? City { get; set; }
+
+    public string? State { get; set; }
+}
+
+/// <summary>A city of a country, with its state and population (the search lists the biggest first).</summary>
+internal sealed class GeoCity
+{
+    public int GeonameId { get; set; }
+
+    public string CountryCode { get; set; } = string.Empty;
+
+    public string Name { get; set; } = string.Empty;
+
+    public string? State { get; set; }
+
+    public int Population { get; set; }
 }
 
 internal sealed class Feedback

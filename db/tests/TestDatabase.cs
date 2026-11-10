@@ -95,7 +95,7 @@ public sealed class TestDatabase
         }
     }
 
-    private static string RepoRoot()
+    public static string RepoRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
         while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "TsrApp.slnx")))

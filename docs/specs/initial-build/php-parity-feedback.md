@@ -130,3 +130,39 @@ updates every row with that email, as PHP does. No unique index.
 ## Access: `assigned` can list a class twice
 PHP's `class_access` view has one row per (rule, class), so two rules reaching class 5 give `assigned: [5,5]` in
 `GET /me/permissions`; `assigned_genders` and `searchReach` stay unique. Copied (`Quirk` test).
+
+## Platform batch A and B (phase 3a): app version, release notes, geo
+
+Run on the same parity stack (PHP 8.5.12 in the image), synthetic data only. Both sides answer the Hurl files in
+`domains/platform/spec/tests/` (`tools/platform-contract.sh parity|dev`). The two catalog responses were also compared
+byte for byte (`cmp`): identical. Where the recon (`phase-3-platform-recon.md`) and the PHP source differ, PHP won:
+
+1. **Recon 3.4: `"  AB  "` is 6 characters, not 5.** The rule (length before trim) is right; the example count was not.
+2. **Recon 3.1: "not a JSON object gives the fallback".** PHP's `is_array` also accepts a JSON LIST (`[]`, `[1,2]`, a list
+   with a `releases` key is impossible), so a list is a "usable catalog" that gives the fallback blocks. Same output
+   either way; copied (`APPVER-D2`).
+3. **`releases` and `notes` given as JSON objects** are walked as their values in file order (PHP `foreach`). Copied.
+4. **`-0` is an integer** in PHP 8.5 (`json_decode('-0')` is `int(0)`), `12.0`, `1e2` and a number above 64 bits are floats.
+   Copied: an integer is a JSON number with no fraction or exponent that fits 64 bits.
+5. **The release `date` regex has no `D` flag**, so `"2030-01-01\n"` passes; `\d` is ASCII only. Copied (the date is returned as written).
+6. **A byte order mark makes the whole file unusable** (`json_decode` fails): fallback. Copied. Duplicate keys: last wins. Copied.
+7. **PHP's `trim` strips only space, tab, newline, carriage return, NUL and vertical tab**; `strtoupper` is ASCII only;
+   `mb_strlen` counts code points, before the trim. Copied with `PhpText` (.NET's `Trim()` would also strip a no-break space).
+8. **A postal code of exactly `"0"` is never looked up** (`array_filter`), and only an ASCII space splits a code. Copied.
+9. **`rate_limit_allows` is a sliding window of whole seconds** (its own doc comment says "fixed-window": the code is not).
+   A refused call is not recorded. 61 calls with bodies that fail validation still give 60 x 422 then 429, on both sides
+   (checked with curl on both). The 429 detail is `Too many lookups; try again in a minute`.
+10. **The deletion gate applies to the geo routes** (recon open question 8): a member with a pending deletion gets 403
+    `Account deletion pending` with `deletion_status`, on PHP and on the new API (checked on both).
+11. **`api_cast` rules for geo:** countries `code` and `name` are plain strings, `hasPostalCodes` is a boolean; postal values are raw
+    (an empty string stays `""`, only SQL NULL is `null`); city `name` is entity-decoded and an empty name would be the number `0`;
+    an empty or NULL `state` is `null`.
+12. **A guest (token 0) never reaches geo:** `api_authenticate` answers 403 `Registration incomplete` first, so the "per address
+    for a guest" rate limit key in the PHP comments cannot occur.
+13. **PHP swallows every database error in `LocationModel::rows()`** and answers empty. The new API keeps only the missing-table
+    case (logged); any other database error is an error (a deliberate difference, `GEO-D3`).
+
+Deliberate differences, none visible to a normal client: a catalog file over 1 MiB is unusable (PHP reads any size); a geo body over
+16 KiB is 413 (PHP reads any size); a trailing space in a stored postal code is not ignored (MariaDB's PAD SPACE ignored it; input is
+trimmed so it cannot be reached); HTML5-only entity names beyond the common ones (`&AMP;` `&LT;` `&GT;` `&QUOT;` `&COPY;` `&REG;` and
+the HTML 4 set are decoded) stay as written; JSON escaping of `<`, `>`, `&`, U+2028 may differ in bytes, never in meaning.
