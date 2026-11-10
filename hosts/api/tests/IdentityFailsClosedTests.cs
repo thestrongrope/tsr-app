@@ -2,16 +2,15 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Hosting.Internal;
 using Tsr.Identity.Api;
-using Xunit;
+using NUnit.Framework;
 
 namespace Tsr.Host.Api.Tests;
 
 /// <summary>The dev verifier must never be active outside Development (fail closed).</summary>
 public sealed class IdentityFailsClosedTests
 {
-    [Theory]
-    [InlineData("Production")]
-    [InlineData("Staging")]
+    [TestCase("Production")]
+    [TestCase("Staging")]
     public void Identity_refuses_to_start_outside_development(string environment)
     {
         var services = new ServiceCollection();
@@ -20,12 +19,12 @@ public sealed class IdentityFailsClosedTests
         Assert.Throws<InvalidOperationException>(() => services.AddIdentity(env));
     }
 
-    [Fact]
+    [Test]
     public void Identity_registers_the_dev_verifier_in_development()
     {
         var services = new ServiceCollection();
         services.AddIdentity(new HostingEnvironment { EnvironmentName = Environments.Development });
 
-        Assert.Contains(services, d => d.ServiceType.Name == "ICallerVerifier");
+        Assert.That(services.Any(d => d.ServiceType.Name == "ICallerVerifier"), Is.True);
     }
 }

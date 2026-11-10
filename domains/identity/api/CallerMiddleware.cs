@@ -1,5 +1,5 @@
 using Microsoft.AspNetCore.Http;
-using MySqlConnector;
+using Microsoft.EntityFrameworkCore;
 using Tsr.Shared.Api;
 
 namespace Tsr.Identity.Api;
@@ -9,14 +9,15 @@ namespace Tsr.Identity.Api;
 /// a registered member (users.id, token, roleid). A request without a verified member continues
 /// with no caller; each slice decides whether it needs one. token = 0 is a guest, never a member.
 /// </summary>
-internal sealed class CallerMiddleware(RequestDelegate next, ICallerVerifier verifier, Db db)
+internal sealed class CallerMiddleware(RequestDelegate next, ICallerVerifier verifier)
 {
-    public async Task InvokeAsync(HttpContext context)
+    // The context is scoped, so it arrives per request here, never in the (singleton) constructor.
+    public async Task InvokeAsync(HttpContext context, IdentityContext db)
     {
         var token = await verifier.VerifyAsync(context.Request, context.RequestAborted);
         if (token is int value)
         {
-            var caller = await FindMemberAsync(value, context.RequestAborted);
+            var caller = await FindMemberAsync(db, value, context.RequestAborted);
             if (caller is not null)
             {
                 context.SetCaller(caller);
@@ -26,19 +27,9 @@ internal sealed class CallerMiddleware(RequestDelegate next, ICallerVerifier ver
         await next(context);
     }
 
-    private async Task<Caller?> FindMemberAsync(int token, CancellationToken ct)
-    {
-        await using var connection = await db.OpenAsync(ct);
-        await using var command = new MySqlCommand(
-            "select id, token, roleid from users where token = @token and token > 0 limit 1",
-            connection);
-        command.Parameters.AddWithValue("@token", token);
-        await using var reader = await command.ExecuteReaderAsync(ct);
-        if (!await reader.ReadAsync(ct))
-        {
-            return null;
-        }
-
-        return new Caller(reader.GetInt32(0), reader.GetInt32(1), reader.GetInt32(2));
-    }
+    private static Task<Caller?> FindMemberAsync(IdentityContext db, int token, CancellationToken ct) =>
+        db.Users.AsNoTracking()
+            .Where(u => u.Token == token && u.Token > 0)
+            .Select(u => new Caller(u.Id, u.Token, u.RoleId))
+            .FirstOrDefaultAsync(ct);
 }

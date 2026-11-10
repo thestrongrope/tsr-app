@@ -22,7 +22,8 @@ read it before editing.
 | The Flutter shell | `hosts/app/` | `lib/main.dart` |
 | The static site generator | `hosts/site/` | `SiteModules.cs`, `Program.cs`; a domain's pages are in `domains/<context>/site/` |
 | Plumbing every domain uses (DB, outbox, HTTP client, site API reader) | `shared/api/`, `shared/app/`, `shared/site/` | the file you need; no rules live here |
-| A table, a migration, synthetic data | `db/` | `migrations/`, `synthetic/seed.sql` |
+| A table or migration | the domain's `api/<Context>Context.cs` and `api/Migrations/` (add: `dotnet ef migrations add <Name> --context <Domain>Context --project domains/<d>/api --startup-project hosts/api --output-dir Migrations -- --TSR_DB=Host=unused --environment=Development`; the generated files need no edit) | `docs/specs/initial-build/phase-0-design.md` |
+| Synthetic data | `db/synthetic/seed.sql` | |
 
 Today's PHP API stays in tsr-account until routes move here. Domains planned: `identity` (AuthN)
 · `access` (AuthZ) · `membership` · `classes` · `assessment` · `content` · `notifications` ·
@@ -55,11 +56,13 @@ what: `domains/CLAUDE.md`.
 
 | Task | Command |
 |---|---|
-| Start the local stack (DB, API, gateway on :8088) | `docker compose -f docker-compose.dev.yml up -d --build` |
+| Start the local stack (PostgreSQL, migrate, seed, API, gateway on :8088) | `docker compose -f docker-compose.dev.yml up -d --build` |
 | Reset the local database | `docker compose -f docker-compose.dev.yml down -v` |
 | Build all .NET | `dotnet build TsrApp.slnx` |
-| Unit + boundary tests (no DB needed) | `dotnet test domains/platform/api/tests`, `dotnet test hosts/api/tests`, `dotnet test hosts/site/tests` |
-| Contract tests (stack must be up) | `dotnet test domains/platform/spec/tests` and `dotnet test domains/content/spec/tests` |
+| Unit + boundary tests (no DB needed, NUnit) | `dotnet test domains/platform/api/tests`, `dotnet test hosts/api/tests`, `dotnet test hosts/site/tests` |
+| Database-backed tests (needs Docker: Testcontainers starts a throwaway postgres:18) | `dotnet test db/tests` |
+| Contract tests, every Hurl file (stack must be up) | `hurl --test --glob "domains/*/spec/tests/*.hurl" --variable base_url=http://localhost:8088 --variable auth_header=X-Dev-Token --variable auth_value=900001` |
+| One implementation's contract (any base URL) | same command with another `base_url`, `auth_header` and `auth_value` (PHP: `--variables-file build/parity-php/token.vars` replaces the last two); `--glob` is expanded by Hurl itself, so it works in any shell on Mac and Windows when the pattern is quoted. Hurl must be installed. |
 | Build the static site (stack must be up) | `dotnet run --project hosts/site` (writes `build/site/`; `TSR_BASE_URL` picks the API) |
 | Flutter: resolve the workspace | `flutter pub get` (once, at the root) |
 | Flutter: analyze, test | `flutter analyze hosts/app shared/app domains/platform/app`, then `flutter test` inside each |
@@ -69,4 +72,4 @@ Never run `docker-compose.yml` (production) locally; this sample has only the de
 ## Done means
 
 The build has zero warnings, the tests you touched pass (and a new rule has a test that failed
-first), the slice's contract tests pass against the stack, and `flutter analyze` is clean.
+first), the slice's Hurl contract files pass against the stack, and `flutter analyze` is clean.

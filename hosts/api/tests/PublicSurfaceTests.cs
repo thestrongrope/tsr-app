@@ -1,4 +1,4 @@
-using Xunit;
+using NUnit.Framework;
 
 namespace Tsr.Host.Api.Tests;
 
@@ -18,26 +18,29 @@ public sealed class PublicSurfaceTests
         ["content"] = ["ContentModule"],
     };
 
-    public static TheoryData<string> ModuleNames()
-    {
-        var data = new TheoryData<string>();
-        foreach (var module in Modules.All)
-        {
-            data.Add(module.Name);
-        }
+    public static IEnumerable<string> ModuleNames() => Modules.All.Select(m => m.Name);
 
-        return data;
-    }
-
-    [Theory]
-    [MemberData(nameof(ModuleNames))]
+    [TestCaseSource(nameof(ModuleNames))]
     public void Module_exposes_only_its_listed_public_types(string name)
     {
-        Assert.True(Allowed.ContainsKey(name), "No public surface listed for " + name + ": add it to Allowed.");
+        Assert.That(Allowed.ContainsKey(name), Is.True, "No public surface listed for " + name + ": add it to Allowed.");
         var module = Modules.All.Single(m => m.Name == name);
 
-        var exposed = module.Assembly.GetExportedTypes().Select(t => t.Name).Order().ToList();
+        var exposed = module.Assembly.GetExportedTypes()
+            .Where(t => !IsEfMigration(t))
+            .Select(t => t.Name)
+            .Order()
+            .ToList();
 
-        Assert.Equal(Allowed[name].Order().ToList(), exposed);
+        Assert.That(exposed, Is.EqualTo(Allowed[name].Order().ToList()));
     }
+
+    /// <summary>
+    /// EF Core generates migration classes (and may generate the model snapshot) as public, and only
+    /// EF uses them, so they are not part of a domain's surface. Matched by base type, not by
+    /// namespace, so nothing else can hide in a Migrations folder.
+    /// </summary>
+    private static bool IsEfMigration(Type type) =>
+        type.BaseType?.FullName is "Microsoft.EntityFrameworkCore.Migrations.Migration"
+            or "Microsoft.EntityFrameworkCore.Infrastructure.ModelSnapshot";
 }

@@ -53,4 +53,4 @@ components:
         publishedAt:
           type: string
           format: date-time
-          description: UTC.
+          description: UTC, written with the offset +00:00 (2026-01-15T09:00:00+00:00), never Z.

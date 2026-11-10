@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Tsr.Content.Api.Features.ListPublishedArticles;
+using Tsr.Shared.Api;
 
 namespace Tsr.Content.Api;
 
@@ -12,6 +13,7 @@ public static class ContentModule
 
     public static IServiceCollection AddContent(this IServiceCollection services)
     {
+        services.AddDomainContext<ContentContext>(ContentContext.SchemaName);
         services.AddScoped<ListPublishedArticlesHandler>();
         return services;
     }

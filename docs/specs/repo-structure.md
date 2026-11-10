@@ -14,9 +14,8 @@ Kept elsewhere, so each is read only when needed:
 
 Out of scope: the other TSR tools (creative, hadith, translation, planner) and the private data repo.
 
-**The sample in this repo predates the stack decision**: it runs on MariaDB with MySqlConnector,
-`.sql` migrations, xUnit and C# contract tests, to mirror the PHP route. It proves the layout, not
-the stack.
+**The sample in this repo began before the stack decision** on MariaDB, xUnit and C# contract tests; it now runs
+on Postgres, EF Core, NUnit and Hurl contract files. It proves the layout, not the whole stack.
 
 ## Part 1: How we are designing the app
 
@@ -185,7 +184,7 @@ read, rule 4 in `domains/CLAUDE.md`), so the site cannot show a draft by mistake
 |---|---|---|
 | Ubiquitous language | `glossary.md` | names in code, tests and screens |
 | Actions and field shapes | `api.yaml` (OpenAPI) | the published HTTP contract |
-| Behaviour and invariants | `tests/`: contract tests against any base URL (target: Hurl; the sample's are C#) | proving any implementation obeys the rules |
+| Behaviour and invariants | `tests/`: contract tests against any base URL (Hurl, one file per slice) | proving any implementation obeys the rules |
 | Events | a table in the domain's `CLAUDE.md`; `events.yaml` (AsyncAPI) once a relay and a consumer exist | the shape producers and consumers agree on |
 
 - **Rules are proven by contract tests.** Types are not generated today: each client (the Flutter

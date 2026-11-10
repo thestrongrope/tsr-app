@@ -85,8 +85,8 @@ Needs Asif's yes before it starts:
 | Task | Who | Done when |
 |---|---|---|
 | 0a Postgres, EF Core and Npgsql, `citext`, migrations for `feedback`, `articles`, outbox | Sonnet `developer` | build 0 warnings; unit and boundary tests pass |
-| 0b xUnit to NUnit | Haiku (mechanical) | same tests, same counts |
-| 0c C# contract tests to Hurl files | Sonnet `developer` | 7 + 4 cases pass against the stack |
+| 0b xUnit to NUnit (done: 15 + 20 + 12 cases) | Haiku (mechanical) | same tests, same counts |
+| 0c C# contract tests to Hurl files (done: 8 + 4 cases) | Sonnet `developer` | 7 + 4 cases pass against the stack |
 | 1 Run the `POST /feedback` Hurl file against tsr-account's PHP | Sonnet `developer` | pass, or a list of differences |
 | Review of the batch | `qa`, `security`; GPT (Codex) on serious findings | findings settled or reported |
 
@@ -111,3 +111,32 @@ them. Budget: five sub-agent runs and one review pass, then a checkpoint with th
 - [ ] Phase 4: site
 - [ ] Phase 5: rehearsal
 - [ ] Phase 6: publish (cutover planned separately)
+
+## Checkpoint 1 (2026-11-10): phases 0 and 1
+
+Done and re-run by the orchestrator: Postgres 18 with EF Core and Npgsql, `citext` by convention with
+a guard test; NUnit 15 + 20 + 12; Hurl contract files (2 files, 14 requests) pass on the new API;
+`submit-feedback.hurl` passes 10 of 10 on PHP (tsr-account `develop` at `ed72cd9`, synthetic data,
+`tools/parity-php/`). Build 0 warnings. Not committed. Choices to confirm: `phase-0-design.md`.
+
+Review findings to settle (qa and security, Sonnet):
+
+- [x] Dev ports bound to every interface: bind 5433 and 8088 to `127.0.0.1`.
+- [x] The API connects as a database superuser: a limited `tsr_app` role for the API, the owner for
+      migrations only.
+- [x] `--migrate` fails outside Development (identity refuses to start): must work without the dev
+      verifier, with a test.
+- [x] No test proves the outbox row is written in the feedback transaction, or that a replay writes
+      none. Needs a database-backed test (the stack names Testcontainers).
+- [x] Guard 2 reads the EF model, not the Postgres catalog; no check that the model matches the
+      migrations.
+- [x] Hurl is weaker than the C# tests in two places: one published slug exactly; pin the
+      `publishedAt` format (`+00:00`) in the file and in `api.yaml`.
+- [x] `README.md` says no Bash is needed, but `db/add-migration.sh` is a shell script.
+- [ ] Images are not pinned by digest (low): declined: local dev only.
+
+Checked and dismissed: the reported change of `publishedAt` from `Z` to `+00:00`. The old code
+produced `+00:00` too (run in isolation); behaviour is unchanged.
+
+Rule to reword: synthetic tokens "900000+" holds for this repo's seed, not for tsr-account's
+generator (tokens from 1). The `.invalid` email is the guard that holds in both.

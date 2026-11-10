@@ -1,12 +1,14 @@
 using System.Text.Json;
-using MySqlConnector;
+using Microsoft.EntityFrameworkCore;
 
 namespace Tsr.Shared.Api;
 
 /// <summary>
 /// Writes a domain event to the outbox in the same transaction as the change that caused it, so
-/// the event exists if and only if the change committed. A relay (hosts/scheduler, the foundation step)
-/// publishes outbox rows to Redis Streams; nothing in a slice talks to Redis directly.
+/// the event exists if and only if the change committed: the caller starts the transaction on its own
+/// context and this writes through that context's connection. The table is platform-owned (mapped by
+/// platform's context, schema "platform"). A relay (hosts/scheduler, the foundation step) publishes outbox
+/// rows to Redis Streams; nothing in a slice talks to Redis directly.
 /// </summary>
 public static class Outbox
 {
@@ -14,22 +16,24 @@ public static class Outbox
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
     public static async Task WriteAsync<TEvent>(
-        MySqlConnection connection,
-        MySqlTransaction transaction,
+        DbContext context,
         string eventType,
         TEvent payload,
         TimeProvider clock,
         CancellationToken ct)
     {
+        ArgumentNullException.ThrowIfNull(context);
         ArgumentException.ThrowIfNullOrWhiteSpace(eventType);
-        await using var command = new MySqlCommand(
-            "insert into outbox (id, event_type, payload, created_at) values (@id, @type, @payload, @created)",
-            connection,
-            transaction);
-        command.Parameters.AddWithValue("@id", Guid.NewGuid().ToString());
-        command.Parameters.AddWithValue("@type", eventType);
-        command.Parameters.AddWithValue("@payload", JsonSerializer.Serialize(payload, Json));
-        command.Parameters.AddWithValue("@created", clock.GetUtcNow().UtcDateTime);
-        await command.ExecuteNonQueryAsync(ct);
+        if (context.Database.CurrentTransaction is null)
+        {
+            throw new InvalidOperationException("The outbox is written inside the transaction of the change that caused the event.");
+        }
+
+        var id = Guid.CreateVersion7();
+        var json = JsonSerializer.Serialize(payload, Json);
+        var created = clock.GetUtcNow();
+        await context.Database.ExecuteSqlAsync(
+            $"insert into platform.outbox (id, event_type, payload, created_at) values ({id}, {eventType}, {json}::jsonb, {created})",
+            ct);
     }
 }

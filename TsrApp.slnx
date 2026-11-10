@@ -1,4 +1,7 @@
 <Solution>
+  <Folder Name="/db/tests/">
+    <Project Path="db/tests/Tsr.Db.Tests.csproj" />
+  </Folder>
   <Folder Name="/domains/" />
   <Folder Name="/domains/access/" />
   <Folder Name="/domains/access/api/">
@@ -10,10 +13,6 @@
   </Folder>
   <Folder Name="/domains/content/site/">
     <Project Path="domains/content/site/Tsr.Content.Site.csproj" />
-  </Folder>
-  <Folder Name="/domains/content/spec/" />
-  <Folder Name="/domains/content/spec/tests/">
-    <Project Path="domains/content/spec/tests/Tsr.Content.Contract.Tests.csproj" />
   </Folder>
   <Folder Name="/domains/identity/" />
   <Folder Name="/domains/identity/api/">
@@ -28,10 +27,6 @@
   </Folder>
   <Folder Name="/domains/platform/site/">
     <Project Path="domains/platform/site/Tsr.Platform.Site.csproj" />
-  </Folder>
-  <Folder Name="/domains/platform/spec/" />
-  <Folder Name="/domains/platform/spec/tests/">
-    <Project Path="domains/platform/spec/tests/Tsr.Platform.Contract.Tests.csproj" />
   </Folder>
   <Folder Name="/hosts/" />
   <Folder Name="/hosts/api/">

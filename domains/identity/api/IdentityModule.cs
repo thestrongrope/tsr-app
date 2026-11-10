@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Tsr.Shared.Api;
 
 namespace Tsr.Identity.Api;
 
@@ -9,6 +10,16 @@ public static class IdentityModule
 {
     /// <summary>Other domain modules this one may use (domains/CLAUDE.md rule 7). identity uses none.</summary>
     public static readonly IReadOnlyList<string> Dependencies = [];
+
+    /// <summary>
+    /// Registers only identity's tables, for the one-off migrate job, which serves no requests and
+    /// so needs no caller verifier. The API itself starts with <see cref="AddIdentity"/>.
+    /// </summary>
+    public static IServiceCollection AddIdentityTables(this IServiceCollection services)
+    {
+        services.AddDomainContext<IdentityContext>(IdentityContext.SchemaName);
+        return services;
+    }
 
     public static IServiceCollection AddIdentity(this IServiceCollection services, IHostEnvironment env)
     {
@@ -20,6 +31,7 @@ public static class IdentityModule
                 "No caller verifier for environment '" + env.EnvironmentName + "'. Only Development is supported.");
         }
 
+        services.AddIdentityTables();
         services.AddSingleton<ICallerVerifier, DevTokenVerifier>();
         return services;
     }

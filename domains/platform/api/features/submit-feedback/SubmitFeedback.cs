@@ -1,7 +1,8 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using MySqlConnector;
+using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Platform.Api.Domain;
 using Tsr.Shared.Api;
@@ -34,10 +35,8 @@ internal static class SubmitFeedbackEndpoint
 }
 
 /// <summary>Application layer for this use case: check, validate, store once, publish.</summary>
-internal sealed class SubmitFeedbackHandler(Db db, Permissions permissions, TimeProvider clock)
+internal sealed class SubmitFeedbackHandler(PlatformContext db, Permissions permissions, TimeProvider clock)
 {
-    private const int DuplicateKey = 1062;
-
     public async Task<IResult> HandleAsync(Caller? caller, SubmitFeedbackRequest? body, CancellationToken ct)
     {
         if (caller is null)
@@ -68,8 +67,7 @@ internal sealed class SubmitFeedbackHandler(Db db, Permissions permissions, Time
 
     private async Task<int> StoreOnceAsync(Caller caller, ClientId clientId, FeedbackText text, CancellationToken ct)
     {
-        await using var connection = await db.OpenAsync(ct);
-        var existing = await FindAsync(connection, caller.UserId, clientId, ct);
+        var existing = await FindAsync(caller.UserId, clientId, ct);
         if (existing is int found)
         {
             return found;
@@ -77,44 +75,37 @@ internal sealed class SubmitFeedbackHandler(Db db, Permissions permissions, Time
 
         try
         {
-            return await InsertAsync(connection, caller, clientId, text, ct);
+            return await InsertAsync(caller, clientId, text, ct);
         }
-        catch (MySqlException e) when (e.Number == DuplicateKey)
+        catch (DbUpdateException e) when (e.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
         {
-            // Two sends of the same message at once: the unique key refused the second one.
-            return await FindAsync(connection, caller.UserId, clientId, ct)
+            // Two sends of the same message at once: the unique key refused the second one. The
+            // transaction is rolled back by now, so the stored row can be read again.
+            db.ChangeTracker.Clear();
+            return await FindAsync(caller.UserId, clientId, ct)
                 ?? throw new InvalidOperationException("Duplicate key without a stored row", e);
         }
     }
 
-    private async Task<int> InsertAsync(
-        MySqlConnection connection, Caller caller, ClientId clientId, FeedbackText text, CancellationToken ct)
+    private async Task<int> InsertAsync(Caller caller, ClientId clientId, FeedbackText text, CancellationToken ct)
     {
-        await using var transaction = await connection.BeginTransactionAsync(ct);
-        await using var insert = new MySqlCommand(
-            "insert into feedback (user_id, client_id, message) values (@user, @client, @message)",
-            connection,
-            transaction);
-        insert.Parameters.AddWithValue("@user", caller.UserId);
-        insert.Parameters.AddWithValue("@client", clientId.Value);
-        insert.Parameters.AddWithValue("@message", text.Value);
-        await insert.ExecuteNonQueryAsync(ct);
-        var id = checked((int)insert.LastInsertedId);
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        var row = new Feedback { UserId = caller.UserId, ClientId = clientId.Value, Message = text.Value };
+        db.Feedback.Add(row);
+        await db.SaveChangesAsync(ct);
 
-        var submitted = new FeedbackSubmitted(id, caller.UserId, clock.GetUtcNow());
-        await Outbox.WriteAsync(connection, transaction, "platform.feedback_submitted", submitted, clock, ct);
+        var submitted = new FeedbackSubmitted(row.Id, caller.UserId, clock.GetUtcNow());
+        await Outbox.WriteAsync(db, "platform.feedback_submitted", submitted, clock, ct);
         await transaction.CommitAsync(ct);
-        return id;
+        return row.Id;
     }
 
-    private static async Task<int?> FindAsync(
-        MySqlConnection connection, int userId, ClientId clientId, CancellationToken ct)
+    private async Task<int?> FindAsync(int userId, ClientId clientId, CancellationToken ct)
     {
-        await using var command = new MySqlCommand(
-            "select id from feedback where user_id = @user and client_id = @client limit 1", connection);
-        command.Parameters.AddWithValue("@user", userId);
-        command.Parameters.AddWithValue("@client", clientId.Value);
-        var value = await command.ExecuteScalarAsync(ct);
-        return value is null ? null : Convert.ToInt32(value, System.Globalization.CultureInfo.InvariantCulture);
+        var id = clientId.Value;
+        return await db.Feedback.AsNoTracking()
+            .Where(f => f.UserId == userId && f.ClientId == id)
+            .Select(f => (int?)f.Id)
+            .FirstOrDefaultAsync(ct);
     }
 }

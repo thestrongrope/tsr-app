@@ -7,7 +7,7 @@ using Tsr.Host.Api;
 using Tsr.Identity.Api;
 using Tsr.Platform.Api;
 using Tsr.Shared.Api;
-using Xunit;
+using NUnit.Framework;
 
 namespace Tsr.Host.Api.Tests;
 
@@ -20,19 +20,9 @@ public sealed class ModuleBoundaryTests
 {
     private const string SharedAssembly = "Tsr.Shared.Api";
 
-    public static TheoryData<string> ModuleNames()
-    {
-        var data = new TheoryData<string>();
-        foreach (var module in Modules.All)
-        {
-            data.Add(module.Name);
-        }
+    public static IEnumerable<string> ModuleNames() => Modules.All.Select(m => m.Name);
 
-        return data;
-    }
-
-    [Theory]
-    [MemberData(nameof(ModuleNames))]
+    [TestCaseSource(nameof(ModuleNames))]
     public void Module_references_only_shared_and_its_listed_dependencies(string name)
     {
         var module = Modules.All.Single(m => m.Name == name);
@@ -44,16 +34,15 @@ public sealed class ModuleBoundaryTests
             .ToList();
 
         var undeclared = referenced.Where(r => !allowed.Contains(r)).ToList();
-        Assert.True(undeclared.Count == 0, name + " references undeclared modules: " + string.Join(", ", undeclared));
+        Assert.That(undeclared, Is.Empty, name + " references undeclared modules");
     }
 
-    [Theory]
-    [MemberData(nameof(ModuleNames))]
+    [TestCaseSource(nameof(ModuleNames))]
     public void Module_starts_with_only_its_listed_dependencies(string name)
     {
         var module = Modules.All.Single(m => m.Name == name);
         var services = new ServiceCollection();
-        services.AddSingleton(new Db("Server=localhost;Database=unused"));
+        services.AddSingleton(new DbSettings("Host=localhost;Database=unused"));
         services.AddSingleton(TimeProvider.System);
 
         Register(services, name);
@@ -64,15 +53,15 @@ public sealed class ModuleBoundaryTests
 
         var options = new ServiceProviderOptions { ValidateOnBuild = true, ValidateScopes = true };
         using var provider = services.BuildServiceProvider(options);
-        Assert.NotNull(provider);
+        Assert.That(provider, Is.Not.Null);
     }
 
-    [Fact]
+    [Test]
     public void Every_listed_dependency_is_a_known_module()
     {
         var known = Modules.All.Select(m => m.Name).ToHashSet();
         var unknown = Modules.All.SelectMany(m => m.Dependencies).Where(d => !known.Contains(d)).ToList();
-        Assert.Empty(unknown);
+        Assert.That(unknown, Is.Empty);
     }
 
     private static string AssemblyNameOf(string module) =>

@@ -1,6 +1,6 @@
 using System.Net;
 using Tsr.Shared.Site;
-using Xunit;
+using NUnit.Framework;
 
 namespace Tsr.Host.Site.Tests;
 
@@ -13,19 +13,11 @@ public sealed class SiteModuleBoundaryTests
 {
     private const string SharedSite = "Tsr.Shared.Site";
 
-    public static TheoryData<string> ModuleNames()
-    {
-        var data = new TheoryData<string>();
-        foreach (var module in SiteModules.All)
-        {
-            data.Add(module.Name);
-        }
+    private static readonly string[] NavPaths = ["/status/", "/articles/"];
 
-        return data;
-    }
+    public static IEnumerable<string> ModuleNames() => SiteModules.All.Select(m => m.Name);
 
-    [Theory]
-    [MemberData(nameof(ModuleNames))]
+    [TestCaseSource(nameof(ModuleNames))]
     public void A_site_module_references_only_shared_site(string name)
     {
         var module = SiteModules.All.Single(m => m.Name == name);
@@ -35,31 +27,30 @@ public sealed class SiteModuleBoundaryTests
             .Where(n => n.StartsWith("Tsr.", StringComparison.Ordinal))
             .ToList();
 
-        Assert.True(referenced.All(r => r == SharedSite), name + " references " + string.Join(", ", referenced));
+        Assert.That(referenced.Where(r => r != SharedSite), Is.Empty, name + " references other Tsr assemblies");
     }
 
-    [Theory]
-    [MemberData(nameof(ModuleNames))]
+    [TestCaseSource(nameof(ModuleNames))]
     public async Task A_site_module_builds_its_pages_alone(string name)
     {
         var module = SiteModules.All.Single(m => m.Name == name);
 
         var pages = await SiteBuilder.CollectAsync([module], FakeApi.Healthy(), CancellationToken.None);
 
-        Assert.Contains(pages, p => p.Path != "/");
+        Assert.That(pages.Any(p => p.Path != "/"), Is.True);
         foreach (var page in pages)
         {
             var html = await SiteBuilder.RenderAsync(page, pages.Where(p => p.NavTitle is not null).ToList());
-            Assert.StartsWith("<!doctype html>", html, StringComparison.Ordinal);
+            Assert.That(html, Does.StartWith("<!doctype html>"));
         }
     }
 
-    [Fact]
+    [Test]
     public async Task Every_module_together_gives_unique_paths_and_one_nav()
     {
         var pages = await SiteBuilder.CollectAsync(SiteModules.All, FakeApi.Healthy(), CancellationToken.None);
 
-        Assert.Equal(pages.Count, pages.Select(p => p.Path).Distinct(StringComparer.Ordinal).Count());
-        Assert.Equal(["/status/", "/articles/"], pages.Where(p => p.NavTitle is not null).Select(p => p.Path));
+        Assert.That(pages.Select(p => p.Path).Distinct(StringComparer.Ordinal).Count(), Is.EqualTo(pages.Count));
+        Assert.That(pages.Where(p => p.NavTitle is not null).Select(p => p.Path), Is.EqualTo(NavPaths));
     }
 }

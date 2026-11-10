@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Tsr.Platform.Api.Features.Health;
 using Tsr.Platform.Api.Features.SubmitFeedback;
+using Tsr.Shared.Api;
 
 namespace Tsr.Platform.Api;
 
@@ -17,6 +18,7 @@ public static class PlatformModule
 
     public static IServiceCollection AddPlatform(this IServiceCollection services)
     {
+        services.AddDomainContext<PlatformContext>(PlatformContext.SchemaName);
         services.AddScoped<SubmitFeedbackHandler>();
         return services;
     }

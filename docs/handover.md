@@ -98,7 +98,7 @@ before the baseline.
 2. Skills only after a task is done by hand twice (`add-slice` after slice 2).
 3. `dotnet-stack.md` "To verify" list: MediatR/AutoMapper/FluentAssertions licences, MinIO status,
    Dokploy running Hurl and promoting the image, the OTel Collector file exporter.
-4. The sample still uses xUnit; the stack says NUnit. Convert in the first build story.
+4. Done: the sample's tests are NUnit and its contract tests are Hurl files (2026-11-10).
 5. **.NET 11:** `~/Projects/tsr-spikes/aot-e2e-net11/RESULTS.md` (2026-11-10, RC3): drop-in, all
    tests pass, but idle memory 85 MiB vs 23 MiB (native, not GC heap; cause unknown). Asif chose to
    wait for GA: rerun on GA packages, then decide whether `dotnet-stack.md` moves to 11.
@@ -106,7 +106,7 @@ before the baseline.
    for the network call; rename to submit only if it starts to confuse.
 
 ## Containers
-Only `tsr-app-dev-{api,gateway,db}` run (rebuilt 2026-11-10). All spike and benchmark containers
+Only `tsr-app-dev-{api,gateway,db}` run (migrate and seed exit after one run) (rebuilt 2026-11-10). All spike and benchmark containers
 (`tsr-aot-*`, `tsr-aot11-*`, `tsr-bench-*`, 19 in all) are stopped, not removed. They were created
 from the old `tsr-app/spikes/` path, so `docker start` breaks their bind mounts: use
 `docker compose up -d` from the folder in `~/Projects/tsr-spikes/` to recreate one.
@@ -115,7 +115,7 @@ from the old `tsr-app/spikes/` path, so `docker start` breaks their bind mounts:
 - Host port 8080 belongs to OrbStack; the gateway is on 8088.
 - NuGet audit fails on old pins. Package versions live only in `Directory.Packages.props`.
 - `FeedbackText` counts code points, to match PHP `mb_strlen`.
-- The DB seed runs via `db/dev-init/load.sh`. A nested file bind mount would litter `db/migrations`.
+- Dev DB is PostgreSQL 18: compose runs `migrate` (API image `--migrate`) then `seed` (`db/synthetic/seed.sql`, psql). `postgres:18` data mounts at `/var/lib/postgresql`. EF migrations stay as generated (public): `PublicSurfaceTests` skips EF migration and snapshot classes by base type, so no hand edit is needed (command in root `CLAUDE.md`). The API connects as the limited `tsr_app` role (`db/init/01-app-role.sql`); `migrate` runs as the owner `tsr` in Production mode and grants `tsr_app` its rights. `dotnet test db/tests` needs Docker.
 - The auto-mode classifier sometimes returns no verdict on Write: retry once.
 - Out of scope on purpose: the private data repo and the other TSR tools.
 - Claude's project memory for this folder used to hold an unrelated Patrol handover (the old

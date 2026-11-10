@@ -5,6 +5,10 @@
     <Content Remove="tests/**" />
   </ItemGroup>
   <ItemGroup>
+    <!-- Design time only (dotnet ef migrations ...): never shipped. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" PrivateAssets="all" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="../../shared/api/Tsr.Shared.Api.csproj" />
     <ProjectReference Include="../../domains/identity/api/Tsr.Identity.Api.csproj" />
     <ProjectReference Include="../../domains/access/api/Tsr.Access.Api.csproj" />

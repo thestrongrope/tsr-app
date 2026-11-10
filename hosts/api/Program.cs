@@ -12,15 +12,36 @@ var builder = WebApplication.CreateBuilder(args);
 var connectionString = builder.Configuration["TSR_DB"]
     ?? throw new InvalidOperationException("TSR_DB is not set. Locally it comes from docker-compose.dev.yml.");
 
-builder.Services.AddSingleton(new Db(connectionString));
+builder.Services.AddSingleton(new DbSettings(connectionString));
 builder.Services.AddSingleton(TimeProvider.System);
 
-builder.Services.AddIdentity(builder.Environment);
+// The one-off migrate job (below) serves no requests: it registers identity's tables but no caller
+// verifier, so it runs in any environment. Normal start-up still fails closed outside Development.
+var migrating = args.Contains("--migrate");
+
+// Registration order is migration order: identity owns users, which other domains reference.
+if (migrating)
+{
+    builder.Services.AddIdentityTables();
+}
+else
+{
+    builder.Services.AddIdentity(builder.Environment);
+}
+
 builder.Services.AddAccess();
 builder.Services.AddPlatform();
 builder.Services.AddContent();
 
 var app = builder.Build();
+
+// One-off migrate job (docker-compose.dev.yml "migrate", a Dokploy job in production): apply every
+// domain's migrations in registration order, then exit without serving.
+if (migrating)
+{
+    await app.Services.MigrateDatabasesAsync(CancellationToken.None);
+    return;
+}
 
 app.UseIdentity();
 app.MapPlatform();

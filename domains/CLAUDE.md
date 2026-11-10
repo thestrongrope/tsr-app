@@ -17,7 +17,7 @@ domains/<context>/
 ├── spec/              DEFINED ONCE, language-neutral; the published language
 │   ├── glossary.md    ubiquitous language: use these words in code, tests and screens
 │   ├── api.yaml       actions and field shapes (OpenAPI 3.1)
-│   └── tests/         contract tests: HTTP only, run against any implementation (TSR_BASE_URL)
+│   └── tests/         Hurl contract files, one per slice (`<slice>.hurl`): HTTP only, run against any base URL (`base_url`)
 ├── api/               THE ONE IMPLEMENTATION (C#, one project per domain)
 │   ├── <Context>Module.cs   registration: Add<Context>(), Map<Context>(), Dependencies
 │   ├── <Interface>.cs       what other domains may call (e.g. access's Permissions); not a slice
@@ -78,7 +78,7 @@ Platform-owned tables (no domain): `outbox`, `outbound_messages`, `schema_migrat
 7. Each domain module must start with only its listed dependencies; `hosts/api/tests` checks it.
    Each `site/` module references only `shared/site` and builds its pages alone; `hosts/site/tests`
    checks it. Both checks see real use of another module, not an unused project reference.
-8. Tests sit next to the code (`Foo.Tests.cs`); behaviour visible over HTTP goes in `spec/tests`.
+8. Tests sit next to the code (`Foo.Tests.cs`); behaviour visible over HTTP goes in a Hurl file in `spec/tests`, named after the slice.
 9. Business rules never live in `site/` or `app/`: they render what the API returns. A `site/` module
    copies the response shapes it reads from `api.yaml` (it is a client of the published contract).
 10. A cross-domain report is owned by the domain whose question it answers (e.g. the MIS report by

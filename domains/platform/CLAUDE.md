@@ -15,12 +15,12 @@ example**: copy its layout when you build another domain (`domains/CLAUDE.md`).
 
 ## What it owns
 
-- Table `feedback` (`db/migrations/2026_11_09_feedback.sql`).
+- Table `feedback`, in schema `platform` (`api/PlatformContext.cs`; migrations in `api/Migrations/`).
 - Permissions `feedback:create:self`, `feedback:review:all`
-  (`db/migrations/2026_11_09_feedback_permissions.sql`; the catalog itself belongs to `access`).
+  (seeded by access's first migration; the catalog itself belongs to `access`).
 - Event `platform.feedback_submitted`.
 - Also, as platform tables with no domain: `outbox`, `outbound_messages`, `schema_migrations`,
-  `admin_access_log`. The outbox writer is in `shared/api/Outbox.cs`.
+  `admin_access_log`. `outbox` is mapped by `PlatformContext` (schema `platform`) and written inside the caller's transaction by `shared/api/Outbox.cs`.
 
 ## Dependencies
 
@@ -35,7 +35,7 @@ dependency.
 | Words to use (Feedback, Client id, Replay ...) | `spec/glossary.md` |
 | The HTTP contract, field shapes and limits | `spec/api.yaml` |
 | Events this domain publishes | "Events" below |
-| Behaviour over HTTP, any implementation | `spec/tests/` (needs the dev stack up) |
+| Behaviour over HTTP, any implementation | `spec/tests/*.hurl` (needs the dev stack up) |
 | Module: registration, routes, dependencies | `api/PlatformModule.cs` |
 | One use case end to end | `api/features/submit-feedback/SubmitFeedback.cs` |
 | Rules shared by slices | `api/domain/` (`ClientId`, `FeedbackText`) |
@@ -66,6 +66,7 @@ until a consumer exists. Payloads are camelCase JSON, like the API, and carry id
 
 ```
 dotnet test domains/platform/api/tests            # unit
-dotnet test domains/platform/spec/tests           # contract, stack must be up (:8088)
+dotnet test db/tests                              # feedback row + outbox row in one transaction (Docker)
+hurl --test --variable base_url=http://localhost:8088 --variable auth_header=X-Dev-Token --variable auth_value=900001 domains/platform/spec/tests/submit-feedback.hurl   # contract, stack up (:8088)
 flutter analyze domains/platform/app && (cd domains/platform/app && flutter test)
 ```

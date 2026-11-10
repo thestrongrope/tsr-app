@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Tsr.Shared.Api;
 
 namespace Tsr.Access.Api;
 
@@ -13,7 +14,8 @@ public static class AccessModule
 
     public static IServiceCollection AddAccess(this IServiceCollection services)
     {
-        services.AddSingleton<Permissions>();
+        services.AddDomainContext<AccessContext>(AccessContext.SchemaName);
+        services.AddScoped(provider => new Permissions(provider.GetRequiredService<AccessContext>()));
         return services;
     }
 }
