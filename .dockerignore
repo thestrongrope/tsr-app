@@ -1,0 +1,11 @@
+# Docker builds use the repo root as context. Keep it small: no Flutter, no build output.
+**/bin
+**/obj
+**/.dart_tool
+**/build
+hosts/app
+shared/app
+domains/*/app
+.git
+.claude
+docs

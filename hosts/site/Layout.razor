@@ -1,0 +1,35 @@
+@* The one page frame: head, navigation, footer. Domain pages render inside <main>. No JavaScript. *@
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>@Page.Title · The Strong Rope</title>
+    <link rel="stylesheet" href="/site.css">
+</head>
+<body>
+    <header>
+        <a href="/">The Strong Rope</a>
+        <nav>
+            @foreach (var item in Nav)
+            {
+                <a href="@item.Path">@item.NavTitle</a>
+            }
+        </nav>
+    </header>
+    <main>
+        <DynamicComponent Type="Page.Component" Parameters="ToMutable(Page.Parameters)" />
+    </main>
+    <footer>Built from the TSR API. Synthetic data only.</footer>
+</body>
+</html>
+
+@code {
+    [Parameter, EditorRequired]
+    public SitePage Page { get; set; } = default!;
+
+    [Parameter, EditorRequired]
+    public IReadOnlyList<SitePage> Nav { get; set; } = default!;
+
+    private static Dictionary<string, object> ToMutable(IReadOnlyDictionary<string, object?> parameters) =>
+        parameters.ToDictionary(p => p.Key, p => p.Value!);
+}

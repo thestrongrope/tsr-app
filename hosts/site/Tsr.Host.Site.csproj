@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+  <!-- The static site generator: loads domain site modules, reads the API, writes plain HTML. No rules. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="tests/**" />
+    <Content Remove="tests/**" />
+    <None Remove="tests/**" />
+  </ItemGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <ProjectReference Include="../../shared/site/Tsr.Shared.Site.csproj" />
+    <ProjectReference Include="../../domains/platform/site/Tsr.Platform.Site.csproj" />
+    <ProjectReference Include="../../domains/content/site/Tsr.Content.Site.csproj" />
+  </ItemGroup>
+</Project>

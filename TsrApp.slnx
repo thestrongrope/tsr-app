@@ -1,0 +1,56 @@
+<Solution>
+  <Folder Name="/domains/" />
+  <Folder Name="/domains/access/" />
+  <Folder Name="/domains/access/api/">
+    <Project Path="domains/access/api/Tsr.Access.Api.csproj" />
+  </Folder>
+  <Folder Name="/domains/content/" />
+  <Folder Name="/domains/content/api/">
+    <Project Path="domains/content/api/Tsr.Content.Api.csproj" />
+  </Folder>
+  <Folder Name="/domains/content/site/">
+    <Project Path="domains/content/site/Tsr.Content.Site.csproj" />
+  </Folder>
+  <Folder Name="/domains/content/spec/" />
+  <Folder Name="/domains/content/spec/tests/">
+    <Project Path="domains/content/spec/tests/Tsr.Content.Contract.Tests.csproj" />
+  </Folder>
+  <Folder Name="/domains/identity/" />
+  <Folder Name="/domains/identity/api/">
+    <Project Path="domains/identity/api/Tsr.Identity.Api.csproj" />
+  </Folder>
+  <Folder Name="/domains/platform/" />
+  <Folder Name="/domains/platform/api/">
+    <Project Path="domains/platform/api/Tsr.Platform.Api.csproj" />
+  </Folder>
+  <Folder Name="/domains/platform/api/tests/">
+    <Project Path="domains/platform/api/tests/Tsr.Platform.Api.Tests.csproj" />
+  </Folder>
+  <Folder Name="/domains/platform/site/">
+    <Project Path="domains/platform/site/Tsr.Platform.Site.csproj" />
+  </Folder>
+  <Folder Name="/domains/platform/spec/" />
+  <Folder Name="/domains/platform/spec/tests/">
+    <Project Path="domains/platform/spec/tests/Tsr.Platform.Contract.Tests.csproj" />
+  </Folder>
+  <Folder Name="/hosts/" />
+  <Folder Name="/hosts/api/">
+    <Project Path="hosts/api/Tsr.Host.Api.csproj" />
+  </Folder>
+  <Folder Name="/hosts/api/tests/">
+    <Project Path="hosts/api/tests/Tsr.Host.Api.Tests.csproj" />
+  </Folder>
+  <Folder Name="/hosts/site/">
+    <Project Path="hosts/site/Tsr.Host.Site.csproj" />
+  </Folder>
+  <Folder Name="/hosts/site/tests/">
+    <Project Path="hosts/site/tests/Tsr.Host.Site.Tests.csproj" />
+  </Folder>
+  <Folder Name="/shared/" />
+  <Folder Name="/shared/api/">
+    <Project Path="shared/api/Tsr.Shared.Api.csproj" />
+  </Folder>
+  <Folder Name="/shared/site/">
+    <Project Path="shared/site/Tsr.Shared.Site.csproj" />
+  </Folder>
+</Solution>

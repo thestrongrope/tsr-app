@@ -1,0 +1,8 @@
+@* The API's status as it was when this site was built. A static page cannot show it live. *@
+<h1>Status</h1>
+<p>When this site was built, the API answered: <strong>@Health.Status</strong>.</p>
+
+@code {
+    [Parameter, EditorRequired]
+    public Health Health { get; set; } = default!;
+}

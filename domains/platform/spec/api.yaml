@@ -1,0 +1,115 @@
+openapi: 3.1.0
+info:
+  title: TSR platform
+  version: 0.1.0
+  description: |
+    The platform domain's actions. Words: glossary.md. Behaviour: tests/ (run against any base URL).
+    Forward compatible: a store-live app keeps calling these, so add fields and routes freely but
+    never remove or change one without the release process. Every error body is {"detail": "..."}.
+
+    Validation note: a missing or malformed field is 422, never 400, so the app sees one error
+    shape. A gateway or generated server must not turn "required" into a 400.
+servers:
+  - url: http://localhost:8088
+    description: Local dev stack (gateway)
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      summary: Is the API process up
+      description: Says the process is up. It does not check the database.
+      security: []
+      responses:
+        "200":
+          description: Up
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    const: ok
+  /feedback:
+    post:
+      operationId: submitFeedback
+      summary: A member sends feedback
+      description: |
+        Needs feedback:create:self. Stores the text once per (member, clientId): a replay returns
+        the stored id with 201 and publishes nothing new. A new row publishes
+        platform.feedback_submitted (event shape: ../CLAUDE.md, "Events").
+      security:
+        - memberToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubmitFeedbackRequest"
+      responses:
+        "201":
+          description: Stored, or already stored by an earlier send with the same clientId
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubmitFeedbackResponse"
+        "401":
+          $ref: "#/components/responses/Problem"
+        "403":
+          $ref: "#/components/responses/Problem"
+        "422":
+          $ref: "#/components/responses/Problem"
+components:
+  securitySchemes:
+    memberToken:
+      type: apiKey
+      in: header
+      name: X-Dev-Token
+      description: |
+        Who is calling, verified by the identity domain. In the dev stack this is X-Dev-Token with a
+        synthetic member's token (db/synthetic/seed.sql). The production header is identity's to
+        define; the contract tests take it from TSR_AUTH_HEADER and TSR_AUTH_VALUE.
+  schemas:
+    SubmitFeedbackRequest:
+      type: object
+      required: [clientId, text]
+      properties:
+        clientId:
+          $ref: "#/components/schemas/ClientId"
+        text:
+          $ref: "#/components/schemas/FeedbackText"
+    SubmitFeedbackResponse:
+      type: object
+      required: [id]
+      properties:
+        id:
+          $ref: "#/components/schemas/FeedbackId"
+    FeedbackId:
+      description: Server id of a stored feedback row.
+      type: integer
+      minimum: 1
+    ClientId:
+      description: The app's own id for one message, usually a UUID. Surrounding spaces are trimmed before the check. A replay with the same value from the same member returns the stored row.
+      type: string
+      pattern: "^[A-Za-z0-9-]{1,36}$"
+    FeedbackText:
+      description: "Trimmed, 1 to 2000 characters, counted as Unicode code points (PHP mb_strlen). JSON Schema maxLength also counts code points, so the limit here is exact; minLength cannot express 'not only spaces', which the server also refuses."
+      type: string
+      minLength: 1
+      maxLength: 2000
+    Problem:
+      type: object
+      required: [detail]
+      properties:
+        detail:
+          type: string
+          description: A short, human-readable reason. Never contains member data.
+          examples: ["Sign in required", "Not allowed", "text is required", "clientId is required"]
+  responses:
+    Problem:
+      description: Expected failure (401 not signed in, 403 not allowed, 422 invalid body)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Problem"

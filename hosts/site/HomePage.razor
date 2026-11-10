@@ -1,0 +1,13 @@
+@* The site's front page, owned by the host: it only links to what the domains contribute. *@
+<h1>The Strong Rope</h1>
+<ul>
+    @foreach (var item in Nav)
+    {
+        <li><a href="@item.Path">@item.NavTitle</a></li>
+    }
+</ul>
+
+@code {
+    [Parameter, EditorRequired]
+    public IReadOnlyList<SitePage> Nav { get; set; } = default!;
+}

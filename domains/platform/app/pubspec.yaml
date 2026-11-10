@@ -1,0 +1,20 @@
+# platform's screens: send feedback (and later app version, release notes). Presentation only:
+# views, view models, and a repository that calls platform's API (spec/api.yaml).
+name: tsr_platform_app
+description: "platform domain screens for tsr-app."
+publish_to: none
+
+environment:
+  sdk: ^3.8.1
+
+resolution: workspace
+
+dependencies:
+  flutter:
+    sdk: flutter
+  tsr_shared_app: any
+
+dev_dependencies:
+  flutter_lints: ^6.0.0
+  flutter_test:
+    sdk: flutter

@@ -1,0 +1,14 @@
+@* One article. The body is plain text (spec/glossary.md); Razor escapes it, so it can never inject HTML. *@
+<article>
+    <h1>@Article.Title</h1>
+    <p><time datetime="@Article.PublishedAt.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)">@Article.PublishedAt.ToString("d MMMM yyyy", CultureInfo.InvariantCulture)</time></p>
+    @foreach (var paragraph in Article.Paragraphs())
+    {
+        <p>@paragraph</p>
+    }
+</article>
+
+@code {
+    [Parameter, EditorRequired]
+    public Article Article { get; set; } = default!;
+}

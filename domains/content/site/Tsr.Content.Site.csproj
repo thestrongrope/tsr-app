@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+  <!-- content's pages on the static site. Reads the API through shared/site; references no api project. -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <ProjectReference Include="../../../shared/site/Tsr.Shared.Site.csproj" />
+  </ItemGroup>
+</Project>

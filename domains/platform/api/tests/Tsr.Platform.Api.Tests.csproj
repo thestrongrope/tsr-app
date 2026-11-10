@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Unit tests for platform. The test files live next to the code ("*.Tests.cs"). -->
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../**/*.Tests.cs" Exclude="../tests/**" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Tsr.Platform.Api.csproj" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+</Project>

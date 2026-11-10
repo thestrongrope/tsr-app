@@ -1,0 +1,19 @@
+# Shared app plumbing: HTTP client, client ids, theme. Never a screen or a business rule.
+name: tsr_shared_app
+description: "Shared Flutter plumbing for tsr-app."
+publish_to: none
+
+environment:
+  sdk: ^3.8.1
+
+resolution: workspace
+
+dependencies:
+  flutter:
+    sdk: flutter
+  http: ^1.6.0
+
+dev_dependencies:
+  flutter_lints: ^6.0.0
+  flutter_test:
+    sdk: flutter

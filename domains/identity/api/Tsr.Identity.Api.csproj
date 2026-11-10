@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- identity (AuthN): who is calling. Depends on shared only. -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <ProjectReference Include="../../../shared/api/Tsr.Shared.Api.csproj" />
+  </ItemGroup>
+</Project>

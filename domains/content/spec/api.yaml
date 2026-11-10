@@ -1,0 +1,56 @@
+openapi: 3.1.0
+info:
+  title: TSR content
+  version: 0.1.0
+  description: |
+    The content domain's actions. Words: glossary.md. Behaviour: tests/ (run against any base URL).
+    Forward compatible: add fields and routes freely, never remove or change one without the
+    release process. Every error body is {"detail": "..."}.
+servers:
+  - url: http://localhost:8088
+    description: Local dev stack (gateway)
+paths:
+  /articles:
+    get:
+      operationId: listPublishedArticles
+      summary: The published articles, newest first
+      description: |
+        Public: no sign-in. Only articles whose publishedAt is set and not in the future are
+        listed; drafts and scheduled articles never are. At most 500 (no paging yet).
+      security: []
+      responses:
+        "200":
+          description: The published articles
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListPublishedArticlesResponse"
+components:
+  schemas:
+    ListPublishedArticlesResponse:
+      type: object
+      required: [articles]
+      properties:
+        articles:
+          type: array
+          maxItems: 500
+          items:
+            $ref: "#/components/schemas/Article"
+    Article:
+      type: object
+      required: [slug, title, body, publishedAt]
+      properties:
+        slug:
+          type: string
+          maxLength: 120
+          description: The article's address on the site (/articles/<slug>/). Unique.
+        title:
+          type: string
+          maxLength: 200
+        body:
+          type: string
+          description: Plain text. Paragraphs are separated by a blank line. Not HTML.
+        publishedAt:
+          type: string
+          format: date-time
+          description: UTC.

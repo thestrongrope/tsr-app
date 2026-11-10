@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+  <!-- Plumbing for the static site: reading the API at build time and describing a page. No rules. -->
+  <PropertyGroup>
+    <!-- CA1716: "Shared" is a VB keyword. Nothing here is consumed from VB (as in shared/api). -->
+    <NoWarn>$(NoWarn);CA1716</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+</Project>

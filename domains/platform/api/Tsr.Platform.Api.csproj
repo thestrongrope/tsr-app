@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- platform: app version, release notes, health, feedback, geo. Lists access as a dependency. -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <ProjectReference Include="../../../shared/api/Tsr.Shared.Api.csproj" />
+    <ProjectReference Include="../../access/api/Tsr.Access.Api.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Tests sit next to the code they test; tests/ compiles them. -->
+    <Compile Remove="**/*.Tests.cs" />
+    <Compile Remove="tests/**" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Slices and value objects are internal; this domain's own unit tests may see them. -->
+    <InternalsVisibleTo Include="Tsr.Platform.Api.Tests" />
+  </ItemGroup>
+</Project>

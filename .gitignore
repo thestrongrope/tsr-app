@@ -1,0 +1,26 @@
+# Secrets and local config: never committed
+.env
+.env.*
+!.env.example
+.secrets/
+*.jks
+key.properties
+
+# .NET
+bin/
+obj/
+*.user
+TestResults/
+
+# Dart / Flutter
+.dart_tool/
+build/
+pubspec_overrides.yaml
+*.iml
+.flutter-plugins
+.flutter-plugins-dependencies
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/

@@ -1,0 +1,25 @@
+# The Flutter shell: main.dart, navigation, theme, platform folders. Holds no screens of its own;
+# each screen lives in its domain's package (domains/<context>/app). Built by Codemagic.
+name: tsr_app
+description: "The Strong Rope app shell (tsr-app sample)."
+publish_to: none
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.8.1
+
+resolution: workspace
+
+dependencies:
+  flutter:
+    sdk: flutter
+  tsr_shared_app: any
+  tsr_platform_app: any
+
+dev_dependencies:
+  flutter_lints: ^6.0.0
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true

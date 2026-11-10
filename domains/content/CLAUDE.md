@@ -1,0 +1,32 @@
+# domains/content/
+
+Quran, recitation, articles, lectures, books. **Status: stub (2026-11-10).** Only articles exist,
+built for the site spike (`docs/specs/site-spike/results.md`) and kept as the example of a domain
+with `site/` pages. Lectures, books, the Quran and the content pipelines are planned
+(`domains/CLAUDE.md`).
+
+## Dependencies
+
+None (`ContentModule.Dependencies` is empty). Its routes are public reads, so it calls no `access`.
+
+## Public reads (rule 4 of `domains/CLAUDE.md`)
+
+`GET /articles` is a public read: no caller and no `access` check. **Its query returns only public
+data**: the published rule (`spec/glossary.md`) is in the SQL of `ListPublishedArticles`, so no
+client or the site can show a draft or a scheduled article by mistake.
+
+## Where things are
+
+| Need | File |
+|---|---|
+| Words to use (Article, Slug, Published ...) | `spec/glossary.md` |
+| The HTTP contract, field shapes and limits | `spec/api.yaml` |
+| Behaviour over HTTP, any implementation | `spec/tests/` (needs the dev stack up) |
+| Module: registration, routes, dependencies | `api/ContentModule.cs` |
+| One use case end to end | `api/features/list-published-articles/ListPublishedArticles.cs` |
+| Its pages on the static site | `site/` |
+| Table | `db/migrations/2026_11_10_content_articles.sql` (owned by content) |
+
+## Events
+
+None yet.

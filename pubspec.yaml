@@ -1,0 +1,13 @@
+# Dart pub workspace root (Dart 3.6+). Run `flutter pub get` here once: it resolves every member
+# together into one pubspec.lock. Members must sit below this folder, which is why the root is the
+# workspace and not hosts/app.
+name: _
+publish_to: none
+
+environment:
+  sdk: ^3.8.1
+
+workspace:
+  - hosts/app
+  - shared/app
+  - domains/platform/app

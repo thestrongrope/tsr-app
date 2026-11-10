@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <!-- The one API process: loads domain modules, wires middleware. Holds no rules. -->
+  <ItemGroup>
+    <Compile Remove="tests/**" />
+    <Content Remove="tests/**" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../shared/api/Tsr.Shared.Api.csproj" />
+    <ProjectReference Include="../../domains/identity/api/Tsr.Identity.Api.csproj" />
+    <ProjectReference Include="../../domains/access/api/Tsr.Access.Api.csproj" />
+    <ProjectReference Include="../../domains/platform/api/Tsr.Platform.Api.csproj" />
+    <ProjectReference Include="../../domains/content/api/Tsr.Content.Api.csproj" />
+  </ItemGroup>
+</Project>
