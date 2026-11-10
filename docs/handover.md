@@ -88,9 +88,18 @@ it moves to the module root when an in-process consumer exists. `site/` librarie
 
 ## Initial build plan (draft, 2026-11-10)
 `docs/specs/initial-build/plan.md`: build the API and site locally to parity with tsr-account, then
-publish once. Not agreed yet. It would replace the order of work above (PHP never moves to Postgres;
+publish once. Agreed the same day (see below). It would replace the order of work above (PHP never moves to Postgres;
 one cutover). Three decisions wait on Asif: all-at-once cutover, local `git init`, no GitHub tracking
 before the baseline.
+
+## Initial build: phases 0 to 2 done (2026-11-10)
+Plan agreed: `docs/specs/initial-build/plan.md` (all-at-once cutover, local git, no GitHub tracking
+before the baseline). Its checklist and "Checkpoint 2" hold the current state and the open items.
+`identity` verifies Firebase tokens (emulator in dev, `tools/dev-auth/mint-token.sh`); `access` has the
+PHP permission engine (`CanAsync`, `ReachAsync`, `ForUserAsync`, port `IClassScopes`). The dev header
+`X-Dev-Token` is gone. Contracts: `tools/identity-contract.sh dev|parity`, `tools/access-contract.sh
+dev|parity`. PHP parity stack: `tools/parity-php/README.md` (synthetic data only; never use
+tsr-account's own long-running containers, they hold real member data). Next: phase 3, `platform` first.
 
 ## Then
 1. D2 (Asif decides): `api.yaml` generated from the C# endpoints with a CI diff, or hand-written with

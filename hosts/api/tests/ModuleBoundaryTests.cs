@@ -72,7 +72,9 @@ public sealed class ModuleBoundaryTests
         switch (module)
         {
             case "identity":
-                services.AddIdentity(new HostingEnvironment { EnvironmentName = Environments.Development });
+                services.AddIdentity(
+                    new HostingEnvironment { EnvironmentName = Environments.Development },
+                    IdentityFailsClosedTests.Config("demo-tsr-test", "localhost:9099"));
                 break;
             case "access":
                 services.AddAccess();

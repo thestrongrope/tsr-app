@@ -63,13 +63,13 @@ paths:
 components:
   securitySchemes:
     memberToken:
-      type: apiKey
-      in: header
-      name: X-Dev-Token
+      type: http
+      scheme: bearer
+      bearerFormat: Firebase ID token
       description: |
-        Who is calling, verified by the identity domain. In the dev stack this is X-Dev-Token with a
-        synthetic member's token (db/synthetic/seed.sql). The production header is identity's to
-        define; the contract tests take it from TSR_AUTH_HEADER and TSR_AUTH_VALUE.
+        Who is calling, verified by the identity domain: the member's Firebase ID token in
+        `Authorization: Bearer <token>`. The dev stack uses the Firebase Auth emulator
+        (tools/identity-contract.sh shows how a synthetic member signs in).
   schemas:
     SubmitFeedbackRequest:
       type: object

@@ -6,7 +6,7 @@ namespace Tsr.Shared.Api;
 /// The verified caller of a request: who they are, never what they may do. Set once by identity's
 /// middleware; authority comes from the database through access, never from this record.
 /// </summary>
-public sealed record Caller(int UserId, int Token, int RoleId);
+public sealed record Caller(int UserId, int Token);
 
 public static class CallerHttpContextExtensions
 {

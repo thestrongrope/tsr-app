@@ -21,6 +21,12 @@ public sealed class SchemaGuardTests
     /// <summary>"schema.table.column" to the reason it is case-sensitive. Empty today: no plain text column is.</summary>
     private static readonly Dictionary<string, string> CaseSensitive = [];
 
+    /// <summary>
+    /// Foreign keys that still cross schemas, with the reason. Platform's first migration added two to identity.users;
+    /// a later change removes them (the ratchet: no new ones).
+    /// </summary>
+    private static readonly HashSet<string> CrossSchemaForeignKeys = ["fk_feedback_user", "fk_feedback_handled_by"];
+
     [Test]
     public void Every_domain_has_exactly_one_context()
     {
@@ -34,6 +40,36 @@ public sealed class SchemaGuardTests
     public void Allow_list_entries_carry_a_reason()
     {
         Assert.That(CaseSensitive.Where(e => string.IsNullOrWhiteSpace(e.Value)).Select(e => e.Key), Is.Empty);
+    }
+
+    [Test]
+    public async Task No_foreign_key_crosses_domain_schemas()
+    {
+        await using var connection = new NpgsqlConnection(TestDatabase.OwnerConnection);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            """
+            select c.conname, c.conname || ': ' || n1.nspname || '.' || t1.relname || ' -> ' || n2.nspname || '.' || t2.relname
+            from pg_constraint c
+            join pg_class t1 on t1.oid = c.conrelid
+            join pg_namespace n1 on n1.oid = t1.relnamespace
+            join pg_class t2 on t2.oid = c.confrelid
+            join pg_namespace n2 on n2.oid = t2.relnamespace
+            where c.contype = 'f' and n1.nspname <> n2.nspname and n1.nspname = any(@schemas)
+            """,
+            connection);
+        command.Parameters.AddWithValue("schemas", Schemas());
+        var crossing = new List<string>();
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            if (!CrossSchemaForeignKeys.Contains(reader.GetString(0)))
+            {
+                crossing.Add(reader.GetString(1));
+            }
+        }
+
+        Assert.That(crossing, Is.Empty, "A domain never references another domain's tables (domains/CLAUDE.md rule 7)");
     }
 
     [Test]

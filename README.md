@@ -9,11 +9,12 @@ and AI agents: [`CLAUDE.md`](CLAUDE.md).
 
 ## Run it (Windows or Mac)
 
-You need Docker, the .NET 10 SDK, Hurl (contract tests) and Flutter (3.38 or later). No Bash, no shared secret. Ports are published on 127.0.0.1 only.
+You need Docker, the .NET 10 SDK, Hurl (contract tests) and Flutter (3.38 or later). No shared secret. The token scripts (`tools/*/mint-token.sh`, `tools/identity-contract.sh`) need Bash, curl and jq (Git Bash on Windows). Ports are published on 127.0.0.1 only.
 
 ```
 docker compose -f docker-compose.dev.yml up -d --build   # PostgreSQL, API, gateway on :8088
-hurl --test --glob "domains/*/spec/tests/*.hurl" --variable base_url=http://localhost:8088 --variable auth_header=X-Dev-Token --variable auth_value=900001   # contract tests (Hurl) against the stack
+tools/identity-contract.sh dev                           # mint a dev token, refresh fixtures, run the sign-in contract
+hurl --test --glob "domains/*/spec/tests/*.hurl" --variable base_url=http://localhost:8088 --variables-file build/dev/token.vars --variables-file domains/identity/spec/tests/fixtures.vars --variables-file domains/access/spec/tests/fixtures.vars   # every contract file
 dotnet test domains/platform/api/tests                   # unit tests
 dotnet test hosts/api/tests                              # module-boundary tests
 dotnet test db/tests                                     # database-backed tests (Docker: a throwaway postgres:18)
@@ -22,8 +23,8 @@ cd domains/platform/app && flutter test                  # screen logic tests
 dotnet run --project hosts/site                          # static site from the API, into build/site/
 ```
 
-Try the API: `curl -X POST localhost:8088/feedback -H "X-Dev-Token: 900001" -H "Content-Type:
-application/json" -d '{"clientId":"demo-1","text":"salaam"}'`. Token 900001 is a synthetic member.
+Try the API: `tools/dev-auth/mint-token.sh` signs the synthetic member `member.gents@example.invalid` in at the dev Firebase Auth emulator (127.0.0.1:19099) and writes `build/dev/token.vars`; then
+`curl -X POST localhost:8088/feedback -H "Authorization: Bearer $(grep auth_value build/dev/token.vars | cut -d" " -f2)" -H "Content-Type: application/json" -d '{"clientId":"demo-1","text":"salaam"}'`.
 
 Windows: enable long paths for Git (`git config --global core.longpaths true`) before cloning.
 

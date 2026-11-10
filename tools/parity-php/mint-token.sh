@@ -29,5 +29,8 @@ TOKEN="$(printf '%s' "$BODY" | curl -sS --max-time 10 -X POST \
 
 mkdir -p "$(dirname "$OUT")"
 umask 077
-printf 'auth_header=Authorization\nauth_value=Bearer %s\n' "$TOKEN" > "$OUT"
+{
+  printf 'auth_header=Authorization\nauth_value=Bearer %s\n' "$TOKEN"
+  printf 'emulator_url=%s\nproject_id=%s\nemulator_password=%s\n' "$HOST" "${PARITY_FIREBASE_PROJECT_ID}" "$PARITY_EMULATOR_PASSWORD"
+} > "$OUT"
 echo "token written to $OUT"

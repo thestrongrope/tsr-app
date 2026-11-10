@@ -2,6 +2,17 @@
   <!-- identity (AuthN): who is calling. Depends on shared only. -->
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
     <ProjectReference Include="../../../shared/api/Tsr.Shared.Api.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Tests sit next to the code they test; tests/ compiles them. -->
+    <Compile Remove="**/*.Tests.cs" />
+    <Compile Remove="tests/**" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Verifier, middleware and slices are internal; this domain's unit tests and the database tests may see them. -->
+    <InternalsVisibleTo Include="Tsr.Identity.Api.Tests" />
+    <InternalsVisibleTo Include="Tsr.Db.Tests" />
   </ItemGroup>
 </Project>

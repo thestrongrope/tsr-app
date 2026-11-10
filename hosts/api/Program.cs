@@ -26,7 +26,7 @@ if (migrating)
 }
 else
 {
-    builder.Services.AddIdentity(builder.Environment);
+    builder.Services.AddIdentity(builder.Environment, builder.Configuration);
 }
 
 builder.Services.AddAccess();
@@ -43,7 +43,10 @@ if (migrating)
     return;
 }
 
+app.UseRouting();
 app.UseIdentity();
+app.MapIdentity();
+app.MapAccess();
 app.MapPlatform();
 app.MapContent();
 

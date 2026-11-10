@@ -63,6 +63,25 @@ public sealed class TestDatabase
         return (T)(await command.ExecuteScalarAsync())!;
     }
 
+    /// <summary>The first row of a query as the owner, column name to value (DBNull as null); null when there is no row.</summary>
+    public static async Task<Dictionary<string, string?>?> RowAsync(string sql)
+    {
+        await using var connection = new NpgsqlConnection(OwnerConnection);
+        await connection.OpenAsync();
+        // citext cannot be read as object by Npgsql, so the row travels as JSON text.
+        await using var command = new NpgsqlCommand("select row_to_json(q)::text from (" + sql + ") q", connection);
+        var json = await command.ExecuteScalarAsync() as string;
+        if (json is null)
+        {
+            return null;
+        }
+
+        using var document = System.Text.Json.JsonDocument.Parse(json);
+        return document.RootElement.EnumerateObject().ToDictionary(
+            p => p.Name,
+            p => p.Value.ValueKind == System.Text.Json.JsonValueKind.Null ? null : p.Value.ValueKind == System.Text.Json.JsonValueKind.String ? p.Value.GetString() : p.Value.GetRawText());
+    }
+
     /// <summary>Runs the host's entry point with <c>--migrate</c> in Production, as the deployed job does.</summary>
     public static async Task MigrateAsProductionAsync(string connectionString)
     {

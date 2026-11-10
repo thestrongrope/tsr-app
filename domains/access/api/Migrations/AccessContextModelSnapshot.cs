@@ -11,7 +11,7 @@ using Tsr.Access.Api;
 namespace Tsr.Access.Api.Migrations
 {
     [DbContext(typeof(AccessContext))]
-    internal partial class AccessContextModelSnapshot : ModelSnapshot
+    partial class AccessContextModelSnapshot : ModelSnapshot
     {
         protected override void BuildModel(ModelBuilder modelBuilder)
         {
@@ -23,6 +23,123 @@ namespace Tsr.Access.Api.Migrations
 
             NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "citext");
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
+
+            modelBuilder.Entity("Tsr.Access.Api.ClassAccessRule", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<int?>("Gender")
+                        .HasColumnType("integer")
+                        .HasColumnName("gender");
+
+                    b.Property<int?>("GrantedBy")
+                        .HasColumnType("integer")
+                        .HasColumnName("granted_by");
+
+                    b.Property<string>("Note")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("citext")
+                        .HasColumnName("note");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(300)
+                        .HasColumnType("citext")
+                        .HasColumnName("reason");
+
+                    b.Property<string>("RevokeReason")
+                        .HasMaxLength(300)
+                        .HasColumnType("citext")
+                        .HasColumnName("revoke_reason");
+
+                    b.Property<DateTimeOffset?>("RevokedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("revoked_at");
+
+                    b.Property<int?>("RevokedBy")
+                        .HasColumnType("integer")
+                        .HasColumnName("revoked_by");
+
+                    b.Property<int>("Token")
+                        .HasColumnType("integer")
+                        .HasColumnName("token");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Token")
+                        .HasDatabaseName("idx_class_access_rules_token");
+
+                    b.ToTable("class_access_rules", "access", t =>
+                        {
+                            t.HasCheckConstraint("ck_class_access_rules_gender", "gender in (1, 2)");
+
+                            t.HasCheckConstraint("ck_class_access_rules_note_length", "char_length(\"note\") <= 255");
+
+                            t.HasCheckConstraint("ck_class_access_rules_reason_length", "char_length(\"reason\") <= 300");
+
+                            t.HasCheckConstraint("ck_class_access_rules_revoke_reason_length", "char_length(\"revoke_reason\") <= 300");
+                        });
+                });
+
+            modelBuilder.Entity("Tsr.Access.Api.ClassAccessRuleCondition", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Field")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("citext")
+                        .HasColumnName("field");
+
+                    b.Property<int?>("LevelId")
+                        .HasColumnType("integer")
+                        .HasColumnName("level_id");
+
+                    b.Property<bool>("Negate")
+                        .HasColumnType("boolean")
+                        .HasColumnName("negate");
+
+                    b.Property<int>("RuleId")
+                        .HasColumnType("integer")
+                        .HasColumnName("rule_id");
+
+                    b.Property<string>("Value")
+                        .HasMaxLength(300)
+                        .HasColumnType("citext")
+                        .HasColumnName("value");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RuleId")
+                        .HasDatabaseName("idx_class_access_rule_conditions_rule");
+
+                    b.ToTable("class_access_rule_conditions", "access", t =>
+                        {
+                            t.HasCheckConstraint("ck_class_access_rule_conditions_field", "field in ('city', 'country', 'level', 'tag')");
+
+                            t.HasCheckConstraint("ck_class_access_rule_conditions_field_length", "char_length(\"field\") <= 20");
+
+                            t.HasCheckConstraint("ck_class_access_rule_conditions_value", "(field = 'level' and level_id is not null and value is null) or (field <> 'level' and value is not null and level_id is null)");
+
+                            t.HasCheckConstraint("ck_class_access_rule_conditions_value_length", "char_length(\"value\") <= 300");
+                        });
+                });
 
             modelBuilder.Entity("Tsr.Access.Api.PermissionEntry", b =>
                 {
@@ -43,6 +160,26 @@ namespace Tsr.Access.Api.Migrations
                             t.HasCheckConstraint("ck_permissions_description_length", "char_length(\"description\") <= 255");
 
                             t.HasCheckConstraint("ck_permissions_name_length", "char_length(\"name\") <= 100");
+                        });
+                });
+
+            modelBuilder.Entity("Tsr.Access.Api.Role", b =>
+                {
+                    b.Property<int>("Id")
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("citext")
+                        .HasColumnName("name");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("roles", "access", t =>
+                        {
+                            t.HasCheckConstraint("ck_roles_name_length", "char_length(\"name\") <= 30");
                         });
                 });
 
@@ -92,9 +229,23 @@ namespace Tsr.Access.Api.Migrations
                         .HasColumnType("citext")
                         .HasColumnName("permission");
 
+                    b.Property<string>("Reason")
+                        .HasMaxLength(300)
+                        .HasColumnType("citext")
+                        .HasColumnName("reason");
+
+                    b.Property<string>("RevokeReason")
+                        .HasMaxLength(300)
+                        .HasColumnType("citext")
+                        .HasColumnName("revoke_reason");
+
                     b.Property<DateTimeOffset?>("RevokedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("revoked_at");
+
+                    b.Property<int?>("RevokedBy")
+                        .HasColumnType("integer")
+                        .HasColumnName("revoked_by");
 
                     b.Property<int>("UserId")
                         .HasColumnType("integer")
@@ -110,7 +261,37 @@ namespace Tsr.Access.Api.Migrations
                     b.ToTable("user_permissions", "access", t =>
                         {
                             t.HasCheckConstraint("ck_user_permissions_permission_length", "char_length(\"permission\") <= 100");
+
+                            t.HasCheckConstraint("ck_user_permissions_reason_length", "char_length(\"reason\") <= 300");
+
+                            t.HasCheckConstraint("ck_user_permissions_revoke_reason_length", "char_length(\"revoke_reason\") <= 300");
                         });
+                });
+
+            modelBuilder.Entity("Tsr.Access.Api.UserRole", b =>
+                {
+                    b.Property<int>("UserId")
+                        .HasColumnType("integer")
+                        .HasColumnName("user_id");
+
+                    b.Property<int>("RoleId")
+                        .HasColumnType("integer")
+                        .HasColumnName("roleid");
+
+                    b.HasKey("UserId");
+
+                    b.HasIndex("RoleId");
+
+                    b.ToTable("user_roles", "access");
+                });
+
+            modelBuilder.Entity("Tsr.Access.Api.ClassAccessRuleCondition", b =>
+                {
+                    b.HasOne("Tsr.Access.Api.ClassAccessRule", null)
+                        .WithMany()
+                        .HasForeignKey("RuleId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Tsr.Access.Api.RolePermission", b =>
@@ -120,6 +301,12 @@ namespace Tsr.Access.Api.Migrations
                         .HasForeignKey("Permission")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("Tsr.Access.Api.Role", null)
+                        .WithMany()
+                        .HasForeignKey("RoleId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Tsr.Access.Api.UserPermission", b =>
@@ -127,6 +314,15 @@ namespace Tsr.Access.Api.Migrations
                     b.HasOne("Tsr.Access.Api.PermissionEntry", null)
                         .WithMany()
                         .HasForeignKey("Permission")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Tsr.Access.Api.UserRole", b =>
+                {
+                    b.HasOne("Tsr.Access.Api.Role", null)
+                        .WithMany()
+                        .HasForeignKey("RoleId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

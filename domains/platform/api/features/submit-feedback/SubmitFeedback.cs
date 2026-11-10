@@ -22,14 +22,15 @@ internal sealed record FeedbackSubmitted(int FeedbackId, int UserId, DateTimeOff
 
 internal static class SubmitFeedbackEndpoint
 {
-    public const string Permission = "feedback:create:self";
+    public const string Permission = "feedback:create";
 
     public static IEndpointRouteBuilder MapSubmitFeedback(this IEndpointRouteBuilder routes)
     {
         routes.MapPost(
             "/feedback",
             (HttpContext context, SubmitFeedbackRequest? body, SubmitFeedbackHandler handler) =>
-                handler.HandleAsync(context.GetCaller(), body, context.RequestAborted));
+                handler.HandleAsync(context.GetCaller(), body, context.RequestAborted))
+            .RequireMember();
         return routes;
     }
 }
@@ -44,7 +45,7 @@ internal sealed class SubmitFeedbackHandler(PlatformContext db, Permissions perm
             return Problem.Unauthenticated();
         }
 
-        if (!await permissions.CanAsync(caller, SubmitFeedbackEndpoint.Permission, ct))
+        if (!await permissions.CanAsync(caller, SubmitFeedbackEndpoint.Permission, AccessTarget.None, ct))
         {
             return Problem.Forbidden();
         }

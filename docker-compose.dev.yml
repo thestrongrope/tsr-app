@@ -30,6 +30,25 @@ services:
       timeout: 5s
       retries: 20
 
+  # The Firebase Auth emulator (Google's own, run through npx): signs in synthetic members so the API and
+  # the contract tests need no Google call. Accounts live in memory; mint a token again after a restart
+  # (tools/dev-auth/mint-token.sh). Published on 127.0.0.1:19099 only. Verified: node:22-alpine ships node
+  # and npx; busybox wget is not relied on (the check uses node fetch, as tools/parity-php does).
+  firebase-emulator:
+    image: node:22-alpine
+    command: ["npx", "--yes", "firebase-tools@15.34.2", "emulators:start", "--only", "auth", "--project", "demo-tsr-app", "--config", "/cfg/firebase.json"]
+    ports:
+      - "127.0.0.1:19099:9099"
+    volumes:
+      - ./tools/auth-emulator:/cfg:ro
+      - emulator-cache:/root/.npm
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:9099/').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+
   migrate:
     # The same image as the API, run once with --migrate (production: the same, as a Dokploy job).
     build:
@@ -65,9 +84,13 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       TSR_DB: "Host=db;Port=5432;Database=tsr;Username=tsr_app;Password=local-only-app"
+      TSR_FIREBASE_PROJECT_ID: demo-tsr-app
+      TSR_AUTH_EMULATOR_HOST: firebase-emulator:9099
     depends_on:
       seed:
         condition: service_completed_successfully
+      firebase-emulator:
+        condition: service_healthy
 
   gateway:
     image: nginx:1.27-alpine
@@ -86,3 +109,4 @@ services:
 
 volumes:
   db-data:
+  emulator-cache:

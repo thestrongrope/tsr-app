@@ -104,9 +104,9 @@ them. Budget: five sub-agent runs and one review pass, then a checkpoint with th
 ## Checklist
 
 - [ ] Decisions 1 and 3 (decision 2 done 2026-11-10: local git, no remote)
-- [ ] Phase 0: sample on Postgres, EF Core, NUnit, Hurl
-- [ ] Phase 1: parity harness, `POST /feedback` green on both
-- [ ] Phase 2: identity, access with the permission matrix, gateway, outbox relay
+- [x] Phase 0: sample on Postgres, EF Core, NUnit, Hurl
+- [x] Phase 1: parity harness, `POST /feedback` green on both
+- [x] Phase 2: identity, access with the permission matrix (2026-11-10; the outbox relay is deferred to its first consumer, no gateway change needed before production)
 - [ ] Phase 3: platform · membership · classes · assessment · notifications · content · MIS
 - [ ] Phase 4: site
 - [ ] Phase 5: rehearsal
@@ -140,3 +140,26 @@ produced `+00:00` too (run in isolation); behaviour is unchanged.
 
 Rule to reword: synthetic tokens "900000+" holds for this repo's seed, not for tsr-account's
 generator (tokens from 1). The `.invalid` email is the guard that holds in both.
+
+## Checkpoint 2 (2026-11-10): phase 2
+
+Design: `phase-2-design.md` (approved, four decisions as recommended). Built by Sonnet, reviewed by
+`qa` and `security` (no high or critical finding), fixed, and re-run by the orchestrator on a fresh dev
+database: build 0 warnings; NUnit platform 15, identity 60, access 64, API boundary 17, site 12,
+database 69; Hurl 6 files, 125 requests on the new API. On PHP (run by the build agent): identity 34 of
+34, access 77 of 77. Catalog: 102 permissions, 7 roles, 88 role permissions, identical to PHP.
+
+Open after phase 2:
+
+- [ ] `hosts/app/lib/main.dart` still sends the removed `X-Dev-Token`: the Flutter app cannot sign in.
+- [ ] Class-dependent permission paths are unit-tested only; parity needs `classes` fixtures (phase 3).
+- [ ] Rule matching ignores case but not accents; MariaDB ignores both (`php-parity-feedback.md`).
+- [ ] Platform's `Initial` migration has two foreign keys into `identity.users` (allow-listed in
+      `db/tests/SchemaGuardTests.cs`); remove with a platform migration.
+- [ ] Not built: grant and rule admin routes, name and picture writes on sign-in, `/auth/debug-token`,
+      the account deletion command.
+- [ ] `POST /auth/link` with no body needs `Content-Length: 0` through the gateway: check what the app sends.
+- [ ] `hosts/api` is not a NativeAOT build; turning it on shows 37 EF and JSON warnings. Decide.
+- [ ] `tsr_app` can write every table, the permission tables included: production setup undecided.
+- [ ] 5 `unknown` cells in `permission-map.csv`.
+

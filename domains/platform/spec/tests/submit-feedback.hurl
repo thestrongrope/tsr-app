@@ -3,7 +3,7 @@
 # (a token is never written into this file). Synthetic members only.
 # New API:
 #   hurl --test --variable base_url=http://localhost:8088 \
-#        --variable auth_header=X-Dev-Token --variable auth_value=900001 submit-feedback.hurl
+#        --variables-file build/dev/token.vars submit-feedback.hurl
 # PHP parity stack (tools/parity-php/README.md): mint-token.sh writes the two auth
 # variables to build/parity-php/token.vars, so:
 #   hurl --test --variable base_url=http://127.0.0.1:18091 \

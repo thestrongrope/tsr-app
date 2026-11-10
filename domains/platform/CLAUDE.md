@@ -24,7 +24,7 @@ example**: copy its layout when you build another domain (`domains/CLAUDE.md`).
 
 ## Dependencies
 
-`access` only (`PlatformModule.Dependencies`), for `Permissions.CanAsync`. The caller comes from
+`access` only (`PlatformModule.Dependencies`), for `Permissions.CanAsync(caller, "feedback:create", AccessTarget.None, ct)` (an action has no scope). The caller comes from
 `identity`'s middleware through `HttpContext.GetCaller()`; that is shared plumbing, not a
 dependency.
 
@@ -67,6 +67,6 @@ until a consumer exists. Payloads are camelCase JSON, like the API, and carry id
 ```
 dotnet test domains/platform/api/tests            # unit
 dotnet test db/tests                              # feedback row + outbox row in one transaction (Docker)
-hurl --test --variable base_url=http://localhost:8088 --variable auth_header=X-Dev-Token --variable auth_value=900001 domains/platform/spec/tests/submit-feedback.hurl   # contract, stack up (:8088)
+hurl --test --variable base_url=http://localhost:8088 --variables-file build/dev/token.vars domains/platform/spec/tests/submit-feedback.hurl   # contract, stack up (:8088)
 flutter analyze domains/platform/app && (cd domains/platform/app && flutter test)
 ```

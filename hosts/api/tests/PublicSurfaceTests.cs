@@ -13,7 +13,14 @@ public sealed class PublicSurfaceTests
     private static readonly Dictionary<string, string[]> Allowed = new()
     {
         ["identity"] = ["IdentityModule"],
-        ["access"] = ["AccessModule", "Permissions"],
+        // access: the module; Permissions (the interface every domain calls) and the types in its signatures
+        // (AccessTarget, Reach, SearchReach, UserAccess, AccessScopes); IClassScopes, the one port classes will supply, with the
+        // two records it returns (ClassMemberships, ClassFacts). Nothing else.
+        ["access"] =
+        [
+            "AccessModule", "Permissions", "AccessTarget", "Reach", "SearchReach", "UserAccess", "AccessScopes",
+            "IClassScopes", "ClassMemberships", "ClassFacts",
+        ],
         ["platform"] = ["PlatformModule"],
         ["content"] = ["ContentModule"],
     };

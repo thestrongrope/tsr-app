@@ -11,13 +11,11 @@ namespace Tsr.Db.Tests;
 /// </summary>
 public sealed class FeedbackTests
 {
-    private const string Token = "900001";
-
     private WebApplicationFactory<Program> factory = null!;
 
     [OneTimeSetUp]
     public void StartApi() =>
-        factory = new WebApplicationFactory<Program>().WithWebHostBuilder(b => b.UseSetting("TSR_DB", TestDatabase.AppConnection));
+        factory = TestApi.Create();
 
     [OneTimeTearDown]
     public void StopApi() => factory.Dispose();
@@ -26,8 +24,8 @@ public sealed class FeedbackTests
     public Task CleanAsync() => TestDatabase.ExecuteAsync(
         """
         truncate platform.feedback, platform.outbox;
-        insert into identity.users (token, roleid, gender, email)
-        select 900001, 0, 1, 'member.gents@example.invalid'
+        insert into identity.users (token, gender, email, firebase_uid)
+        select 900001, 1, 'member.gents@example.invalid', 'uid-feedback'
         where not exists (select 1 from identity.users where token = 900001);
         """);
 
@@ -85,7 +83,11 @@ public sealed class FeedbackTests
         {
             Content = JsonContent.Create(new { clientId, text }),
         };
-        request.Headers.Add("X-Dev-Token", Token);
+        foreach (var (name, value) in TestApi.SignedInAs("uid-feedback", "member.gents@example.invalid"))
+        {
+            request.Headers.Add(name, value);
+        }
+
         return await client.SendAsync(request);
     }
 

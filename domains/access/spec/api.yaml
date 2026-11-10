@@ -1,0 +1,122 @@
+openapi: 3.1.0
+info:
+  title: TSR access
+  version: 0.1.0
+  description: |
+    The access domain's routes: what the signed-in member may do. Words: glossary.md. Behaviour: tests/
+    (run against any base URL, on PHP and on the new API alike). Forward compatible: add fields freely, never remove
+    or change one without the release process. Every error body is {"detail": "..."}.
+    All three routes need a sign-in and no permission (a member sees their own answer).
+servers:
+  - url: http://localhost:8088
+    description: Local dev stack (gateway)
+paths:
+  /me/permissions:
+    get:
+      operationId: getMePermissions
+      summary: Everything the caller may do, and what their scopes resolve to
+      security:
+        - memberToken: []
+      responses:
+        "200":
+          description: Permission names in catalog order (ordinal), and the scopes
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [version, issued_at, permissions, scopes]
+                properties:
+                  version: { type: integer, const: 4 }
+                  issued_at: { type: string, description: "UTC, microseconds, +00:00 offset" }
+                  permissions: { type: array, items: { type: string } }
+                  scopes:
+                    type: object
+                    required: [gender, assigned, assigned_genders, own, taught, enrolled]
+                    properties:
+                      gender: { type: [integer, "null"], description: "1 gents, 2 ladies, from the role; null otherwise" }
+                      assigned: { type: array, items: { type: integer } }
+                      assigned_genders: { type: array, items: { type: integer } }
+                      own: { type: array, items: { type: integer } }
+                      taught: { type: array, items: { type: integer } }
+                      enrolled: { type: array, items: { type: integer } }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+  /me/permissions/{permission}:
+    get:
+      operationId: getMePermission
+      summary: The scopes the caller holds one action in
+      description: "`permission` is resource:action (no scope); the colon may be percent-encoded. Empty scopes means not held."
+      security:
+        - memberToken: []
+      parameters:
+        - { name: permission, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: The scopes, in catalog order
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [permission, scopes]
+                properties:
+                  permission: { type: string }
+                  scopes: { type: array, items: { type: string } }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /user/permissions:
+    get:
+      operationId: getUserPermissions
+      summary: The older page list by role id (the app's router reads it)
+      description: |
+        Legacy, copied from PHP including a bug: the two derived roles (class_admin, class_teacher) are listed in
+        applicable_roles but grant no pages.
+      security:
+        - memberToken: []
+      responses:
+        "200":
+          description: Role, pages and class facts
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [version, permissions, role_id, role_name, applicable_roles, enrolled, class_count, teacher_count, mcq_admin, is_teacher, issued_at]
+                properties:
+                  version: { type: integer, const: 3 }
+                  permissions: { type: array, items: { type: string } }
+                  role_id: { type: integer }
+                  role_name: { type: string }
+                  applicable_roles:
+                    type: array
+                    items:
+                      type: object
+                      required: [role_id, role_name, source, priority]
+                      properties:
+                        role_id: { type: [integer, string] }
+                        role_name: { type: string }
+                        source: { type: string }
+                        priority: { type: integer }
+                  enrolled: { type: boolean }
+                  class_count: { type: integer }
+                  teacher_count: { type: integer }
+                  mcq_admin: { type: boolean }
+                  is_teacher: { type: boolean }
+                  issued_at: { type: string }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+components:
+  securitySchemes:
+    memberToken:
+      type: http
+      scheme: bearer
+      description: A Firebase ID token (identity verifies it)
+  responses:
+    Problem:
+      description: "{\"detail\": \"...\"}; 403 may add deletion_status"
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [detail]
+            properties:
+              detail: { type: string }

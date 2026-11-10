@@ -1,6 +1,9 @@
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Tsr.Identity.Api.Features.LinkAccount;
 using Tsr.Shared.Api;
 
 namespace Tsr.Identity.Api;
@@ -13,7 +16,7 @@ public static class IdentityModule
 
     /// <summary>
     /// Registers only identity's tables, for the one-off migrate job, which serves no requests and
-    /// so needs no caller verifier. The API itself starts with <see cref="AddIdentity"/>.
+    /// so needs no Firebase settings. The API itself starts with <see cref="AddIdentity"/>.
     /// </summary>
     public static IServiceCollection AddIdentityTables(this IServiceCollection services)
     {
@@ -21,21 +24,25 @@ public static class IdentityModule
         return services;
     }
 
-    public static IServiceCollection AddIdentity(this IServiceCollection services, IHostEnvironment env)
+    /// <summary>
+    /// Registers sign-in. Fails closed: without a Firebase project id, or with the emulator on outside
+    /// Development, this throws and the API does not start (<see cref="FirebaseSettings"/>).
+    /// </summary>
+    public static IServiceCollection AddIdentity(this IServiceCollection services, IHostEnvironment env, IConfiguration configuration)
     {
-        if (!env.IsDevelopment())
-        {
-            // Fail closed: there is no production verifier in this sample yet. The Firebase
-            // verifier (docs/dev/identity.md in tsr-account) lands with the foundation step.
-            throw new InvalidOperationException(
-                "No caller verifier for environment '" + env.EnvironmentName + "'. Only Development is supported.");
-        }
-
+        var settings = FirebaseSettings.Create(configuration, env);
         services.AddIdentityTables();
-        services.AddSingleton<ICallerVerifier, DevTokenVerifier>();
+        services.AddFirebaseVerification(settings);
+        services.AddScoped<MemberDirectory>();
         return services;
     }
 
     public static IApplicationBuilder UseIdentity(this IApplicationBuilder app) =>
         app.UseMiddleware<CallerMiddleware>();
+
+    public static IEndpointRouteBuilder MapIdentity(this IEndpointRouteBuilder routes)
+    {
+        routes.MapLinkAccount();
+        return routes;
+    }
 }

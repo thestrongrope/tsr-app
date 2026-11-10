@@ -7,6 +7,9 @@
   <Folder Name="/domains/access/api/">
     <Project Path="domains/access/api/Tsr.Access.Api.csproj" />
   </Folder>
+  <Folder Name="/domains/access/api/tests/">
+    <Project Path="domains/access/api/tests/Tsr.Access.Api.Tests.csproj" />
+  </Folder>
   <Folder Name="/domains/content/" />
   <Folder Name="/domains/content/api/">
     <Project Path="domains/content/api/Tsr.Content.Api.csproj" />
@@ -17,6 +20,9 @@
   <Folder Name="/domains/identity/" />
   <Folder Name="/domains/identity/api/">
     <Project Path="domains/identity/api/Tsr.Identity.Api.csproj" />
+  </Folder>
+  <Folder Name="/domains/identity/api/tests/">
+    <Project Path="domains/identity/api/tests/Tsr.Identity.Api.Tests.csproj" />
   </Folder>
   <Folder Name="/domains/platform/" />
   <Folder Name="/domains/platform/api/">

@@ -22,7 +22,7 @@ read it before editing.
 | The Flutter shell | `hosts/app/` | `lib/main.dart` |
 | The static site generator | `hosts/site/` | `SiteModules.cs`, `Program.cs`; a domain's pages are in `domains/<context>/site/` |
 | Plumbing every domain uses (DB, outbox, HTTP client, site API reader) | `shared/api/`, `shared/app/`, `shared/site/` | the file you need; no rules live here |
-| A table or migration | the domain's `api/<Context>Context.cs` and `api/Migrations/` (add: `dotnet ef migrations add <Name> --context <Domain>Context --project domains/<d>/api --startup-project hosts/api --output-dir Migrations -- --TSR_DB=Host=unused --environment=Development`; the generated files need no edit) | `docs/specs/initial-build/phase-0-design.md` |
+| A table or migration | the domain's `api/<Context>Context.cs` and `api/Migrations/` (add: `dotnet ef migrations add <Name> --context <Domain>Context --project domains/<d>/api --startup-project hosts/api --output-dir Migrations -- --TSR_DB=Host=unused --TSR_FIREBASE_PROJECT_ID=demo-design --environment=Development`; the generated files need no edit) | `docs/specs/initial-build/phase-0-design.md` |
 | Synthetic data | `db/synthetic/seed.sql` | |
 
 Today's PHP API stays in tsr-account until routes move here. Domains planned: `identity` (AuthN)
@@ -36,7 +36,7 @@ what: `domains/CLAUDE.md`.
 1. **Rules live in a domain, never in a client or a host.** Apps and the site are presentation;
    hosts only wire. A rule enforced only in the app is not enforced: the repo is public and anyone
    can build a modified client.
-2. **Permissions go through `access`** (`Permissions.CanAsync`), checked in the slice's handler.
+2. **Permissions go through `access`** (`Permissions.CanAsync(caller, action, target)`), checked in the slice's handler.
    **Gender segregation** is a scope from `access`, applied by each domain to its own data.
 3. **A slice never calls another slice; a domain never reads another domain's tables.** Use the
    domain's listed public interface or its events. Dependencies are listed in
@@ -61,8 +61,9 @@ what: `domains/CLAUDE.md`.
 | Build all .NET | `dotnet build TsrApp.slnx` |
 | Unit + boundary tests (no DB needed, NUnit) | `dotnet test domains/platform/api/tests`, `dotnet test hosts/api/tests`, `dotnet test hosts/site/tests` |
 | Database-backed tests (needs Docker: Testcontainers starts a throwaway postgres:18) | `dotnet test db/tests` |
-| Contract tests, every Hurl file (stack must be up) | `hurl --test --glob "domains/*/spec/tests/*.hurl" --variable base_url=http://localhost:8088 --variable auth_header=X-Dev-Token --variable auth_value=900001` |
-| One implementation's contract (any base URL) | same command with another `base_url`, `auth_header` and `auth_value` (PHP: `--variables-file build/parity-php/token.vars` replaces the last two); `--glob` is expanded by Hurl itself, so it works in any shell on Mac and Windows when the pattern is quoted. Hurl must be installed. |
+| Contract tests, every Hurl file (stack must be up; `tools/identity-contract.sh dev` first mints the token into `build/dev/token.vars` and refreshes the 2 hour fixture) | `hurl --test --glob "domains/*/spec/tests/*.hurl" --variable base_url=http://localhost:8088 --variables-file build/dev/token.vars --variables-file domains/identity/spec/tests/fixtures.vars --variables-file domains/access/spec/tests/fixtures.vars` |
+| One implementation's contract (any base URL) | `tools/identity-contract.sh dev` or `... parity` runs the sign-in contract on either side. For another file, same command with another `base_url` and `--variables-file` (PHP: `build/parity-php/token.vars`, written by `tools/parity-php/mint-token.sh <.invalid email>`); `--glob` is expanded by Hurl itself, so it works in any shell on Mac and Windows when the pattern is quoted. Hurl must be installed. |
+| Access contract on PHP or the new API (stack up; PHP: parity stack) | `tools/access-contract.sh dev` or `parity` (also `tools/identity-contract.sh`) |
 | Build the static site (stack must be up) | `dotnet run --project hosts/site` (writes `build/site/`; `TSR_BASE_URL` picks the API) |
 | Flutter: resolve the workspace | `flutter pub get` (once, at the root) |
 | Flutter: analyze, test | `flutter analyze hosts/app shared/app domains/platform/app`, then `flutter test` inside each |

@@ -1,0 +1,212 @@
+method,path,route_file,auth,permission_checks,target_or_scope_passed,row_filtering,notes
+GET,/health,routes/health.php:5,public,,-,no,
+GET,/app-version,routes/app_version.php:222,public,,-,no,No server-side minimum-build enforcement; informational only (app_version.php:4)
+GET,/release-notes,routes/app_version.php:239,public,,-,no,
+POST,/auth/link,routes/auth.php:11,member,,-,no,api_authenticate(true) creates the users row if absent (auth.php:141); 403 if account deleted inside resurrection window (auth.php:202)
+POST,/auth/debug-token,routes/auth.php:43,public,,-,no,"404 when APP_ENV is production (auth.php route :46); non-prod verifies bearer only, no member lookup"
+GET,/me,routes/users.php:34,member,profile:read,none,no,allowed during pending deletion (API_DELETION_ALLOWED auth.php:41)
+PATCH,/me,routes/users.php:49,member,profile:update,none,no,"422 if gender changed while enrolled in any active class (users.php:106, subscribers.php:46); blocked during pending deletion"
+POST,/me/deletion-request,routes/account_deletion.php:89,member,account:delete,none,no,allowed during pending deletion (auth.php:46)
+GET,/me/deletion-request,routes/account_deletion.php:129,member,account:delete,none,no,allowed during pending deletion (auth.php:46)
+DELETE,/me/deletion-request,routes/account_deletion.php:148,member,account:delete,none,no,allowed during pending deletion (auth.php:46)
+GET,/me/permissions,routes/permissions.php:148,member,,-,no,returns PermissionsModel::forUser(caller) (permissions.php:155); no check
+GET,/me/permissions/{permission},routes/permissions.php:166,member,,-,no,404 if name not in catalog (permissions.php:171); scopesOf(caller)
+GET,/me/children,routes/children.php:23,member,children:read,none,unknown,rows = caller own active guardian links; model SQL (GuardiansModel::getChildrenForParent/linksForParent/linksForChild/revokeForPair) not read line by line
+GET,/me/children/links,routes/children.php:313,member,children:read,none,unknown,rows = caller own links; model SQL (GuardiansModel::getChildrenForParent/linksForParent/linksForChild/revokeForPair) not read line by line
+GET,/me/children/link/{code},routes/children.php:286,member,children:link,none,no,rate limit 60/h per member (children.php:293)
+POST,/me/children/link/{code},routes/children.php:238,member,children:link,none,no,"invite state checks in GuardiansModel::acceptInvite (expired 410, revoked_by_child 403, already linked 409)"
+DELETE,/me/children/{child_token}/link,routes/children.php:328,member,children:link,none,unknown,revokes only the caller own pair link (404 otherwise); model SQL (GuardiansModel::getChildrenForParent/linksForParent/linksForChild/revokeForPair) not read line by line
+GET,/me/parents,routes/children.php:435,member,parents:manage,none,unknown,caller own parents (linksForChild); model SQL (GuardiansModel::getChildrenForParent/linksForParent/linksForChild/revokeForPair) not read line by line
+DELETE,/me/parents/{parent_token},routes/children.php:450,member,parents:manage,none,unknown,caller own child-side link; model SQL (GuardiansModel::getChildrenForParent/linksForParent/linksForChild/revokeForPair) not read line by line
+POST,/members/{child_token}/parent-links,routes/children.php:180,member,parents:add (or parents:manage when caller token == child_token),"none at route; model staffMayAddFor(user, child): managedReach all|gender==child gender, else can(parents:add,[class=each active class of child])",yes,404 when out of scope (children.php:149-172); gender read as (int)users.gender
+GET,/members/{child_token}/parent-links,routes/children.php:207,member,parents:add (or parents:manage self),same as parent-links create,yes,same helper
+DELETE,/members/{child_token}/parent-links/{id},routes/children.php:221,member,parents:add (or parents:manage self),"helper as above; then cancelInvite: creator OR can(parents:manage,[gender=child gender])",yes,guardians.php:509
+GET,/members/{child_token}/parents/candidate/{parent_token},routes/children.php:350,member,parents:add-direct,none at route; model candidateLookup -> staffMayAddFor(direct=true),yes,rate limit 30/h per member; 404 out of scope
+POST,/members/{child_token}/parents,routes/children.php:380,member,parents:add-direct,"staffMayAddFor(user, child, direct=true); addDirect then revokedByChildBlocks: can(parents:manage,[gender=child gender])",yes,guardians.php:363-458; cannot link self as parent
+GET,/me/children/{child_token}/classes,routes/children.php:39,member,children-performance:read,none,yes,ownership = active guardian link caller->child enforced in GuardiansModel (null -> 404); class must be one the child is enrolled in; getChildClasses lists every enrolment row of the child with no class-status filter (guardians.php:796)
+GET,/me/children/{child_token}/classes/{class_id}/attendance,routes/children.php:59,member,children-performance:read,none,yes,ownership = active guardian link caller->child enforced in GuardiansModel (null -> 404); class must be one the child is enrolled in; getChildClasses lists every enrolment row of the child with no class-status filter (guardians.php:796)
+GET,/me/children/{child_token}/classes/{class_id}/performance,routes/children.php:88,member,children-performance:read,none,yes,ownership = active guardian link caller->child enforced in GuardiansModel (null -> 404); class must be one the child is enrolled in; getChildClasses lists every enrolment row of the child with no class-status filter (guardians.php:796)
+GET,/me/children/{child_token}/classes/{class_id}/scores,routes/children.php:117,member,children-performance:read,none,yes,ownership = active guardian link caller->child enforced in GuardiansModel (null -> 404); class must be one the child is enrolled in; getChildClasses lists every enrolment row of the child with no class-status filter (guardians.php:796)
+POST,/devices,routes/devices.php:22,member,devices:manage,none,no,blocked during pending deletion
+DELETE,/devices,routes/devices.php:40,member,devices:manage,none,no,allowed during pending deletion
+POST,/feedback,routes/feedback.php:10,member,feedback:create,none,no,api_authenticate(false): does NOT create a users row (feedback.php:12)
+GET,/class-levels,routes/classes.php:159,member,,-,no,reference data
+GET,/classes,routes/classes.php:178,member,classes:read,none; with ?include=managed also managedReach(classes:read),yes,ClassesModel::listForUser: own (attending/teaching) + managed reach (all | gender | assigned ids); classes.php:795
+POST,/classes/join,routes/classes.php:260,member,classes:join,none,no,api_require_identity (400 if gender unset); class.gender must equal member gender else 403 (classes.php:286); removed-from-class 403; class must be active
+GET,/join/{code},routes/classes.php:101,public,,-,no,rate limit 30/60s per IP -> 429 (classes.php:103); 404 for unknown code
+POST,/classes,routes/class_manage.php:608,member,classes:create,gender=body.gender (must be int 1|2 else 422),no,rate limit 1/60s per class signature; teacher must satisfy isTeacherCandidate(gender rule); audit-logged
+GET,/classes/create-options,routes/class_manage.php:564,member,classes:create,"none; genders list built from can(classes:create,[gender=1|2])",yes,response lists only creatable genders (class_manage.php:554)
+GET,/classes/teachers,routes/class_manage.php:577,member,classes:create,gender=query gender (2 else 1 default),no,teacher pool filtered: gents class takes gents only (classes.php:1334)
+GET,/classes/{class_id}/sessions,routes/classes.php:337,member,classes:read,class={class_id} (path),no,api_require_identity first (400 if gender unset); class active (404)
+GET,/classes/{class_id}/syllabus-topics,routes/classes.php:376,member,syllabus:read;classes:read,none; class={class_id} (path),no,api_require_identity; class active
+GET,/classes/{class_id}/guide,routes/classes.php:408,member,classes:read,class={class_id} (path),no,api_require_identity; class active
+GET,/guides,routes/guides.php:29,member,guides:manage,none,no,
+GET,/guides/{level_id},routes/guides.php:45,member,guides:manage,none,no,
+PUT,/guides/{level_id},routes/guides.php:56,member,guides:manage,none,no,
+GET,/classes/{class_id}/my-attendance,routes/classes.php:433,member,attendance:read,none,yes,"then api_verify_enrolled: canViewClass = enrolled(status A,not removed) OR teacher of ACTIVE class else 404 (classes.php:148); api_require_identity"
+GET,/classes/{class_id}/my-performance,routes/classes.php:477,member,performance:read,none,yes,same enrolment check as my-attendance
+POST,/classes/{class_id}/notifications,routes/classes.php:510,member,notifications:send,class={class_id} (path),no,rate limit 10/h per member -> 429; class active
+POST,/classes/{class_id}/notifications/scheduled,routes/classes.php:664,member,notifications:send,class={class_id} (path),no,"rate limit 20/h; worker re-checks can(notifications:send,[class]) at fire time (classschedulednotificationworker.php:168)"
+GET,/classes/{class_id}/notifications/scheduled,routes/classes.php:781,member,notifications:send,class={class_id} (path),no,
+DELETE,/classes/{class_id}/notifications/scheduled/{scheduled_id},routes/classes.php:806,member,notifications:send,class={class_id} (path),no,
+GET,/holy-quran,routes/conduction.php:227,member,,-,no,reference data
+GET,/classes/{class_id}/conduction,routes/conduction.php:235,member,sessions:create,class={class_id} (path),no,"class active; list adds per-row editable flag (10-day window, sessions.php:90)"
+GET,/classes/{class_id}/conduction/new,routes/conduction.php:331,member,sessions:create,class={class_id} (path),no,"class active; list adds per-row editable flag (10-day window, sessions.php:90)"
+GET,/classes/{class_id}/conduction/check,routes/conduction.php:374,member,sessions:create,class={class_id} (path),no,"class active; list adds per-row editable flag (10-day window, sessions.php:90)"
+POST,/classes/{class_id}/conduction,routes/conduction.php:445,member,sessions:create,class={class_id} (path),no,"class active; list adds per-row editable flag (10-day window, sessions.php:90)"
+GET,/classes/{class_id}/conduction/{session_id},routes/conduction.php:398,member,sessions:update,class={class_id} (path),no,session must belong to class (404); editable flag = created <=10 days ago AND (creator OR class teacher OR can(sessions:update))
+PUT,/classes/{class_id}/conduction/{session_id},routes/conduction.php:501,member,sessions:update,class={class_id} (path),no,"403 Session is not editable when isEditable false: >10 days since created_at, or caller is neither creator nor teacher nor holder of sessions:update on class (sessions.php:90-114); 409 duplicate date"
+GET,/classes/{class_id}/mcq/quizzes,routes/mcq.php:153,member,quizzes:take,class={class_id} (path),yes,api_require_identity; enrolled else 404
+GET,/classes/{class_id}/my-scores,routes/mcq.php:449,member,quiz-scores:read,none,yes,api_require_identity; enrolled in class else 404
+GET,/mcq/by-code/{code},routes/mcq.php:67,member,quizzes:take,none,yes,McqModel::resolveLink returns state (not_eligible unless enrolled in the quiz class)
+GET,/mcq/open,routes/mcq.php:79,member,quizzes:take,none,yes,openForStudent(token): own classes only
+GET,/mcq/quizzes/{quiz_id}/questions,routes/mcq.php:235,member,quizzes:take,none,yes,as quiz detail; 409 already attempted / not currently available
+POST,/mcq/quizzes/{quiz_id}/responses,routes/mcq.php:283,member,quizzes:take,none,yes,as quiz detail; canTakeQuiz: not deactivated; 409 if attempted
+GET,/mcq/quizzes/{quiz_id}/my-score,routes/mcq.php:411,member,quizzes:take,none,yes,as quiz detail
+GET,/mcq/quizzes/{quiz_id},routes/mcq.php:196,member,quizzes:take,none,yes,api_require_identity; getForStudent: published AND enrolled in quiz class (mcq.php:906) else 404; restrict_to_class flag deliberately ignored (mcq.php route :118)
+GET,/classes/{class_id}/mcq/manage,routes/mcq_admin.php:76,member,mcqs:manage,class={class_id} (path),no,class active
+POST,/classes/{class_id}/mcq,routes/mcq_admin.php:118,member,mcqs:manage,class={class_id} (path),no,class active
+GET,/classes/{class_id}/mcq/topics,routes/mcq_admin.php:586,member,mcqs:manage,class={class_id} (path),no,class active
+GET,/classes/{class_id}/mcq/standard,routes/mcq_admin.php:608,member,mcqs:manage,class={class_id} (path),no,class active
+POST,/classes/{class_id}/mcq/standard/{mcq_id}/copy,routes/mcq_admin.php:658,member,mcqs:manage,class={class_id} (path),no,class active
+GET,/mcq/copy/classes,routes/mcq_admin.php:539,member,mcqs:copy,"none; model copyableClasses probes can(mcqs:copy,[gender=1]) and [gender=2]",yes,list = getAll(gender) per gender the caller holds (mcq.php:194); getAll applies assignedOnlyIds(classes:read)
+GET,/mcq/copy/classes/{class_id}/topics,routes/mcq_admin.php:548,member,mcqs:copy,class={class_id} (path),no,
+GET,/mcq/copy/classes/{class_id}/quizzes,routes/mcq_admin.php:566,member,mcqs:copy,class={class_id} (path),no,
+GET,/mcq/manage/{quiz_id}/scores,routes/mcq_admin.php:395,member,mcqs:manage,"class = quiz.class_id (looked up from quiz_id; class must be active, mcq_admin.php:61)",no,
+GET,/mcq/manage/{quiz_id}/offline,routes/mcq_admin.php:429,member,mcqs:manage,"class = quiz.class_id (looked up from quiz_id; class must be active, mcq_admin.php:61)",no,
+POST,/mcq/manage/{quiz_id}/offline,routes/mcq_admin.php:463,member,mcqs:manage,"class = quiz.class_id (looked up from quiz_id; class must be active, mcq_admin.php:61)",no,
+GET,/mcq/manage/{quiz_id}/sheet,routes/mcq_admin.php:494,member,mcqs:manage,"class = quiz.class_id (looked up from quiz_id; class must be active, mcq_admin.php:61)",no,
+GET,/mcq/manage/{quiz_id},routes/mcq_admin.php:146,member,mcqs:manage,"class = quiz.class_id (looked up from quiz_id; class must be active, mcq_admin.php:61)",no,
+PUT,/mcq/manage/{quiz_id},routes/mcq_admin.php:193,member,mcqs:manage,"class = quiz.class_id (looked up from quiz_id; class must be active, mcq_admin.php:61)",no,
+POST,/mcq/manage/{quiz_id}/publish,routes/mcq_admin.php:272,member,mcqs:manage,"class = quiz.class_id (looked up from quiz_id; class must be active, mcq_admin.php:61)",no,
+POST,/mcq/manage/{quiz_id}/deactivate,routes/mcq_admin.php:349,member,mcqs:manage,"class = quiz.class_id (looked up from quiz_id; class must be active, mcq_admin.php:61)",no,
+POST,/mcq/manage/{quiz_id}/copy,routes/mcq_admin.php:369,member,mcqs:copy,"class = source quiz class AND class = target class (both checked at route; model re-checks, mcq.php:127)",no,
+GET,/classes/{class_id},routes/classes.php:223,member,classes:read,class={class_id} (path),yes,"managers (reaches()) get getForManager; teacher own; else enrolled AND class.gender==member gender (getForUser, classes.php:937)"
+PUT,/classes/{class_id},routes/class_manage.php:475,member,classes:update,class={class_id} (path),no,teacher must be isTeacherCandidate for class gender; audit-logged
+GET,/classes/{class_id}/manage,routes/class_manage.php:335,member,classes:update,class={class_id} (path),no,audit-logged
+GET,/classes/{class_id}/students,routes/class_manage.php:279,member,class-students:read,class={class_id} (path),yes,"email/mobile/notes blanked unless can(classes:update,[class]) (class_manage.php:288)"
+GET,/classes/{class_id}/students/performance,routes/class_manage.php:303,member,mcqs:manage,class={class_id} (path),no,
+GET,/classes/{class_id}/teachers,routes/class_manage.php:346,member,classes:update,class={class_id} (path),yes,pool gender rule from class gender
+GET,/classes/{class_id}/schedule,routes/class_manage.php:519,member,classes:update OR classes:schedule,class={class_id} (path),no,"classes:update passes first, else classes:schedule (class_manage.php:492)"
+PUT,/classes/{class_id}/schedule,routes/class_manage.php:532,member,classes:update OR classes:schedule,class={class_id} (path),no,same
+POST,/classes/{class_id}/students,routes/class_manage.php:709,member,students:enrol,class={class_id} (path),no,addStudent refuses when member gender known and != class gender (classstudents.php:152-171); unrecorded gender allowed
+POST,/classes/{class_id}/students/bulk,routes/class_manage.php:740,member,students:enrol,class={class_id} (path),no,rate limit 10/60s; bulk rules in ClassStudentsModel::bulkEnrol; audit-logged
+PUT,/classes/{class_id}/students/{token},routes/class_manage.php:798,member,classes:update,class={class_id} (path),no,"NOTE permission is classes:update, not students:enrol"
+POST,/classes/{class_id}/students/{token}/remove,routes/class_manage.php:831,member,students:enrol,class={class_id} (path),no,
+POST,/classes/{class_id}/students/{token}/restore,routes/class_manage.php:848,member,students:enrol,class={class_id} (path),no,
+PUT,/classes/{class_id}/students/{token}/class-admin,routes/class_manage.php:861,member,class-students:update,class={class_id} (path),no,sets class_students.mcq_admin flag; scope own is NOT given (only taught/all)
+POST,/classes/{class_id}/students/{token}/transfer,routes/class_manage.php:878,member,students:transfer,none (only all scope exists),no,"source and destination class must be same gender (422, class_manage.php:899); both active"
+GET,/geo/countries,routes/geo.php:48,member,,-,no,rate limit 60/min per member (geo.php:32)
+POST,/geo/postal,routes/geo.php:55,member,,-,no,rate limit as above
+POST,/geo/cities,routes/geo.php:68,member,,-,no,rate limit as above
+GET,/registration,routes/registration.php:20,member,,-,no,no permission by design (registration.php:23); token>0 still required
+POST,/registration,routes/registration.php:50,member,,-,no,no permission check; own row only (token from session)
+GET,/user/permissions,routes/permissions.php:41,member,,-,no,legacy: pages.json role-id catalog + is_teacher/mcq_admin derivation (permissions.php:41-146); not PermissionsModel
+GET,/reports/conduction,routes/reports.php:100,member,reports:read,"gender=genderLock(user,reports:read) else ?gender (2 else 1 default)",yes,MisModel::reachFilter limits classes to managedReach(reports:read) (mis.php:51); 
+GET,/reports/conduction/download,routes/reports.php:126,member,reports:read,"gender=genderLock(user,reports:read) else ?gender (2 else 1 default)",yes,MisModel::reachFilter limits classes to managedReach(reports:read) (mis.php:51); 
+GET,/reports/conduction/download-all,routes/reports.php:166,member,reports:read,"gender=genderLock(user,reports:read) else ?gender (2 else 1 default)",yes,MisModel::reachFilter limits classes to managedReach(reports:read) (mis.php:51); 
+GET,/reports/weekly,routes/reports.php:291,member,reports:read,"gender=genderLock(user,reports:read) else ?gender (2 else 1 default)",yes,MisModel::reachFilter limits classes to managedReach(reports:read) (mis.php:51); 
+GET,/reports/weekly/download,routes/reports.php:324,member,reports:read,"gender=genderLock(user,reports:read) else ?gender (2 else 1 default)",yes,MisModel::reachFilter limits classes to managedReach(reports:read) (mis.php:51); 
+GET,/reports/summary,routes/reports.php:407,member,reports:read,"gender=genderLock(user,reports:read) else ?gender (2 else 1 default)",yes,MisModel::reachFilter limits classes to managedReach(reports:read) (mis.php:51); 
+GET,/reports/summary/download,routes/reports.php:425,member,reports:read,"gender=genderLock(user,reports:read) else ?gender (2 else 1 default)",yes,MisModel::reachFilter limits classes to managedReach(reports:read) (mis.php:51); 
+GET,/reports/students,routes/reports.php:529,member,reports:read,"gender=genderLock(user,reports:read) else ?gender (2 else 1 default)",yes,MisModel::reachFilter limits classes to managedReach(reports:read) (mis.php:51); 
+GET,/reports/students/download,routes/reports.php:694,member,reports:read,"gender=genderLock(user,reports:read) else ?gender (2 else 1 default)",yes,MisModel::reachFilter limits classes to managedReach(reports:read) (mis.php:51); 
+GET,/reports/tsr,routes/reports.php:612,member,reports:read,"gender=genderLock(user,reports:read) else ?gender (2 else 1 default)",yes,MisModel::reachFilter limits classes to managedReach(reports:read) (mis.php:51); 
+GET,/reports/tsr/download,routes/reports.php:742,member,reports:read,"gender=genderLock(user,reports:read) else ?gender (2 else 1 default)",yes,MisModel::reachFilter limits classes to managedReach(reports:read) (mis.php:51); 
+GET,/reports/pending,routes/reports.php:836,member,reports:read,"gender=genderLock(user,reports:read) else ?gender (2 else 1 default)",yes,MisModel::reachFilter limits classes to managedReach(reports:read) (mis.php:51); 
+GET,/reports/pending/download,routes/reports.php:877,member,reports:read,"gender=genderLock(user,reports:read) else ?gender (2 else 1 default)",yes,MisModel::reachFilter limits classes to managedReach(reports:read) (mis.php:51); 
+GET,/reports/subject-conduction,routes/reports.php:1052,member,reports:read,"gender=genderLock(user,reports:read) else ?gender (2 else 1 default)",yes,"class asked must be in subjectConductionClasses(user,gender) else 403 (reports.php:1020)"
+GET,/reports/subject-conduction/download,routes/reports.php:1093,member,reports:read,"gender=genderLock(user,reports:read) else ?gender (2 else 1 default)",yes,same class check
+GET,/reports/class-sessions,routes/reports.php:1141,member,reports:read,"gender=genderLock(user,reports:read) else ?gender (2 else 1 default)",yes,MisModel::reachFilter limits classes to managedReach(reports:read) (mis.php:51); 
+GET,/reports/class-sessions/download-all,routes/reports.php:1206,member,reports:read,"gender=genderLock(user,reports:read) else ?gender (2 else 1 default)",yes,MisModel::reachFilter limits classes to managedReach(reports:read) (mis.php:51); 
+GET,/reports/class-sessions/{class_id},routes/reports.php:1222,member,reports:read,"none at route; model getClassSessionHistory re-filters via getClassFilter(user,gender of class)",yes,empty list when class out of reach (mis.php:2237)
+GET,/reports/class-sessions/{class_id}/download,routes/reports.php:1234,member,reports:read,as class-sessions/{class_id},yes,
+GET,/reports/mcq-summary,routes/reports.php:1283,member,reports:read,"gender=genderLock(user,reports:read) else ?gender (2 else 1 default)",yes,MisModel::reachFilter limits classes to managedReach(reports:read) (mis.php:51); 
+GET,/reports/mcq-summary/download-all,routes/reports.php:1356,member,reports:read,"gender=genderLock(user,reports:read) else ?gender (2 else 1 default)",yes,MisModel::reachFilter limits classes to managedReach(reports:read) (mis.php:51); 
+GET,/reports/mcq-summary/{class_id},routes/reports.php:1367,member,reports:read,"gender=genderLock(user,reports:read) else ?gender (2 else 1 default)",yes,class_id passed to model; reachFilter applies
+GET,/reports/mcq-summary/{class_id}/download,routes/reports.php:1379,member,reports:read,"gender=genderLock(user,reports:read) else ?gender (2 else 1 default)",yes,class_id passed to model; reachFilter applies
+GET,/reports/mcq-adherence,routes/reports.php:1434,member,reports:read,"gender=genderLock(user,reports:read) else ?gender (2 else 1 default)",yes,MisModel::reachFilter limits classes to managedReach(reports:read) (mis.php:51); 
+GET,/reports/mcq-adherence/download-all,routes/reports.php:1474,member,reports:read,"gender=genderLock(user,reports:read) else ?gender (2 else 1 default)",yes,MisModel::reachFilter limits classes to managedReach(reports:read) (mis.php:51); 
+GET,/reports/mcq-adherence/{class_id},routes/reports.php:1485,member,reports:read,"gender=genderLock(user,reports:read) else ?gender (2 else 1 default)",yes,class_id passed to model; reachFilter applies
+GET,/reports/mcq-adherence/{class_id}/download,routes/reports.php:1495,member,reports:read,"gender=genderLock(user,reports:read) else ?gender (2 else 1 default)",yes,class_id passed to model; reachFilter applies
+GET,/reports/active-teachers,routes/reports.php:1535,member,reports:read,"gender=genderLock(user,reports:read) else ?gender (2 else 1 default)",yes,MisModel::reachFilter limits classes to managedReach(reports:read) (mis.php:51); 
+GET,/reports/active-teachers/download,routes/reports.php:1558,member,reports:read,"gender=genderLock(user,reports:read) else ?gender (2 else 1 default)",yes,MisModel::reachFilter limits classes to managedReach(reports:read) (mis.php:51); 
+GET,/reports/quran-leaderboard,routes/reports.php:1629,member,quran-leaderboard:read,"gender=genderLock(user,quran-leaderboard:read) else ?gender",yes,assignedOnlyIds(reports:read) SQL filter (quranrecitation.php:55) -- note it reads reports:read not quran-leaderboard:read
+GET,/reports/this-week,routes/this_week.php:22,member,reports:read,"gender=genderLock(user,reports:read) else ?gender (2 else 1 default)",yes,MisModel::reachFilter limits classes to managedReach(reports:read) (mis.php:51); 
+GET,/reports/this-week/class/{class_id},routes/this_week.php:47,member,reports:read,"gender=genderLock(user,reports:read) else ?gender (2 else 1 default)",yes,MisModel::reportableClass; 404 when class not reachable (thisweek.php:110)
+GET,/reports/registrations,routes/reports.php:1678,member,registrations:read,"gender=genderLock(user,registrations:read) else ?gender (default 1)",yes,"filter is by gender only (getClassRegistrations), not by assigned class ids; assigned scope reaches the genders of assigned classes"
+GET,/reports/registrations/download,routes/reports.php:1710,member,registrations:read,"gender=genderLock(user,registrations:read) else ?gender (default 1)",yes,as /reports/registrations
+GET,/reports/registrations/allocated/download,routes/reports.php:1745,member,registrations:read,"gender=genderLock(user,registrations:read); managedReach used to decide open-vs-class registrations",yes,open registrations only for all|gender reach; assigned-only gets people placed in assigned classes (reports.php:1755)
+GET,/registrations/{registration_id}/classes,routes/registrations.php:42,member,registrations:read;students:enrol,"gender=1 then gender=2 probe; then gender=registrant.gender; per class can(students:enrol,[class=id])",yes,409 when registrant no longer waiting; classes filtered by can(students:enrol) (registrations.php:51)
+POST,/registrations/{registration_id}/place,routes/registrations.php:70,member,registrations:read;students:enrol,gender=registrant.gender; class=body.classId,no,addStudent gender check 422; 409 not waiting
+POST,/registrations/{registration_id}/reject,routes/registrations.php:95,member,registrations:read;registrations:reject,gender=registrant.gender,no,409 not waiting
+GET,/reports/quran-leaderboard/download,routes/reports.php:1649,member,quran-leaderboard:read,as leaderboard,yes,same
+POST,/reports/pending/nudge,routes/reports.php:910,member,reports:read,"gender=genderLock(user,reports:read) else ?gender (2 else 1 default)",yes,rate limit 30/h per member; teacher recomputed from caller reach; sends push
+GET,/syllabus/levels,routes/syllabus.php:86,member,syllabus:read,none,no,
+GET,/syllabus/level/{level_id},routes/syllabus.php:100,member,syllabus:read,none,no,
+GET,/admin/syllabus,routes/syllabus.php:129,member,syllabus:update,none,no,audit-logged (syllabus.php:68)
+POST,/admin/syllabus,routes/syllabus.php:168,member,syllabus:update,none,no,audit-logged (syllabus.php:68)
+GET,/admin/transfers/classes,routes/student_transfers.php:95,member,students:transfer,none,no,
+GET,/admin/transfers/classes/{class_id}/students,routes/student_transfers.php:115,member,students:transfer,none,no,
+GET,/admin/transfers/history,routes/student_transfers.php:199,member,students:transfer,none,no,
+POST,/admin/transfers,routes/student_transfers.php:138,member,students:transfer,none,no,
+GET,/admin/permissions/members,routes/permission_grants.php:71,member,permissions:manage,none,no,super admin only (role 1 only); grantable set = unheld :all-scope names minus NOT_GRANTABLE (permissiongrants.php:38)
+GET,/admin/permissions/members/{token},routes/permission_grants.php:80,member,permissions:manage,none,no,super admin only (role 1 only); grantable set = unheld :all-scope names minus NOT_GRANTABLE (permissiongrants.php:38)
+POST,/admin/permissions/members/{token}/grants,routes/permission_grants.php:88,member,permissions:manage,none,no,super admin only (role 1 only); grantable set = unheld :all-scope names minus NOT_GRANTABLE (permissiongrants.php:38)
+POST,/admin/permissions/grants/{id}/revoke,routes/permission_grants.php:108,member,permissions:manage,none,no,super admin only (role 1 only); grantable set = unheld :all-scope names minus NOT_GRANTABLE (permissiongrants.php:38)
+GET,/admin/class-access/members,routes/class_access.php:206,member,class-access:manage,"none at route; model calls can(class-access:manage,[gender=g]) per member/rule gender",yes,ClassAccessModel: member gender from users.gender text normalised by genderOf; rule gender null needs both genders; cannot change own access; Finance(7) refused
+GET,/admin/class-access/members/{token},routes/class_access.php:218,member,class-access:manage,"none at route; model calls can(class-access:manage,[gender=g]) per member/rule gender",yes,ClassAccessModel: member gender from users.gender text normalised by genderOf; rule gender null needs both genders; cannot change own access; Finance(7) refused
+GET,/admin/class-access/options,routes/class_access.php:229,member,class-access:manage,"none at route; model calls can(class-access:manage,[gender=g]) per member/rule gender",yes,ClassAccessModel: member gender from users.gender text normalised by genderOf; rule gender null needs both genders; cannot change own access; Finance(7) refused
+POST,/admin/class-access/preview,routes/class_access.php:253,member,class-access:manage,"none at route; model calls can(class-access:manage,[gender=g]) per member/rule gender",yes,ClassAccessModel: member gender from users.gender text normalised by genderOf; rule gender null needs both genders; cannot change own access; Finance(7) refused
+POST,/admin/class-access/members/{token}/rules,routes/class_access.php:272,member,class-access:manage,"none at route; model calls can(class-access:manage,[gender=g]) per member/rule gender",yes,ClassAccessModel: member gender from users.gender text normalised by genderOf; rule gender null needs both genders; cannot change own access; Finance(7) refused
+POST,/admin/class-access/rules/{id}/revoke,routes/class_access.php:297,member,class-access:manage,"none at route; model calls can(class-access:manage,[gender=g]) per member/rule gender",yes,ClassAccessModel: member gender from users.gender text normalised by genderOf; rule gender null needs both genders; cannot change own access; Finance(7) refused
+GET,/admin/members/{token},routes/member_enrol.php:89,member,members:enrol-by-token,none (route) ; model re-checks,no,rate limit 30/h; audit-logged; returns contact details
+POST,/admin/members/{token}/enrolments,routes/member_enrol.php:125,member,members:enrol-by-token;students:enrol,none; class=body.classId,no,rate limit 30/h; 409 inactive class; 422 other gender (enrolByToken)
+GET,/admin/deactivated-classes,routes/deactivated_classes.php:29,member,deactivated-classes:manage,none,no,
+GET,/admin/deactivated-classes/candidates,routes/deactivated_classes.php:61,member,deactivated-classes:manage,none,no,
+POST,/classes/{class_id}/deactivate,routes/deactivated_classes.php:85,member,deactivated-classes:manage,none (class_id is not a target),no,model re-checks can(deactivated-classes:manage) (classes.php:1733)
+GET,/admin/whatsapp/reminders,routes/whatsapp_reminders.php:92,member,whatsapp:manage,none,no,rate-limited per user on some (whatsapp_reminders.php:196)
+PUT,/admin/whatsapp/reminders/{reminder_id},routes/whatsapp_reminders.php:106,member,whatsapp:manage,none,no,rate-limited per user on some (whatsapp_reminders.php:196)
+POST,/admin/whatsapp/reminders/{reminder_id}/run,routes/whatsapp_reminders.php:163,member,whatsapp:manage,none,no,rate-limited per user on some (whatsapp_reminders.php:196)
+GET,/admin/whatsapp/runs,routes/whatsapp_reminders.php:130,member,whatsapp:manage,none,no,rate-limited per user on some (whatsapp_reminders.php:196)
+GET,/admin/whatsapp/runs/{run_id},routes/whatsapp_reminders.php:145,member,whatsapp:manage,none,no,rate-limited per user on some (whatsapp_reminders.php:196)
+POST,/admin/whatsapp/test,routes/whatsapp_reminders.php:176,member,whatsapp:manage,none,no,rate-limited per user on some (whatsapp_reminders.php:196)
+GET,/admin/whatsapp/link,routes/whatsapp_reminders.php:207,member,whatsapp:manage,none,no,rate-limited per user on some (whatsapp_reminders.php:196)
+GET,/admin/whatsapp/link/qr,routes/whatsapp_reminders.php:225,member,whatsapp:manage,none,no,rate-limited per user on some (whatsapp_reminders.php:196)
+POST,/admin/whatsapp/link/relink,routes/whatsapp_reminders.php:255,member,whatsapp:manage,none,no,rate-limited per user on some (whatsapp_reminders.php:196)
+POST,/admin/whatsapp/link/logout,routes/whatsapp_reminders.php:265,member,whatsapp:manage,none,no,rate-limited per user on some (whatsapp_reminders.php:196)
+GET,/admin/quiz,routes/quiz_admin.php:233,member,quiz:admin,none,no,quiz:admin:all is a user_permissions grant only (no role holds it)
+POST,/admin/quiz/settings/refresh,routes/quiz_admin.php:241,member,quiz:admin,none,no,quiz:admin:all is a user_permissions grant only (no role holds it)
+POST,/admin/quiz/download,routes/quiz_admin.php:264,member,quiz:admin,none,no,quiz:admin:all is a user_permissions grant only (no role holds it)
+POST,/admin/quiz/winners/generate,routes/quiz_admin.php:286,member,quiz:admin,none,no,quiz:admin:all is a user_permissions grant only (no role holds it)
+POST,/admin/quiz/winners/regenerate,routes/quiz_admin.php:294,member,quiz:admin,none,no,quiz:admin:all is a user_permissions grant only (no role holds it)
+POST,/admin/quiz/publish,routes/quiz_admin.php:302,member,quiz:admin,none,no,quiz:admin:all is a user_permissions grant only (no role holds it)
+POST,/admin/quiz/reset,routes/quiz_admin.php:332,member,quiz:admin;then quiz:reset (in model deleteAll/canReset),none,no,quiz:reset:all granted to no role; model denies on lookup failure (quizadmin.php:258)
+GET,/admin/donors,routes/donors.php:31,member,donors:read,none,no,role 1 and role 7 (Finance)
+GET,/admin/donors/download,routes/donors.php:37,member,donors:read,none,no,
+GET,/admin/access-log,routes/access_log.php:35,member,audit-log:read,none,no,
+GET,/admin/access-log/download,routes/access_log.php:84,member,audit-log:read,none,no,
+GET,/admin/deletion-requests,routes/admin_deletion_requests.php:135,member,deletion-requests:manage,none,no,complete: rate limit 1/60s per request id
+POST,/admin/deletion-requests,routes/admin_deletion_requests.php:164,member,deletion-requests:manage,none,no,complete: rate limit 1/60s per request id
+POST,/admin/deletion-requests/{request_id}/hold,routes/admin_deletion_requests.php:203,member,deletion-requests:manage,none,no,complete: rate limit 1/60s per request id
+POST,/admin/deletion-requests/{request_id}/confirmation-sent,routes/admin_deletion_requests.php:229,member,deletion-requests:manage,none,no,complete: rate limit 1/60s per request id
+POST,/admin/deletion-requests/{request_id}/complete,routes/admin_deletion_requests.php:250,member,deletion-requests:manage,none,no,complete: rate limit 1/60s per request id
+GET,/standard-mcqs/sources,routes/standard_mcqs.php:40,member,standard-mcqs:update,none,no,named grant only (no role)
+POST,/standard-mcqs/update,routes/standard_mcqs.php:51,member,standard-mcqs:update,none,no,
+GET,/admin/teachers,routes/teachers.php:39,member,teachers:read,"gender=genderLock(user,teachers:read) else ?gender (default 1)",yes,
+GET,/teachers/{token},routes/teachers.php:80,member,teachers:lookup,"none at route; model TeachersModel::canView: can(teachers:lookup,[gender=g]) else can(...,[teacher_gender=1]) and member actually teaches",yes,404 when canView false; member with no 1/2 gender needs scope all (teachers.php:795)
+GET,/search,routes/search.php:29,member,classes:read,"none at route; model per kind: searchReach(classes:read|teachers:lookup), managedReach(classes:read)",yes,api_require_identity (400 if gender unset); results re-verified per hit; subscribers need managedReach all (search.php:146-160)
+GET,/students/{token},routes/entity_cards.php:18,member,classes:read,"none at route; model studentCardFor(managedReach(classes:read), token)",yes,404 if none of the student classes is reached; contact details never returned (entityaccess.php:28)
+GET,/subscribers/{token},routes/entity_cards.php:42,member,classes:read,none at route; subscriberCardFor requires managedReach all,yes,404 unless all-reach and person is not enrolled (entityaccess.php:58)
+POST,/admin/teachers/training,routes/teachers.php:123,member,teachers:read,"none at route; model per change can(teachers:read,[gender=teacher gender])",no,403 per teacher; gender read via (int)users.gender (so Male/Female text -> 0 -> refused) (teachers.php:699)
+POST,/admin/teachers/import,routes/teachers.php:152,member,teachers:read,gender=genderLock else body.gender (default 1),no,
+PUT,/admin/syllabus/{syllabus_id},routes/syllabus.php:227,member,syllabus:update,none,no,audit-logged (syllabus.php:68)
+DELETE,/admin/syllabus/{syllabus_id},routes/syllabus.php:288,member,syllabus:update,none,no,audit-logged (syllabus.php:68)
+POST,/notifications/send,routes/notifications.php:73,member,notifications:broadcast,none,no,audit-logged; super admin only; targets ALL_USERS|CLASS_LEVEL|GENDER|TEACHERS
+GET,/notifications/history,routes/notifications.php:188,member,notifications:broadcast,none,no,audit-logged; super admin only; targets ALL_USERS|CLASS_LEVEL|GENDER|TEACHERS
+POST,/notifications/cleanup-invalid-tokens,routes/notifications.php:242,member,notifications:broadcast,none,no,audit-logged; super admin only; targets ALL_USERS|CLASS_LEVEL|GENDER|TEACHERS
+GET,/notifications/stats,routes/notifications.php:292,member,notifications:broadcast,none,no,audit-logged; super admin only; targets ALL_USERS|CLASS_LEVEL|GENDER|TEACHERS
+GET,/user/notifications,routes/notifications.php:318,member,notifications:read,none,yes,own inbox rows only
+GET,/user/notifications/unread-count,routes/notifications.php:406,member,notifications:read,none,yes,own inbox rows only
+POST,/user/notifications/read-all,routes/notifications.php:394,member,notifications:read,none,yes,own inbox rows only
+POST,/user/notifications/{notification_id}/read,routes/notifications.php:382,member,notifications:read,none,yes,own inbox rows only

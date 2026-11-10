@@ -4,10 +4,17 @@
  * Loaded by the dev stack's "seed" service after the migrations (docker-compose.dev.yml). Not a
  * migration: production runs migrations and must never get these rows. Safe to run again.
  *
- *   900001  member, gents      (default TSR_AUTH_VALUE of the contract tests)
+ *   900001  member, gents      (the member tools/dev-auth/mint-token.sh signs in)
  *   900002  member, ladies
  *   900003  super admin (roleid 1)
  *   0       a guest: never a member, so it can never sign in
+ *   900011  member with a pending account deletion        (contract: link-account.hurl)
+ *   900012  member whose email an unverified sign-in must not claim
+ *   900013  member with no Firebase id yet, claimed by a verified email
+ *   9001xx  one member per role, for the access contract (domains/access/spec/tests): 900101 member (role 0),
+ *           900102 super admin (1), 900103 gents admin (3), 900104 ladies admin (4), 900105 class coordinator (5),
+ *           900106 finance (7), 900107 class teacher (6), 900108 role 0 with named grants (two live, one revoked)
+ *   (no row) deleted.recently: a deletion completed just now; tools/identity-contract.sh refreshes its time
  *
  * Articles, one of each kind. Invented text.
  *   published  public (published_at in the past)
@@ -15,15 +22,70 @@
  *   scheduled  not public yet (published_at in 2099)
  */
 
-INSERT INTO identity.users (token, roleid, gender, email)
-SELECT v.token, v.roleid, v.gender, v.email
+INSERT INTO identity.users (token, gender, email)
+SELECT v.token, v.gender, v.email
 FROM (VALUES
-  (900001, 0, 1::smallint, 'member.gents@example.invalid'),
-  (900002, 0, 2::smallint, 'member.ladies@example.invalid'),
-  (900003, 1, 1::smallint, 'super.admin@example.invalid'),
-  (0, 0, NULL::smallint, 'guest@example.invalid')
-) AS v (token, roleid, gender, email)
+  (900001, 1::smallint, 'member.gents@example.invalid'),
+  (900002, 2::smallint, 'member.ladies@example.invalid'),
+  (900003, 1::smallint, 'super.admin@example.invalid'),
+  (0, NULL::smallint, 'guest@example.invalid')
+) AS v (token, gender, email)
 WHERE NOT EXISTS (SELECT 1 FROM identity.users u WHERE u.token = v.token);
+
+INSERT INTO identity.users (token, email)
+SELECT v.token, v.email
+FROM (VALUES
+  (900011, 'deletion.pending@example.invalid'),
+  (900012, 'unverified.target@example.invalid'),
+  (900013, 'link.target@example.invalid')
+) AS v (token, email)
+WHERE NOT EXISTS (SELECT 1 FROM identity.users u WHERE u.token = v.token);
+
+-- Roles live in access (identity.users has no role column). A member (role 0) has no row.
+INSERT INTO access.user_roles (user_id, roleid)
+SELECT u.id, v.roleid
+FROM (VALUES (900003, 1)) AS v (token, roleid)
+JOIN identity.users u ON u.token = v.token
+WHERE NOT EXISTS (SELECT 1 FROM access.user_roles r WHERE r.user_id = u.id);
+
+-- The access contract's fixtures: the same emails and tokens exist on the PHP parity stack (tools/access-contract.sh).
+INSERT INTO identity.users (token, email)
+SELECT v.token, v.email
+FROM (VALUES
+  (900101, 'perm.member@example.invalid'),
+  (900102, 'perm.superadmin@example.invalid'),
+  (900103, 'perm.gentsadmin@example.invalid'),
+  (900104, 'perm.ladiesadmin@example.invalid'),
+  (900105, 'perm.coordinator@example.invalid'),
+  (900106, 'perm.finance@example.invalid'),
+  (900107, 'perm.teacherrole@example.invalid'),
+  (900108, 'perm.granted@example.invalid')
+) AS v (token, email)
+WHERE NOT EXISTS (SELECT 1 FROM identity.users u WHERE u.token = v.token);
+
+INSERT INTO access.user_roles (user_id, roleid)
+SELECT u.id, v.roleid
+FROM (VALUES (900102, 1), (900103, 3), (900104, 4), (900105, 5), (900106, 7), (900107, 6)) AS v (token, roleid)
+JOIN identity.users u ON u.token = v.token
+WHERE NOT EXISTS (SELECT 1 FROM access.user_roles r WHERE r.user_id = u.id);
+
+INSERT INTO access.user_permissions (user_id, permission, reason, revoked_at)
+SELECT u.id, v.permission, 'synthetic fixture', v.revoked_at
+FROM (VALUES
+  ('standard-mcqs:update:all', NULL::timestamptz),
+  ('api-docs:read:all', NULL::timestamptz),
+  ('summary-report:read:all', TIMESTAMPTZ '2026-01-01 00:00:00+00')
+) AS v (permission, revoked_at)
+JOIN identity.users u ON u.token = 900108
+WHERE NOT EXISTS (SELECT 1 FROM access.user_permissions g WHERE g.user_id = u.id AND g.permission = v.permission);
+
+INSERT INTO identity.account_deletion_requests (token, status, contact_email, requested_at)
+SELECT 900011, 'pending', 'deletion.pending@example.invalid', now()
+WHERE NOT EXISTS (SELECT 1 FROM identity.account_deletion_requests r WHERE r.token = 900011);
+
+INSERT INTO identity.account_deletion_requests (token, status, contact_email, requested_at, completed_at)
+SELECT NULL, 'completed', 'deleted.recently@example.invalid', now(), now()
+WHERE NOT EXISTS (SELECT 1 FROM identity.account_deletion_requests r WHERE r.status = 'completed' AND r.contact_email = 'deleted.recently@example.invalid');
 
 -- E'' strings: \n is a newline here, as it was in MariaDB's plain strings.
 INSERT INTO content.articles (slug, title, body, published_at)
