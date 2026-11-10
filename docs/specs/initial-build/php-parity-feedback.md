@@ -166,3 +166,39 @@ Deliberate differences, none visible to a normal client: a catalog file over 1 M
 16 KiB is 413 (PHP reads any size); a trailing space in a stored postal code is not ignored (MariaDB's PAD SPACE ignored it; input is
 trimmed so it cannot be reached); HTML5-only entity names beyond the common ones (`&AMP;` `&LT;` `&GT;` `&QUOT;` `&COPY;` `&REG;` and
 the HTML 4 set are decoded) stay as written; JSON escaping of `<`, `>`, `&`, U+2028 may differ in bytes, never in meaning.
+
+## Membership batch 3b-2: profile, class request form, guardian self-service (ten operations)
+
+Read from tsr-account's code and probed on the parity stack (synthetic members only). Each quirk below is copied, with the test that
+proves it; the capability documents (`domains/membership/capabilities/`) hold the requirement IDs.
+
+**Where the recon and the PHP source differ (the source won)**
+
+1. **`mobile: null` is a 500** (recon: "unverified"): it passes validation and `users.mobile` is NOT NULL. Copied (`PROF-Q5`).
+2. **A language that is not entirely a number is a 500** (`"2abc"`: `(int)` is 2, so it validates, then MariaDB refuses the text), and **a decimal rounds**: `2.5` and `"2.5"` store 3. Copied (`PROF-Q4`).
+3. **A non-scalar value for a text column is stored as `"Array"`** (`name: ["x"]` validates as the 5-letter string "Array"). PHP also prints a warning into the response body on the parity stack (its `display_errors`); the warning is not copied (`PROF-Q3`).
+4. **A duplicate id in `interestIds` is a 500 after the old choices were deleted** and the first copy was inserted (unique key `unique_student_interest`). The recon did not mention it. Copied (`REG-Q2`).
+5. **The accept route maps the model's status, not its http_code**: a child nobody holds is 404 `Invite not found` (the model says 422 for the parent check but 404 for the child check); a shared-token caller is 422. Copied (`GRD-Q2`).
+6. **`GET /registration` takes the lowest id** of a token's rows (no ORDER BY in PHP; observed: the Pending row of the duplicate pair).
+7. **`selectedInterestIds` has no ORDER BY in PHP**; the new API orders by interest id.
+8. **PHP's 500s answer HTTP 200 with an HTML error** on the parity stack, so a 500 is never asserted in Hurl; `db/tests` proves each one.
+9. **Hurl runs files in parallel** (`--test`): two files changing the same member race. Every fixture member a file changes is used by that file only (`registrant.update` is a copy of `registrant.duplicates` for that reason).
+
+**Quirks copied** (profile): untrimmed stored text; `gender` stored as the text of what was sent ("1abc" validates, stores, reads back null; 1.9 and `true` read back 1); `age_range` never validated; a mobile or zip ending in a newline passes (PCRE `$`); a name longer than 50 only counts after trim; the place rules compare trimmed values and check only a changed field; the postal code's state and city win over what was sent unless empty or "0"; `GET /me` shows an empty name as the integer 0; `Male`, `Female`, empty and null gender read as null, never 0; the gender lock treats a null gender as 0 (a clear is a change) and does not look at the class's own status.
+
+**Quirks copied** (class request): the update changes every row of a token and wipes `for_classid`, `profession` and the legacy `interests`; the three writes are separate and unguarded; a non-empty `languages` map of only invalid entries erases the saved languages; an empty array or `{}` leaves them; an `interestIds` array (even empty) replaces the choices; `birthYear` "abc" is 0 with no range check; a dropdown value must equal a label exactly, else null; multi-select duplicates are kept; an array inside a multi-select is a `TypeError` (500); an object is an array (its values are used).
+
+**Quirks copied** (guardians): every accept 422 carries one text; the 403 rule asks about the invite's creator, with the child's `(int)` gender; a revoke ends every active row of a duplicate pair; a revoked row stays when the pair is linked again; a token in the path is `(int)` cast ("abc" is 0); `created_by_name` is `Invite link` for source `link`, else the creator's name or `Unknown`; the list joins users by token so a shared token doubles the row; the inspect call counts toward 60 an hour even when it answers not_found.
+
+**Deliberate differences, none visible to a normal client**
+- A body over 1 MiB is 413 `Request body too large` (PHP reads any size).
+- The two guardian lists are capped at 200 rows (PHP has no cap); ties on `created_at` break by id.
+- The gender lock reads the caller's own profile by user id; PHP reads `users` by token, the first row (differs only for a token two members share).
+- Entity decoding uses .NET's table (HTML 4 plus `&apos;`); PHP knows every HTML5 name, so an obscure name stays as written here.
+- A float in a text field is formatted with 14 significant digits; PHP's exponent form (`1.0E+25`) formats differently.
+- The postal regex from the database runs on .NET's engine with a 250 ms timeout (PHP: PCRE); a broken or slow pattern is "no match", as PHP's `@preg_match` false is.
+- The log lines (`profile.gender_change_refused`, `parent_invite_inspect.rate_limited`) carry no member token.
+- The 403 text is PHP's (`You do not have permission to do that`); the shared `Problem.Forbidden` says `Not allowed` and is not used here.
+- The inspect rate limit is per API process (like the geo one).
+
+**Not proven end to end**: the permission 403 (the member set gives every member these permissions and nothing can deny them); the gender lock against real enrolments (no classes yet: proven with a fake port in NUnit and a host-level fake in `db/tests`); the 500s above (db/tests only).

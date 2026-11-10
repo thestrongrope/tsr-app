@@ -17,6 +17,7 @@ Run from the repo root, with `P` as in `docs/specs/initial-build/php-parity-feed
 - Start: `P up -d --wait db firebase-emulator`, then once `P --profile load run --rm synth-build`, then `P up -d --wait api`.
 - Token: `tools/parity-php/mint-token.sh <synthetic .invalid email>` writes `build/parity-php/token.vars`.
   Emulator accounts live in memory: run it again after the emulator restarts.
+- Membership fixtures (the members, guardian links and registrations the membership contract files use; the same rows are in `db/synthetic/membership-fixtures.sql`): `tools/parity-php/membership-fixtures.sh`. It resets the rows it owns, so run it before each contract run; `tools/membership-contract.sh parity` does it, loads the geo rows and mints one token per fixture member.
 - Stop (keeps the data): `P stop`.
 - Reset (deletes the database): `P down -v`, then start and load again.
 - Refresh the PHP source: delete `build/parity-php/src/`, re-run the `git archive` line in the doc, `P build api`.

@@ -17,6 +17,8 @@ internal static class TestApi
     public const string Email = "X-Test-Email";
     public const string Verified = "X-Test-Verified";
     public const string Outcome = "X-Test-Outcome";
+    public const string Name = "X-Test-Name";
+    public const string Picture = "X-Test-Picture";
 
     public static WebApplicationFactory<Program> Create() =>
         new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
@@ -47,7 +49,12 @@ internal static class TestApi
                 "noemail" => new Verification(VerifyStatus.NoEmail),
                 _ => new Verification(
                     VerifyStatus.Verified,
-                    new FirebaseIdentity(request.Headers[Uid].ToString(), request.Headers[Email].ToString(), request.Headers[Verified] == "true")),
+                    new FirebaseIdentity(
+                        request.Headers[Uid].ToString(),
+                        request.Headers[Email].ToString(),
+                        request.Headers[Verified] == "true",
+                        request.Headers.TryGetValue(Name, out var name) ? name.ToString() : null,
+                        request.Headers.TryGetValue(Picture, out var picture) ? picture.ToString() : null)),
             };
             return Task.FromResult(result);
         }

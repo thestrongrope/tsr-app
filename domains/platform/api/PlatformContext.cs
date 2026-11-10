@@ -26,6 +26,8 @@ internal sealed class PlatformContext(DbContextOptions<PlatformContext> options)
 
     public DbSet<GeoCity> GeoCities => Set<GeoCity>();
 
+    public DbSet<LookupEntry> LookupEntries => Set<LookupEntry>();
+
     protected override void Configure(ModelBuilder modelBuilder)
     {
         ConfigureGeo(modelBuilder);
@@ -38,6 +40,19 @@ internal sealed class PlatformContext(DbContextOptions<PlatformContext> options)
             feedback.Property(f => f.CreatedAt).HasDefaultValueSql("now()");
             feedback.HasIndex(f => new { f.UserId, f.ClientId }).IsUnique().HasDatabaseName("uq_feedback_user_client");
             feedback.HasIndex(f => new { f.HandledAt, f.CreatedAt }).HasDatabaseName("idx_feedback_handled_created");
+        });
+
+        modelBuilder.Entity<LookupEntry>(lookup =>
+        {
+            lookup.ToTable("lookups");
+            lookup.Property(l => l.Type).HasMaxLength(50);
+            lookup.Property(l => l.Code).HasMaxLength(100);
+            lookup.Property(l => l.Label).HasMaxLength(255);
+            lookup.Property(l => l.SortOrder).HasDefaultValue(0);
+            lookup.Property(l => l.IsActive).HasDefaultValue(true);
+            lookup.Property(l => l.CreatedAt).HasDefaultValueSql("now()");
+            lookup.HasIndex(l => new { l.Type, l.Code }).IsUnique().HasDatabaseName("uniq_type_code");
+            lookup.HasIndex(l => new { l.Type, l.IsActive, l.SortOrder }).HasDatabaseName("idx_type_active_sort");
         });
 
         modelBuilder.Entity<OutboxMessage>(outbox =>
@@ -130,6 +145,24 @@ internal sealed class GeoCity
     public string? State { get; set; }
 
     public int Population { get; set; }
+}
+
+/// <summary>One enumerated option of PHP's <c>lookups</c> (the class request form's dropdown lists). <c>Code</c> is stable, <c>Label</c> is what is shown and what registrations store.</summary>
+internal sealed class LookupEntry
+{
+    public int Id { get; set; }
+
+    public string Type { get; set; } = string.Empty;
+
+    public string Code { get; set; } = string.Empty;
+
+    public string Label { get; set; } = string.Empty;
+
+    public int SortOrder { get; set; }
+
+    public bool IsActive { get; set; } = true;
+
+    public DateTimeOffset? CreatedAt { get; set; }
 }
 
 internal sealed class Feedback

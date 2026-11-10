@@ -2,6 +2,7 @@ using System.Reflection;
 using Tsr.Access.Api;
 using Tsr.Content.Api;
 using Tsr.Identity.Api;
+using Tsr.Membership.Api;
 using Tsr.Platform.Api;
 
 namespace Tsr.Host.Api;
@@ -21,6 +22,7 @@ public static class Modules
         new("identity", IdentityModule.Dependencies, typeof(IdentityModule).Assembly),
         new("access", AccessModule.Dependencies, typeof(AccessModule).Assembly),
         new("platform", PlatformModule.Dependencies, typeof(PlatformModule).Assembly),
+        new("membership", MembershipModule.Dependencies, typeof(MembershipModule).Assembly),
         new("content", ContentModule.Dependencies, typeof(ContentModule).Assembly),
     ];
 }

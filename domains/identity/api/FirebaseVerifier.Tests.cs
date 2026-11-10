@@ -33,6 +33,39 @@ public sealed class FirebaseVerifierTests
         Assert.That(result.Identity, Is.EqualTo(new FirebaseIdentity("uid-1", "a@example.invalid", true)));
     }
 
+    [Test]
+    public async Task The_name_and_picture_claims_travel_with_the_identity()
+    {
+        var token = Sign(new() { ["email"] = "a@example.invalid", ["name"] = "Synthetic Person", ["picture"] = "https://example.invalid/p.png" });
+
+        var result = await VerifyProductionAsync("Bearer " + token);
+
+        Assert.That(result.Identity?.Name, Is.EqualTo("Synthetic Person"));
+        Assert.That(result.Identity?.Picture, Is.EqualTo("https://example.invalid/p.png"));
+    }
+
+    [Test]
+    public async Task A_name_or_picture_that_is_not_text_is_ignored()
+    {
+        var token = Sign(new() { ["email"] = "a@example.invalid", ["name"] = 42, ["picture"] = true });
+
+        var result = await VerifyProductionAsync("Bearer " + token);
+
+        Assert.That(result.Identity?.Name, Is.Null);
+        Assert.That(result.Identity?.Picture, Is.Null);
+    }
+
+    [Test]
+    public async Task In_emulator_mode_the_name_and_picture_come_from_the_token_payload_as_in_PHP()
+    {
+        var token = Unsigned(DemoProject, new() { ["name"] = "Synthetic Person", ["picture"] = "https://example.invalid/p.png" });
+
+        var result = await VerifyEmulatorAsync("Bearer " + token, Account("uid-1", "a@example.invalid", true));
+
+        Assert.That(result.Identity?.Name, Is.EqualTo("Synthetic Person"));
+        Assert.That(result.Identity?.Picture, Is.EqualTo("https://example.invalid/p.png"));
+    }
+
     [TestCase(null)]
     [TestCase("")]
     [TestCase("Basic abc")]

@@ -10,7 +10,7 @@ namespace Tsr.Identity.Api;
 /// getFromFirebase / getOrCreateFromFirebase do: by Firebase uid first, then by email (citext, so case is
 /// ignored), and an email claims a row only when the token says it is verified.
 /// </summary>
-internal sealed partial class MemberDirectory(IdentityContext db, TimeProvider clock, ILogger<MemberDirectory> logger)
+internal sealed partial class MemberDirectory(IdentityContext db, TimeProvider clock, IProfileSink profiles, ILogger<MemberDirectory> logger)
 {
     private const int FirstToken = 1000;
     private const long TokenLock = 7_100_001;
@@ -29,7 +29,7 @@ internal sealed partial class MemberDirectory(IdentityContext db, TimeProvider c
         var byEmail = await db.Users.OrderBy(u => u.Id).FirstOrDefaultAsync(u => u.Email == who.Email, ct);
         if (byEmail is null)
         {
-            return create ? await CreateAsync(who, ct) : null;
+            return create ? await CreateAndRecordAsync(who, ct) : null;
         }
 
         if (!who.EmailVerified)
@@ -45,6 +45,7 @@ internal sealed partial class MemberDirectory(IdentityContext db, TimeProvider c
             byEmail.FirebaseUid = who.Uid;
             byEmail.Provider = "firebase";
             await db.SaveChangesAsync(ct);
+            await profiles.RecordSignInAsync(byEmail.Id, who.Name, who.Picture, isNewMember: false, ct);
         }
         else if (string.IsNullOrEmpty(byEmail.FirebaseUid))
         {
@@ -126,6 +127,14 @@ internal sealed partial class MemberDirectory(IdentityContext db, TimeProvider c
         {
             set.SetProperty(u => u.Version, tracking.Version);
         }
+    }
+
+    // PHP writes the token's name and picture into the same row on create and on a claim (getOrCreateFromFirebase): here that is the profile sink.
+    private async Task<User> CreateAndRecordAsync(FirebaseIdentity who, CancellationToken ct)
+    {
+        var user = await CreateAsync(who, ct);
+        await profiles.RecordSignInAsync(user.Id, who.Name, who.Picture, isNewMember: true, ct);
+        return user;
     }
 
     // Token is max + 1 as in PHP, made safe by a transaction-scoped lock: two first sign-ins at once

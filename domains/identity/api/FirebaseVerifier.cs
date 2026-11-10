@@ -136,7 +136,7 @@ internal sealed partial class FirebaseVerifier(
         }
 
         return settings.UseEmulator
-            ? await FromEmulatorAsync(request, uid, ct)
+            ? await FromEmulatorAsync(request, result.Principal, uid, ct)
             : FromClaims(result.Principal, uid);
     }
 
@@ -151,12 +151,16 @@ internal sealed partial class FirebaseVerifier(
         var verified = principal.FindFirst("email_verified") is { ValueType: ClaimValueTypes.Boolean, Value: var value }
             && bool.TryParse(value, out var flag)
             && flag;
-        return new Verification(VerifyStatus.Verified, new FirebaseIdentity(uid, email, verified));
+        return new Verification(VerifyStatus.Verified, new FirebaseIdentity(uid, email, verified, TextClaim(principal, "name"), TextClaim(principal, "picture")));
     }
+
+    // A claim is used only when it is JSON text; PHP hands any value on, but a number or a flag is never a name.
+    private static string? TextClaim(ClaimsPrincipal principal, string type) =>
+        principal.FindFirst(type) is { ValueType: ClaimValueTypes.String, Value: var value } ? value : null;
 
     // The email and its verified flag come from the emulator's account, never from the unsigned
     // token, so a hand-made token cannot name another email (as PHP does).
-    private async Task<Verification> FromEmulatorAsync(HttpRequest request, string uid, CancellationToken ct)
+    private async Task<Verification> FromEmulatorAsync(HttpRequest request, ClaimsPrincipal principal, string uid, CancellationToken ct)
     {
         var idToken = BearerHeader().Match(request.Headers.Authorization.ToString().Trim()).Groups[1].Value.Trim();
         try
@@ -171,7 +175,7 @@ internal sealed partial class FirebaseVerifier(
             }
 
             using var document = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(ct), cancellationToken: ct);
-            return FromAccount(document.RootElement, uid);
+            return FromAccount(document.RootElement, principal, uid);
         }
         catch (Exception e) when (e is HttpRequestException or TaskCanceledException or JsonException)
         {
@@ -180,7 +184,7 @@ internal sealed partial class FirebaseVerifier(
         }
     }
 
-    private Verification FromAccount(JsonElement root, string uid)
+    private Verification FromAccount(JsonElement root, ClaimsPrincipal principal, string uid)
     {
         if (root.ValueKind != JsonValueKind.Object
             || !root.TryGetProperty("users", out var users)
@@ -206,7 +210,7 @@ internal sealed partial class FirebaseVerifier(
         }
 
         var verified = account.TryGetProperty("emailVerified", out var v) && v.ValueKind == JsonValueKind.True;
-        return new Verification(VerifyStatus.Verified, new FirebaseIdentity(uid, email, verified));
+        return new Verification(VerifyStatus.Verified, new FirebaseIdentity(uid, email, verified, TextClaim(principal, "name"), TextClaim(principal, "picture")));
     }
 
     [GeneratedRegex(@"^Bearer\s+(.+)$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 200)]

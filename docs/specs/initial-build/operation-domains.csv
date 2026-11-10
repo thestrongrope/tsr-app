@@ -137,8 +137,8 @@ GET,/reports/this-week/class/{class_id},classes,reports-this-week-class,?,?,M
 GET,/reports/registrations,membership,reports-registrations,?,?,L
 GET,/reports/registrations/download,membership,reports-registrations-download,?,?,L
 GET,/reports/registrations/allocated/download,membership,reports-registrations-allocated-download,?,?,L
-GET,/registrations/{registration_id}/classes,membership,registrations-classes,?,?,M
-POST,/registrations/{registration_id}/place,membership,registrations-place,?,?,L
+GET,/registrations/{registration_id}/classes,classes,registrations-classes,?,?,M
+POST,/registrations/{registration_id}/place,classes,registrations-place,?,?,L
 POST,/registrations/{registration_id}/reject,membership,registrations-reject,?,?,M
 GET,/reports/quran-leaderboard/download,content,reports-quran-leaderboard-download,?,?,L
 POST,/reports/pending/nudge,notifications,reports-pending-nudge,?,?,M

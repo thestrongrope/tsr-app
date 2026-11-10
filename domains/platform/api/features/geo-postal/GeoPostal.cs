@@ -2,8 +2,6 @@ using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
 using Tsr.Platform.Api.Domain;
 using Tsr.Shared.Api;
 
@@ -26,7 +24,7 @@ internal static class GeoPostalEndpoint
     }
 }
 
-internal sealed class GeoPostalHandler(PlatformContext db, GeoGate gate, ILogger<GeoPostalHandler> logger)
+internal sealed class GeoPostalHandler(Geo geo, GeoGate gate)
 {
     public async Task<IResult> HandleAsync(Caller? caller, HttpRequest request, CancellationToken ct)
     {
@@ -59,25 +57,7 @@ internal sealed class GeoPostalHandler(PlatformContext db, GeoGate gate, ILogger
             return Problem.Detail(StatusCodes.Status422UnprocessableEntity, code.Error!);
         }
 
-        var found = await GeoTables.OrEmptyAsync(
-            () => FindAsync(PhpText.ToUpperAscii(country.Value!), PhpText.ToUpperAscii(code.Value!), ct), null, logger);
+        var found = await geo.ByPostalCodeAsync(country.Value!, code.Value!, ct);
         return Results.Json(new JsonObject { ["found"] = found is not null, ["city"] = found?.City, ["state"] = found?.State });
-    }
-
-    /// <summary>The first hit among the tries; a code of exactly "0" is never looked up (GeoLookup.PostalCodeTries).</summary>
-    private async Task<GeoPostalCode?> FindAsync(string country, string code, CancellationToken ct)
-    {
-        foreach (var attempt in GeoLookup.PostalCodeTries(code))
-        {
-            var row = await db.GeoPostalCodes.AsNoTracking()
-                .Where(p => p.CountryCode == country && p.PostalCode == attempt)
-                .FirstOrDefaultAsync(ct);
-            if (row is not null)
-            {
-                return row;
-            }
-        }
-
-        return null;
     }
 }

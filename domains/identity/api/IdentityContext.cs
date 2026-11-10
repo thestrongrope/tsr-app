@@ -50,16 +50,14 @@ internal sealed class IdentityContext(DbContextOptions<IdentityContext> options)
 }
 
 /// <summary>
-/// One row of PHP's <c>users</c>: the identity columns only. <c>Gender</c> stays until membership's profile owns it
-/// (phase 3); the role moved to <c>access.user_roles</c>.
+/// One row of PHP's <c>users</c>: the identity columns only. The profile columns (gender among them) moved to membership's
+/// <c>member_profiles</c>, the role to <c>access.user_roles</c>.
 /// </summary>
 internal sealed class User
 {
     public int Id { get; set; }
 
     public int Token { get; set; }
-
-    public short? Gender { get; set; }
 
     public string? Email { get; set; }
 

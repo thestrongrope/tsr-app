@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 using Tsr.Platform.Api.Domain;
 using Tsr.Platform.Api.Features.AppVersion;
 using Tsr.Platform.Api.Features.GeoCities;
@@ -29,11 +31,13 @@ public static class PlatformModule
         services.AddSingleton<AppCatalogSource>();
         services.AddScoped<AppVersionHandler>();
         services.AddScoped<ReleaseNotesHandler>();
-        services.AddSingleton<GeoRateLimit>();
+        services.TryAddSingleton<MemberRateLimit>();
         services.AddScoped<GeoGate>();
         services.AddScoped<GeoCountriesHandler>();
         services.AddScoped<GeoPostalHandler>();
         services.AddScoped<GeoCitiesHandler>();
+        services.AddScoped(provider => new Lookups(provider.GetRequiredService<PlatformContext>()));
+        services.AddScoped(provider => new Geo(provider.GetRequiredService<PlatformContext>(), provider.GetRequiredService<ILogger<Geo>>()));
         return services;
     }
 

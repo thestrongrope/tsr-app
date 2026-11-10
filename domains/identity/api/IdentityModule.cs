@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Tsr.Identity.Api.Features.LinkAccount;
 using Tsr.Shared.Api;
@@ -34,6 +35,8 @@ public static class IdentityModule
         services.AddIdentityTables();
         services.AddFirebaseVerification(settings);
         services.AddScoped<MemberDirectory>();
+        services.TryAddScoped<IProfileSink, NoProfileSink>();
+        services.AddScoped(provider => new UserDirectory(provider.GetRequiredService<IdentityContext>()));
         return services;
     }
 

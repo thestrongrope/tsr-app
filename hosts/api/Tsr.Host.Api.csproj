@@ -13,6 +13,7 @@
     <ProjectReference Include="../../domains/identity/api/Tsr.Identity.Api.csproj" />
     <ProjectReference Include="../../domains/access/api/Tsr.Access.Api.csproj" />
     <ProjectReference Include="../../domains/platform/api/Tsr.Platform.Api.csproj" />
+    <ProjectReference Include="../../domains/membership/api/Tsr.Membership.Api.csproj" />
     <ProjectReference Include="../../domains/content/api/Tsr.Content.Api.csproj" />
   </ItemGroup>
 </Project>

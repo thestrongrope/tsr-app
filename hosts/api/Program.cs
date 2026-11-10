@@ -1,6 +1,7 @@
 using Tsr.Access.Api;
 using Tsr.Content.Api;
 using Tsr.Identity.Api;
+using Tsr.Membership.Api;
 using Tsr.Platform.Api;
 using Tsr.Shared.Api;
 
@@ -31,6 +32,7 @@ else
 
 builder.Services.AddAccess();
 builder.Services.AddPlatform();
+builder.Services.AddMembership();
 builder.Services.AddContent();
 
 var app = builder.Build();
@@ -48,6 +50,7 @@ app.UseIdentity();
 app.MapIdentity();
 app.MapAccess();
 app.MapPlatform();
+app.MapMembership();
 app.MapContent();
 
 app.Run();

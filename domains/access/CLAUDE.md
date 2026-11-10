@@ -8,7 +8,7 @@ quirks included (facts: `docs/specs/initial-build/phase-2-permissions-recon.md`,
 
 | Part | State |
 |---|---|
-| Interface `Permissions`: `CanAsync(caller, action, target)`, `ReachAsync(caller, action)` (managedReach, searchReach, genderLock, assignedOnlyIds in one `Reach`), `ForUserAsync(caller)` | built; `api/Permissions.cs`, rules in `api/domain/AccessEngine.cs` |
+| Interface `Permissions`: `CanAsync(caller, action, target)`, `ReachAsync(caller, action)` (managedReach, searchReach, genderLock, assignedOnlyIds in one `Reach`), `ForUserAsync(caller)`, `RoleIdAsync(caller)` (the role id for GET /me) | built; `api/Permissions.cs`, rules in `api/domain/AccessEngine.cs` |
 | Catalog (102 permissions, 7 roles, role grants), seeded from PHP | built; migration `CatalogFromPhp`; regenerate: `tools/access-catalog/export.sh` |
 | User roles (`access.user_roles`), named grants, class access rules (tables) | built; nothing writes grants or rules yet (PHP serves the admin routes) |
 | Class access rule matching (`RuleMatcher`) | built, unit tested; has no classes to match until `classes` exists |

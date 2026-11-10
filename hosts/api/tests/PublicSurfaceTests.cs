@@ -12,7 +12,8 @@ public sealed class PublicSurfaceTests
 {
     private static readonly Dictionary<string, string[]> Allowed = new()
     {
-        ["identity"] = ["IdentityModule"],
+        // identity: the module; UserDirectory with the record it returns (UserRef); IProfileSink, the one port it declares (membership supplies it).
+        ["identity"] = ["IdentityModule", "UserDirectory", "UserRef", "IProfileSink"],
         // access: the module; Permissions (the interface every domain calls) and the types in its signatures
         // (AccessTarget, Reach, SearchReach, UserAccess, AccessScopes); IClassScopes, the one port classes will supply, with the
         // two records it returns (ClassMemberships, ClassFacts). Nothing else.
@@ -21,7 +22,10 @@ public sealed class PublicSurfaceTests
             "AccessModule", "Permissions", "AccessTarget", "Reach", "SearchReach", "UserAccess", "AccessScopes",
             "IClassScopes", "ClassMemberships", "ClassFacts",
         ],
-        ["platform"] = ["PlatformModule"],
+        // platform: the module; Lookups and Geo (read interfaces) with the two records Geo returns (GeoCountryInfo, GeoPlace).
+        ["platform"] = ["PlatformModule", "Lookups", "Geo", "GeoCountryInfo", "GeoPlace"],
+        // membership: the module; MemberNames (read interface); IClassEnrolments, the one port classes will supply.
+        ["membership"] = ["MembershipModule", "MemberNames", "IClassEnrolments"],
         ["content"] = ["ContentModule"],
     };
 

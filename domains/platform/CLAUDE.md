@@ -16,11 +16,12 @@ example**: copy its layout when you build another domain (`domains/CLAUDE.md`).
 | `geo-countries` | `GET /geo/countries` | built; signed in, rate limited |
 | `geo-postal` | `POST /geo/postal` | built; signed in, rate limited |
 | `geo-cities` | `POST /geo/cities` | built; signed in, rate limited |
-| lookups, access log (`GET /admin/access-log` and its download) | - | not started; PHP still serves them (the access log waits for membership: phase-3-platform-design.md) |
+| `lookups` table, public `Lookups` and `Geo` read interfaces | - | built (no route); `membership` uses them | 
+| access log (`GET /admin/access-log` and its download) | - | not started; PHP still serves it (waits for the report generator: phase-3-platform-design.md) |
 
 ## What it owns
 
-- Tables `feedback`, `geo_countries`, `geo_postal_codes`, `geo_cities`, in schema `platform` (`api/PlatformContext.cs`; migrations in `api/Migrations/`).
+- Tables `feedback`, `geo_countries`, `geo_postal_codes`, `geo_cities`, `lookups` (the 7 class request lists, 72 options, seeded from PHP), in schema `platform` (`api/PlatformContext.cs`; migrations in `api/Migrations/`).
 - Permissions `feedback:create:self`, `feedback:review:all`
   (seeded by access's first migration; the catalog itself belongs to `access`).
 - Event `platform.feedback_submitted`.
@@ -45,7 +46,11 @@ Three columns (`geo_countries.name`, `geo_postal_codes.postal_code`, `geo_cities
 find "Zürich" for "zur" and sort accented names among plain ones. Proof, with the PostgreSQL 18 limits (no ILIKE, regex or
 `starts_with` on these columns; LIKE and indexes work): `docs/specs/initial-build/phase-3-collation-proof.md`. The guard
 test `db/tests/SchemaGuardTests.cs` lists the three with the reason. The collation lives in schema `public` (a column
-definition names it unqualified). The geo rate limit (60 calls a minute per member) is in memory, per process.
+definition names it unqualified). The geo rate limit (60 calls a minute per member, bucket `geo`) is `MemberRateLimit` in `shared/api` (in memory, per process); `GeoGate` supplies the limit and the wording.
+
+## Public read interfaces
+
+`Geo` (`HasCountriesAsync`, `CountryByNameAsync`, `ByPostalCodeAsync`, `FromPostalCodeAsync`, with `GeoCountryInfo` and `GeoPlace`) is the one geo lookup code: the postal code slice answers from it and `membership` validates a profile with it. A missing geo table answers "nothing" (logged), as PHP. `Lookups.LabelsAsync(type)` returns the active labels in display order and throws for an unseeded type (PHP `labelsOrFail`).
 
 ## Dependencies
 

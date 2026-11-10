@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Unit tests for shared/api. The test files live next to the code ("*.Tests.cs"). -->
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <!-- CA1716: "Shared" is a VB keyword; see Tsr.Shared.Api.csproj. -->
+    <NoWarn>$(NoWarn);CA1716</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../**/*.Tests.cs" Exclude="../tests/**" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Tsr.Shared.Api.csproj" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="NUnit" />
+    <PackageReference Include="NUnit3TestAdapter" />
+    <PackageReference Include="NUnit.Analyzers" PrivateAssets="all" />
+  </ItemGroup>
+</Project>

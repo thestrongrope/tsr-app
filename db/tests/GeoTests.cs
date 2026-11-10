@@ -27,8 +27,8 @@ public sealed class GeoTests
         for (var member = 1; member <= 8; member++)
         {
             await TestDatabase.ExecuteAsync(
-                "insert into identity.users (token, gender, email, firebase_uid) "
-                + "select " + (900030 + member) + ", 1, 'geo" + member + "@example.invalid', 'uid-geo-" + member + "' "
+                "insert into identity.users (token, email, firebase_uid) "
+                + "select " + (900030 + member) + ", 'geo" + member + "@example.invalid', 'uid-geo-" + member + "' "
                 + "where not exists (select 1 from identity.users where token = " + (900030 + member) + ")");
         }
     }

@@ -24,6 +24,13 @@
   <Folder Name="/domains/identity/api/tests/">
     <Project Path="domains/identity/api/tests/Tsr.Identity.Api.Tests.csproj" />
   </Folder>
+  <Folder Name="/domains/membership/" />
+  <Folder Name="/domains/membership/api/">
+    <Project Path="domains/membership/api/Tsr.Membership.Api.csproj" />
+  </Folder>
+  <Folder Name="/domains/membership/api/tests/">
+    <Project Path="domains/membership/api/tests/Tsr.Membership.Api.Tests.csproj" />
+  </Folder>
   <Folder Name="/domains/platform/" />
   <Folder Name="/domains/platform/api/">
     <Project Path="domains/platform/api/Tsr.Platform.Api.csproj" />
@@ -50,6 +57,9 @@
   <Folder Name="/shared/" />
   <Folder Name="/shared/api/">
     <Project Path="shared/api/Tsr.Shared.Api.csproj" />
+  </Folder>
+  <Folder Name="/shared/api/tests/">
+    <Project Path="shared/api/tests/Tsr.Shared.Api.Tests.csproj" />
   </Folder>
   <Folder Name="/shared/site/">
     <Project Path="shared/site/Tsr.Shared.Site.csproj" />

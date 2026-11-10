@@ -15,6 +15,9 @@
  *           900102 super admin (1), 900103 gents admin (3), 900104 ladies admin (4), 900105 class coordinator (5),
  *           900106 finance (7), 900107 class teacher (6), 900108 role 0 with named grants (two live, one revoked)
  *   (no row) deleted.recently: a deletion completed just now; tools/identity-contract.sh refreshes its time
+ *   9002xx  membership fixtures (every gender form, a shared token, guardian links in each status, duplicate registrations): see the
+ *           db/synthetic/membership-fixtures.sql (included below; it RESETS the rows it owns every time it runs);
+ *           tools/parity-php/membership-fixtures.sql holds the same rows for the PHP parity stack
  *
  * Articles, one of each kind. Invented text.
  *   published  public (published_at in the past)
@@ -22,15 +25,26 @@
  *   scheduled  not public yet (published_at in 2099)
  */
 
-INSERT INTO identity.users (token, gender, email)
-SELECT v.token, v.gender, v.email
+INSERT INTO identity.users (token, email)
+SELECT v.token, v.email
 FROM (VALUES
-  (900001, 1::smallint, 'member.gents@example.invalid'),
-  (900002, 2::smallint, 'member.ladies@example.invalid'),
-  (900003, 1::smallint, 'super.admin@example.invalid'),
-  (0, NULL::smallint, 'guest@example.invalid')
-) AS v (token, gender, email)
+  (900001, 'member.gents@example.invalid'),
+  (900002, 'member.ladies@example.invalid'),
+  (900003, 'super.admin@example.invalid'),
+  (0, 'guest@example.invalid')
+) AS v (token, email)
 WHERE NOT EXISTS (SELECT 1 FROM identity.users u WHERE u.token = v.token);
+
+-- The profile (gender, name) lives in membership; identity.users holds none of it. 900001 to 900003 keep the genders they had.
+INSERT INTO membership.member_profiles (user_id, name, gender)
+SELECT u.id, v.name, v.gender
+FROM (VALUES
+  ('member.gents@example.invalid', 'Synthetic Gents Member', '1'),
+  ('member.ladies@example.invalid', 'Synthetic Ladies Member', '2'),
+  ('super.admin@example.invalid', 'Synthetic Super Admin', '1')
+) AS v (email, name, gender)
+JOIN identity.users u ON u.email = v.email
+ON CONFLICT (user_id) DO NOTHING;
 
 INSERT INTO identity.users (token, email)
 SELECT v.token, v.email
@@ -102,6 +116,10 @@ FROM (VALUES
    TIMESTAMPTZ '2099-01-01 00:00:00+00')
 ) AS v (slug, title, body, published_at)
 WHERE NOT EXISTS (SELECT 1 FROM content.articles a WHERE a.slug = v.slug);
+
+-- Membership fixtures (phase 3b): members, guardian links and registrations for the membership contract files. They RESET the rows
+-- they own each time (tools/membership-contract.sh does it before a run), so a contract that changed a row is put back.
+\ir membership-fixtures.sql
 
 -- Geo rows (countries, postal codes, cities): one file shared with the PHP parity stack's MariaDB, so both sides
 -- hold identical rows (tools/platform-contract.sh). It replaces the three geo tables' content, in schema platform.

@@ -6,6 +6,7 @@ using Tsr.Access.Api;
 using Tsr.Content.Api;
 using Tsr.Host.Api;
 using Tsr.Identity.Api;
+using Tsr.Membership.Api;
 using Tsr.Platform.Api;
 using Tsr.Shared.Api;
 using NUnit.Framework;
@@ -85,6 +86,9 @@ public sealed class ModuleBoundaryTests
                 break;
             case "platform":
                 services.AddPlatform();
+                break;
+            case "membership":
+                services.AddMembership();
                 break;
             case "content":
                 services.AddContent();

@@ -198,6 +198,70 @@ namespace Tsr.Platform.Api.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Tsr.Platform.Api.LookupEntry", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("citext")
+                        .HasColumnName("code");
+
+                    b.Property<DateTimeOffset?>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_active");
+
+                    b.Property<string>("Label")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("citext")
+                        .HasColumnName("label");
+
+                    b.Property<int>("SortOrder")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("sort_order");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("citext")
+                        .HasColumnName("type");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Type", "Code")
+                        .IsUnique()
+                        .HasDatabaseName("uniq_type_code");
+
+                    b.HasIndex("Type", "IsActive", "SortOrder")
+                        .HasDatabaseName("idx_type_active_sort");
+
+                    b.ToTable("lookups", "platform", t =>
+                        {
+                            t.HasCheckConstraint("ck_lookups_code_length", "char_length(\"code\") <= 100");
+
+                            t.HasCheckConstraint("ck_lookups_label_length", "char_length(\"label\") <= 255");
+
+                            t.HasCheckConstraint("ck_lookups_type_length", "char_length(\"type\") <= 50");
+                        });
+                });
+
             modelBuilder.Entity("Tsr.Platform.Api.OutboxMessage", b =>
                 {
                     b.Property<Guid>("Id")

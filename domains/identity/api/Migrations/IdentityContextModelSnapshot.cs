@@ -102,10 +102,6 @@ namespace Tsr.Identity.Api.Migrations
                         .HasColumnType("citext")
                         .HasColumnName("firebase_uid");
 
-                    b.Property<short?>("Gender")
-                        .HasColumnType("smallint")
-                        .HasColumnName("gender");
-
                     b.Property<string>("LastDevice")
                         .HasMaxLength(2000)
                         .HasColumnType("citext")

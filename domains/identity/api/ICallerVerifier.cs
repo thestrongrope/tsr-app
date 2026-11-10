@@ -18,8 +18,11 @@ internal enum VerifyStatus
     NoEmail,
 }
 
-/// <summary>What a verified token says about its holder. <c>EmailVerified</c> is true only for a JSON <c>true</c>.</summary>
-internal sealed record FirebaseIdentity(string Uid, string Email, bool EmailVerified);
+/// <summary>
+/// What a verified token says about its holder. <c>EmailVerified</c> is true only for a JSON <c>true</c>. <c>Name</c> and
+/// <c>Picture</c> are the token's own claims when they are text, else null (PHP: <c>$claims['name'] ?? null</c>); identity hands them on, it stores neither.
+/// </summary>
+internal sealed record FirebaseIdentity(string Uid, string Email, bool EmailVerified, string? Name = null, string? Picture = null);
 
 internal sealed record Verification(VerifyStatus Status, FirebaseIdentity? Identity = null);
 

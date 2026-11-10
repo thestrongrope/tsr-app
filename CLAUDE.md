@@ -27,7 +27,7 @@ read it before editing.
 
 Today's PHP API stays in tsr-account until routes move here. Domains planned: `identity` (AuthN)
 · `access` (AuthZ) · `membership` · `classes` · `assessment` · `content` · `notifications` ·
-`platform` · `search` (read model); only `identity`, `access`, `platform` and `content` (a stub)
+`platform` · `search` (read model); only `identity`, `access`, `platform`, `membership` (ten routes: profile, class request form, guardian self-service; the other 16 wait for `classes`) and `content` (a stub)
 have code. Which owns
 what: `domains/CLAUDE.md`.
 
@@ -59,11 +59,12 @@ what: `domains/CLAUDE.md`.
 | Start the local stack (PostgreSQL, migrate, seed, API, gateway on :8088) | `docker compose -f docker-compose.dev.yml up -d --build` |
 | Reset the local database | `docker compose -f docker-compose.dev.yml down -v` |
 | Build all .NET | `dotnet build TsrApp.slnx` |
-| Unit + boundary tests (no DB needed, NUnit) | `dotnet test domains/platform/api/tests`, `dotnet test hosts/api/tests`, `dotnet test hosts/site/tests` |
+| Unit + boundary tests (no DB needed, NUnit) | `dotnet test domains/platform/api/tests` (likewise `domains/identity`, `domains/access`, `domains/membership`, `shared/api`), `dotnet test hosts/api/tests`, `dotnet test hosts/site/tests` |
 | Database-backed tests (needs Docker: Testcontainers starts a throwaway postgres:18) | `dotnet test db/tests` |
-| Contract tests, every Hurl file (stack must be up; `tools/identity-contract.sh dev` first mints the token into `build/dev/token.vars` and refreshes the 2 hour fixture) | `hurl --test --glob "domains/*/spec/tests/*.hurl" --variable base_url=http://localhost:8088 --variables-file build/dev/token.vars --variables-file domains/identity/spec/tests/fixtures.vars --variables-file domains/access/spec/tests/fixtures.vars` |
+| Contract tests, every Hurl file (stack must be up; `tools/identity-contract.sh dev` first mints the token into `build/dev/token.vars` and refreshes the 2 hour fixture; `tools/membership-contract.sh dev --prepare` resets the membership fixtures, loads the geo rows and mints one token per fixture member into `build/dev/membership.vars`; Hurl runs the files in parallel, so no two files change the same member) | `hurl --test --glob "domains/*/spec/tests/*.hurl" --variable base_url=http://localhost:8088 --variables-file build/dev/token.vars --variables-file domains/identity/spec/tests/fixtures.vars --variables-file domains/access/spec/tests/fixtures.vars --variables-file build/dev/membership.vars` (21 files, 273 requests) |
 | One implementation's contract (any base URL) | `tools/identity-contract.sh dev` or `... parity` runs the sign-in contract on either side. For another file, same command with another `base_url` and `--variables-file` (PHP: `build/parity-php/token.vars`, written by `tools/parity-php/mint-token.sh <.invalid email>`); `--glob` is expanded by Hurl itself, so it works in any shell on Mac and Windows when the pattern is quoted. Hurl must be installed. |
 | Access contract on PHP or the new API (stack up; PHP: parity stack) | `tools/access-contract.sh dev` or `parity` (also `tools/identity-contract.sh`) |
+| Membership contract on PHP or the new API (resets its fixture rows first, loads the geo rows, signs 21 fixture members in; the files accept invites and change profiles, so it must reset before each run; invite inspection allows 60 an hour per member, so the files make few calls) | `tools/membership-contract.sh dev` or `parity` (`--prepare` stops after the preparation) |
 | Platform contract on PHP or the new API (loads the geo rows from `db/synthetic/geo-fixtures.sql` into that side first; the three geo files spend about 35 of a member's 60 calls a minute, so do not run one side twice within a minute) | `tools/platform-contract.sh dev` or `parity` |
 | Build the static site (stack must be up) | `dotnet run --project hosts/site` (writes `build/site/`; `TSR_BASE_URL` picks the API) |
 | Flutter: resolve the workspace | `flutter pub get` (once, at the root) |

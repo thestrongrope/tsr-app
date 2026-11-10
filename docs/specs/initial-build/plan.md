@@ -187,3 +187,33 @@ Open after phase 3a:
 - [ ] Public responses carry no `Cache-Control` or `nosniff` header (as PHP); decide after the baseline.
 - [ ] The full GeoNames load (rehearsal), and the trailing-space difference of the collation.
 - [ ] Hurl files assert fields, not whole bodies.
+
+## Checkpoint 4 (2026-11-10): phase 3b, membership first half, and a change of order
+
+Built: ten `membership` operations (registration form 2, guardian self-service 6, profile 2), schema
+`membership`, identity `UserDirectory` and the `IProfileSink` port, platform `Lookups` and `Geo`, the
+rate limiter moved to `shared/api`, `identity.users.gender` dropped. Design: `phase-3-membership-design.md`;
+notes: `phase-3b-notes.md`. Checked by the orchestrator on the final code: build 0 warnings; 912 NUnit
+tests (shared 13, platform 205, identity 63, access 64, membership 274, API boundary 20, site 12, db 261);
+21 Hurl files, 273 requests on the new API. On PHP (run by the build agent only): membership, identity,
+access and platform contracts pass.
+
+**Committed without the `qa` and `security` reviews** (Asif's decision: the build used 741,000 tokens
+against a 600,000 budget). Review it with the next whole-change review.
+
+Open after phase 3b:
+
+- [ ] No unanchored review of 3b. Look first at: the sign-in name and picture write (a second database call, not one transaction with the user insert), names cut to 200 and pictures to 2,000 characters, the two new public members `Permissions.RoleIdAsync` and `UserDirectory.ByTokensAsync`.
+- [ ] Dropping `identity.users.gender` loses data on a populated database: the data move must fill `membership.member_profiles` first.
+- [ ] Gender lock on `PATCH /me` and the permission 403s have no parity proof until `classes` exists.
+- [ ] Deliberate differences in `php-parity-feedback.md` ("Membership batch 3b-2"): 413 over 1 MiB, guardian lists capped at 200, gender lock by user id, .NET's HTML entity table.
+- [ ] `TSR_PUBLIC_WEB_BASE` and the search touch are not built. The seed resets membership rows on every start. The rate limiter is per process.
+- [ ] The other 14 membership operations (2 moved to `classes`).
+
+**Order of work changed (agreed with Asif, 2026-11-10).** Thin domain-by-domain slices cost too much
+per operation. From here:
+
+1. Schema phase: every remaining PHP table ported in one pass, with owners, synthetic seed and a load script.
+2. Surface phase: all nine domains set up, every operation of the OpenAPI spec routed, unbuilt ones answering 501.
+3. Fill by domain: `classes` with the rest of `membership`, then `assessment`, then `notifications`; one review per domain; a recon only for the large operations.
+4. Parity bar: same status, body and permission for valid and ordinary invalid input. Exotic edge cases are recorded, not chased.

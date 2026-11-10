@@ -1,0 +1,448 @@
+openapi: 3.1.0
+info:
+  title: TSR membership
+  version: 0.1.0
+  description: |
+    The membership domain's actions built so far: the profile, the class request form and the guardian self-service links.
+    Words: glossary.md. Behaviour: tests/ (Hurl, run against PHP and the new API). Parity first: every answer is PHP's.
+    Forward compatible: a store-live app keeps calling these, so add fields and routes freely but never remove or change one
+    without the release process. Every error body is {"detail": "..."}.
+
+    Validation note: a malformed body is 422 `Invalid JSON body`, never 400. A body over 1 MiB is 413 (PHP reads any size).
+servers:
+  - url: http://localhost:8088
+    description: Local dev stack (gateway)
+paths:
+  /me:
+    get:
+      operationId: getProfile
+      summary: The member's own profile
+      description: |
+        Needs profile:read:self. The one membership route a member with a pending account deletion may still call.
+        Cast as PHP's api_cast: `name` is the integer 0 when empty; `gender` and `age_range` are ints or null.
+      security:
+        - memberToken: []
+      responses:
+        "200":
+          description: The sixteen fields, in this order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Profile"
+        "401":
+          $ref: "#/components/responses/Problem"
+        "403":
+          $ref: "#/components/responses/Problem"
+    patch:
+      operationId: updateProfile
+      summary: Update the member's own profile
+      description: |
+        Needs profile:update:self; refused with 403 `Account deletion pending` while a deletion is pending. Only the nine keys
+        are read. No updatable key: 200 with the current profile, nothing validated. Validation in the order name, gender,
+        age_range, mobile, country, state, city, language, zip; the first error is a 422. Values are stored as sent.
+      security:
+        - memberToken: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProfileUpdate"
+      responses:
+        "200":
+          description: The re-read profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Profile"
+        "401":
+          $ref: "#/components/responses/Problem"
+        "403":
+          $ref: "#/components/responses/Problem"
+        "413":
+          $ref: "#/components/responses/Problem"
+        "422":
+          $ref: "#/components/responses/Problem"
+  /registration:
+    get:
+      operationId: getRegistration
+      summary: The member's saved class request, the interest options, their choices and languages
+      description: Signed in only (no permission). The first row of the member's token by id; raw values.
+      security:
+        - memberToken: []
+      responses:
+        "200":
+          description: The saved form and its options
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegistrationAnswer"
+        "401":
+          $ref: "#/components/responses/Problem"
+    post:
+      operationId: saveRegistration
+      summary: Create or update the member's class request
+      description: |
+        Signed in only (no permission). Creates a row, or updates every row of the token (and clears for_classid, profession and the
+        legacy interests). A non-empty `languages` replaces the saved languages; an array `interestIds` replaces the choices.
+        The three writes are separate and unguarded.
+      security:
+        - memberToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegistrationRequest"
+      responses:
+        "200":
+          description: Saved
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, message]
+                properties:
+                  success:
+                    type: boolean
+                    const: true
+                  message:
+                    type: string
+                    const: Class request submitted successfully
+        "401":
+          $ref: "#/components/responses/Problem"
+        "413":
+          $ref: "#/components/responses/Problem"
+        "422":
+          $ref: "#/components/responses/Problem"
+  /me/children/links:
+    get:
+      operationId: listMyLinks
+      summary: The caller's own parent links, every status, newest first
+      description: Needs children:read:self. A bare list; at most 200 rows.
+      security:
+        - memberToken: []
+      responses:
+        "200":
+          description: The links
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ChildLink"
+        "401":
+          $ref: "#/components/responses/Problem"
+        "403":
+          $ref: "#/components/responses/Problem"
+  /me/children/link/{code}:
+    parameters:
+      - name: code
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      operationId: inspectInvite
+      summary: Look at an invite before accepting it
+      description: |
+        Needs children:link:self. 60 calls an hour per member, every call counts: the 61st is 429 `Too many lookups; try again later`.
+        Writes nothing.
+      security:
+        - memberToken: []
+      responses:
+        "200":
+          description: not_found, expired, or valid with the child's first name
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [state]
+                properties:
+                  state:
+                    type: string
+                    enum: [not_found, expired, valid]
+                  first_name:
+                    type: [string, "null"]
+                    description: Present only when state is valid
+        "401":
+          $ref: "#/components/responses/Problem"
+        "403":
+          $ref: "#/components/responses/Problem"
+        "429":
+          $ref: "#/components/responses/Problem"
+    post:
+      operationId: acceptInvite
+      summary: Accept an invite and become the child's parent
+      description: |
+        Needs children:link:self. Body `relationship` (father, mother or guardian; trimmed, lower-cased). Refusals in order: 404 `Invite not found`,
+        410 `This link has expired or has already been used`, 422 `Invalid relationship or self-link not allowed`, 403 `This person was removed by
+        the child; ask an admin for a new link`, 409 `An active link already exists for this parent and child`. Done under a lock on the child.
+      security:
+        - memberToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                relationship:
+                  type: string
+                  enum: [father, mother, guardian]
+      responses:
+        "200":
+          description: Linked
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [child_token, relationship, status]
+                properties:
+                  child_token:
+                    type: integer
+                  relationship:
+                    type: string
+                  status:
+                    type: string
+                    const: active
+        "401":
+          $ref: "#/components/responses/Problem"
+        "403":
+          $ref: "#/components/responses/Problem"
+        "404":
+          $ref: "#/components/responses/Problem"
+        "409":
+          $ref: "#/components/responses/Problem"
+        "410":
+          $ref: "#/components/responses/Problem"
+        "422":
+          $ref: "#/components/responses/Problem"
+  /me/children/{child_token}/link:
+    delete:
+      operationId: revokeChildLink
+      summary: A parent ends their own active link to a child
+      description: Needs children:link:self. The token is cast as PHP's (int), so text that is not a number is 0. 404 `Active link not found`.
+      security:
+        - memberToken: []
+      parameters:
+        - name: child_token
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Revoked
+        "401":
+          $ref: "#/components/responses/Problem"
+        "403":
+          $ref: "#/components/responses/Problem"
+        "404":
+          $ref: "#/components/responses/Problem"
+  /me/parents:
+    get:
+      operationId: listMyParents
+      summary: The caller's active parents (the caller as the child)
+      description: Needs parents:manage:self. A bare list, newest first, at most 200 rows.
+      security:
+        - memberToken: []
+      responses:
+        "200":
+          description: The links, with parent_name in place of child_name
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ParentLink"
+        "401":
+          $ref: "#/components/responses/Problem"
+        "403":
+          $ref: "#/components/responses/Problem"
+  /me/parents/{parent_token}:
+    delete:
+      operationId: revokeParent
+      summary: A child removes one of their active parents
+      description: |
+        Needs parents:manage:self. The row records the child as the one who revoked, so a return by invite then needs an admin.
+        404 `Active parent link not found`.
+      security:
+        - memberToken: []
+      parameters:
+        - name: parent_token
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Revoked
+        "401":
+          $ref: "#/components/responses/Problem"
+        "403":
+          $ref: "#/components/responses/Problem"
+        "404":
+          $ref: "#/components/responses/Problem"
+components:
+  securitySchemes:
+    memberToken:
+      type: http
+      scheme: bearer
+      description: A Firebase ID token. identity verifies it and creates the member on first use.
+  responses:
+    Problem:
+      description: An error
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [detail]
+            properties:
+              detail:
+                type: string
+  schemas:
+    Profile:
+      type: object
+      description: The sixteen fields, in this order. Nullable fields are null when empty.
+      required: [id, token, email, name, roleid, picture, gender, age_range, mobile, country, state, city, language, zip, sendupdates, unsubscribe]
+      properties:
+        id: {type: integer}
+        token: {type: integer}
+        email: {type: string}
+        name:
+          description: The integer 0 when the name is empty
+          oneOf:
+            - type: string
+            - type: integer
+              const: 0
+        roleid: {type: integer}
+        picture: {type: [string, "null"]}
+        gender:
+          type: [integer, "null"]
+          description: The int of a numeric text; null for Male, Female, empty and null
+        age_range: {type: [integer, "null"]}
+        mobile: {type: [string, "null"]}
+        country: {type: [string, "null"]}
+        state: {type: [string, "null"]}
+        city: {type: [string, "null"]}
+        language: {type: [integer, "null"]}
+        zip: {type: [string, "null"]}
+        sendupdates: {type: [string, "null"]}
+        unsubscribe: {type: [string, "null"]}
+    ProfileUpdate:
+      type: object
+      description: Only these keys are read. A null value is not validated.
+      properties:
+        name: {description: "2 to 50 characters after trim and no control character"}
+        gender: {description: "(int) must be 1 or 2"}
+        age_range: {description: Any value; never validated}
+        mobile: {description: "Empty, or an optional + and 10 to 15 digits"}
+        country: {description: "2 to 50 characters; from the country list when the list is loaded"}
+        state: {description: "2 to 50 characters; no digit"}
+        city: {description: "2 to 50 characters; no digit"}
+        language: {description: "(int) must be 1, 2 or 3"}
+        zip: {description: "Empty, or 3 to 12 letters, digits, spaces or hyphens; not an email or phone number"}
+    RegistrationAnswer:
+      type: object
+      required: [registration, interestOptions, selectedInterestIds, languages]
+      properties:
+        registration:
+          description: Null when nothing is saved
+          oneOf:
+            - type: "null"
+            - $ref: "#/components/schemas/Registration"
+        interestOptions:
+          type: array
+          items:
+            type: object
+            required: [id, name]
+            properties:
+              id: {type: integer}
+              name: {type: string}
+        selectedInterestIds:
+          type: array
+          items: {type: integer}
+        languages:
+          type: object
+          description: "{language: {skill: proficiency}}; an empty object when none"
+          additionalProperties:
+            type: object
+            additionalProperties: {type: string}
+    Registration:
+      type: object
+      required: [preferredLocation, birthYear, islamicStudyYears, linkedinUrl, residenceLocation, workLocation, education, fieldOfStudy, fieldOfStudyOther, professionalCourses, professionalCoursesOther, occupationType, fieldOfWork, yearsExperience, roleLevel, otherInterests, status]
+      properties:
+        preferredLocation: {type: [string, "null"]}
+        birthYear: {type: [integer, "null"]}
+        islamicStudyYears: {type: [integer, "null"]}
+        linkedinUrl: {type: [string, "null"]}
+        residenceLocation: {type: [string, "null"]}
+        workLocation: {type: [string, "null"]}
+        education: {type: [string, "null"]}
+        fieldOfStudy: {type: array, items: {type: string}}
+        fieldOfStudyOther: {type: [string, "null"]}
+        professionalCourses: {type: array, items: {type: string}}
+        professionalCoursesOther: {type: [string, "null"]}
+        occupationType: {type: [string, "null"]}
+        fieldOfWork: {type: [string, "null"]}
+        yearsExperience: {type: [string, "null"]}
+        roleLevel: {type: [string, "null"]}
+        otherInterests: {type: [string, "null"]}
+        status: {type: string, enum: [Pending, Accepted, Rejected]}
+    RegistrationRequest:
+      type: object
+      description: |
+        Required: preferredLocation, birthYear, islamicStudyYears (empty after trim is a 422). Dropdowns (education, occupationType,
+        fieldOfWork, yearsExperience, roleLevel) must equal an active lookup label or are dropped; fieldOfStudy and professionalCourses
+        are lists filtered the same way; languages is {language: {skill: proficiency}}; interestIds is a list of option ids.
+      properties:
+        preferredLocation: {type: string}
+        birthYear: {}
+        islamicStudyYears: {}
+        linkedinUrl: {type: string}
+        residenceLocation: {type: string}
+        workLocation: {type: string}
+        education: {type: string}
+        fieldOfStudy: {type: array, items: {type: string}}
+        fieldOfStudyOther: {type: string}
+        professionalCourses: {type: array, items: {type: string}}
+        professionalCoursesOther: {type: string}
+        occupationType: {type: string}
+        fieldOfWork: {type: string}
+        yearsExperience: {type: string}
+        roleLevel: {type: string}
+        otherInterests: {type: string}
+        languages: {type: object}
+        interestIds: {type: array, items: {type: integer}}
+    ChildLink:
+      type: object
+      required: [id, parent_token, child_token, child_name, relationship, status, source, created_at, created_by_name, activated_at, revoked_at]
+      properties:
+        id: {type: integer}
+        parent_token: {type: [integer, "null"]}
+        child_token: {type: integer}
+        child_name: {type: [string, "null"]}
+        relationship: {type: [string, "null"], enum: [father, mother, guardian, null]}
+        status: {type: string, enum: [invited, active, revoked]}
+        source: {type: string, enum: [link, token_entry]}
+        created_at: {type: string, description: "Y-m-d H:i:s, UTC"}
+        created_by_name: {type: string, description: "Invite link when source is link; else the creator name or Unknown"}
+        activated_at: {type: [string, "null"]}
+        revoked_at: {type: [string, "null"]}
+    ParentLink:
+      type: object
+      description: The same row as ChildLink with parent_name in place of child_name.
+      required: [id, parent_token, child_token, parent_name, relationship, status, source, created_at, created_by_name, activated_at, revoked_at]
+      properties:
+        id: {type: integer}
+        parent_token: {type: [integer, "null"]}
+        child_token: {type: integer}
+        parent_name: {type: [string, "null"]}
+        relationship: {type: [string, "null"]}
+        status: {type: string}
+        source: {type: string}
+        created_at: {type: string}
+        created_by_name: {type: string}
+        activated_at: {type: [string, "null"]}
+        revoked_at: {type: [string, "null"]}

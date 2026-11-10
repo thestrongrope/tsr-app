@@ -21,7 +21,7 @@ Use these words in code, tests, screens and messages. If a word is missing, add 
 | **Announcement** | An optional notice in the catalog, shown once at start-up; a new id shows it again. | `announcement` |
 | **Geo lookup** | A signed-in member's help when filling in a location: the country list, a postal code's state and suggested city, or a city search. Public GeoNames data, never member data. | `GET /geo/countries`, `POST /geo/postal`, `POST /geo/cities` |
 | **Postal code lookup** | Finds a state and a suggested city for a country and code. A code with a space is tried whole, then by the part before the space. | `GeoLookup.PostalCodeTries` |
-| **Geo call** | Any call to the three geo operations. A member may make 60 in 60 seconds; a call that fails validation still counts. | `GeoRateLimit` |
+| **Geo call** | Any call to the three geo operations. A member may make 60 in 60 seconds; a call that fails validation still counts. | `MemberRateLimit` (shared/api) |
 | **Accent-insensitive** | Equal, and sorted together, whatever the case and accents: "zur" finds "Zürich". The geo name and code columns do this with one collation. | collation `geo_ci_ai` |
 
 ## Words we do not use

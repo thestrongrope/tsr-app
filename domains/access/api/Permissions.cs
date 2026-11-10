@@ -62,7 +62,8 @@ public sealed class Permissions
         return AccessEngine.HeldScopes(await ResolveAsync(caller, ct), action);
     }
 
-    internal async Task<int> RoleIdAsync(Caller caller, CancellationToken ct) =>
+    /// <summary>The caller's role id (0 when the user holds no role): the <c>roleid</c> of GET /me.</summary>
+    public async Task<int> RoleIdAsync(Caller caller, CancellationToken ct) =>
         await _db.UserRoles.AsNoTracking()
             .Where(u => u.UserId == caller.UserId)
             .Select(u => (int?)u.RoleId)

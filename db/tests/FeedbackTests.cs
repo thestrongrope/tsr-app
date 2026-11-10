@@ -24,8 +24,8 @@ public sealed class FeedbackTests
     public Task CleanAsync() => TestDatabase.ExecuteAsync(
         """
         truncate platform.feedback, platform.outbox;
-        insert into identity.users (token, gender, email, firebase_uid)
-        select 900001, 1, 'member.gents@example.invalid', 'uid-feedback'
+        insert into identity.users (token, email, firebase_uid)
+        select 900001, 'member.gents@example.invalid', 'uid-feedback'
         where not exists (select 1 from identity.users where token = 900001);
         """);
 
