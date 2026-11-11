@@ -111,11 +111,11 @@ GET,/reports/weekly,classes,create,built
 GET,/reports/weekly/download,classes,member,planned
 GET,/reports/summary,classes,create,built
 GET,/reports/summary/download,classes,member,planned
-GET,/reports/students,classes,member,planned
+GET,/reports/students,classes,create,built
 GET,/reports/students/download,classes,member,planned
-GET,/reports/tsr,classes,member,planned
+GET,/reports/tsr,classes,create,built
 GET,/reports/tsr/download,classes,member,planned
-GET,/reports/pending,classes,member,planned
+GET,/reports/pending,classes,create,built
 GET,/reports/pending/download,classes,member,planned
 GET,/reports/subject-conduction,classes,create,built
 GET,/reports/subject-conduction/download,classes,member,planned

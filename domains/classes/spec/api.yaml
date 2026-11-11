@@ -1547,6 +1547,70 @@ paths:
         "401": {$ref: "#/components/responses/Problem"}
         "403": {$ref: "#/components/responses/Problem"}
         "404": {$ref: "#/components/responses/Problem"}
+  /reports/pending:
+    get:
+      operationId: reportPending
+      summary: Per teacher, the class forms not filled and the MCQs copied but not conducted
+      description: |
+        reports:read for the gender (403); from and to are months MM-YYYY (default last month to this month, at most 12 months, else 422). Answers {gender, from, to, levels, teachers[{teacherToken, teacher, notFilled, mcqPending, classes[{classId, level, class, notFilled, mcqPending, mcqConducted, mcqExpected}]}]}: only teachers and classes with something pending, most forms then most MCQs first; level narrows the teachers (levels lists every level before it). The MCQ figures ignore the months. Slice: features/report-pending/ReportPending.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: gender, in: query, required: false, schema: {type: string}}
+        - {name: from, in: query, required: false, schema: {type: string}}
+        - {name: to, in: query, required: false, schema: {type: string}}
+        - {name: level, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /reports/tsr:
+    get:
+      operationId: reportTsr
+      summary: TSR at a glance, per level and per class, over a range of days
+      description: |
+        reports:read for the gender (403); from and to are days YYYY-MM-DD (default the 14 days to today; from after to, a bad day or more than 366 days is 422). Answers {gender, from, to, conduction, mcq, attendance, recitation}; conduction and mcq have levels[{levelId, level, conducted, total, percent (float)}] and classes[{level, class, teacher, lastConducted (a day; for mcq the time of the latest publish)}], attendance has levels[{levelId, level, percent}] and classes[{level, class, teacher, percent}], recitation has levels[{levelId, level, total}] and classes[{level, class, teacher, total}]. The level rows count the classes of every gender in the caller's reach and show the asked gender's figures; the recitation class list also holds closed classes (PHP has no status condition there). Slice: features/report-tsr/ReportTsr.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: gender, in: query, required: false, schema: {type: string}}
+        - {name: from, in: query, required: false, schema: {type: string}}
+        - {name: to, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /reports/students:
+    get:
+      operationId: reportStudents
+      summary: Every student of every class in reach with attendance, MCQ and recitation figures over a range of days
+      description: |
+        reports:read for the gender (403); from and to are days YYYY-MM-DD (default the 30 days to today; from after to, a bad day or more than 366 days is 422). Answers {gender, from, to, levels, classes[{class, level}], students[{token (text), name, level, class, sessions, attendance, totalMcqs, mcqAttempted, mcqPerformance, recitation, recitationAvg (float), tsrScore}]}, best tsrScore first; percentages are whole numbers. Only students with an attendance mark of a held session in the range are listed, one row per class. The recitation is PHP's global leaderboard figure (every mark of the range, ranked, then limited to enrolments with status A in active classes, to members of the asked gender and, for an assigned-only caller, to the assigned classes; only the first 1000 rows by rank count, the rest are 0). Slice: features/report-students/ReportStudents.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: gender, in: query, required: false, schema: {type: string}}
+        - {name: from, in: query, required: false, schema: {type: string}}
+        - {name: to, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
 components:
   securitySchemes:
     memberToken:

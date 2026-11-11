@@ -13,6 +13,7 @@
 # The CONDUCTION fixtures (classes-conduction-fixtures.sql, tokens 9008xx, classes 9471 and up, sessions 947101 and up) are reset the same way, run-created sessions included.
 # The B4a fixtures (classes-b4a-fixtures.sql, tokens 9009xx and 9010xx, classes 9511 to 9559, syllabus 9501 to 9599) are loaded and reset the same way, for the 15 /admin files.
 # The B5a REPORT fixtures (classes-b5a-fixtures.sql, tokens 9014xx, classes 9581 to 9589, sessions 958101 and up, fixed dates in November 2025) are loaded last and reset the same way, for the report files.
+# The B5c REPORT fixtures (classes-b5c-fixtures.sql, tokens 9019xx, classes 9564 to 9568, language 9, fixed dates in October and November 2025, the coordinator rc_coord) are loaded last and reset the same way, for pending, TSR and students.
 # Only the tsr-app-test and tsr-parity compose projects are touched. Needs docker, curl, jq, hurl. Prints no secret.
 set -euo pipefail
 
@@ -82,6 +83,7 @@ MEMBERS=(
   "b4_enrol_d=b4.900909@example.invalid"
   "rp_coord=rp.901401@example.invalid"
   "rb_coord=rb.901501@example.invalid"
+  "rc_coord=rc.901901@example.invalid"
 )
 
 parity() { docker compose -p tsr-parity -f tools/parity-php/compose.parity.yml --env-file tools/parity-php/parity.env "$@"; }
@@ -102,6 +104,7 @@ case "$SIDE" in
     test_sql < db/synthetic/classes-b4a-fixtures.sql
     test_sql < db/synthetic/classes-b5a-fixtures.sql
     test_sql < db/synthetic/classes-b5b-fixtures.sql
+    test_sql < db/synthetic/classes-b5c-fixtures.sql
     MINT="tools/dev-auth/mint-token.sh"
     BASE="http://localhost:8089"
     VARS="build/test/classes.vars" ;;
@@ -116,6 +119,7 @@ case "$SIDE" in
     php_sql < tools/parity-php/classes-b4a-fixtures.sql
     php_sql < tools/parity-php/classes-b5a-fixtures.sql
     php_sql < tools/parity-php/classes-b5b-fixtures.sql
+    php_sql < tools/parity-php/classes-b5c-fixtures.sql
     # Files named *-new-api.hurl hold cases PHP gets wrong (a PHP bug is not copied); they run on the new API only.
     KEPT=()
     for f in "${FILES[@]}"; do case "$f" in *-new-api.hurl) ;; *) KEPT+=("$f") ;; esac; done

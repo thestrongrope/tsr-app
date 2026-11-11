@@ -205,4 +205,147 @@ public sealed class ReportsB5bTests
         Assert.That((await kit.SendAsync(Granted, HttpMethod.Get, "/reports/this-week/class/9701")).Status, Is.EqualTo(HttpStatusCode.OK));
         Assert.That((await kit.SendAsync(Granted, HttpMethod.Get, "/reports/this-week/class/9702")).Status, Is.EqualTo(HttpStatusCode.NotFound));
     }
+
+    [Test]
+    public async Task Pending_lists_only_the_classes_in_reach_and_the_gender_asked_for() => await AssertScopeAsync("/reports/pending?from=11-2025&to=11-2025");
+
+    [Test]
+    public async Task Pending_keeps_to_the_assigned_classes_of_a_coordinator_granted_all_reports()
+    {
+        const int Granted = 901709;
+        var granted = await MembershipTestKit.AddMemberAsync(Granted, "Rt Granted Pending", "1");
+        await TestDatabase.ExecuteAsync(
+            $"insert into access.user_roles (user_id, roleid) values ({granted}, 5); "
+            + $"insert into access.user_permissions (user_id, permission) values ({granted}, 'reports:read:all'); "
+            + $"insert into access.class_access_rules (id, token, gender, note) values (6, {Granted}, 1, 'rt level 3'); "
+            + "insert into access.class_access_rule_conditions (rule_id, field, negate, level_id) values (6, 'level', false, 3)");
+
+        await ShowsAsync(Granted, "/reports/pending?from=11-2025&to=11-2025", [Assigned], [OtherGents, Ladies, Closed]);
+    }
+
+    [Test]
+    public async Task Pending_counts_the_standard_mcqs_of_language_one_for_a_class_with_no_language_and_never_a_deleted_one_or_a_deactivated_copy()
+    {
+        await TestDatabase.ExecuteAsync(
+            "truncate assessment.spot_quizzes, assessment.standard_mcqs restart identity cascade; "
+            + "update classes.classes set language_id = null where id = 9701; "
+            + "insert into assessment.standard_mcqs (code, language_id, level_id, topic, subject, lesson, name, deleted_at) values "
+            + "('RT-M1', 1, 3, 't', 's', 'l', 'n', null), ('RT-M2', 1, 3, 't', 's', 'l', 'n', null), ('RT-M3', 1, 3, 't', 's', 'l', 'n', now()), ('RT-M4', 2, 3, 't', 's', 'l', 'n', null); "
+            + "insert into assessment.spot_quizzes (code, mcq_code, class_id, published_at) values ('RTQ1', 'rt-m1', 9701, timestamptz '2025-10-01 00:00:00+00'); "
+            + "insert into assessment.spot_quizzes (code, mcq_code, class_id, published_at, deactivated_at) values ('RTQ2', 'RT-M2', 9701, null, now())");
+
+        var answer = await kit.SendAsync(Admin, HttpMethod.Get, "/reports/pending?from=11-2025&to=11-2025");
+
+        Assert.That(answer.Status, Is.EqualTo(HttpStatusCode.OK), answer.Body);
+        var row = answer.Json!["teachers"]!.AsArray().SelectMany(t => t!["classes"]!.AsArray()).Single(c => c!["classId"]!.GetValue<int>() == 9701)!;
+        Assert.That((row["mcqExpected"]!.GetValue<int>(), row["mcqConducted"]!.GetValue<int>(), row["mcqPending"]!.GetValue<int>()), Is.EqualTo((2, 1, 0)));
+    }
+
+    [Test]
+    public async Task Tsr_lists_only_the_classes_in_reach_and_the_gender_asked_for() => await AssertScopeAsync("/reports/tsr?from=2025-11-01&to=2025-11-30");
+
+    /// <summary>PHP reachFilter (not getAll): TSR follows the reports:read grant, so a named grant for every class widens a coordinator, unlike pending, weekly and this week.</summary>
+    [Test]
+    public async Task Tsr_follows_the_reports_grant_so_a_coordinator_granted_all_reports_sees_every_class_of_the_gender()
+    {
+        const int Granted = 901710;
+        var granted = await MembershipTestKit.AddMemberAsync(Granted, "Rt Granted Tsr", "1");
+        await TestDatabase.ExecuteAsync(
+            $"insert into access.user_roles (user_id, roleid) values ({granted}, 5); "
+            + $"insert into access.user_permissions (user_id, permission) values ({granted}, 'reports:read:all'); "
+            + $"insert into access.class_access_rules (id, token, gender, note) values (7, {Granted}, 1, 'rt level 3'); "
+            + "insert into access.class_access_rule_conditions (rule_id, field, negate, level_id) values (7, 'level', false, 3)");
+
+        await ShowsAsync(Granted, "/reports/tsr?from=2025-11-01&to=2025-11-30&gender=1", [Assigned, OtherGents], [Ladies, Closed]);
+    }
+
+    /// <summary>PHP's recitation list has no status condition: a closed class with recitation is listed there for a caller who reaches every class of a gender, and in no other list.</summary>
+    [Test]
+    public async Task Tsr_lists_the_recitation_of_a_closed_class_only_in_the_recitation_list()
+    {
+        await TestDatabase.ExecuteAsync(
+            "insert into classes.class_attendance (session_id, token, extra_student, present, recitation) "
+            + "select s.id, 1, 0, 1, 7 from classes.class_sessions s join classes.classes c on c.id = s.class_id where c.status = 'I'");
+
+        var answer = await kit.SendAsync(GentsAdmin, HttpMethod.Get, "/reports/tsr?from=2025-11-01&to=2025-11-30");
+
+        Assert.That(answer.Status, Is.EqualTo(HttpStatusCode.OK), answer.Body);
+        Assert.That(answer.Json!["recitation"]!["classes"]!.AsArray().Select(c => c!["class"]!.GetValue<string>()), Does.Contain(Closed));
+        foreach (var list in new[] { "conduction", "mcq", "attendance" })
+        {
+            Assert.That(answer.Json[list]!["classes"]!.AsArray().Select(c => c!["class"]!.GetValue<string>()), Does.Not.Contain(Closed), list);
+        }
+
+        var coordinator = await kit.SendAsync(Coordinator, HttpMethod.Get, "/reports/tsr?from=2025-11-01&to=2025-11-30");
+        Assert.That(coordinator.Body, Does.Not.Contain(Closed), "a class assigned by a rule is an active one");
+    }
+
+    /// <summary>One student per class (member tokens 901731 to 901734, in 9701 to 9704), each with a mark in the class's held session and a recitation figure: who sees whose name and token.</summary>
+    private static async Task SeedStudentsAsync()
+    {
+        for (var i = 0; i < 4; i++)
+        {
+            Assert.That(await MembershipTestKit.AddMemberAsync(901731 + i, "Rt Student " + (i + 1), i == 2 ? "2" : "1"), Is.GreaterThan(0));
+        }
+
+        await TestDatabase.ExecuteAsync(
+            "insert into classes.class_students (class_id, token_no, joined_on, status) select 9701 + (token - 901731), token, date '2025-01-06', 'A' from generate_series(901731, 901734) token; "
+            + "insert into classes.class_attendance (session_id, token, extra_student, present, recitation) "
+            + "select s.id, 901731 + (s.class_id - 9701), 0, 1, 10 from classes.class_sessions s");
+    }
+
+    private async Task<string[]> StudentTokensAsync(int caller, string query)
+    {
+        var answer = await kit.SendAsync(caller, HttpMethod.Get, "/reports/students?from=2025-11-01&to=2025-11-30" + query);
+        Assert.That(answer.Status, Is.EqualTo(HttpStatusCode.OK), answer.Body);
+        return [.. answer.Json!["students"]!.AsArray().Select(s => s!["token"]!.GetValue<string>())];
+    }
+
+    [Test]
+    public async Task Students_lists_only_the_students_of_the_classes_in_reach_and_the_gender_asked_for_and_never_a_closed_class()
+    {
+        await SeedStudentsAsync();
+
+        Assert.That(await StudentTokensAsync(GentsAdmin, "&gender=2"), Is.EqualTo((string[])["901731", "901732"]));
+        Assert.That(await StudentTokensAsync(LadiesAdmin, "&gender=1"), Is.EqualTo((string[])["901733"]));
+        Assert.That(await StudentTokensAsync(Coordinator, "&gender=2"), Is.EqualTo((string[])["901731"]));
+        Assert.That(await StudentTokensAsync(Both, "&gender=1"), Is.EqualTo((string[])["901731"]));
+        Assert.That(await StudentTokensAsync(Both, "&gender=2"), Is.EqualTo((string[])["901733"]));
+        Assert.That(await StudentTokensAsync(Admin, "&gender=1"), Is.EqualTo((string[])["901731", "901732"]));
+    }
+
+    /// <summary>PHP reachFilter (not getAll): the students report follows the reports:read grant, so a named grant for every class widens a coordinator.</summary>
+    [Test]
+    public async Task Students_follows_the_reports_grant_so_a_coordinator_granted_all_reports_sees_the_students_of_every_class_of_the_gender()
+    {
+        await SeedStudentsAsync();
+        const int Granted = 901711;
+        var granted = await MembershipTestKit.AddMemberAsync(Granted, "Rt Granted Students", "1");
+        await TestDatabase.ExecuteAsync(
+            $"insert into access.user_roles (user_id, roleid) values ({granted}, 5); "
+            + $"insert into access.user_permissions (user_id, permission) values ({granted}, 'reports:read:all'); "
+            + $"insert into access.class_access_rules (id, token, gender, note) values (8, {Granted}, 1, 'rt level 3'); "
+            + "insert into access.class_access_rule_conditions (rule_id, field, negate, level_id) values (8, 'level', false, 3)");
+
+        Assert.That(await StudentTokensAsync(Granted, "&gender=1"), Is.EqualTo((string[])["901731", "901732"]));
+    }
+
+    /// <summary>PHP's recitation leaderboard keeps the enrolments of the reports:read assigned classes when that is all the caller reaches: a student of an outside class has recitation 0 even when ranked.</summary>
+    [Test]
+    public async Task Students_recitation_counts_only_enrolments_in_the_assigned_classes_of_an_assigned_only_caller()
+    {
+        await SeedStudentsAsync();
+        await TestDatabase.ExecuteAsync("insert into classes.class_students (class_id, token_no, joined_on, status) values (9702, 901731, date '2025-01-06', 'A')");
+
+        async Task<int> RecitationAsync(int caller)
+        {
+            var answer = await kit.SendAsync(caller, HttpMethod.Get, "/reports/students?from=2025-11-01&to=2025-11-30&gender=1");
+            return answer.Json!["students"]!.AsArray().First(s => s!["class"]!.GetValue<string>() == Assigned)!["recitation"]!.GetValue<int>();
+        }
+
+        Assert.That(await RecitationAsync(Coordinator), Is.EqualTo(10), "the student is enrolled in an assigned class too");
+        await TestDatabase.ExecuteAsync("update classes.class_students set status = 'I' where class_id = 9701 and token_no = 901731");
+        Assert.That(await RecitationAsync(Admin), Is.EqualTo(10), "the enrolment in 9702 still ranks");
+        Assert.That(await RecitationAsync(Coordinator), Is.EqualTo(0), "the only enrolment left with status A is outside the assigned classes");
+    }
 }
