@@ -1,6 +1,6 @@
 using NUnit.Framework;
 
-namespace Tsr.Classes.Api.Features.ReportWeekly;
+namespace Tsr.Classes.Api.Domain;
 
 [TestFixture]
 internal sealed class WeeklyGridTests

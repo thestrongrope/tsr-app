@@ -153,7 +153,7 @@ INSERT INTO classes.student_transfers (id, token_no, from_class_id, to_class_id,
 INSERT INTO membership.class_registrations (id, token, for_classid, status, created_at) VALUES
   (951101, 900991, 9541, 'Pending', TIMESTAMPTZ '2025-02-01 10:00:00+00'),
   (951102, 900993, 9541, 'Accepted', TIMESTAMPTZ '2025-02-01 10:00:00+00'),
-  (951103, 900996, 9599, 'Pending', TIMESTAMPTZ '2025-02-01 10:00:00+00');
+  (951103, 900996, 99999999, 'Pending', TIMESTAMPTZ '2025-02-01 10:00:00+00');
 
 INSERT INTO classes.teachers (token, salman, abuzar, miqdad, ammar, bilal, comments, status, created_by) VALUES
   (900921, 0, 1, 1, 0, 0, 'B4 record', 'A', 900902),

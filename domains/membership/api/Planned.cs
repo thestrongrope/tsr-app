@@ -12,11 +12,9 @@ internal static class Planned
     public static IEndpointRouteBuilder MapPlannedRoutes(this IEndpointRouteBuilder routes)
     {
         routes.MapPlanned(
-            ("GET", "/reports/registrations"),
             ("GET", "/reports/registrations/download"),
             ("GET", "/reports/registrations/allocated/download"),
-            ("GET", "/admin/donors/download"),
-            ("GET", "/students/{token}"));
+            ("GET", "/admin/donors/download"));
         return routes;
     }
 }

@@ -131,12 +131,12 @@ GET,/reports/mcq-adherence,assessment,member,planned
 GET,/reports/mcq-adherence/download-all,assessment,member,planned
 GET,/reports/mcq-adherence/{class_id},assessment,member,planned
 GET,/reports/mcq-adherence/{class_id}/download,assessment,member,planned
-GET,/reports/active-teachers,classes,member,planned
+GET,/reports/active-teachers,classes,create,built
 GET,/reports/active-teachers/download,classes,member,planned
 GET,/reports/quran-leaderboard,content,member,planned
-GET,/reports/this-week,classes,create,planned
-GET,/reports/this-week/class/{class_id},classes,create,planned
-GET,/reports/registrations,membership,member,planned
+GET,/reports/this-week,classes,create,built
+GET,/reports/this-week/class/{class_id},classes,create,built
+GET,/reports/registrations,membership,create,built
 GET,/reports/registrations/download,membership,member,planned
 GET,/reports/registrations/allocated/download,membership,create,planned
 GET,/registrations/{registration_id}/classes,classes,create,built
@@ -198,7 +198,7 @@ POST,/standard-mcqs/update,assessment,member,planned
 GET,/admin/teachers,classes,create,built
 GET,/teachers/{token},classes,create,built
 GET,/search,search,create,planned
-GET,/students/{token},membership,create,planned
+GET,/students/{token},membership,create,built
 GET,/subscribers/{token},membership,create,built
 POST,/admin/teachers/training,classes,create,built
 POST,/admin/teachers/import,classes,create,built

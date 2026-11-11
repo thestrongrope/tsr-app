@@ -81,6 +81,7 @@ MEMBERS=(
   "b4_enrol_c=b4.900908@example.invalid"
   "b4_enrol_d=b4.900909@example.invalid"
   "rp_coord=rp.901401@example.invalid"
+  "rb_coord=rb.901501@example.invalid"
 )
 
 parity() { docker compose -p tsr-parity -f tools/parity-php/compose.parity.yml --env-file tools/parity-php/parity.env "$@"; }
@@ -100,6 +101,7 @@ case "$SIDE" in
     test_sql < db/synthetic/classes-conduction-fixtures.sql
     test_sql < db/synthetic/classes-b4a-fixtures.sql
     test_sql < db/synthetic/classes-b5a-fixtures.sql
+    test_sql < db/synthetic/classes-b5b-fixtures.sql
     MINT="tools/dev-auth/mint-token.sh"
     BASE="http://localhost:8089"
     VARS="build/test/classes.vars" ;;
@@ -113,6 +115,7 @@ case "$SIDE" in
     php_sql < tools/parity-php/classes-conduction-fixtures.sql
     php_sql < tools/parity-php/classes-b4a-fixtures.sql
     php_sql < tools/parity-php/classes-b5a-fixtures.sql
+    php_sql < tools/parity-php/classes-b5b-fixtures.sql
     # Files named *-new-api.hurl hold cases PHP gets wrong (a PHP bug is not copied); they run on the new API only.
     KEPT=()
     for f in "${FILES[@]}"; do case "$f" in *-new-api.hurl) ;; *) KEPT+=("$f") ;; esac; done

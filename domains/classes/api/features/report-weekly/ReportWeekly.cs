@@ -16,8 +16,6 @@ namespace Tsr.Classes.Api.Features.ReportWeekly;
 
 internal static class ReportWeeklySlice
 {
-    private const int MaxSessions = 100000;
-
     internal sealed record WeekItem(string Month, string Label, string From, string To);
 
     internal sealed record CellItem(string Status, int Sessions);
@@ -27,8 +25,6 @@ internal static class ReportWeeklySlice
     internal sealed record Answer(int Gender, string From, string To, IReadOnlyList<string> Levels, IReadOnlyList<WeekItem> Weeks, IReadOnlyList<ClassItem> Classes);
 
     private sealed record ClassRow(int Id, string Level, string Code, string? TeacherName);
-
-    private sealed record SessionRow(int ClassId, DateOnly ConductedOn, int Conducted);
 
     public static IEndpointRouteBuilder MapReportWeekly(this IEndpointRouteBuilder routes)
     {
@@ -59,16 +55,11 @@ internal static class ReportWeeklySlice
             return Problem.Detail(StatusCodes.Status422UnprocessableEntity, invalid);
         }
 
-        var ids = await scope!.ClassIdsAsync(db, 0, ct);
-        var assigned = (await permissions.ReachAsync(caller, "classes:read", ct)).AssignedOnlyIds;
-        if (assigned is not null)
-        {
-            ids = [.. ids.Intersect(assigned)];
-        }
+        var ids = await ReportScope.KeepAssignedAsync(await scope!.ClassIdsAsync(db, 0, ct), permissions, caller, ct);
 
         var classes = await ClassesAsync(db, ids, ct);
         var (start, end) = ReportCalendar.Window(from, to, today);
-        var sessions = await SessionsAsync(db, ids, start, end, ct);
+        var sessions = await WeeklySessions.ByClassAndDayAsync(db, ids, start, end, ct);
         var months = WeeklyGrid.Months(start, end);
 
         var level = ReportScope.LevelOf(context);
@@ -91,36 +82,6 @@ internal static class ReportWeeklySlice
                 order by c.gender, cl.sort_order, c.id
                 """)
             .ToListAsync(ct);
-
-    // PHP details(): the sessions of the window of classes whose level and teacher exist; one flag per class and day, the later session wins.
-    private static async Task<Dictionary<int, Dictionary<DateOnly, int>>> SessionsAsync(ClassesContext db, int[] ids, DateOnly start, DateOnly end, CancellationToken ct)
-    {
-        var rows = await db.Database
-            .SqlQuery<SessionRow>($"""
-                select s.class_id as "ClassId", s.conducted_on as "ConductedOn", s.conducted::int as "Conducted"
-                from classes.class_sessions s
-                join classes.classes c on c.id = s.class_id
-                join classes.class_levels cl on cl.id = c.class_level_id
-                join membership.v_members t on t.token = c.teacher
-                where s.conducted_on >= {start} and s.conducted_on <= {end} and c.id = any({ids})
-                order by s.id
-                limit {MaxSessions}
-                """)
-            .ToListAsync(ct);
-        var byClass = new Dictionary<int, Dictionary<DateOnly, int>>();
-        foreach (var row in rows)
-        {
-            if (!byClass.TryGetValue(row.ClassId, out var days))
-            {
-                days = [];
-                byClass[row.ClassId] = days;
-            }
-
-            days[row.ConductedOn] = row.Conducted;
-        }
-
-        return byClass;
-    }
 
     private static ClassItem ToItem(ClassRow c, Dictionary<DateOnly, int> conducted, IReadOnlyList<WeeklyGrid.Month> months)
     {

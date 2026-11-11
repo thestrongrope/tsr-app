@@ -48,6 +48,18 @@ internal sealed record ReportScope(int Gender, bool All, bool HasGenderLimit, in
     }
 
     /// <summary>
+    /// PHP <c>MisModel::reportClasses</c> (via <c>ClassesModel::getAll</c>): the class ids of <see cref="ClassIdsAsync"/>, and for a caller whose classes:read is assigned-only, only the assigned classes.
+    /// </summary>
+    public static async Task<int[]> KeepAssignedAsync(int[] ids, Permissions permissions, Caller caller, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+        ArgumentNullException.ThrowIfNull(permissions);
+        ArgumentNullException.ThrowIfNull(caller);
+        var assigned = (await permissions.ReachAsync(caller, "classes:read", ct)).AssignedOnlyIds;
+        return assigned is null ? ids : [.. ids.Intersect(assigned)];
+    }
+
+    /// <summary>
     /// The active classes of <see cref="Gender"/> the scope reaches, the demo class (code AYD1, PHP <c>DEMO_CLASS_CODE</c>) never among them; with <paramref name="onlyClass"/> above 0, that class or none. A gender of 0 (a class with no gender, PHP's <c>(int) null</c>) narrows by no gender.
     /// PHP: reachFilter, status 'A' and <c>demo_class_exclusion_sql</c>. Bound: the classes of one gender.
     /// </summary>

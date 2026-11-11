@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -14,8 +13,6 @@ namespace Tsr.Classes.Api.Features.ClassSyllabusTopics;
 
 internal static class ClassSyllabusTopicsSlice
 {
-    private static readonly Lazy<JsonElement> Catalogue = new(LoadCatalogue);
-
     public static IEndpointRouteBuilder MapClassSyllabusTopics(this IEndpointRouteBuilder routes)
     {
         routes.MapGet("/classes/{class_id}/syllabus-topics", HandleAsync).RequireMember(createsMember: true);
@@ -47,14 +44,7 @@ internal static class ClassSyllabusTopicsSlice
             return Refusals.NotPermitted();
         }
 
-        var key = PhpText.ToUpperAscii(PhpText.Trim(head.LevelName));
-        return Catalogue.Value.TryGetProperty(key, out var topics) ? Results.Json(topics) : Results.Json(new Dictionary<string, string>());
-    }
-
-    private static JsonElement LoadCatalogue()
-    {
-        using var stream = typeof(ClassSyllabusTopicsSlice).Assembly.GetManifestResourceStream("syllabus_topics.json")
-            ?? throw new InvalidOperationException("The embedded syllabus_topics.json is missing");
-        return JsonDocument.Parse(stream).RootElement.Clone();
+        var topics = SyllabusCatalogue.For(head.LevelName);
+        return topics is null ? Results.Json(new Dictionary<string, string>()) : Results.Json(topics.Value);
     }
 }

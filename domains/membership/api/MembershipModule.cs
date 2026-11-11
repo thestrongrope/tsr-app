@@ -9,6 +9,8 @@ using Tsr.Membership.Api.Features.MemberParentLinkCancel;
 using Tsr.Membership.Api.Features.MemberParentCandidate;
 using Tsr.Membership.Api.Features.MemberParentsAdd;
 using Tsr.Membership.Api.Features.RegistrationReject;
+using Tsr.Membership.Api.Features.ReportRegistrations;
+using Tsr.Membership.Api.Features.StudentCard;
 using Tsr.Membership.Api.Features.AdminDonors;
 using Tsr.Membership.Api.Features.SubscriberCard;
 using Tsr.Membership.Api.Features.ChildrenLinkAccept;
@@ -80,6 +82,8 @@ public static class MembershipModule
         routes.MapMemberParentCandidate();
         routes.MapMemberParentsAdd();
         routes.MapRegistrationReject();
+        routes.MapReportRegistrations();
+        routes.MapStudentCard();
         routes.MapAdminDonors();
         routes.MapSubscriberCard();
         routes.MapPlannedRoutes();

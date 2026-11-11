@@ -12,8 +12,7 @@ namespace Tsr.Membership.Api.Features.SubscriberCard;
 // classes:read reaches every class (Reach.All) gets a card: anyone else, a token of 0 or less, an unknown member or a member with a live enrolment in an active class is 404 "Person
 // not found" (one answer for all, so it never says which). Carries no contact details. Contract: spec/api.yaml.
 // PHP: routes/entity_cards.php route_subscribers_card, EntityAccessModel::subscriberCardFor. gender is genderOf (1 or Male, 2 or Female, else null). registeredOn is the day of the member's
-// LATEST registration (highest id), requestedClass that registration's class code when the class still exists; both null without one. The student card (GET /students/{token}) is not
-// built: it needs the class level name, which no published view carries.
+// LATEST registration (highest id), requestedClass that registration's class code when the class still exists; both null without one. The student card is slice student-card.
 
 internal static class SubscriberCardSlice
 {
@@ -26,15 +25,6 @@ internal static class SubscriberCardSlice
         routes.MapGet("/subscribers/{token}", HandleAsync).RequireMember(createsMember: true);
         return routes;
     }
-
-    /// <summary>PHP EntityAccessModel::genderOf: "1" or "Male" is 1, "2" or "Female" is 2, anything else is not recorded.</summary>
-    internal static int? GenderOf(string? stored) =>
-        stored switch
-        {
-            "1" or "Male" => 1,
-            "2" or "Female" => 2,
-            _ => null,
-        };
 
     private static async Task<IResult> HandleAsync(string token, HttpContext context, MembershipContext db, Permissions permissions, CancellationToken ct)
     {
@@ -67,7 +57,7 @@ internal static class SubscriberCardSlice
         {
             ["token"] = value,
             ["name"] = member.Name ?? string.Empty,
-            ["gender"] = GenderOf(member.Gender),
+            ["gender"] = CardRules.GenderOf(member.Gender),
             ["registeredOn"] = registration?.RegisteredOn,
             ["requestedClass"] = string.IsNullOrEmpty(registration?.Code) ? null : registration.Code,
         });

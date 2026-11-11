@@ -1491,6 +1491,62 @@ paths:
               schema: {type: object}
         "401": {$ref: "#/components/responses/Problem"}
         "403": {$ref: "#/components/responses/Problem"}
+  /reports/active-teachers:
+    get:
+      operationId: reportActiveTeachers
+      summary: The teachers of the active classes the caller reaches
+      description: |
+        reports:read for the gender (403). The teachers are filtered by their own gender. Answers {gender, teachers[{token, name, attendingClass, selfTeacher, maxLevel, totalClasses, conductingClasses}]}, by lower-case name then token. Slice: features/report-active-teachers/ReportActiveTeachers.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: gender, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+  /reports/this-week:
+    get:
+      operationId: reportThisWeek
+      summary: The class coordinator's review of the last completed week
+      description: |
+        reports:read for the gender (403). Answers {gender, week{from, to}, summary{met, of, formsMissing, attendance (float or null), flagged}, stages{cform, conduction, attendance, alignment, met, attended}}; every row is {classId, code, level, teacher, teacherToken, teacherMobile, detail, action (message, call or null), quiet[{subject, weeks}]}. teacherMobile only for a teacher the caller may look up (teachers:lookup), null otherwise and in the met and attended lists. Slice: features/report-this-week/ReportThisWeek.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: gender, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+  /reports/this-week/class/{class_id}:
+    get:
+      operationId: reportThisWeekClass
+      summary: What one class taught in each of the last 8 weeks
+      description: |
+        reports:read for the gender (403). A class that is missing, closed or out of the caller's reach (by the class's own gender) is 404 "Class not found". Answers {classId, code, level, weeks[{from, to, status (taught, no class, no form), subjects}], chart}, newest week first; chart is the Standard Syllabus Chart of the level or null. Slice: features/report-this-week-class/ReportThisWeekClass.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+        - {name: gender, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
 components:
   securitySchemes:
     memberToken:

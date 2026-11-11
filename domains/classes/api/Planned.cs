@@ -25,10 +25,7 @@ internal static class Planned
             ("GET", "/reports/pending/download"),
             ("GET", "/reports/subject-conduction/download"),
             ("GET", "/reports/class-sessions/{class_id}/download"),
-            ("GET", "/reports/active-teachers"),
-            ("GET", "/reports/active-teachers/download"),
-            ("GET", "/reports/this-week"),
-            ("GET", "/reports/this-week/class/{class_id}"));
+            ("GET", "/reports/active-teachers/download"));
         return routes;
     }
 }

@@ -78,32 +78,17 @@ internal static class TeacherDetailSlice
         return rows.Count == 0 ? null : rows[0];
     }
 
-    private static async Task<bool> CanViewAsync(ClassesContext db, Permissions permissions, Caller caller, Member member, CancellationToken ct)
-    {
-        var gender = (int)PhpValue.IntOfText(member.Gender ?? string.Empty);
-        if (gender is not (1 or 2))
-        {
-            return (await permissions.ReachAsync(caller, "teachers:lookup", ct)).All;
-        }
-
-        if (await permissions.CanAsync(caller, "teachers:lookup", AccessTarget.ForGender(gender), ct))
-        {
-            return true;
-        }
-
-        // Gents may teach ladies classes: whoever manages a ladies class may see a gents member, but only one who teaches.
-        if (gender != 1 || !await permissions.CanAsync(caller, "teachers:lookup", AccessTarget.ForTeacherGender(1), ct))
-        {
-            return false;
-        }
-
-        var teaches = await db.Database
-            .SqlQuery<int>($"""
-                select 1 as "Value" where exists (select 1 from classes.teachers where token = {member.Token}) or exists (select 1 from classes.classes where teacher = {member.Token})
-                """)
-            .ToListAsync(ct);
-        return teaches.Count > 0;
-    }
+    private static async Task<bool> CanViewAsync(ClassesContext db, Permissions permissions, Caller caller, Member member, CancellationToken ct) =>
+        await TeacherView.CanViewAsync(
+            permissions,
+            caller,
+            (int)PhpValue.IntOfText(member.Gender ?? string.Empty),
+            async () => (await db.Database
+                .SqlQuery<int>($"""
+                    select 1 as "Value" where exists (select 1 from classes.teachers where token = {member.Token}) or exists (select 1 from classes.classes where teacher = {member.Token})
+                    """)
+                .ToListAsync(ct)).Count > 0,
+            ct);
 
     private static async Task<Dictionary<string, object?>> DetailAsync(ClassesContext db, Member m, CancellationToken ct)
     {

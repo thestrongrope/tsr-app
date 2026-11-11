@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
 
-namespace Tsr.Classes.Api.Features.ReportWeekly;
+namespace Tsr.Classes.Api.Domain;
 
 /// <summary>PHP <c>MisModel::weeklyMonths</c> and <c>weeklyCell</c>, and the route's reading of a cell.</summary>
 internal static partial class WeeklyGrid
@@ -15,7 +15,7 @@ internal static partial class WeeklyGrid
 
     /// <summary>
     /// The Sunday-start weeks of the window grouped by label ('Nov-2025'): the first week takes the month of its last day, every other week the month of its first day. The window starts on a Sunday
-    /// (<see cref="Domain.ReportCalendar.Window"/>); the last week may be shorter.
+    /// (<see cref="ReportCalendar.Window"/>); the last week may be shorter.
     /// </summary>
     public static IReadOnlyList<Month> Months(DateOnly start, DateOnly end)
     {

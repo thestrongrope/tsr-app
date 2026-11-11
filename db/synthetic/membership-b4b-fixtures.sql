@@ -106,4 +106,4 @@ INSERT INTO membership.class_registrations (id, token, for_classid, preferred_lo
   (951307, 901166, NULL, 'B4B placeholder', 'Pending', NULL, TIMESTAMPTZ '2025-03-03 10:00:00+00'),
   (951311, 901171, 9562, 'B4B older', 'Pending', NULL, TIMESTAMPTZ '2025-03-01 10:00:00+00'),
   (951312, 901171, 9561, 'B4B latest', 'Pending', NULL, TIMESTAMPTZ '2025-03-04 10:00:00+00'),
-  (951313, 901174, 9599, 'B4B gone class', 'Pending', NULL, TIMESTAMPTZ '2025-03-05 10:00:00+00');
+  (951313, 901174, 99999999, 'B4B gone class', 'Pending', NULL, TIMESTAMPTZ '2025-03-05 10:00:00+00');

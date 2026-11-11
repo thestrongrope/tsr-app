@@ -415,6 +415,43 @@ paths:
         "401": {$ref: "#/components/responses/Problem"}
         "403": {$ref: "#/components/responses/Problem"}
         "404": {$ref: "#/components/responses/Problem"}
+  /reports/registrations:
+    get:
+      operationId: reportRegistrations
+      summary: The people waiting to be placed in a class
+      description: |
+        registrations:read for the gender (403); a caller tied to one gender gets that gender, anyone else "2" for ladies and gents otherwise. No row scope beyond the gender. Answers {gender, registrants[{id, token, name, status, registeredOn, requestedClass, email, mobile, residenceLocation, preferredLocation, workLocation, birthYear, classLevel, classNumber, profession, islamicStudyYears, interests, city, country, zip}]}, newest first, at most 5000. One row per member (the greatest value of each column over their forms); people in an active class, with a Rejected form, or with a placeholder email are left out. Slice: features/report-registrations/ReportRegistrations.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: gender, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+  /students/{token}:
+    get:
+      operationId: studentCard
+      summary: The card of a member in an active class
+      description: |
+        classes:read (403). Answers {token, name, gender, classes[{id, code, level}]}: only the classes the caller's classes:read reaches. A token of 0 or less, an unknown member, a member in no active class or in none the caller reaches is 404 "Person not found". No contact details. Slice: features/student-card/StudentCard.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: token, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
 components:
   securitySchemes:
     memberToken:
