@@ -1,0 +1,156 @@
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Routing;
+using Microsoft.EntityFrameworkCore;
+using Tsr.Access.Api;
+using Tsr.Classes.Api.Domain;
+using Tsr.Shared.Api;
+
+namespace Tsr.Classes.Api.Features.ClassJoin;
+
+// Slice: POST /classes/join {link} -> the caller joins (or rejoins) the class a link names. Answers {success, message, classId, className}. Contract: spec/api.yaml.
+// PHP: routes/classes.php route_class_join (:260), ClassStudentsModel::{getEnrolmentRow, rejoin, addStudent}. Order: classes:join (no target; 403 "You do not have permission to do that"), the caller's gender is a
+// number (400 "User gender not set; update profile first"), link (string) trimmed, blank is 422 "link is required"; the class with that link (case-insensitive, its teacher a member) that is active (else 404
+// "Invalid class link or class not active"); a class with a gender other than the caller's is 403 "This class is not available for your gender". Then the caller's enrolment row (the first by id; PHP's is
+// arbitrary): not removed -> 200 success false "You are already enrolled in this class"; removed by someone else -> 403 "You were removed from this class. Please contact the class coordinator."; removed by the
+// caller or by nobody -> REJOIN every row of the pair (status A, removed_at and removed_reason cleared, joined_on today, mcq_admin 0; removed_by is NOT cleared) -> 200 "Welcome back! You have re-joined the class";
+// no row -> domain/Enrolment.AddAsync with no added_by -> 200 "Successfully joined the class!" EVEN WHEN it refuses (a class without a gender, a member of a known gender: nothing is written, as PHP).
+// A link with a NUL byte names no class (404). Events (outbox, same transaction, only when a row was written): classes.student_rejoined, classes.student_enrolled (source "joined"). PHP's search touch is not sent.
+
+internal static class ClassJoinSlice
+{
+    internal sealed record StudentRejoined(int ClassId, int Token);
+
+    private sealed record Target(int Id, string Name, int? Gender);
+
+    private sealed record Existing(int? RemovedBy, bool Removed);
+
+    public static IEndpointRouteBuilder MapClassJoin(this IEndpointRouteBuilder routes)
+    {
+        routes.MapPost("/classes/join", HandleAsync).RequireMember(createsMember: true);
+        return routes;
+    }
+
+    private static async Task<IResult> HandleAsync(HttpContext context, ClassesContext db, Permissions permissions, TimeProvider clock, CancellationToken ct)
+    {
+        var caller = context.GetCaller();
+        if (caller is null)
+        {
+            return Problem.Unauthenticated();
+        }
+
+        if (!await permissions.CanAsync(caller, "classes:join", AccessTarget.None, ct))
+        {
+            return Refusals.NotPermitted();
+        }
+
+        var gender = await ClassGuards.NumericGenderAsync(db, caller, ct);
+        if (gender is null)
+        {
+            return Refusals.GenderNotSet();
+        }
+
+        var (body, refusal) = await RequestBodies.ReadAsync(context.Request, ct);
+        if (refusal is not null)
+        {
+            return refusal;
+        }
+
+        var link = PhpText.Trim(PhpValue.Text(body!.Get("link")));
+        if (link.Length == 0)
+        {
+            return Problem.Detail(StatusCodes.Status422UnprocessableEntity, "link is required");
+        }
+
+        var target = await FindAsync(db, link, ct);
+        if (target is null)
+        {
+            return Problem.Detail(StatusCodes.Status404NotFound, "Invalid class link or class not active");
+        }
+
+        if (target.Gender is not null && target.Gender != gender)
+        {
+            return Problem.Detail(StatusCodes.Status403Forbidden, "This class is not available for your gender");
+        }
+
+        return await JoinAsync(db, clock, target, caller.Token, ct);
+    }
+
+    private static async Task<Target?> FindAsync(ClassesContext db, string link, CancellationToken ct)
+    {
+        if (link.Contains('\0', StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        var rows = await db.Database
+            .SqlQuery<Target>($"""
+                select c.id as "Id", c.name as "Name", c.gender as "Gender"
+                from classes.classes c
+                join membership.v_members t on t.token = c.teacher
+                where c.link = {link}::citext and c.status = 'A'
+                order by c.id
+                limit 1
+                """)
+            .ToListAsync(ct);
+        return rows.Count == 0 ? null : rows[0];
+    }
+
+    private static async Task<IResult> JoinAsync(ClassesContext db, TimeProvider clock, Target target, int token, CancellationToken ct)
+    {
+        var rows = await db.Database
+            .SqlQuery<Existing>($"""
+                select removed_by as "RemovedBy", removed_at is not null as "Removed"
+                from classes.class_students where class_id = {target.Id} and token_no = {token}
+                order by id limit 1
+                """)
+            .ToListAsync(ct);
+        if (rows.Count == 0)
+        {
+            await EnrolAsync(db, clock, target.Id, token, ct);
+            return Answer(true, "Successfully joined the class!", target);
+        }
+
+        if (!rows[0].Removed)
+        {
+            return Answer(false, "You are already enrolled in this class", target);
+        }
+
+        if (rows[0].RemovedBy is not null && rows[0].RemovedBy != token)
+        {
+            return Problem.Detail(StatusCodes.Status403Forbidden, "You were removed from this class. Please contact the class coordinator.");
+        }
+
+        await RejoinAsync(db, clock, target.Id, token, ct);
+        return Answer(true, "Welcome back! You have re-joined the class", target);
+    }
+
+    private static async Task EnrolAsync(ClassesContext db, TimeProvider clock, int classId, int token, CancellationToken ct)
+    {
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        if (await Enrolment.AddAsync(db, classId, token, null, ct))
+        {
+            await Outbox.WriteAsync(db, "classes.student_enrolled", new StudentEnrolled(classId, token, null, "joined"), clock, ct);
+        }
+
+        await transaction.CommitAsync(ct);
+    }
+
+    private static async Task RejoinAsync(ClassesContext db, TimeProvider clock, int classId, int token, CancellationToken ct)
+    {
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        await db.Database.ExecuteSqlAsync(
+            $"update classes.class_students set status = 'A', removed_at = null, removed_reason = null, joined_on = (now() at time zone 'UTC')::date, mcq_admin = 0 where class_id = {classId} and token_no = {token}",
+            ct);
+        await Outbox.WriteAsync(db, "classes.student_rejoined", new StudentRejoined(classId, token), clock, ct);
+        await transaction.CommitAsync(ct);
+    }
+
+    private static IResult Answer(bool success, string message, Target target) => Results.Json(new Dictionary<string, object?>
+    {
+        ["success"] = success,
+        ["message"] = message,
+        ["classId"] = target.Id,
+        ["className"] = target.Name,
+    });
+}

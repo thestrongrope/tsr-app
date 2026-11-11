@@ -84,6 +84,31 @@ paths:
         "401": {$ref: "#/components/responses/Problem"}
         "403": {$ref: "#/components/responses/Problem"}
         "404": {$ref: "#/components/responses/Problem"}
+    put:
+      operationId: putGuide
+      summary: Replace a level's English guide
+      description: |
+        Body {guide}. guides:manage (403), the level has a guide page (404), guide non-blank text of at most 65535 bytes (422). Answers {guide}.
+        Slice: features/guide-update/GuideUpdate.cs. Event: classes.guide_saved.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: level_id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "413": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
   /classes:
     get:
       operationId: listMyClasses
@@ -104,6 +129,29 @@ paths:
                 items: {$ref: "#/components/schemas/ClassCard"}
         "401": {$ref: "#/components/responses/Problem"}
         "403": {$ref: "#/components/responses/Problem"}
+    post:
+      operationId: postClass
+      summary: Create a class
+      description: |
+        Body {gender 1|2, levelId, location, city, country, teacher, tags, schedules}. classes:create for the gender (403), 422s, 409 when the same class was made within a minute. 201 {classId}.
+        Slice: features/class-create/ClassCreate.cs. Event: classes.class_created.
+      security:
+        - memberToken: []
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        "201":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "413": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
   /classes/{class_id}:
     get:
       operationId: getClass
@@ -125,6 +173,31 @@ paths:
         "401": {$ref: "#/components/responses/Problem"}
         "403": {$ref: "#/components/responses/Problem"}
         "404": {$ref: "#/components/responses/Problem"}
+    put:
+      operationId: putClass
+      summary: Edit a class's details, teacher, tags and schedule
+      description: |
+        Body {languageId?, startedOn?, format, address?, city?, country?, location?, teacher, tags, schedules}. Active complete class (404), classes:update (403), then 422. Answers with the manage payload.
+        Slice: features/class-update/ClassUpdate.cs. Event: classes.class_updated.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "413": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
   /classes/{class_id}/sessions:
     get:
       operationId: listClassSessions
@@ -205,6 +278,30 @@ paths:
         "401": {$ref: "#/components/responses/Problem"}
         "403": {$ref: "#/components/responses/Problem"}
         "404": {$ref: "#/components/responses/Problem"}
+    post:
+      operationId: addClassStudent
+      summary: Enrol one member in a class
+      description: |
+        Body {token}. Active complete class (404), students:enrol on it (403), token a JSON integer above 0 (422), already on the roster is a no-op, a non-member or a known gender other than the class's is 422. Answers with the roster payload.
+        Slice: features/class-student-add/ClassStudentAdd.cs. Event: classes.student_enrolled (source added).
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
   /classes/{class_id}/teachers:
     get:
       operationId: searchClassTeachers
@@ -240,6 +337,283 @@ paths:
       responses:
         "200":
           description: "{schedules: [{id, day, hour, minute, timezone}], timezones: [{timezone, label}]}"
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+    put:
+      operationId: putClassSchedule
+      summary: Replace the class's weekly slots
+      description: |
+        Body {schedules: [{id?, day 1-7, hour 0-23, minute 0-59, timezone}]}, at most 21. Same guards as GET (404, 403), then 422. Answers like GET.
+        Slice: features/class-schedule-update/ClassScheduleUpdate.cs. Event: classes.schedule_replaced.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "413": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}/manage:
+    get:
+      operationId: getClassManage
+      summary: Everything the manage screen needs
+      description: |
+        Active complete class (404), classes:update on it (403). {class, tags, schedules (with topics), lookups, can, students, removedStudents, mcqStudents, transferHistory, destinations}.
+        Slice: features/class-manage/ClassManage.cs; payload: domain/ManagePayload.cs, domain/ClassRoster.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}/students/performance:
+    get:
+      operationId: getClassStudentsPerformance
+      summary: Each student's attendance, quiz results and recitation over a range
+      description: |
+        Active complete class (404), mcqs:manage on it (403), then from and to (YYYY-MM-DD, at most 366 days apart; default the year to today) (422).
+        Slice: features/class-students-performance/ClassStudentsPerformance.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}/students/{token}/class-admin:
+    put:
+      operationId: setClassStudentAdmin
+      summary: Set or clear a student's MCQ-admin flag
+      description: |
+        Body {status: true|false}. Active complete class (404), class-students:update on it (403), the member is on the active roster (404), status is a JSON bool (422). Answers with the roster payload.
+        Slice: features/class-student-admin/ClassStudentAdmin.cs. Event: classes.student_class_admin_changed.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+        - {name: token, in: path, required: true, schema: {type: string}}
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}/students/{token}/remove:
+    post:
+      operationId: removeClassStudent
+      summary: Take a student off a class
+      description: |
+        Body {reason} (trimmed, 1 to 500 characters, 422). Active complete class (404), students:enrol on it (403), the member is on the active roster (404). Writes every enrolment row of the pair. Answers with the roster payload.
+        Slice: features/class-student-remove/ClassStudentRemove.cs. Event: classes.student_removed.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+        - {name: token, in: path, required: true, schema: {type: string}}
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}/students/{token}/restore:
+    post:
+      operationId: restoreClassStudent
+      summary: Put a removed student back
+      description: |
+        No body is read. Active complete class (404), students:enrol on it (403), the member is on the removed list (404). Writes every enrolment row of the pair. Answers with the roster payload.
+        Slice: features/class-student-restore/ClassStudentRestore.cs. Event: classes.student_restored.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+        - {name: token, in: path, required: true, schema: {type: string}}
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}/students/{token}/transfer:
+    post:
+      operationId: transferClassStudent
+      summary: Move a student to another class of the same gender
+      description: |
+        Body {toClassId, type?, reason?}. Active complete class (404), students:transfer with no target (403), the member is on the active roster (404), toClassId a JSON integer other than this class, type transfer, promotion or demotion, reason at most 500 characters (422), the destination an active class (404) of the same gender (422) without the student in it (422). Answers with the SOURCE class's roster payload.
+        Slice: features/class-student-transfer/ClassStudentTransfer.cs. Event: classes.student_transferred.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+        - {name: token, in: path, required: true, schema: {type: string}}
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /classes/join:
+    post:
+      operationId: joinClass
+      summary: Join, or rejoin, the class a link names
+      description: |
+        Body {link}. classes:join (403), the caller's gender is a number (400), link required (422), an active class (404), of the caller's gender (403). 200 {success, message, classId, className}: success false when already enrolled; a member removed by someone else is 403; one who left rejoins; a new member is enrolled.
+        Slice: features/class-join/ClassJoin.cs. Events: classes.student_enrolled (source joined), classes.student_rejoined.
+      security:
+        - memberToken: []
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /join/{code}:
+    get:
+      operationId: previewJoinLink
+      summary: The class a join link names (public)
+      description: |
+        No sign-in: the app shows it before sign-in; only name, level, language, gender and open, never the teacher, counts or ids. 30 calls a minute per client address (429); a malformed or unknown code is a bare 404.
+        Slice: features/join-preview/JoinPreview.cs.
+      security: []
+      parameters:
+        - {name: code, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "404": {$ref: "#/components/responses/Problem"}
+        "429": {$ref: "#/components/responses/Problem"}
+  /registrations/{registration_id}/classes:
+    get:
+      operationId: listRegistrationClasses
+      summary: The classes a waiting registrant could be placed in
+      description: |
+        registrations:read for a gender (403), a waiting registrant (409), registrations:read for the registrant's gender (403). Active classes of that gender the caller may enrol into: {classes: [{id, code, level, teacher, location, students}]}.
+        Slice: features/registration-classes/RegistrationClasses.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: registration_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+  /registrations/{registration_id}/place:
+    post:
+      operationId: placeRegistration
+      summary: Put a waiting registrant in a class
+      description: |
+        Body {classId}. The registrant guard as the list above (403, 409), classId a JSON integer above 0 (422), an active class (404), students:enrol on it (403), the registrant's gender must match (422). 200 {placed, registrationId, classId}.
+        Slice: features/registration-place/RegistrationPlace.cs. Event: classes.student_enrolled (source placed).
+      security:
+        - memberToken: []
+      parameters:
+        - {name: registration_id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /teachers/{token}:
+    get:
+      operationId: getTeacher
+      summary: A teacher's details, trained levels, classes and training history
+      description: |
+        teachers:lookup (403); a member the caller may not see, or no such member, is 404 "Teacher not found".
+        Slice: features/teacher-detail/TeacherDetail.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: token, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: The body described above
           content:
             application/json:
               schema: {type: object}

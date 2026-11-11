@@ -86,3 +86,10 @@ VALUES (939304, 9302, 939304, 900312, 'a', 'a', 1), (939305, 9302, 939305, 90031
 -- The roster slice shows when a student joined (the day of the enrolment row's created_at) and the row's note: fixed here so the day does not move.
 UPDATE class_students SET created_at = CONCAT(joined_on, ' 08:00:00') WHERE class_id BETWEEN 9301 AND 9399;
 UPDATE class_students SET notes = 'Cls note &amp; more' WHERE id = 9301;
+UPDATE spot_quizzes SET topic = 'Quran' WHERE id = 9301;
+
+DELETE FROM teachers_history WHERE token BETWEEN 900301 AND 900399;
+DELETE FROM teachers WHERE token BETWEEN 900301 AND 900399;
+INSERT INTO teachers (token, salman, abuzar, miqdad, ammar, bilal, comments, status, created_by) VALUES (900302, 0, 0, 1, 0, 1, 'Cls training', 'A', 900315);
+INSERT INTO teachers_history (id, token, salman, abuzar, miqdad, ammar, bilal, comments, status, created_by, created_at)
+VALUES (939301, 900302, 0, 0, 1, 0, 1, 'Cls trained', 'A', 900315, '2025-08-01 09:00:00');

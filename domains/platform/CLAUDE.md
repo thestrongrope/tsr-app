@@ -48,6 +48,10 @@ find "Zürich" for "zur" and sort accented names among plain ones. Proof, with t
 test `db/tests/SchemaGuardTests.cs` lists the three with the reason. The collation lives in schema `public` (a column
 definition names it unqualified). The geo rate limit (60 calls a minute per member, bucket `geo`) is `MemberRateLimit` in `shared/api` (in memory, per process); `GeoGate` supplies the limit and the wording.
 
+## Published commands
+
+`PlatformCommands.RecordAdminAccessAsync(db, httpContext, userId, token, roleId, ct)` (`api/PlatformCommands.cs`): PHP's `api_log_admin_action`. One `admin_access_log` row for a caller whose role is 1, 3, 4, 5 or 7 (path, method, client address, user agent, referer cut to the column lengths, no session id), written on the caller's connection outside a transaction; a failed write is logged and never fails the request. Used by `classes`; proved by `db/tests/AdminAuditTests.cs`.
+
 ## Public read interfaces
 
 `Geo` (`HasCountriesAsync`, `CountryByNameAsync`, `ByPostalCodeAsync`, `FromPostalCodeAsync`, with `GeoCountryInfo` and `GeoPlace`) is the one geo lookup code: the postal code slice answers from it and `membership` validates a profile with it. A missing geo table answers "nothing" (logged), as PHP. `Lookups.LabelsAsync(type)` returns the active labels in display order and throws for an unseeded type (PHP `labelsOrFail`).

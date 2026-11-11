@@ -22,10 +22,10 @@ public sealed class PublicSurfaceTests
             "AccessModule", "Permissions", "AccessTarget", "Reach", "SearchReach", "UserAccess", "AccessScopes",
             "IClassScopes", "ClassMemberships", "ClassFacts",
         ],
-        // platform: the module; Lookups and Geo (read interfaces) with the two records Geo returns (GeoCountryInfo, GeoPlace).
-        ["platform"] = ["PlatformModule", "Lookups", "Geo", "GeoCountryInfo", "GeoPlace"],
-        // membership: the module; MemberNames (read interface); IClassEnrolments, the one port classes will supply.
-        ["membership"] = ["MembershipModule", "MemberNames", "IClassEnrolments"],
+        // platform: the module; Lookups and Geo (read interfaces) with the two records Geo returns (GeoCountryInfo, GeoPlace); PlatformCommands (published commands: the admin audit row).
+        ["platform"] = ["PlatformModule", "Lookups", "Geo", "GeoCountryInfo", "GeoPlace", "PlatformCommands"],
+        // membership: the module; MemberNames (read interface); IClassEnrolments, the one port classes will supply; MembershipCommands (published commands).
+        ["membership"] = ["MembershipModule", "MemberNames", "IClassEnrolments", "MembershipCommands"],
         ["content"] = ["ContentModule"],
         // Tables and placeholder routes only so far: the module class and nothing else.
         ["classes"] = ["ClassesModule"],

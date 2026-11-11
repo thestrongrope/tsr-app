@@ -12,9 +12,6 @@ internal static class Planned
     public static IEndpointRouteBuilder MapPlannedRoutes(this IEndpointRouteBuilder routes)
     {
         routes.MapPlanned(
-            ("POST", "/classes/join"),
-            ("POST", "/classes"),
-            ("PUT", "/guides/{level_id}"),
             ("GET", "/me/guides"),
             ("GET", "/me/guides/{slug}"),
             ("GET", "/classes/{class_id}/conduction"),
@@ -23,17 +20,8 @@ internal static class Planned
             ("POST", "/classes/{class_id}/conduction"),
             ("GET", "/classes/{class_id}/conduction/{session_id}"),
             ("PUT", "/classes/{class_id}/conduction/{session_id}"),
-            ("PUT", "/classes/{class_id}"),
-            ("GET", "/classes/{class_id}/manage"),
-            ("GET", "/classes/{class_id}/students/performance"),
-            ("PUT", "/classes/{class_id}/schedule"),
-            ("POST", "/classes/{class_id}/students"),
             ("POST", "/classes/{class_id}/students/bulk"),
             ("PUT", "/classes/{class_id}/students/{token}"),
-            ("POST", "/classes/{class_id}/students/{token}/remove"),
-            ("POST", "/classes/{class_id}/students/{token}/restore"),
-            ("PUT", "/classes/{class_id}/students/{token}/class-admin"),
-            ("POST", "/classes/{class_id}/students/{token}/transfer"),
             ("GET", "/reports/conduction"),
             ("GET", "/reports/conduction/download"),
             ("GET", "/reports/conduction/download-all"),
@@ -57,8 +45,6 @@ internal static class Planned
             ("GET", "/reports/active-teachers/download"),
             ("GET", "/reports/this-week"),
             ("GET", "/reports/this-week/class/{class_id}"),
-            ("GET", "/registrations/{registration_id}/classes"),
-            ("POST", "/registrations/{registration_id}/place"),
             ("GET", "/admin/syllabus"),
             ("POST", "/admin/syllabus"),
             ("GET", "/admin/transfers/classes"),
@@ -71,13 +57,10 @@ internal static class Planned
             ("GET", "/admin/deactivated-classes/candidates"),
             ("POST", "/classes/{class_id}/deactivate"),
             ("GET", "/admin/teachers"),
-            ("GET", "/teachers/{token}"),
             ("POST", "/admin/teachers/training"),
             ("POST", "/admin/teachers/import"),
             ("PUT", "/admin/syllabus/{syllabus_id}"),
             ("DELETE", "/admin/syllabus/{syllabus_id}"));
-        routes.MapPlannedPublic(
-            ("GET", "/join/{code}"));
         return routes;
     }
 }

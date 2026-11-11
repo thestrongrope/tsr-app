@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using Tsr.Access.Api;
+using Tsr.Platform.Api;
 using Tsr.Shared.Api;
 
 namespace Tsr.Classes.Api.Domain;
@@ -15,6 +17,9 @@ internal static class ClassGuards
 
     /// <summary>PHP casts a path segment with (int): "5abc" is 5, "abc" is 0 (no such class).</summary>
     public static long IdOf(string segment) => PhpValue.IntOfText(segment);
+
+    /// <summary>A token in a path: PHP (int) cast, kept inside what a token column holds (a larger number matches nobody).</summary>
+    public static int TokenOf(string segment) => (int)Math.Clamp(IdOf(segment), int.MinValue, int.MaxValue);
 
     /// <summary>PHP's <c>(int)($_GET[name] ?? default)</c>: the numeric prefix of the value, the default when it is absent.</summary>
     public static long QueryInt(HttpContext context, string name, long fallback)
@@ -49,6 +54,19 @@ internal static class ClassGuards
             .ToListAsync(ct);
         return rows.Count > 0;
     }
+
+    /// <summary>PHP api_require_class_schedule: whoever may update the class, else whoever holds classes:schedule on it (its teacher or MCQ admin).</summary>
+    public static async Task<bool> CanSetScheduleAsync(Permissions permissions, Caller caller, int classId, CancellationToken ct)
+    {
+        var target = AccessTarget.ForClass(classId);
+        return await permissions.CanAsync(caller, "classes:update", target, ct) || await permissions.CanAsync(caller, "classes:schedule", target, ct);
+    }
+
+    /// <summary>PHP api_log_admin_action: platform's published command writes the admin_access_log row for a privileged caller, outside any transaction, after the permission check.</summary>
+    public static async Task LogAdminAccessAsync(ClassesContext db, HttpContext context, Permissions permissions, Caller caller, CancellationToken ct) =>
+        await PlatformCommands.RecordAdminAccessAsync(db, context, caller.UserId, caller.Token, await permissions.RoleIdAsync(caller, ct), ct);
+
+    public static IResult ScheduleRefusal() => Problem.Detail(StatusCodes.Status403Forbidden, "You do not have permission to set this class's schedule");
 
     /// <summary>PHP's api_find_class: the active class whose gender, level and teacher rows all exist, or null.</summary>
     public static async Task<ClassHead?> FindActiveClassAsync(ClassesContext db, long classId, CancellationToken ct)

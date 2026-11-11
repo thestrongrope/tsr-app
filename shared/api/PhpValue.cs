@@ -31,6 +31,19 @@ public static partial class PhpValue
         _ => string.Empty,
     };
 
+    /// <summary>PHP <c>is_int()</c> of a decoded JSON value: a number written without a fraction or exponent that fits 64 bits (<c>1.0</c> and <c>1e2</c> decode to floats).</summary>
+    public static bool IsInt(JsonElement value, out long number)
+    {
+        number = 0;
+        if (value.ValueKind != JsonValueKind.Number || !value.TryGetInt64(out number))
+        {
+            return false;
+        }
+
+        var raw = value.GetRawText();
+        return !raw.Contains('.', StringComparison.Ordinal) && !raw.Contains('e', StringComparison.OrdinalIgnoreCase);
+    }
+
     /// <summary>(int): a number truncates, text takes its numeric prefix, true is 1, an empty array is 0 and any other array 1.</summary>
     public static long ToInteger(JsonElement value) => value.ValueKind switch
     {

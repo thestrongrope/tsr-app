@@ -26,6 +26,18 @@ internal static class TeacherSearch
         return Results.Json(new Dictionary<string, object?> { ["teachers"] = wire });
     }
 
+    /// <summary>PHP isTeacherCandidate: the member is token 1001 or an active student of any class, and a gents class takes gents only (token 1001 excepted).</summary>
+    public static async Task<bool> IsCandidateAsync(ClassesContext db, int token, bool gentsClass, CancellationToken ct) =>
+        (await db.Database
+            .SqlQuery<int>($"""
+                select 1 as "Value" from membership.v_members m
+                where m.token = {token}
+                  and (m.token = {AlwaysCandidate} or m.token in (select cs.token_no from classes.class_students cs where cs.removed_at is null and cs.status = 'A'))
+                  and (not {gentsClass} or m.token = {AlwaysCandidate} or lower(m.gender) in ('1', 'male'))
+                limit 1
+                """)
+            .ToListAsync(ct)).Count > 0;
+
     /// <summary>PHP's <c>addcslashes($q, '%_\\')</c> into a contains pattern.</summary>
     private static string Pattern(string q) => "%" + q.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_") + "%";
 

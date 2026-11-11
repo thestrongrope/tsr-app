@@ -40,13 +40,18 @@ internal sealed class MembershipTestKit : IDisposable
     public static Task<long> CountAsync(string table, string where = "true") =>
         TestDatabase.ScalarAsync<long>($"select count(*) from {table} where {where}", TestDatabase.OwnerConnection);
 
-    public async Task<Reply> SendAsync(int token, HttpMethod method, string path, string? json = null)
+    public async Task<Reply> SendAsync(int token, HttpMethod method, string path, string? json = null, string? userAgent = null)
     {
         using var client = _factory.CreateClient();
         using var request = new HttpRequestMessage(method, path);
         foreach (var (name, value) in TestApi.SignedInAs("uid-" + token, EmailOf(token)))
         {
             request.Headers.Add(name, value);
+        }
+
+        if (userAgent is not null)
+        {
+            request.Headers.TryAddWithoutValidation("User-Agent", userAgent);
         }
 
         if (json is not null)

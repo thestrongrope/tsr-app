@@ -9,6 +9,9 @@ internal static class Refusals
     /// <summary>PHP's <c>api_require()</c> refusal: 403 "You do not have permission to do that".</summary>
     public static IResult NotPermitted() => Problem.Detail(StatusCodes.Status403Forbidden, "You do not have permission to do that");
 
+    /// <summary>The 403 of the enrolment writes (students:enrol).</summary>
+    public static IResult NotPermittedToChangeStudents() => Problem.Detail(StatusCodes.Status403Forbidden, "You do not have permission to change this class's students");
+
     /// <summary>PHP's <c>api_find_class()</c> refusal.</summary>
     public static IResult ClassNotFound() => Problem.Detail(StatusCodes.Status404NotFound, "Class not found");
 

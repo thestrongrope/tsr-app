@@ -35,6 +35,10 @@ copied (facts: `docs/specs/initial-build/phase-3-membership-recon.md`; design: `
 | uses `UserDirectory` (identity: `ByTokenAsync`, `ByTokensAsync`, `ByIdsAsync`), `Geo`, `Lookups` (platform), `Permissions` (access: `CanAsync`, `RoleIdAsync`), `MemberRateLimit` (shared) | by the ten slices |
 | advisory lock class 3001 (`pg_advisory_xact_lock(3001, child_user_id)`) | membership's guardian lock; no other code may use class 3001 |
 
+## Published commands
+
+`MembershipCommands.RecordAcceptedRegistrationAsync(db, token, classId, ct)` (`api/MembershipCommands.cs`): PHP `writeEnrolment`'s first step. A member with no `class_registrations` row gets an Accepted one naming the class; a member with any row keeps it. Runs on the caller's transaction (it throws outside one). Used by `classes` (add, join, place); proved by `db/tests/EnrolmentWritesTests.cs`.
+
 ## Where things are
 
 | Need | File |
