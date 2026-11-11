@@ -2,7 +2,7 @@
 # S2 proof on SYNTHETIC data only. DESTRUCTIVE: it drops schema staging, truncates and reloads the target.
 # The target is NEVER a default: give it in TSR_DST_CLIENT (a psql client command), and it must be a throwaway, migrated,
 # synthetic PostgreSQL (for example a postgres:18 container migrated with the API image's --migrate; no seed needed). It
-# refuses to start unless the target has no identity.users row whose email does not end in .invalid (test/require-synthetic.sh).
+# refuses to start unless the target has no identity.users row whose email does not end in .invalid, bulk-add placeholders of synthetic tokens aside (test/require-synthetic.sh).
 # The local dev database may hold real member data: never point this at it.
 # Needs: the parity stack's db up (tools/parity-php/README.md).
 # It builds the scratch source (tools/parity-php/s2-source.sh), loads it, and checks counts, values, the refusal and the

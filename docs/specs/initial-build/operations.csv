@@ -92,7 +92,7 @@ GET,/classes/{class_id}/teachers,classes,create,built
 GET,/classes/{class_id}/schedule,classes,create,built
 PUT,/classes/{class_id}/schedule,classes,create,built
 POST,/classes/{class_id}/students,classes,create,built
-POST,/classes/{class_id}/students/bulk,classes,create,planned
+POST,/classes/{class_id}/students/bulk,classes,create,built
 PUT,/classes/{class_id}/students/{token},classes,create,built
 POST,/classes/{class_id}/students/{token}/remove,classes,create,built
 POST,/classes/{class_id}/students/{token}/restore,classes,create,built

@@ -512,6 +512,34 @@ paths:
         "403": {$ref: "#/components/responses/Problem"}
         "404": {$ref: "#/components/responses/Problem"}
         "422": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}/students/bulk:
+    post:
+      operationId: bulkAddClassStudents
+      summary: Enrol a pasted list of names, each with an optional mobile
+      description: |
+        Body {lines: [text], resolutions: {lineNumber: add|enrol|skip}}; no other field is read. Active complete class (404), students:enrol on the class (403), then the admin audit row for a privileged caller and a limit of 10 calls a minute per member (429 "Too many bulk adds. Please wait a minute and try again.", counted before the body is checked, so 422s count), then 422: lines a list of at most 200 texts of at most 300 characters (a NUL is refused) with one not blank; each resolution add, enrol or skip.
+        A line is "name" or "name, mobile" (name at most 100 characters; mobile digits, spaces, dashes, a leading plus, 7 to 15 digits). Each answered line has line (its position from 1, blank lines are skipped), name, status and, where it applies, reason or member {name} (first name and last initial only, never a token or number). Status: rejected (reason), duplicate_name, mobile_match (an existing member of the class's gender, or with none recorded, has that mobile on its last ten digits), ready, then added or enrolled once written. A flagged line without a usable answer (duplicate_name takes add or skip; mobile_match takes enrol, add or skip) holds the whole batch back: status "confirm", nothing written. Otherwise one transaction writes every wanted line (a new member, or an existing one enrolled with the gender checked again): status "added" with roster, "none" when nothing was left to write. A failure rolls everything back: 500 "Nothing was added. Please try again."
+        Slice: features/class-students-bulk/ClassStudentsBulk.cs. Events: classes.student_enrolled (source bulk) per enrolled member, identity.member_created and membership.member_created per created member.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        "200":
+          description: "{status, added, lines, roster (when added > 0)}"
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "429": {$ref: "#/components/responses/Problem"}
+        "500": {$ref: "#/components/responses/Problem"}
   /classes/{class_id}/students/{token}:
     put:
       operationId: editClassStudent

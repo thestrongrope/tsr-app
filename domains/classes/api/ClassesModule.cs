@@ -12,6 +12,7 @@ using Tsr.Classes.Api.Features.ClassLevels;
 using Tsr.Classes.Api.Features.ClassesList;
 using Tsr.Classes.Api.Features.ClassSessions;
 using Tsr.Classes.Api.Features.ClassStudentEdit;
+using Tsr.Classes.Api.Features.ClassStudentsBulk;
 using Tsr.Classes.Api.Features.ClassSyllabusTopics;
 using Tsr.Classes.Api.Features.GuideGet;
 using Tsr.Classes.Api.Features.GuideUpdate;
@@ -95,6 +96,7 @@ public static class ClassesModule
         routes.MapJoinPreview();
         routes.MapClassStudentTransfer();
         routes.MapClassStudentEdit();
+        routes.MapClassStudentsBulk();
         routes.MapClassDeactivate();
         routes.MapClassStudentRemove();
         routes.MapClassStudentRestore();

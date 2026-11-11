@@ -20,7 +20,6 @@ internal static class Planned
             ("POST", "/classes/{class_id}/conduction"),
             ("GET", "/classes/{class_id}/conduction/{session_id}"),
             ("PUT", "/classes/{class_id}/conduction/{session_id}"),
-            ("POST", "/classes/{class_id}/students/bulk"),
             ("GET", "/reports/conduction"),
             ("GET", "/reports/conduction/download"),
             ("GET", "/reports/conduction/download-all"),

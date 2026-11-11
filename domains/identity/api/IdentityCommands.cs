@@ -31,24 +31,22 @@ public static class IdentityCommands
             throw new InvalidOperationException("An email change is written inside the transaction of the edit it belongs to.");
         }
 
+        // A token is not unique: every row the update below touches is judged (PHP judges one arbitrary row).
         var rows = await db.Database
-            .SqlQuery<Current>($"""select email as "Email", firebase_uid as "FirebaseUid" from identity.users where token = {token} order by id limit 1""")
+            .SqlQuery<Current>($"""select email as "Email", firebase_uid as "FirebaseUid" from identity.users where token = {token} order by id""")
             .ToListAsync(ct);
         if (rows.Count == 0)
         {
             return false;
         }
 
-        var current = PhpText.Trim(rows[0].Email ?? string.Empty);
         var wanted = PhpText.Trim(email);
-        if (string.Equals(current, wanted, StringComparison.Ordinal))
+        if (rows.All(row => string.Equals(PhpText.Trim(row.Email ?? string.Empty), wanted, StringComparison.Ordinal)))
         {
             return true;
         }
 
-        var sameAddress = string.Equals(current, wanted, StringComparison.OrdinalIgnoreCase);
-        var placeholder = current.Length == 0 || string.Equals(current, $"{token}@thestrongrope.com", StringComparison.OrdinalIgnoreCase);
-        if (!sameAddress && !(placeholder && string.IsNullOrEmpty(rows[0].FirebaseUid)))
+        if (!rows.All(row => MayTake(row, token, wanted)))
         {
             return false;
         }
@@ -58,5 +56,37 @@ public static class IdentityCommands
         return true;
     }
 
+    private static bool MayTake(Current row, int token, string wanted)
+    {
+        var current = PhpText.Trim(row.Email ?? string.Empty);
+        var sameAddress = string.Equals(current, wanted, StringComparison.OrdinalIgnoreCase);
+        var placeholder = current.Length == 0 || string.Equals(current, $"{token}@thestrongrope.com", StringComparison.OrdinalIgnoreCase);
+        return sameAddress || (placeholder && string.IsNullOrEmpty(row.FirebaseUid));
+    }
+
     private sealed record MemberEmailChanged(int Token);
+
+    /// <summary>
+    /// PHP <c>createClassStudent</c>'s <c>users</c> insert, for a member who is not an app member yet (bulk add): a row with the next token (<see cref="TokenAllocation"/>, PHP's max + 1 under the advisory lock),
+    /// the placeholder address <c>&lt;token&gt;@thestrongrope.com</c>, no Firebase link and no role. Returns the token. The profile is membership's (<c>MembershipCommands.CreateProfileAsync</c>). Writes one outbox
+    /// row, <c>identity.member_created</c>. Run inside the caller's transaction.
+    /// </summary>
+    public static async Task<int> CreateMemberAsync(DbContext db, TimeProvider clock, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(clock);
+        if (db.Database.CurrentTransaction is null)
+        {
+            throw new InvalidOperationException("A member is created inside the transaction of the add it belongs to.");
+        }
+
+        var token = await TokenAllocation.NextAsync(db, ct);
+        var email = $"{token}@thestrongrope.com";
+        var now = clock.GetUtcNow();
+        await db.Database.ExecuteSqlAsync($"insert into identity.users (token, email, createdon) values ({token}, {email}, {now})", ct);
+        await Outbox.WriteAsync(db, "identity.member_created", new MemberCreated(token), clock, ct);
+        return token;
+    }
+
+    private sealed record MemberCreated(int Token);
 }

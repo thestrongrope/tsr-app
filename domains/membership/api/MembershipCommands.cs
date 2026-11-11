@@ -67,4 +67,42 @@ public static class MembershipCommands
     }
 
     private sealed record MemberContactChanged(int Token, bool NameChanged);
+
+    /// <summary>
+    /// PHP <c>createClassStudent</c>'s profile columns for a member just created by <c>IdentityCommands.CreateMemberAsync</c>: the name, the gender (the raw text PHP keeps, the class's number) and the mobile
+    /// (may be empty). No other profile column is written. The token must name an existing user without a profile. Writes one outbox row, <c>membership.member_created</c>. Run inside the caller's transaction.
+    /// </summary>
+    public static async Task CreateProfileAsync(DbContext db, int token, string name, string gender, string mobile, TimeProvider clock, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(clock);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(token);
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        ArgumentException.ThrowIfNullOrWhiteSpace(gender);
+        ArgumentNullException.ThrowIfNull(mobile);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(name.Length, MaxNameLength);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(gender.Length, MaxGenderLength);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(mobile.Length, MaxMobileLength);
+        if (db.Database.CurrentTransaction is null)
+        {
+            throw new InvalidOperationException("A member profile is created inside the transaction of the add it belongs to.");
+        }
+
+        var written = await db.Database.ExecuteSqlAsync(
+            $"""
+            insert into membership.member_profiles (user_id, name, gender, mobile)
+            select id, {name}, {gender}, {mobile} from identity.v_users where token = {token}
+            """,
+            ct);
+        if (written == 0)
+        {
+            throw new InvalidOperationException("No member has that token.");
+        }
+
+        await Outbox.WriteAsync(db, "membership.member_created", new MemberCreated(token), clock, ct);
+    }
+
+    private const int MaxGenderLength = 200;
+
+    private sealed record MemberCreated(int Token);
 }

@@ -88,7 +88,7 @@ the logical references are counted (`sql/90-orphans.sql`) and the report is prin
 ## Proof (synthetic only)
 **Run these only against a throwaway, synthetic PostgreSQL.** The dev database may hold real member data. `test/prove-synthetic.sh` and
 `test/prove-guards.sh` truncate and reload their target, which comes from `TSR_DST_CLIENT` with no default, and both start by running
-`test/require-synthetic.sh`, which refuses a target holding any `identity.users` row whose email does not end in `.invalid` (it prints a count only).
+`test/require-synthetic.sh`, which refuses a target holding any `identity.users` row whose email does not end in `.invalid`, except a bulk-add placeholder (`<own token>@thestrongrope.com`, token 900000 or above) (it prints a count only).
 `prove-guards.sh` tests that refusal, the `--truncate` confirmation, the zone line, the failed-domain result and the retry, and the merge-table reject.
 
 `tools/parity-php/s2-source.sh` builds the scratch source `tsr_synth_s2` in the parity stack; `test/prove-synthetic.sh` loads it into the throwaway target in `TSR_DST_CLIENT`

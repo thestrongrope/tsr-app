@@ -8,7 +8,7 @@
 # tools/parity-php/classes-fixtures.sql for PHP: the same members, classes, enrolments, sessions, guardian links, guides and syllabus), signs
 # each fixture member in at that side's Auth emulator and writes build/<side>/classes.vars (auth_<alias>=Bearer ...). The read slices do not change the fixtures; the write
 # files change only the rows of the WRITE fixtures (db/synthetic/classes-write-fixtures.sql and tools/parity-php/classes-write-fixtures.sql, tokens 9003xx/9004xx, classes 94xx and every class
-# created by the write admin) and the ENROLMENT fixtures (classes-enrol-fixtures.sql beside them, tokens 9005xx, classes 9411 and up), which are RESET on every run, so a
+# created by the write admin), the BULK-ADD fixtures (classes-bulk-fixtures.sql, tokens 9007xx, classes 9451 and up; they first delete the members a bulk add created) and the ENROLMENT fixtures (classes-enrol-fixtures.sql beside them, tokens 9005xx, classes 9411 and up), which are RESET on every run, so a
 # file can be run again and files can run in parallel.
 # Only the tsr-app-test and tsr-parity compose projects are touched. Needs docker, curl, jq, hurl. Prints no secret.
 set -euo pipefail
@@ -53,6 +53,14 @@ MEMBERS=(
   "en_j_removed=en.900564@example.invalid"
   "en_j_left=en.900565@example.invalid"
   "en_j_nogender=en.900566@example.invalid"
+  "bk_adm_a=bk.900701@example.invalid"
+  "bk_adm_b=bk.900702@example.invalid"
+  "bk_adm_c=bk.900703@example.invalid"
+  "bk_adm_d=bk.900704@example.invalid"
+  "bk_ladm_e=bk.900705@example.invalid"
+  "bk_adm_f=bk.900706@example.invalid"
+  "bk_teacher=bk.900711@example.invalid"
+  "bk_student=bk.900721@example.invalid"
 )
 
 parity() { docker compose -p tsr-parity -f tools/parity-php/compose.parity.yml --env-file tools/parity-php/parity.env "$@"; }
@@ -63,18 +71,22 @@ case "$SIDE" in
   test)
     export TSR_EMULATOR_PORT=19100
     "$ROOT/tools/require-synthetic-stack.sh" tsr-app-test
+    test_sql < db/synthetic/classes-bulk-cleanup.sql
     test_sql < db/synthetic/classes-fixtures.sql
     test_sql < db/synthetic/classes-write-fixtures.sql
     test_sql < db/synthetic/classes-enrol-fixtures.sql
     test_sql < db/synthetic/classes-b2c-fixtures.sql
+    test_sql < db/synthetic/classes-bulk-fixtures.sql
     MINT="tools/dev-auth/mint-token.sh"
     BASE="http://localhost:8089"
     VARS="build/test/classes.vars" ;;
   parity)
+    php_sql < tools/parity-php/classes-bulk-cleanup.sql
     php_sql < tools/parity-php/classes-fixtures.sql
     php_sql < tools/parity-php/classes-write-fixtures.sql
     php_sql < tools/parity-php/classes-enrol-fixtures.sql
     php_sql < tools/parity-php/classes-b2c-fixtures.sql
+    php_sql < tools/parity-php/classes-bulk-fixtures.sql
     # Files named *-new-api.hurl hold cases PHP gets wrong (a PHP bug is not copied); they run on the new API only.
     KEPT=()
     for f in "${FILES[@]}"; do case "$f" in *-new-api.hurl) ;; *) KEPT+=("$f") ;; esac; done

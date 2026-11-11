@@ -106,4 +106,17 @@ public sealed class StudentEditTests
         Assert.That(await MembershipTestKit.CountAsync("identity.users", "email = 'ok.address@example.invalid'"), Is.EqualTo(0), "the email change rolled back with the rest");
         Assert.That(await MembershipTestKit.CountAsync("platform.outbox"), Is.EqualTo(0));
     }
+
+    [Test]
+    public async Task A_token_shared_with_a_signed_in_row_is_not_given_a_new_address()
+    {
+        // A token is not unique in identity.users. The check must cover every row the update would touch: here the first row is a placeholder, the second has signed in.
+        await TestDatabase.ExecuteAsync($"insert into identity.users (token, email, firebase_uid) values ({Placeholder}, 'signed.in@example.invalid', 'uid-shared-token')");
+
+        await EditAsync(Placeholder, """{"email": "new.address@example.invalid"}""");
+
+        Assert.That(await MembershipTestKit.CountAsync("identity.users", $"token = {Placeholder} and email = 'signed.in@example.invalid'"), Is.EqualTo(1));
+        Assert.That(await MembershipTestKit.CountAsync("identity.users", "email = 'new.address@example.invalid'"), Is.EqualTo(0));
+        Assert.That(await EventsAsync("identity.member_email_changed"), Is.EqualTo(0));
+    }
 }

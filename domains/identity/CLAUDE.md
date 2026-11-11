@@ -41,6 +41,8 @@ tools/identity-contract.sh parity          # the same file on PHP (parity stack 
 
 `IdentityCommands.ChangeEmailAsync(db, token, email, clock, ct)` (`api/IdentityCommands.cs`): PHP `canChangeEmail` and the email write of `updateStudentInClass`. Only a placeholder (blank or `<token>@thestrongrope.com`) with no Firebase link may be given another address; an address the member already has is left alone; no uniqueness check (PHP has none). Returns false and writes nothing otherwise. Validates its inputs (throws), runs on the caller's transaction, writes the event `identity.member_email_changed` (token) when it changes the address. Used by `classes` (edit a student); proved by `db/tests/StudentEditTests.cs`.
 
+`IdentityCommands.CreateMemberAsync(db, clock, ct)` returns the token (`api/IdentityCommands.cs`): PHP `createClassStudent`'s `users` insert for a member who is not an app member yet (bulk add). The token is allocated by `domain/TokenAllocation.cs`, the one allocator (sign-in uses it too): highest + 1 under advisory lock 7100001, waiting at most 10 seconds, inside the caller's transaction. The row has the address `<token>@thestrongrope.com`, no Firebase link and no role. Throws without a transaction. Writes the event `identity.member_created` (token). Used by `classes` (bulk add); proved by `db/tests/BulkAddTests.cs`.
+
 ## Placeholders
 
 Operations of this domain not built yet are 501 placeholders in `api/Planned.cs` (after the sign-in check; they create nothing). Building one deletes its line there and flips its state in `docs/specs/initial-build/operations.csv`.
