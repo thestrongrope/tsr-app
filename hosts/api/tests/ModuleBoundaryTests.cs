@@ -3,11 +3,15 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Hosting.Internal;
 using Tsr.Access.Api;
+using Tsr.Assessment.Api;
+using Tsr.Classes.Api;
 using Tsr.Content.Api;
 using Tsr.Host.Api;
 using Tsr.Identity.Api;
 using Tsr.Membership.Api;
+using Tsr.Notifications.Api;
 using Tsr.Platform.Api;
+using Tsr.Search.Api;
 using Tsr.Shared.Api;
 using NUnit.Framework;
 
@@ -92,6 +96,18 @@ public sealed class ModuleBoundaryTests
                 break;
             case "content":
                 services.AddContent();
+                break;
+            case "classes":
+                services.AddClasses();
+                break;
+            case "assessment":
+                services.AddAssessment();
+                break;
+            case "search":
+                services.AddSearch();
+                break;
+            case "notifications":
+                services.AddNotifications();
                 break;
             default:
                 throw new InvalidOperationException("Unknown module " + module + ": add it to Register().");

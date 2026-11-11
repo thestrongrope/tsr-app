@@ -25,6 +25,92 @@ namespace Tsr.Platform.Api.Migrations
             NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "citext");
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Tsr.Platform.Api.AdminAccessLogEntry", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTimeOffset>("AccessedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("accessed_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<string>("Ip")
+                        .HasMaxLength(45)
+                        .HasColumnType("citext")
+                        .HasColumnName("ip");
+
+                    b.Property<string>("Method")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("citext")
+                        .HasColumnName("method");
+
+                    b.Property<string>("Page")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("citext")
+                        .HasColumnName("page");
+
+                    b.Property<string>("Referer")
+                        .HasMaxLength(512)
+                        .HasColumnType("citext")
+                        .HasColumnName("referer");
+
+                    b.Property<int?>("Roleid")
+                        .HasColumnType("integer")
+                        .HasColumnName("roleid");
+
+                    b.Property<string>("SessionId")
+                        .HasMaxLength(128)
+                        .HasColumnType("citext")
+                        .HasColumnName("session_id");
+
+                    b.Property<int?>("Token")
+                        .HasColumnType("integer")
+                        .HasColumnName("token");
+
+                    b.Property<string>("UserAgent")
+                        .HasMaxLength(512)
+                        .HasColumnType("citext")
+                        .HasColumnName("user_agent");
+
+                    b.Property<int?>("UserId")
+                        .HasColumnType("integer")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AccessedAt")
+                        .HasDatabaseName("idx_accessed_at");
+
+                    b.HasIndex("Page")
+                        .HasDatabaseName("idx_page");
+
+                    b.HasIndex("Token")
+                        .HasDatabaseName("idx_token");
+
+                    b.ToTable("admin_access_log", "platform", t =>
+                        {
+                            t.HasCheckConstraint("ck_admin_access_log_ip_length", "char_length(\"ip\") <= 45");
+
+                            t.HasCheckConstraint("ck_admin_access_log_method_length", "char_length(\"method\") <= 10");
+
+                            t.HasCheckConstraint("ck_admin_access_log_page_length", "char_length(\"page\") <= 255");
+
+                            t.HasCheckConstraint("ck_admin_access_log_referer_length", "char_length(\"referer\") <= 512");
+
+                            t.HasCheckConstraint("ck_admin_access_log_session_id_length", "char_length(\"session_id\") <= 128");
+
+                            t.HasCheckConstraint("ck_admin_access_log_user_agent_length", "char_length(\"user_agent\") <= 512");
+                        });
+                });
+
             modelBuilder.Entity("Tsr.Platform.Api.Feedback", b =>
                 {
                     b.Property<int>("Id")
@@ -75,6 +161,29 @@ namespace Tsr.Platform.Api.Migrations
                     b.ToTable("feedback", "platform", t =>
                         {
                             t.HasCheckConstraint("ck_feedback_client_id_length", "char_length(\"client_id\") <= 36");
+                        });
+                });
+
+            modelBuilder.Entity("Tsr.Platform.Api.Gender", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("citext")
+                        .HasColumnName("name");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("genders", "platform", t =>
+                        {
+                            t.HasCheckConstraint("ck_genders_name_length", "char_length(\"name\") <= 100");
                         });
                 });
 
@@ -198,6 +307,59 @@ namespace Tsr.Platform.Api.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Tsr.Platform.Api.Language", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<int?>("CreatedBy")
+                        .HasColumnType("integer")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<int?>("DeletedBy")
+                        .HasColumnType("integer")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<DateTimeOffset?>("ModifiedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("modified_at");
+
+                    b.Property<int?>("ModifiedBy")
+                        .HasColumnType("integer")
+                        .HasColumnName("modified_by");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("citext")
+                        .HasColumnName("name");
+
+                    b.Property<int?>("SortOrder")
+                        .HasColumnType("integer")
+                        .HasColumnName("sort_order");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("languages", "platform", t =>
+                        {
+                            t.HasCheckConstraint("ck_languages_name_length", "char_length(\"name\") <= 100");
+                        });
+                });
+
             modelBuilder.Entity("Tsr.Platform.Api.LookupEntry", b =>
                 {
                     b.Property<int>("Id")
@@ -259,6 +421,101 @@ namespace Tsr.Platform.Api.Migrations
                             t.HasCheckConstraint("ck_lookups_label_length", "char_length(\"label\") <= 255");
 
                             t.HasCheckConstraint("ck_lookups_type_length", "char_length(\"type\") <= 50");
+                        });
+                });
+
+            modelBuilder.Entity("Tsr.Platform.Api.OutboundMessage", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<int>("Attempts")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("attempts");
+
+                    b.Property<string>("Channel")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("citext")
+                        .HasColumnName("channel");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<int?>("CreatedBy")
+                        .HasColumnType("integer")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("DedupeKey")
+                        .HasMaxLength(191)
+                        .HasColumnType("citext")
+                        .HasColumnName("dedupe_key");
+
+                    b.Property<string>("Error")
+                        .HasMaxLength(65535)
+                        .HasColumnType("citext")
+                        .HasColumnName("error");
+
+                    b.Property<DateTimeOffset?>("NextAttemptAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("next_attempt_at");
+
+                    b.Property<string>("Payload")
+                        .HasColumnType("citext")
+                        .HasColumnName("payload");
+
+                    b.Property<string>("Recipient")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("citext")
+                        .HasColumnName("recipient");
+
+                    b.Property<DateTimeOffset?>("SentAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sent_at");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("citext")
+                        .HasDefaultValue("queued")
+                        .HasColumnName("status");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAt")
+                        .HasDatabaseName("idx_created_at");
+
+                    b.HasIndex("Channel", "DedupeKey")
+                        .IsUnique()
+                        .HasDatabaseName("uq_channel_dedupe");
+
+                    b.HasIndex("Channel", "Status", "NextAttemptAt")
+                        .HasDatabaseName("idx_claim");
+
+                    b.ToTable("outbound_messages", "platform", t =>
+                        {
+                            t.HasCheckConstraint("ck_outbound_messages_channel_length", "char_length(\"channel\") <= 20");
+
+                            t.HasCheckConstraint("ck_outbound_messages_dedupe_key_length", "char_length(\"dedupe_key\") <= 191");
+
+                            t.HasCheckConstraint("ck_outbound_messages_error_length", "char_length(\"error\") <= 65535");
+
+                            t.HasCheckConstraint("ck_outbound_messages_payload_json", "payload::text is json");
+
+                            t.HasCheckConstraint("ck_outbound_messages_recipient_length", "char_length(\"recipient\") <= 500");
+
+                            t.HasCheckConstraint("ck_outbound_messages_status_length", "char_length(\"status\") <= 20");
                         });
                 });
 

@@ -1,9 +1,10 @@
 # domains/content/
 
-Quran, recitation, articles, lectures, books. **Status: stub (2026-11-10).** Only articles exist,
-built for the site spike (`docs/specs/site-spike/results.md`) and kept as the example of a domain
+Quran, recitation, articles, lectures, books. **Status: stub (2026-11-10).** Articles, built for the site spike (`docs/specs/site-spike/results.md`) and kept as the example of a domain
 with `site/` pages. Lectures, books, the Quran and the content pipelines are planned
 (`domains/CLAUDE.md`).
+
+Table `holy_quran` (the 114 surahs and verse counts, PHP's table, ported in the schema phase; its routes are 501 placeholders in `api/Planned.cs`) is in schema `content` beside `articles`.
 
 ## Dependencies
 
@@ -30,3 +31,7 @@ client or the site can show a draft or a scheduled article by mistake.
 ## Events
 
 None yet.
+
+## Placeholders
+
+The operations not built yet (3: Quran and the like) are 501 placeholders in `api/Planned.cs`; building one deletes its line there and flips its state in `docs/specs/initial-build/operations.csv`.

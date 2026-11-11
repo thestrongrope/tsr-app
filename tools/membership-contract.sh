@@ -57,7 +57,9 @@ dev_sql() { docker compose -p tsr-app-dev -f docker-compose.dev.yml exec -T db p
 
 case "$SIDE" in
   dev)
-    dev_sql < db/synthetic/membership-fixtures.sql
+    # TSR_FIXTURES_LOADED=1: the members are already in the database (a database filled by tools/data-load from the
+    # parity source, which holds the same fixtures); do not add db/synthetic/membership-fixtures.sql on top.
+    [ -n "${TSR_FIXTURES_LOADED:-}" ] || dev_sql < db/synthetic/membership-fixtures.sql
     { echo "set search_path = platform, public;"; cat db/synthetic/geo-fixtures.sql; } | dev_sql
     MINT="tools/dev-auth/mint-token.sh"
     BASE="http://localhost:8088" ;;

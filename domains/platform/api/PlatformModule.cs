@@ -50,6 +50,7 @@ public static class PlatformModule
         routes.MapGeoCountries();
         routes.MapGeoPostal();
         routes.MapGeoCities();
+        routes.MapPlannedRoutes();
         return routes;
     }
 }

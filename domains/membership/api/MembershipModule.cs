@@ -64,6 +64,7 @@ public static class MembershipModule
         routes.MapChildrenLinkRevoke();
         routes.MapParentsList();
         routes.MapParentRevoke();
+        routes.MapPlannedRoutes();
         return routes;
     }
 }

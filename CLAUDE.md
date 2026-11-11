@@ -27,9 +27,14 @@ read it before editing.
 
 Today's PHP API stays in tsr-account until routes move here. Domains planned: `identity` (AuthN)
 · `access` (AuthZ) · `membership` · `classes` · `assessment` · `content` · `notifications` ·
-`platform` · `search` (read model); only `identity`, `access`, `platform`, `membership` (ten routes: profile, class request form, guardian self-service; the other 16 wait for `classes`) and `content` (a stub)
-have code. Which owns
-what: `domains/CLAUDE.md`.
+`platform` · `search` (read model). All nine exist and route the whole API surface: the **route catalog**
+`docs/specs/initial-build/operations.csv` lists PHP's 213 operations (method, path, domain, auth kind, state). A `built`
+one has its slice; a `planned` one is a placeholder in its domain's `api/Planned.cs` that signs the caller in as the real
+route will (never creating a member), then answers 501 `{"detail": "Not implemented"}`. **Building a slice replaces its
+placeholder:** delete its line in `Planned.cs`, flip its state in `operations.csv` to `built` (the tests in `hosts/api/tests`
+fail until both match; a gateway block per path already exists). Built today: identity 1, access 3, platform 7,
+membership 10 (21); the rest are planned (192). Tables only, besides routes: `classes`, `assessment`, `notifications`.
+`search` has routes only. Which owns what: `domains/CLAUDE.md`.
 
 ## Rules (the ones that must load without opening another file)
 
@@ -61,7 +66,7 @@ what: `domains/CLAUDE.md`.
 | Build all .NET | `dotnet build TsrApp.slnx` |
 | Unit + boundary tests (no DB needed, NUnit) | `dotnet test domains/platform/api/tests` (likewise `domains/identity`, `domains/access`, `domains/membership`, `shared/api`), `dotnet test hosts/api/tests`, `dotnet test hosts/site/tests` |
 | Database-backed tests (needs Docker: Testcontainers starts a throwaway postgres:18) | `dotnet test db/tests` |
-| Contract tests, every Hurl file (stack must be up; `tools/identity-contract.sh dev` first mints the token into `build/dev/token.vars` and refreshes the 2 hour fixture; `tools/membership-contract.sh dev --prepare` resets the membership fixtures, loads the geo rows and mints one token per fixture member into `build/dev/membership.vars`; Hurl runs the files in parallel, so no two files change the same member) | `hurl --test --glob "domains/*/spec/tests/*.hurl" --variable base_url=http://localhost:8088 --variables-file build/dev/token.vars --variables-file domains/identity/spec/tests/fixtures.vars --variables-file domains/access/spec/tests/fixtures.vars --variables-file build/dev/membership.vars` (21 files, 273 requests) |
+| Contract tests, every Hurl file (stack must be up; `tools/identity-contract.sh dev` first mints the token into `build/dev/token.vars` and refreshes the 2 hour fixture; `tools/membership-contract.sh dev --prepare` resets the membership fixtures, loads the geo rows and mints one token per fixture member into `build/dev/membership.vars`; Hurl runs the files in parallel, so no two files change the same member) | `hurl --test --glob "domains/*/spec/tests/*.hurl" --glob "hosts/api/spec/*.hurl" --variable base_url=http://localhost:8088 --variables-file build/dev/token.vars --variables-file domains/identity/spec/tests/fixtures.vars --variables-file domains/access/spec/tests/fixtures.vars --variables-file build/dev/membership.vars` (22 files, 288 requests; `hosts/api/spec/planned-surface.hurl` is the cross-domain spot check of the 501 placeholders, new API only) |
 | One implementation's contract (any base URL) | `tools/identity-contract.sh dev` or `... parity` runs the sign-in contract on either side. For another file, same command with another `base_url` and `--variables-file` (PHP: `build/parity-php/token.vars`, written by `tools/parity-php/mint-token.sh <.invalid email>`); `--glob` is expanded by Hurl itself, so it works in any shell on Mac and Windows when the pattern is quoted. Hurl must be installed. |
 | Access contract on PHP or the new API (stack up; PHP: parity stack) | `tools/access-contract.sh dev` or `parity` (also `tools/identity-contract.sh`) |
 | Membership contract on PHP or the new API (resets its fixture rows first, loads the geo rows, signs 21 fixture members in; the files accept invites and change profiles, so it must reset before each run; invite inspection allows 60 an hour per member, so the files make few calls) | `tools/membership-contract.sh dev` or `parity` (`--prepare` stops after the preparation) |

@@ -16,7 +16,7 @@ what the member may do (that is `access`). Parity first: PHP's behaviour is copi
 
 ## Owns
 
-- Schema `identity`: `users` (id, token, email, provider, firebase_uid, created/last sign-in, IP, device, platform, version; the profile columns, `gender` included, moved to `membership.member_profiles`, the role to `access.user_roles`) and `account_deletion_requests` (the part sign-in reads).
+- Schema `identity`: `users` (id, token, email, provider, firebase_uid, created/last sign-in, IP, device, platform, version; the profile columns, `gender` included, moved to `membership.member_profiles`, the role to `access.user_roles`) and `account_deletion_requests` (all of PHP's columns since the schema phase; `source` has a CHECK, and one live request per member is a partial unique index in place of PHP's generated `active_token`).
 - Dependencies: none (`IdentityModule.Dependencies`). Other domains read the caller from `HttpContext.GetCaller()` (shared plumbing).
 - Public: `UserDirectory` (`ByTokenAsync`: every user of a token, because a token is not unique, at most 50; `ByIdsAsync`: at most 500 ids, more throws; `ByTokensAsync`: at most 500 tokens, every holder in id order, at most 2000 rows) with `UserRef`, and the port `IProfileSink` (name and picture from the token, handed on in the same request when a create route makes a member or a verified email claims one; default no-op, `membership` supplies the real one). The token claims `name` and `picture` are read in both verifier modes, as PHP does.
 
@@ -36,3 +36,7 @@ dotnet test db/tests                       # every refusal and success over HTTP
 tools/identity-contract.sh dev             # Hurl contract on the dev stack (emulator sign-in)
 tools/identity-contract.sh parity          # the same file on PHP (parity stack up, tools/parity-php/README.md)
 ```
+
+## Placeholders
+
+Operations of this domain not built yet are 501 placeholders in `api/Planned.cs` (after the sign-in check; they create nothing). Building one deletes its line there and flips its state in `docs/specs/initial-build/operations.csv`.

@@ -2,7 +2,7 @@
 
 The Strong Rope's software: one product (a Flutter app and a public site) on one API, organized
 by domain. This is a working sample of the target layout: `platform/submit-feedback` runs end to
-end (spec, API slice, contract tests, Flutter screen, gateway); the other domains are structure.
+end (spec, API slice, contract tests, Flutter screen, gateway); the whole API surface is routed (docs/specs/initial-build/operations.csv): built slices answer, the rest are 501 placeholders.
 
 Design: [`docs/specs/repo-structure.md`](docs/specs/repo-structure.md). Working rules for people
 and AI agents: [`CLAUDE.md`](CLAUDE.md).
@@ -17,7 +17,7 @@ tools/identity-contract.sh dev                           # mint a dev token, ref
 tools/platform-contract.sh dev                           # platform contract (app version, release notes, geo, feedback); also: parity
 tools/membership-contract.sh dev                         # membership contract (profile, class request form, guardian links); resets its fixtures first; also: parity
 tools/membership-contract.sh dev --prepare               # before the next line: reset the membership fixtures, mint their tokens
-hurl --test --glob "domains/*/spec/tests/*.hurl" --variable base_url=http://localhost:8088 --variables-file build/dev/token.vars --variables-file domains/identity/spec/tests/fixtures.vars --variables-file domains/access/spec/tests/fixtures.vars --variables-file build/dev/membership.vars   # every contract file
+hurl --test --glob "domains/*/spec/tests/*.hurl" --glob "hosts/api/spec/*.hurl" --variable base_url=http://localhost:8088 --variables-file build/dev/token.vars --variables-file domains/identity/spec/tests/fixtures.vars --variables-file domains/access/spec/tests/fixtures.vars --variables-file build/dev/membership.vars   # every contract file
 dotnet test domains/platform/api/tests                   # unit tests
 dotnet test hosts/api/tests                              # module-boundary tests
 dotnet test db/tests                                     # database-backed tests (Docker: a throwaway postgres:18)

@@ -33,18 +33,53 @@ namespace Tsr.Identity.Api.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<DateTimeOffset?>("CancelledAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("cancelled_at");
+
                     b.Property<DateTimeOffset?>("CompletedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("completed_at");
+
+                    b.Property<DateTimeOffset?>("ConfirmationSentAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("confirmation_sent_at");
 
                     b.Property<string>("ContactEmail")
                         .HasMaxLength(200)
                         .HasColumnType("citext")
                         .HasColumnName("contact_email");
 
+                    b.Property<string>("ContactName")
+                        .HasMaxLength(200)
+                        .HasColumnType("citext")
+                        .HasColumnName("contact_name");
+
+                    b.Property<int?>("HandledBy")
+                        .HasColumnType("integer")
+                        .HasColumnName("handled_by");
+
+                    b.Property<string>("OperatorNote")
+                        .HasMaxLength(1000)
+                        .HasColumnType("citext")
+                        .HasColumnName("operator_note");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(500)
+                        .HasColumnType("citext")
+                        .HasColumnName("reason");
+
                     b.Property<DateTimeOffset>("RequestedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("requested_at");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(3)
+                        .HasColumnType("citext")
+                        .HasDefaultValue("app")
+                        .HasColumnName("source");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -64,9 +99,26 @@ namespace Tsr.Identity.Api.Migrations
                     b.HasIndex("Token")
                         .HasDatabaseName("idx_account_deletion_requests_token");
 
+                    b.HasIndex("Status", "RequestedAt")
+                        .HasDatabaseName("idx_status_requested");
+
+                    b.HasIndex(new[] { "Token" }, "uq_active_token")
+                        .IsUnique()
+                        .HasFilter("status in ('pending', 'awaiting_prize_delivery')");
+
                     b.ToTable("account_deletion_requests", "identity", t =>
                         {
                             t.HasCheckConstraint("ck_account_deletion_requests_contact_email_length", "char_length(\"contact_email\") <= 200");
+
+                            t.HasCheckConstraint("ck_account_deletion_requests_contact_name_length", "char_length(\"contact_name\") <= 200");
+
+                            t.HasCheckConstraint("ck_account_deletion_requests_operator_note_length", "char_length(\"operator_note\") <= 1000");
+
+                            t.HasCheckConstraint("ck_account_deletion_requests_reason_length", "char_length(\"reason\") <= 500");
+
+                            t.HasCheckConstraint("ck_account_deletion_requests_source", "source in ('app', 'web')");
+
+                            t.HasCheckConstraint("ck_account_deletion_requests_source_length", "char_length(\"source\") <= 3");
 
                             t.HasCheckConstraint("ck_account_deletion_requests_status", "status in ('pending', 'awaiting_prize_delivery', 'completed', 'cancelled')");
 

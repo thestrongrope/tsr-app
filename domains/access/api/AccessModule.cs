@@ -40,6 +40,7 @@ public static class AccessModule
         routes.MapMePermissions();
         routes.MapMePermission();
         routes.MapUserPermissions();
+        routes.MapPlannedRoutes();
         return routes;
     }
 }

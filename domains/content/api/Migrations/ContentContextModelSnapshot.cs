@@ -70,6 +70,40 @@ namespace Tsr.Content.Api.Migrations
                             t.HasCheckConstraint("ck_articles_title_length", "char_length(\"title\") <= 200");
                         });
                 });
+
+            modelBuilder.Entity("Tsr.Content.Api.HolyQuranSurah", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Arabic")
+                        .HasMaxLength(255)
+                        .HasColumnType("citext")
+                        .HasColumnName("arabic");
+
+                    b.Property<string>("Surah")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("citext")
+                        .HasColumnName("surah");
+
+                    b.Property<int>("Verses")
+                        .HasColumnType("integer")
+                        .HasColumnName("verses");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("holy_quran", "content", t =>
+                        {
+                            t.HasCheckConstraint("ck_holy_quran_arabic_length", "char_length(\"arabic\") <= 255");
+
+                            t.HasCheckConstraint("ck_holy_quran_surah_length", "char_length(\"surah\") <= 100");
+                        });
+                });
 #pragma warning restore 612, 618
         }
     }

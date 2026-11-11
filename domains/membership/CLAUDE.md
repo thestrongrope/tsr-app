@@ -62,3 +62,7 @@ dotnet test db/tests                       # schema, the sink, the ten operation
 tools/membership-contract.sh dev           # the ten Hurl files on the dev stack (resets the fixtures first); also: parity
 tools/parity-php/membership-fixtures.sh    # only the fixture reset on the PHP parity stack (db/synthetic/membership-fixtures.sql holds the same rows for the new API)
 ```
+
+## Placeholders
+
+Operations of this domain not built yet are 501 placeholders in `api/Planned.cs` (after the sign-in check; they create nothing). Building one deletes its line there and flips its state in `docs/specs/initial-build/operations.csv`.

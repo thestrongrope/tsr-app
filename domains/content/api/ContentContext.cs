@@ -3,12 +3,14 @@ using Tsr.Shared.Api;
 
 namespace Tsr.Content.Api;
 
-/// <summary>content's tables, schema "content". Today: the articles the public site shows.</summary>
+/// <summary>content's tables, schema "content". The articles the public site shows and the surah list (PHP holy_quran).</summary>
 internal sealed class ContentContext(DbContextOptions<ContentContext> options) : TsrDbContext(options, SchemaName)
 {
     public const string SchemaName = "content";
 
     public DbSet<Article> Articles => Set<Article>();
+
+    public DbSet<HolyQuranSurah> HolyQuran => Set<HolyQuranSurah>();
 
     protected override void Configure(ModelBuilder modelBuilder)
     {
@@ -18,6 +20,14 @@ internal sealed class ContentContext(DbContextOptions<ContentContext> options) :
             article.Property(a => a.Title).HasMaxLength(200);
             article.HasIndex(a => a.Slug).IsUnique().HasDatabaseName("uq_articles_slug");
             article.HasIndex(a => a.PublishedAt).HasDatabaseName("idx_articles_published");
+        });
+
+        // PHP holy_quran: the 114 surahs with their verse counts, keyed by the surah number. The recitation columns of classes read it.
+        modelBuilder.Entity<HolyQuranSurah>(surah =>
+        {
+            surah.ToTable("holy_quran");
+            surah.Property(s => s.Surah).HasMaxLength(100);
+            surah.Property(s => s.Arabic).HasMaxLength(255);
         });
     }
 }
@@ -34,4 +44,16 @@ internal sealed class Article
     public string Body { get; set; } = string.Empty;
 
     public DateTimeOffset? PublishedAt { get; set; }
+}
+
+/// <summary>One surah of the Quran (PHP <c>holy_quran</c>): its number (<c>Id</c>), name, Arabic name and verse count.</summary>
+internal sealed class HolyQuranSurah
+{
+    public int Id { get; set; }
+
+    public string Surah { get; set; } = string.Empty;
+
+    public string? Arabic { get; set; }
+
+    public int Verses { get; set; }
 }

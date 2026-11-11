@@ -21,6 +21,7 @@ public static class ContentModule
     public static IEndpointRouteBuilder MapContent(this IEndpointRouteBuilder routes)
     {
         routes.MapListPublishedArticles();
+        routes.MapPlannedRoutes();
         return routes;
     }
 }

@@ -1,8 +1,12 @@
 using Tsr.Access.Api;
+using Tsr.Assessment.Api;
+using Tsr.Classes.Api;
 using Tsr.Content.Api;
 using Tsr.Identity.Api;
 using Tsr.Membership.Api;
+using Tsr.Notifications.Api;
 using Tsr.Platform.Api;
+using Tsr.Search.Api;
 using Tsr.Shared.Api;
 
 // Composition root: wiring only, never a rule. Each module registers its own services and maps
@@ -34,6 +38,11 @@ builder.Services.AddAccess();
 builder.Services.AddPlatform();
 builder.Services.AddMembership();
 builder.Services.AddContent();
+// Tables only so far (schema phase); registered after platform, whose migration creates the collation classes uses.
+builder.Services.AddClasses();
+builder.Services.AddAssessment();
+builder.Services.AddNotifications();
+builder.Services.AddSearch();
 
 var app = builder.Build();
 
@@ -45,6 +54,7 @@ if (migrating)
     return;
 }
 
+app.UseRouterErrors();
 app.UseRouting();
 app.UseIdentity();
 app.MapIdentity();
@@ -52,6 +62,10 @@ app.MapAccess();
 app.MapPlatform();
 app.MapMembership();
 app.MapContent();
+app.MapClasses();
+app.MapAssessment();
+app.MapNotifications();
+app.MapSearch();
 
 app.Run();
 

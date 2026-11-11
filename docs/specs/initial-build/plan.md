@@ -208,6 +208,7 @@ Open after phase 3b:
 - [ ] Gender lock on `PATCH /me` and the permission 403s have no parity proof until `classes` exists.
 - [ ] Deliberate differences in `php-parity-feedback.md` ("Membership batch 3b-2"): 413 over 1 MiB, guardian lists capped at 200, gender lock by user id, .NET's HTML entity table.
 - [ ] `TSR_PUBLIC_WEB_BASE` and the search touch are not built. The seed resets membership rows on every start. The rate limiter is per process.
+- [ ] Shared tokens: `GET` and `POST /registration` key the registration by `users.token`, which is not unique, so two accounts sharing a token read and overwrite the same registration. Copied from PHP (only the guardian code refuses a shared token). Flagged by the automated security review after the commit; decide: refuse shared tokens, or key by user id after the baseline.
 - [ ] The other 14 membership operations (2 moved to `classes`).
 
 **Order of work changed (agreed with Asif, 2026-11-10).** Thin domain-by-domain slices cost too much
@@ -217,3 +218,54 @@ per operation. From here:
 2. Surface phase: all nine domains set up, every operation of the OpenAPI spec routed, unbuilt ones answering 501.
 3. Fill by domain: `classes` with the rest of `membership`, then `assessment`, then `notifications`; one review per domain; a recon only for the large operations.
 4. Parity bar: same status, body and permission for valid and ordinary invalid input. Exotic edge cases are recorded, not chased.
+
+## Checkpoint 5 (2026-11-11): schema phase (S1 schema, S2 load, S3 surface)
+
+Design: `schema-phase-design.md`; notes: `schema-phase-notes.md`; reviews: `schema-phase-qa.md`, security
+findings below (its reviewer cannot write files).
+
+Built: 36 more tables (58 in eight schemas), modules for `classes`, `assessment`, `notifications` and
+`search`; `tools/data-load/` (MariaDB to PostgreSQL, counts-only report); every PHP operation routed,
+catalog `operations.csv`: 213 operations (not 211: `GET /me/guides` and `/me/guides/{slug}` were missed
+earlier), 21 built, 192 answering 501.
+
+Checked by the orchestrator: build 0 warnings; 1,143 NUnit tests in 11 projects (after the fix round);
+22 Hurl files, 288 requests on the synthetic dev database (before the production load, not since).
+
+**The dev database holds production data since 2026-11-10** (Asif's decision: Claude runs the load;
+the dev database is replaced; query freely, never copy anything out into code, tests, seeds, docs,
+logs, commits or another vendor's model). Load: 725,380 rows from 52 tables, 0 rejected, every table's
+count equal to its source; dates read as UTC (PHP `date.timezone = UTC`, MariaDB UTC).
+**Do not reset the dev volume, run the seed, or run the contract scripts without asking**: they
+expect synthetic fixtures and write rows.
+
+Reviews: security 0 high, 0 medium, 6 low; qa 0 high, 4 medium, 6 low. Fixed in the fix round (load
+tooling only): the synthetic proof refuses a non-synthetic target; `--truncate` needs the database name;
+the report says `LOAD INCOMPLETE` and names what failed; the report states the source zone.
+
+Open after the schema phase:
+
+- [ ] Contract tests cannot run on the loaded database until the synthetic test members are added on top safely. No Hurl run since the load.
+- [ ] Geo tables are not in the load (8 synthetic countries only); the full GeoNames load is still to do.
+- [ ] Orphaned references in production data (counts in `build/data-load/`): attendance 6,309 without a member and 343 without a session; quiz responses 5,556 without a question. The reports must tolerate them as PHP does.
+- [ ] Notifier columns: the worker runs in India time; its own timestamps are unchecked.
+- [ ] PHP's triggers and `ON UPDATE CURRENT_TIMESTAMP` are not ported: each command must set those values.
+- [ ] `tsr_app` can write every table in all schemas, roles and permissions included (security low 1). Narrow per schema.
+- [ ] The gateway passes `Client-IP` through, so the sign-in IP can be forged (as PHP). Placeholders still record the sign-in.
+- [ ] Name and picture from the token are stored unchecked and the name is rewritten on each sign-in (as PHP).
+- [ ] About 70 planned rows in `operations.csv` have a guessed auth label (`member` where PHP creates the member). Fix each when its slice is built.
+- [ ] The gateway sends all 213 paths to the new API. Correct for the all-at-once cutover; never front PHP with it.
+- [ ] JSON columns: text with `IS JSON` in the new tables, `jsonb` in membership's.
+- [ ] A unique index on `identity.users.token` where token <> 0 (the only duplicate today is token 0).
+- [ ] `teacher_training*` and `surveys` are in no schema source and not in the local MariaDB copy.
+- [ ] `docs/handover.md` is not updated for phases 3 and the schema phase.
+
+Design direction from Asif (2026-11-10/11), for the fill phase:
+
+1. Public shapes follow the API's needs, not the tables: an endpoint returns a response type written for it, never a database entity. The 213 PHP operations keep PHP's shapes. Add a test that no endpoint returns an EF entity.
+2. Event sourcing only where it fits (candidates: enrolment and transfers, teacher assignments, audit logs, the deletion lifecycle); decided per case after the baseline.
+3. Every command writes its event to the outbox in the same transaction (name, version, entity id, what changed, an ordered id). Consumers, the relay, the search index and a reconcile check can be built at any time; do not purge the outbox before the first consumer has caught up. A consumer may start from a full reindex.
+4. Decide the read-model approach for cross-domain reports before `classes` is filled (test case: the MIS report).
+
+Spend: 996,000 against a 900,000 budget (S1 243,000, S2 176,000, S3 129,000, security 111,000,
+qa 226,000, fixes 111,000), plus 263,000 for the recon.

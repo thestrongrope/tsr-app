@@ -15,5 +15,9 @@
     <ProjectReference Include="../../domains/platform/api/Tsr.Platform.Api.csproj" />
     <ProjectReference Include="../../domains/membership/api/Tsr.Membership.Api.csproj" />
     <ProjectReference Include="../../domains/content/api/Tsr.Content.Api.csproj" />
+    <ProjectReference Include="../../domains/classes/api/Tsr.Classes.Api.csproj" />
+    <ProjectReference Include="../../domains/assessment/api/Tsr.Assessment.Api.csproj" />
+    <ProjectReference Include="../../domains/notifications/api/Tsr.Notifications.Api.csproj" />
+    <ProjectReference Include="../../domains/search/api/Tsr.Search.Api.csproj" />
   </ItemGroup>
 </Project>

@@ -46,6 +46,7 @@ public static class IdentityModule
     public static IEndpointRouteBuilder MapIdentity(this IEndpointRouteBuilder routes)
     {
         routes.MapLinkAccount();
+        routes.MapPlannedRoutes();
         return routes;
     }
 }

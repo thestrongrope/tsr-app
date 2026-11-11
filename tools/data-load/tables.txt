@@ -1,0 +1,59 @@
+# <source table (MariaDB)>  <target table (PostgreSQL)>  <load | merge>
+# load  = the target must be empty (or --truncate); merge = a table the EF migrations seed: seed rows are kept, source rows
+#         that are not there are added, and the ones that differ are counted.
+# The domain files in sql/ do the loading; this list drives the export and the emptiness check. A table listed here that no
+# domain file loads is reported as NOT LOADED. Not listed on purpose: the 15 leave-behind tables, class_access,
+# calendar_table, the geo_* tables (loaded from GeoNames by tools/geonames/load.php), and content.articles / access.roles
+# (PostgreSQL only).
+users identity.users load
+account_deletion_requests identity.account_deletion_requests load
+users access.user_roles load
+permissions access.permissions merge
+role_permissions access.role_permissions merge
+class_access_rules access.class_access_rules load
+class_access_rule_conditions access.class_access_rule_conditions load
+user_permissions access.user_permissions load
+users membership.member_profiles load
+interest_options membership.interest_options merge
+student_interests membership.student_interests load
+class_registrations membership.class_registrations load
+class_registrations_languages membership.class_registrations_languages load
+user_guardians membership.user_guardians load
+genders platform.genders load
+languages platform.languages load
+lookups platform.lookups merge
+admin_access_log platform.admin_access_log load
+feedback platform.feedback load
+outbound_messages platform.outbound_messages load
+holy_quran content.holy_quran load
+class_levels classes.class_levels load
+tags classes.tags load
+topics classes.topics load
+teachers classes.teachers load
+teachers_history classes.teachers_history load
+classes classes.classes load
+class_schedules classes.class_schedules load
+class_schedule_topics classes.class_schedule_topics load
+class_sessions classes.class_sessions load
+class_attendance classes.class_attendance load
+class_students classes.class_students load
+class_tags classes.class_tags load
+class_audit_log classes.class_audit_log load
+guides classes.guides load
+student_transfers classes.student_transfers load
+syllabus classes.syllabus load
+quiz_campaigns assessment.quiz_campaigns load
+standard_mcqs assessment.standard_mcqs load
+standard_mcq_questions assessment.standard_mcq_questions load
+spot_quizzes assessment.spot_quizzes load
+spot_quiz_questions assessment.spot_quiz_questions load
+spot_quiz_responses assessment.spot_quiz_responses load
+spot_quiz_submissions assessment.spot_quiz_submissions load
+notifications notifications.notifications load
+user_notifications notifications.user_notifications load
+user_devices notifications.user_devices load
+notifier_reminders notifications.notifier_reminders load
+notifier_runs notifications.notifier_runs load
+notifier_sent_messages notifications.notifier_sent_messages load
+class_scheduled_notifications notifications.class_scheduled_notifications load
+class_scheduled_notification_runs notifications.class_scheduled_notification_runs load

@@ -4,8 +4,8 @@ using Tsr.Shared.Api;
 namespace Tsr.Platform.Api;
 
 /// <summary>
-/// platform's tables, schema "platform": the feedback table and the platform-owned outbox
-/// (written by every domain through shared/api/Outbox.cs).
+/// platform's tables, schema "platform": the feedback table, the platform-owned outbox
+/// (written by every domain through shared/api/Outbox.cs), geo and lookups, and the tables ported in the schema phase (PlatformTables.cs).
 /// </summary>
 internal sealed class PlatformContext(DbContextOptions<PlatformContext> options) : TsrDbContext(options, SchemaName)
 {
@@ -28,9 +28,18 @@ internal sealed class PlatformContext(DbContextOptions<PlatformContext> options)
 
     public DbSet<LookupEntry> LookupEntries => Set<LookupEntry>();
 
+    public DbSet<AdminAccessLogEntry> AdminAccessLog => Set<AdminAccessLogEntry>();
+
+    public DbSet<Gender> Genders => Set<Gender>();
+
+    public DbSet<Language> Languages => Set<Language>();
+
+    public DbSet<OutboundMessage> OutboundMessages => Set<OutboundMessage>();
+
     protected override void Configure(ModelBuilder modelBuilder)
     {
         ConfigureGeo(modelBuilder);
+        PlatformTables.Configure(modelBuilder);
 
         // user_id and handled_by are plain integers: a domain never references another domain's tables. (The first migration
         // added foreign keys to identity.users by hand; DropIdentityForeignKeys removed them.)

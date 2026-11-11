@@ -23,3 +23,6 @@ Run from the repo root, with `P` as in `docs/specs/initial-build/php-parity-feed
 - Refresh the PHP source: delete `build/parity-php/src/`, re-run the `git archive` line in the doc, `P build api`.
 
 Synthetic tokens here start at 1, not 900000 (the generator's choice); `token = 0` rows are guests.
+
+Data-load source (task S2): `tools/parity-php/s2-source.sh` builds the scratch database `tsr_synth_s2` (a copy of `tsr_synth`, the two additive
+2026_11_08 migrations and invented fixture rows); `tools/data-load/README.md` says how it is used.

@@ -1,9 +1,13 @@
 using System.Reflection;
 using Tsr.Access.Api;
+using Tsr.Assessment.Api;
+using Tsr.Classes.Api;
 using Tsr.Content.Api;
 using Tsr.Identity.Api;
 using Tsr.Membership.Api;
+using Tsr.Notifications.Api;
 using Tsr.Platform.Api;
+using Tsr.Search.Api;
 
 namespace Tsr.Host.Api;
 
@@ -24,5 +28,9 @@ public static class Modules
         new("platform", PlatformModule.Dependencies, typeof(PlatformModule).Assembly),
         new("membership", MembershipModule.Dependencies, typeof(MembershipModule).Assembly),
         new("content", ContentModule.Dependencies, typeof(ContentModule).Assembly),
+        new("classes", ClassesModule.Dependencies, typeof(ClassesModule).Assembly),
+        new("assessment", AssessmentModule.Dependencies, typeof(AssessmentModule).Assembly),
+        new("notifications", NotificationsModule.Dependencies, typeof(NotificationsModule).Assembly),
+        new("search", SearchModule.Dependencies, typeof(SearchModule).Assembly),
     ];
 }

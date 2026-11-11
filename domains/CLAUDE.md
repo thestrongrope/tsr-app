@@ -60,7 +60,7 @@ in force, each requirement linked to the test that proves it.
 | `platform` | app version, release notes, health, feedback, geo, lookups, audit log | `feedback.php`, `lookups.php`, `location.php`, `auditlog.php`, `reportexport.php` |
 | `search` | read model only: indexes fed by events; global and public search | `search*.php` |
 
-Platform-owned tables (no domain): `outbox`, `outbound_messages`, `schema_migrations`,
+Platform-owned tables (no domain): `outbox`, `outbound_messages` (PHP's `schema_migrations` is replaced by EF's history tables),
 `admin_access_log`.
 
 ## Rules for code in domains/

@@ -1,3 +1,4 @@
+| Tables `admin_access_log`, `genders`, `languages`, `outbound_messages` (schema phase) | - | built (tables only, no route; migration `AddQueueAndLookupTables`) |
 # domains/platform/
 
 The domain for things every member touches but no other domain owns: health, feedback, app version,
@@ -25,8 +26,7 @@ example**: copy its layout when you build another domain (`domains/CLAUDE.md`).
 - Permissions `feedback:create:self`, `feedback:review:all`
   (seeded by access's first migration; the catalog itself belongs to `access`).
 - Event `platform.feedback_submitted`.
-- Also, as platform tables with no domain: `outbox`, `outbound_messages`, `schema_migrations`,
-  `admin_access_log`. `outbox` is mapped by `PlatformContext` (schema `platform`) and written inside the caller's transaction by `shared/api/Outbox.cs`.
+- Also, as platform tables with no domain: `outbox`, `outbound_messages`, `admin_access_log` (PHP's `schema_migrations` is not ported: EF's history tables replace it). `genders` and `languages` are their own tables here, not rows of `lookups`: other tables store their ids, so a straight copy is simpler (design decision 5). `outbound_messages` stays beside the outbox: the outbox holds domain events, `outbound_messages` the delivery queue (push, WhatsApp, search); its `payload` is JSON kept as text. `outbox` is mapped by `PlatformContext` (schema `platform`) and written inside the caller's transaction by `shared/api/Outbox.cs`.
 - The geo tables hold public GeoNames data (CC BY 4.0), never member data; the dev seed holds a small synthetic set
   (`db/synthetic/geo-fixtures.sql`, shared with the PHP parity stack). The full GeoNames loader is not built.
 - `feedback.user_id` and `handled_by` are plain integers (no foreign key to identity, rule 3).
@@ -103,3 +103,7 @@ dotnet test db/tests                              # feedback row + outbox row in
 hurl --test --variable base_url=http://localhost:8088 --variables-file build/dev/token.vars domains/platform/spec/tests/submit-feedback.hurl   # contract, stack up (:8088)
 flutter analyze domains/platform/app && (cd domains/platform/app && flutter test)
 ```
+
+## Placeholders
+
+Operations of this domain not built yet are 501 placeholders in `api/Planned.cs` (after the sign-in check; they create nothing). Building one deletes its line there and flips its state in `docs/specs/initial-build/operations.csv`.

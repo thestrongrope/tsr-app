@@ -8,6 +8,10 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
   <ItemGroup>
+    <!-- The route catalog reader the host tests use: one reader of operations.csv, not two. -->
+    <Compile Include="../../hosts/api/tests/RouteCatalog.cs" Link="RouteCatalog.cs" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="../../hosts/api/Tsr.Host.Api.csproj" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
     <PackageReference Include="Testcontainers.PostgreSql" />

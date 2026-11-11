@@ -126,3 +126,7 @@ WHERE NOT EXISTS (SELECT 1 FROM content.articles a WHERE a.slug = v.slug);
 SET search_path = platform, public;
 \ir geo-fixtures.sql
 RESET search_path;
+
+-- The schema phase's tables (classes, assessment, notifications and the new platform, content and identity rows): one small coherent set
+-- for the members above. Idempotent (fixed ids, ON CONFLICT DO NOTHING).
+\ir schema-phase-fixtures.sql

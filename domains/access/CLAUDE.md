@@ -67,3 +67,7 @@ dotnet test db/tests                       # catalog, stored roles and grants, t
 tools/access-contract.sh dev               # Hurl contract on the dev stack
 tools/access-contract.sh parity            # the same files on PHP (parity stack up, tools/parity-php/README.md)
 ```
+
+## Placeholders
+
+Operations of this domain not built yet are 501 placeholders in `api/Planned.cs` (after the sign-in check; they create nothing). Building one deletes its line there and flips its state in `docs/specs/initial-build/operations.csv`.

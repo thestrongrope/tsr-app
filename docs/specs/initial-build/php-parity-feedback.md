@@ -202,3 +202,11 @@ proves it; the capability documents (`domains/membership/capabilities/`) hold th
 - The inspect rate limit is per API process (like the geo one).
 
 **Not proven end to end**: the permission 403 (the member set gives every member these permissions and nothing can deny them); the gender lock against real enrolments (no classes yet: proven with a fake port in NUnit and a host-level fake in `db/tests`); the 500s above (db/tests only).
+
+## Found by review, 2026-11-10
+
+Three membership differences the independent QA found in the ten-operation batch (`schema-phase-qa.md`, U1 to U3). Recorded, not fixed.
+
+1. **Guardian list timestamps are printed in UTC; PHP prints the database's own clock.** New API: `domains/membership/api/domain/LinkRowView.cs:49-51` (`Stamp` converts to UTC); callers `ParentsList.cs:45-48` and the children-links list. PHP: `web/models/guardians.php:631-634` selects `created_at`, `activated_at` and `revoked_at` and returns them as the stored string (`:559` casts to string), in MariaDB's local zone; `expires_at` is written from PHP's own `date('Y-m-d H:i:s', ...)` (`:166`, PHP zone) but compared by SQL (database zone). The two zones are assumed equal in PHP. Visible only if the zone of the loaded `datetime` columns is not UTC (design decision 2, still open).
+2. **`PATCH /me` with `"mobile": null` writes a blank profile row first, then answers 500.** New API: `domains/membership/api/features/profile-update/ProfileUpdate.cs:117-119` (insert of the member's profile row, committed) before the setter at `:141` throws. PHP: `web/models/subscribers.php:216-217` runs one `update users set mobile = :mobile` that the NOT NULL column refuses: a 500 and no row changed. The blank row reads back as the column defaults, so no client sees a difference.
+3. **`interestOptions` ties on `sort_order` sort by a different collation.** New API: `domains/membership/api/features/registration-get/RegistrationGet.cs:48` (`OrderBy(SortOrder).ThenBy(Name)`, PostgreSQL sorts the `citext` name under `en_US.utf8`). PHP: `web/models/subscribers.php:317-320` (`ORDER BY sort_order, name`, MariaDB `utf8mb4_unicode_520_ci`). Only accents or punctuation in names with equal `sort_order` can order differently (19 options today).

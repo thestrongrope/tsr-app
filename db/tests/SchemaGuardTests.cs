@@ -24,8 +24,12 @@ public sealed class SchemaGuardTests
         "geo lookups search, sort and compare this column ignoring case AND accents, as MariaDB did; citext ignores case only "
         + "(docs/specs/initial-build/phase-3-collation-proof.md)";
 
+    private const string ClassesReason =
+        "an access rule matches a class's city and country ignoring case AND accents, as MariaDB did; citext ignores case only "
+        + "(docs/specs/initial-build/phase-3-collation-proof.md, schema-phase-design.md risks)";
+
     /// <summary>
-    /// "schema.table.column" to the reason it is not citext. Only the three geo columns the lookups search, sort and compare:
+    /// "schema.table.column" to the reason it is not citext. The three geo columns the lookups search, sort and compare, and the two class columns an access rule matches:
     /// they use the ICU collation geo_ci_ai, which is still case-insensitive, so the rule's intent holds (see the test below).
     /// </summary>
     private static readonly Dictionary<string, string> NotCitext = new()
@@ -33,18 +37,32 @@ public sealed class SchemaGuardTests
         ["platform.geo_countries.name"] = GeoReason,
         ["platform.geo_postal_codes.postal_code"] = GeoReason,
         ["platform.geo_cities.name"] = GeoReason,
+        ["classes.classes.city"] = ClassesReason,
+        ["classes.classes.country"] = ClassesReason,
     };
+
+    /// <summary>Domains that own no table (routes only), so no context.</summary>
+    private static readonly HashSet<string> DomainsWithoutTables = ["search"];
 
     /// <summary>Foreign keys that may cross schemas. Empty: platform's two into identity.users were dropped by its DropIdentityForeignKeys migration.</summary>
     private static readonly HashSet<string> CrossSchemaForeignKeys = [];
 
     [Test]
-    public void Every_domain_has_exactly_one_context()
+    public void Every_domain_has_exactly_one_context_except_those_without_tables()
     {
         foreach (var module in Modules.All)
         {
-            Assert.That(ContextTypes(module).ToList(), Has.Count.EqualTo(1), module.Name + " must have one DbContext");
+            var expected = DomainsWithoutTables.Contains(module.Name) ? 0 : 1;
+            Assert.That(ContextTypes(module).ToList(), Has.Count.EqualTo(expected), module.Name + " has the wrong number of DbContexts");
         }
+    }
+
+    [Test]
+    public void Every_domain_schema_is_covered_by_the_guards()
+    {
+        // The guards read the schemas from the modules, so a module left out of Modules.All would pass them without being checked.
+        var expected = new[] { "identity", "access", "platform", "membership", "content", "classes", "assessment", "notifications" };
+        Assert.That(Schemas(), Is.EquivalentTo(expected));
     }
 
     [Test]

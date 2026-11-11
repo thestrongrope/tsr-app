@@ -27,6 +27,11 @@ public sealed class PublicSurfaceTests
         // membership: the module; MemberNames (read interface); IClassEnrolments, the one port classes will supply.
         ["membership"] = ["MembershipModule", "MemberNames", "IClassEnrolments"],
         ["content"] = ["ContentModule"],
+        // Tables and placeholder routes only so far: the module class and nothing else.
+        ["classes"] = ["ClassesModule"],
+        ["assessment"] = ["AssessmentModule"],
+        ["notifications"] = ["NotificationsModule"],
+        ["search"] = ["SearchModule"],
     };
 
     public static IEnumerable<string> ModuleNames() => Modules.All.Select(m => m.Name);

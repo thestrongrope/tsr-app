@@ -10,6 +10,20 @@
   <Folder Name="/domains/access/api/tests/">
     <Project Path="domains/access/api/tests/Tsr.Access.Api.Tests.csproj" />
   </Folder>
+  <Folder Name="/domains/assessment/" />
+  <Folder Name="/domains/assessment/api/">
+    <Project Path="domains/assessment/api/Tsr.Assessment.Api.csproj" />
+  </Folder>
+  <Folder Name="/domains/assessment/api/tests/">
+    <Project Path="domains/assessment/api/tests/Tsr.Assessment.Api.Tests.csproj" />
+  </Folder>
+  <Folder Name="/domains/classes/" />
+  <Folder Name="/domains/classes/api/">
+    <Project Path="domains/classes/api/Tsr.Classes.Api.csproj" />
+  </Folder>
+  <Folder Name="/domains/classes/api/tests/">
+    <Project Path="domains/classes/api/tests/Tsr.Classes.Api.Tests.csproj" />
+  </Folder>
   <Folder Name="/domains/content/" />
   <Folder Name="/domains/content/api/">
     <Project Path="domains/content/api/Tsr.Content.Api.csproj" />
@@ -30,6 +44,13 @@
   </Folder>
   <Folder Name="/domains/membership/api/tests/">
     <Project Path="domains/membership/api/tests/Tsr.Membership.Api.Tests.csproj" />
+  </Folder>
+  <Folder Name="/domains/notifications/" />
+  <Folder Name="/domains/notifications/api/">
+    <Project Path="domains/notifications/api/Tsr.Notifications.Api.csproj" />
+  </Folder>
+  <Folder Name="/domains/notifications/api/tests/">
+    <Project Path="domains/notifications/api/tests/Tsr.Notifications.Api.Tests.csproj" />
   </Folder>
   <Folder Name="/domains/platform/" />
   <Folder Name="/domains/platform/api/">
