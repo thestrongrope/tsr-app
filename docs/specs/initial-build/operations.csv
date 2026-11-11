@@ -35,8 +35,8 @@ GET,/classes,classes,create,built
 POST,/classes/join,classes,create,planned
 GET,/join/{code},classes,public,planned
 POST,/classes,classes,create,planned
-GET,/classes/create-options,classes,create,planned
-GET,/classes/teachers,classes,create,planned
+GET,/classes/create-options,classes,create,built
+GET,/classes/teachers,classes,create,built
 GET,/classes/{class_id}/sessions,classes,create,built
 GET,/classes/{class_id}/syllabus-topics,classes,create,built
 GET,/classes/{class_id}/guide,classes,create,built
@@ -86,10 +86,10 @@ POST,/mcq/manage/{quiz_id}/copy,assessment,create,planned
 GET,/classes/{class_id},classes,create,built
 PUT,/classes/{class_id},classes,create,planned
 GET,/classes/{class_id}/manage,classes,create,planned
-GET,/classes/{class_id}/students,classes,create,planned
+GET,/classes/{class_id}/students,classes,create,built
 GET,/classes/{class_id}/students/performance,classes,create,planned
-GET,/classes/{class_id}/teachers,classes,create,planned
-GET,/classes/{class_id}/schedule,classes,create,planned
+GET,/classes/{class_id}/teachers,classes,create,built
+GET,/classes/{class_id}/schedule,classes,create,built
 PUT,/classes/{class_id}/schedule,classes,create,planned
 POST,/classes/{class_id}/students,classes,create,planned
 POST,/classes/{class_id}/students/bulk,classes,create,planned

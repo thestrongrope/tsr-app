@@ -68,6 +68,11 @@ internal static class ClassesListSlice
         var level = IntFilter(context, "level");
         var language = IntFilter(context, "language");
         var q = context.Request.Query["q"].LastOrDefault();
+        if (q is not null && q.Contains('\0'))
+        {
+            return []; // PostgreSQL text cannot hold a NUL byte, so nothing matches.
+        }
+
         var pattern = string.IsNullOrEmpty(q) || q == "0" ? null : "%" + q + "%";
         var all = reach?.All ?? false;
         var gender = reach?.Gender;

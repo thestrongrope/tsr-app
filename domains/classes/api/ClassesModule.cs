@@ -17,6 +17,11 @@ using Tsr.Classes.Api.Features.MyAttendance;
 using Tsr.Classes.Api.Features.MyPerformance;
 using Tsr.Classes.Api.Features.SyllabusLevel;
 using Tsr.Classes.Api.Features.SyllabusLevels;
+using Tsr.Classes.Api.Features.ClassStudents;
+using Tsr.Classes.Api.Features.ClassTeachers;
+using Tsr.Classes.Api.Features.ClassSchedule;
+using Tsr.Classes.Api.Features.ClassCreateOptions;
+using Tsr.Classes.Api.Features.ClassCreateTeachers;
 using Tsr.Shared.Api;
 
 namespace Tsr.Classes.Api;
@@ -53,6 +58,11 @@ public static class ClassesModule
         routes.MapChildPerformance();
         routes.MapClassesList();
         routes.MapClassDetail();
+        routes.MapClassStudents();
+        routes.MapClassTeachers();
+        routes.MapClassSchedule();
+        routes.MapClassCreateOptions();
+        routes.MapClassCreateTeachers();
         routes.MapPlannedRoutes();
         return routes;
     }

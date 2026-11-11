@@ -102,8 +102,8 @@ HTTP 405
 [Asserts]
 jsonpath "$.detail" == "Method Not Allowed"
 
-# The overlap PHP resolves by listing the literal path first: /classes/teachers is not /classes/{class_id}
-GET {{base_url}}/classes/teachers
+# The overlap PHP resolves by listing the literal path first: /classes/{id}/conduction/new is not /classes/{id}/conduction/{session_id}
+GET {{base_url}}/classes/1/conduction/new
 {{auth_header}}: {{auth_value}}
 HTTP 501
 [Asserts]

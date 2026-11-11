@@ -36,3 +36,14 @@ Deferred (recorded, not fixed):
 - `ClassScopes` loads up to 10,000 active classes and all their tags on every permission check that needs the class set.
 - `?q=` in the classes list does not escape `%` and `_` and has no length cap (the same as PHP).
 - The 403 branches of the my-* and child routes cannot be reached over HTTP: every signed-in member holds `performance:read` and `children-performance:read` (PermissionSets.Member), a guest cannot sign in, so no Hurl case exists for them.
+
+## Batch B2 (11 Nov 2026): the five smallest extras
+- GET /classes/{id}/students, /classes/{id}/teachers, /classes/{id}/schedule, /classes/create-options, /classes/teachers: files `features/{class-students,class-teachers,class-schedule,class-create-options,class-create-teachers}/`,
+  `domain/{TeacherSearch,Timezones}.cs`, `data/timezones.json` (PHP's 143 pairs; 121 zones after first-label-wins); contract `spec/tests/{class-students,class-teachers,class-schedule,class-create-options,class-create-teachers}.hurl`;
+  PHP pass, new pass (classes: 22 files, 156 requests on the new side, 21 files, 151 on PHP). No migration, no view: email comes from `identity.v_users`, name and mobile from `membership.v_members`.
+  Fixtures: enrolment rows get a fixed `created_at` (the roster's joinedOn is the day of created_at) and row 9301 a note, both sides.
+  Quirks copied: a caller without classes:update gets email, mobile, notes as null placed first in the object (PHP `[null...] + $s`); schedule slots in id order (PHP has no ORDER BY); /classes/teachers gender is 2 only for the text "2";
+  the teacher pool is every active student of any class plus token 1001 (PHP constant). Deviation: name search uses ILIKE (PHP's collation also ignores accents). A teacher of the class may read its schedule (classes:schedule:own) and roster (names only).
+  planned-surface.hurl: its literal-before-param case moved from /classes/teachers (now built) to /classes/1/conduction/new.
+  Not run: the full Hurl glob (membership and geo prepare); the red run on the new side (501) was not captured separately.
+- Review fix (main thread): a NUL byte in `q` gave 500 on `/classes/teachers`, `/classes/{id}/teachers` and `/classes`; now an empty result, as PHP answers for the teacher searches (Hurl cases added). Any other route passing request text to SQL may share this: check per slice. Deferred: `ILIKE` does not ignore accents as MySQL's `LIKE` does; silent caps of 5000 students and 5000 tags.

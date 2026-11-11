@@ -4,7 +4,7 @@ Classes, levels, tags, schedules, sessions, attendance, enrolment, teachers, syl
 
 ## Status
 
-**Tables, 15 read slices (2026-11-11).** `GET /class-levels` (`api/features/class-levels/ClassLevels.cs`, the slice template) and 14 more reads (batch B1: guides, syllabus, sessions, my and child attendance and performance, the class list and detail; one folder each under `api/features/`, contract `spec/tests/<slice>.hurl`). It supplies access's `IClassScopes` (`api/ClassScopes.cs`); no other public interface yet. Run the contract with `tools/classes-contract.sh test|parity`; notes: `docs/specs/initial-build/fill-b1-notes.md`. The other operations are 501 placeholders in `api/Planned.cs` (catalog: `docs/specs/initial-build/operations.csv`). Facts and decisions:
+**Tables, 20 read slices (2026-11-11).** `GET /class-levels` (`api/features/class-levels/ClassLevels.cs`, the slice template) and 19 more reads (batch B1: guides, syllabus, sessions, my and child attendance and performance, the class list and detail, the roster, the schedule, the two teacher searches, the create options; one folder each under `api/features/`, contract `spec/tests/<slice>.hurl`). It supplies access's `IClassScopes` (`api/ClassScopes.cs`); no other public interface yet. Run the contract with `tools/classes-contract.sh test|parity`; notes: `docs/specs/initial-build/fill-b1-notes.md`. The other operations are 501 placeholders in `api/Planned.cs` (catalog: `docs/specs/initial-build/operations.csv`). Facts and decisions:
 `docs/specs/initial-build/schema-phase-design.md`, `schema-phase-tables.csv`, `schema-phase-notes.md`.
 
 | Part | State |

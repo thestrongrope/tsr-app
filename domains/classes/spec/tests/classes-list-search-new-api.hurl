@@ -34,3 +34,10 @@ HTTP 200
 jsonpath "$" count == 2
 jsonpath "$[0].id" == 9302
 jsonpath "$[1].id" == 9301
+
+# A NUL byte inside q matches no class (it must not be a server error).
+GET {{base_url}}/classes?include=managed&q=a%00b
+Authorization: {{auth_admin}}
+HTTP 200
+[Asserts]
+jsonpath "$" count == 0

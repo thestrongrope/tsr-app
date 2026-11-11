@@ -148,6 +148,104 @@ paths:
         "401": {$ref: "#/components/responses/Problem"}
         "403": {$ref: "#/components/responses/Problem"}
         "404": {$ref: "#/components/responses/Problem"}
+  /classes/create-options:
+    get:
+      operationId: getClassCreateOptions
+      summary: What the create-class form offers
+      description: |
+        classes:create at any scope (403). genders: each of 1, 2 the caller may create for; tags: live tags by name; timezones: 121 zones, first label each.
+        Slice: features/class-create-options/ClassCreateOptions.cs; data: api/data/timezones.json.
+      security:
+        - memberToken: []
+      responses:
+        "200":
+          description: "{genders: [int], tags: [{id, name}], timezones: [{timezone, label}]}"
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+  /classes/teachers:
+    get:
+      operationId: searchNewClassTeachers
+      summary: Teacher candidates for a class not yet created
+      description: |
+        Query gender (2 only when exactly "2", else 1) and q (trimmed; empty gives an empty list). classes:create for that gender (403). At most 20, by name; a gents class takes gents only.
+        Slice: features/class-create-teachers/ClassCreateTeachers.cs; pool: domain/TeacherSearch.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: gender, in: query, schema: {type: string}}
+        - {name: q, in: query, schema: {type: string}}
+      responses:
+        "200":
+          description: "{teachers: [{token, name}]}"
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}/students:
+    get:
+      operationId: listClassStudents
+      summary: A class's active roster
+      description: |
+        Active complete class (404), class-students:read on it (403). email, mobile and notes are null unless the caller holds classes:update on the class.
+        Slice: features/class-students/ClassStudents.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: "{students: [{token, name, email, mobile, joinedOn, notes, mcqAdmin}]}"
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}/teachers:
+    get:
+      operationId: searchClassTeachers
+      summary: Teacher candidates for an existing class
+      description: |
+        Active complete class (404), classes:update on it (403). q trimmed; empty gives an empty list. At most 20, by name; a gents class takes gents only.
+        Slice: features/class-teachers/ClassTeachers.cs; pool: domain/TeacherSearch.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+        - {name: q, in: query, schema: {type: string}}
+      responses:
+        "200":
+          description: "{teachers: [{token, name}]}"
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}/schedule:
+    get:
+      operationId: getClassSchedule
+      summary: A class's schedule slots and the timezones to pick from
+      description: |
+        Active complete class (404), classes:update or classes:schedule on it (403).
+        Slice: features/class-schedule/ClassSchedule.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: "{schedules: [{id, day, hour, minute, timezone}], timezones: [{timezone, label}]}"
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
   /classes/{class_id}/syllabus-topics:
     get:
       operationId: getClassSyllabusTopics

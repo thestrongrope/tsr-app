@@ -124,3 +124,7 @@ INSERT INTO assessment.spot_quiz_questions (id, spot_quiz_id, is_arabic, questio
 VALUES (939304, 9302, FALSE, 'Cls question four', 'a', 'b', 1), (939305, 9302, FALSE, 'Cls question five', 'a', 'b', 1), (939306, 9302, FALSE, 'Cls question six', 'a', 'b', 1);
 INSERT INTO assessment.spot_quiz_responses (id, spot_quiz_id, spot_quiz_question_id, token, response, correct_response, is_correct)
 VALUES (939304, 9302, 939304, 900312, 'a', 'a', 1), (939305, 9302, 939305, 900312, 'b', 'a', 0), (939306, 9302, 939306, 900312, 'b', 'a', 0);
+
+-- The roster slice shows when a student joined (the day of the enrolment row's created_at) and the row's note: fixed here so the day does not move.
+UPDATE classes.class_students SET created_at = joined_on + TIME '08:00' AT TIME ZONE 'UTC' WHERE class_id BETWEEN 9301 AND 9399;
+UPDATE classes.class_students SET notes = 'Cls note &amp; more' WHERE id = 9301;
