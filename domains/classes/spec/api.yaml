@@ -31,6 +31,313 @@ paths:
                   $ref: "#/components/schemas/ClassLevel"
         "401":
           $ref: "#/components/responses/Problem"
+  /guides:
+    get:
+      operationId: listGuideLevels
+      summary: The class levels that can have a guide
+      description: |
+        Permission guides:manage (403 "You do not have permission to do that"). Levels 2 to 5 in level order, id and name only.
+        Slice: features/guides-list/GuidesList.cs.
+      security:
+        - memberToken: []
+      responses:
+        "200":
+          description: "{levels: [{id, name}]}"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [levels]
+                properties:
+                  levels:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, name]
+                      properties:
+                        id: {type: integer}
+                        name: {type: string}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+  /guides/{level_id}:
+    get:
+      operationId: getGuideForEditing
+      summary: The English guide of a level, as the editor starts from it
+      description: |
+        Permission guides:manage. The id is PHP's (int) cast. A level without a guide page (not 2 to 5) is 404 "Level not found". guide is null when no row exists.
+        Slice: features/guide-get/GuideGet.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: level_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: "{guide: string or null, level_name}"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [guide, level_name]
+                properties:
+                  guide: {type: [string, "null"]}
+                  level_name: {type: string}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /classes:
+    get:
+      operationId: listMyClasses
+      summary: The caller's active classes (taught, attended, and with include=managed the ones their reach covers)
+      description: |
+        Permission classes:read; no gender needed. Query include=managed, level, language (int casts), q (LIKE on code or name; "0" is empty). Conducting classes first, then newest id first.
+        role is conducting, attending or managing; studentCount only for managing; joinUrl is null until the public web base is configured.
+        Slice: features/classes-list/ClassesList.cs.
+      security:
+        - memberToken: []
+      responses:
+        "200":
+          description: The class cards with city, country, tags, studentCount and schedules
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: "#/components/schemas/ClassCard"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}:
+    get:
+      operationId: getClass
+      summary: One class with its schedule
+      description: |
+        404 unknown or inactive class; 403 without classes:read on it; a member who is neither the teacher nor covered by their reach needs a numeric gender (400) and must attend the class of their gender.
+        Slice: features/class-detail/ClassDetail.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: The class card and schedules
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ClassCard"}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}/sessions:
+    get:
+      operationId: listClassSessions
+      summary: A class's sessions, newest day first
+      description: |
+        Gender set (400), active class (404), classes:read on the class (403). Query page, pageSize (default 20, at most 100). A bare array; not-conducted sessions are included.
+        Slice: features/class-sessions/ClassSessions.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+        - {name: page, in: query, schema: {type: integer}}
+        - {name: pageSize, in: query, schema: {type: integer}}
+      responses:
+        "200":
+          description: "[{id, conductedOn, conducted, duration, attendance, <five>Conducted, <five>Topic, nonConductionReason}]"
+          content:
+            application/json:
+              schema: {type: array, items: {type: object}}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}/syllabus-topics:
+    get:
+      operationId: getClassSyllabusTopics
+      summary: The topic catalogue of the class's level
+      description: |
+        Gender set (400), active class (404), syllabus:read and classes:read on the class (403). An object of subjects to topics to lessons (only MIQDAD has one), else {}.
+        Slice: features/class-syllabus-topics/ClassSyllabusTopics.cs; data: api/data/syllabus_topics.json.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: The catalogue object
+          content:
+            application/json:
+              schema: {type: object}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}/guide:
+    get:
+      operationId: getClassGuide
+      summary: The guide of the class's level
+      description: |
+        Gender set (400), active class (404), classes:read on the class (403). guide and share_url are null for a level with no or a blank guide; share_url is null until the public web base is configured.
+        Slice: features/class-guide/ClassGuide.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: "{guide, share_url, level_name}"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  guide: {type: [string, "null"]}
+                  share_url: {type: [string, "null"]}
+                  level_name: {type: [string, "null"]}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}/my-attendance:
+    get:
+      operationId: getMyClassAttendance
+      summary: The caller's own attendance in a class
+      description: |
+        attendance:read (403), gender set (400), enrolled student or teacher of an active class (404 "Class not found or not enrolled"). Query start_date, end_date (Y-m-d, inclusive).
+        A bare array of conducted sessions, newest first; a teacher sees every session as absent. Slice: features/my-attendance/MyAttendance.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+        - {name: start_date, in: query, schema: {type: string, format: date}}
+        - {name: end_date, in: query, schema: {type: string, format: date}}
+      responses:
+        "200":
+          description: "[{sessionId, conductedOn, present, recitation}]"
+          content:
+            application/json:
+              schema: {type: array, items: {type: object}}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}/my-performance:
+    get:
+      operationId: getMyClassPerformance
+      summary: The caller's attendance and quiz figures in a class
+      description: |
+        As my-attendance with performance:read. Percentages are floats. The dates bound the sessions, not the quiz part. Slice: features/my-performance/MyPerformance.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+        - {name: start_date, in: query, schema: {type: string, format: date}}
+        - {name: end_date, in: query, schema: {type: string, format: date}}
+      responses:
+        "200":
+          description: "{totalSessions, attendedSessions, attendancePercent, totalRecitation, averageRecitation, quizzesAttempted, quizAverageScore}"
+          content:
+            application/json:
+              schema: {type: object}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /me/children/{child_token}/classes:
+    get:
+      operationId: listChildClasses
+      summary: Every class a linked child is or was enrolled in
+      description: |
+        children-performance:read (403); an active guardian link to the child (404 "Child not found"). No status filter. Slice: features/child-classes/ChildClasses.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: child_token, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: "[{class_id, class_name, class_code, gender, teacher_name, started_on, enrolment_status}]"
+          content:
+            application/json:
+              schema: {type: array, items: {type: object}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /me/children/{child_token}/classes/{class_id}/attendance:
+    get:
+      operationId: getChildClassAttendance
+      summary: A linked child's attendance summary and history in a class
+      description: |
+        children-performance:read (403); an active link and any enrolment row (404 "Child or class not found"). Query start_date, end_date. Slice: features/child-attendance/ChildAttendance.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: child_token, in: path, required: true, schema: {type: string}}
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+        - {name: start_date, in: query, schema: {type: string, format: date}}
+        - {name: end_date, in: query, schema: {type: string, format: date}}
+      responses:
+        "200":
+          description: "{summary: {total_sessions, attended_sessions, attendance_percentage, total_recitation}, history: [{date, duration, present, recitation}]}"
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /me/children/{child_token}/classes/{class_id}/performance:
+    get:
+      operationId: getChildClassPerformance
+      summary: A linked child's attendance and quiz summary in a class
+      description: |
+        As the child's attendance. The dates bound the sessions, not the quiz part. Slice: features/child-performance/ChildPerformance.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: child_token, in: path, required: true, schema: {type: string}}
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+        - {name: start_date, in: query, schema: {type: string, format: date}}
+        - {name: end_date, in: query, schema: {type: string, format: date}}
+      responses:
+        "200":
+          description: "{attendance: {total_sessions, attended_sessions, attendance_percentage, total_recitation}, quizzes: {quizzes_attempted, quiz_average_score}}"
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /syllabus/levels:
+    get:
+      operationId: listSyllabusLevels
+      summary: Every class level with its sort order
+      description: |
+        Permission syllabus:read (every member). Unlike GET /class-levels the sort_order is returned. Slice: features/syllabus-levels/SyllabusLevels.cs.
+      security:
+        - memberToken: []
+      responses:
+        "200":
+          description: "[{id, code, name, sort_order}]"
+          content:
+            application/json:
+              schema: {type: array, items: {type: object}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+  /syllabus/level/{level_id}:
+    get:
+      operationId: getSyllabusLevel
+      summary: One level's active syllabus items
+      description: |
+        Permission syllabus:read. Unknown level (the id is an int cast) is 404 "Level not found". Times are naive Y-m-dTH:i:s. Slice: features/syllabus-level/SyllabusLevel.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: level_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: "{level_id, level_name, level_code, items: [{id, level_id, subject_name, description, link_type, url, sort_order, is_active, created_at, modified_at}]}"
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
 components:
   securitySchemes:
     memberToken:
@@ -39,7 +346,8 @@ components:
       bearerFormat: Firebase ID token
   responses:
     Problem:
-      description: An error. The body is always {"detail": "..."}
+      description: |
+        An error. The body is always {"detail": "..."}
       content:
         application/json:
           schema:
@@ -59,3 +367,33 @@ components:
           type: string
         name:
           type: string
+    ClassCard:
+      type: object
+      description: |
+        The class card of GET /classes and GET /classes/{class_id}. The list adds city, country (raw), tags, studentCount (managing only) and schedules; the detail adds schedules.
+      required: [id, code, name, level, gender, status]
+      properties:
+        id: {type: integer}
+        code: {type: string}
+        name: {type: string}
+        level: {type: integer}
+        levelName: {type: [string, "null"]}
+        language: {type: [integer, "null"]}
+        gender: {type: integer}
+        status: {type: string}
+        location: {type: [string, "null"]}
+        teacherName: {type: [string, "null"]}
+        teacherMobile: {type: [string, "null"]}
+        format: {type: [string, "null"]}
+        startedOn: {type: [string, "null"], format: date}
+        role: {type: [string, "null"], enum: [conducting, attending, managing, null]}
+        joinUrl: {type: [string, "null"]}
+        schedules:
+          type: array
+          items:
+            type: object
+            properties:
+              day: {type: integer}
+              hour: {type: integer}
+              minute: {type: integer}
+              timezone: {type: [string, "null"]}

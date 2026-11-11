@@ -8,7 +8,7 @@ namespace Tsr.Access.Api;
 /// </summary>
 public interface IClassScopes
 {
-    /// <summary>The active classes this member teaches, holds an MCQ flag on, or attends.</summary>
+    /// <summary>The active classes this member teaches, holds an MCQ flag on (the flag only: taught classes are in Taught), or attends.</summary>
     Task<ClassMemberships> MembershipsAsync(int token, CancellationToken ct);
 
     /// <summary>The class, or null when it does not exist or is not active.</summary>

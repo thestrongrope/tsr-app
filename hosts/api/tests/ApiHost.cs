@@ -30,6 +30,9 @@ internal sealed class ApiHost : IDisposable
         });
     }
 
+    /// <summary>The host's services, for a test that checks what the container resolves.</summary>
+    public IServiceProvider Services => factory.Services;
+
     /// <summary>Every route endpoint the app mapped.</summary>
     public IReadOnlyList<RouteEndpoint> Endpoints =>
         factory.Services.GetRequiredService<EndpointDataSource>().Endpoints.OfType<RouteEndpoint>().ToList();

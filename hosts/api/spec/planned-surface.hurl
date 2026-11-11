@@ -44,7 +44,7 @@ HTTP 501
 jsonpath "$.detail" == "Not implemented"
 
 # classes (a path with parameters: any non-slash segment)
-GET {{base_url}}/me/children/900009/classes
+GET {{base_url}}/classes/900009/conduction/new
 {{auth_header}}: {{auth_value}}
 HTTP 501
 [Asserts]

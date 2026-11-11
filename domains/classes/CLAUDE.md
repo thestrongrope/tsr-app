@@ -4,13 +4,13 @@ Classes, levels, tags, schedules, sessions, attendance, enrolment, teachers, syl
 
 ## Status
 
-**Tables, 1 slice (2026-11-11).** `GET /class-levels` is built (`api/features/class-levels/ClassLevels.cs`, the slice template; contract `spec/tests/class-levels.hurl`); no public interface yet. The other operations are 501 placeholders in `api/Planned.cs` (catalog: `docs/specs/initial-build/operations.csv`). Facts and decisions:
+**Tables, 15 read slices (2026-11-11).** `GET /class-levels` (`api/features/class-levels/ClassLevels.cs`, the slice template) and 14 more reads (batch B1: guides, syllabus, sessions, my and child attendance and performance, the class list and detail; one folder each under `api/features/`, contract `spec/tests/<slice>.hurl`). It supplies access's `IClassScopes` (`api/ClassScopes.cs`); no other public interface yet. Run the contract with `tools/classes-contract.sh test|parity`; notes: `docs/specs/initial-build/fill-b1-notes.md`. The other operations are 501 placeholders in `api/Planned.cs` (catalog: `docs/specs/initial-build/operations.csv`). Facts and decisions:
 `docs/specs/initial-build/schema-phase-design.md`, `schema-phase-tables.csv`, `schema-phase-notes.md`.
 
 | Part | State |
 |---|---|
 | Schema `classes`, 16 tables: `classes`, `class_levels`, `tags`, `class_tags`, `class_schedules`, `topics`, `class_schedule_topics`, `class_sessions`, `class_attendance`, `class_students` (enrolment), `student_transfers`, `class_audit_log`, `teachers`, `teachers_history`, `syllabus`, `guides` | built; migration `Initial` |
-| Port `IClassScopes` (access) and `IClassEnrolments` (membership), supplied from here | not yet: access and membership use their defaults |
+| Port `IClassScopes` (access), supplied from here (`Services.Replace`, because `AddAccess` registers first) | built; `IClassEnrolments` (membership) not yet: membership uses its default |
 | Published views `classes.v_classes`, `classes.v_enrolments` (migration `PublishedViews`) | built |
 | PHP's trigger on `classes` (the share `link`) | not ported: the slice that creates a class will set it |
 
@@ -20,7 +20,7 @@ Classes, levels, tags, schedules, sessions, attendance, enrolment, teachers, syl
   integers; the one foreign key (`syllabus` to `class_levels`) stays inside the schema. A session's day (`conducted_on`) and the class dates are `date`.
 - `classes.city` and `classes.country` (the columns access rules match) use the ICU collation `public.geo_ci_ai` (case and accent insensitive, as MariaDB's
   was), declared by platform's migration. Every other text column is `citext` with a length CHECK.
-- Dependencies: none (`ClassesModule.Dependencies` is empty). Register it after platform (`Program.cs`): its migration uses platform's collation.
+- Dependencies: `access` (`ClassesModule.Dependencies`): `Permissions` and the port `IClassScopes` it supplies. Other domains are read through their published `v_*` views in SQL (`membership.v_members`, `v_guardian_links`, `platform.v_genders`, `assessment.v_quiz_results`). Register it after platform (`Program.cs`): its migration uses platform's collation.
 - Events: none published, none consumed.
 
 ## Checks

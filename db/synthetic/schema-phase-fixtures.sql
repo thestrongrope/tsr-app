@@ -7,7 +7,7 @@
  * IPs are from the documentation range. Rows have fixed ids (9001 and up) and ON CONFLICT DO NOTHING, so running it again changes nothing.
  * Not a migration: production must never get these rows.
  *
- *   members used: 900001 (gents), 900002 (ladies), 900104 (ladies admin, a teacher here), 900107 (class teacher)
+ *   members used: 900001 (gents), 900002 (ladies), 900303 (gents class teacher), 900304 (ladies class teacher): not 9001xx (the access contract holds those to no class) and not 9003xx (the classes contract fixtures)
  *   genders: 1 Male, 2 Female. Languages: 1 English, 2 Urdu, 3 Hindi. Levels 1 to 5 (names are the programme's).
  *   classes: 9001 gents active, 9002 ladies active, 9003 gents inactive (status I), 9004 ladies active online
  */
@@ -25,7 +25,7 @@ ON CONFLICT DO NOTHING;
 INSERT INTO platform.outbound_messages (id, channel, recipient, payload, dedupe_key, status, attempts, next_attempt_at, created_by, created_at, sent_at, error)
 VALUES
   (9001, 'push', 'synthetic-device-0001', '{"title":"Synthetic push","body":"Invented text"}', 'synthetic-push-1', 'queued', 0, NULL, NULL, TIMESTAMPTZ '2026-01-10 09:00:00+00', NULL, NULL),
-  (9002, 'whatsapp:gents', '+910000000001', '{"text":"Invented reminder"}', 'synthetic-wa-1', 'sent', 1, NULL, 900107, TIMESTAMPTZ '2026-01-10 09:01:00+00', TIMESTAMPTZ '2026-01-10 09:01:30+00', NULL),
+  (9002, 'whatsapp:gents', '+910000000001', '{"text":"Invented reminder"}', 'synthetic-wa-1', 'sent', 1, NULL, 900303, TIMESTAMPTZ '2026-01-10 09:01:00+00', TIMESTAMPTZ '2026-01-10 09:01:30+00', NULL),
   (9003, 'whatsapp:ladies', '+910000000002', NULL, NULL, 'failed', 3, TIMESTAMPTZ '2026-01-11 09:00:00+00', NULL, TIMESTAMPTZ '2026-01-10 09:02:00+00', NULL, 'Synthetic delivery error')
 ON CONFLICT DO NOTHING;
 
@@ -43,7 +43,7 @@ WHERE NOT EXISTS (SELECT 1 FROM identity.account_deletion_requests r WHERE r.con
 -- classes -----------------------------------------------------------------------------------------------------------------------------
 
 INSERT INTO classes.class_levels (id, code, name, sort_order)
-VALUES (1, 'BIL', 'BILAL', 1), (2, 'AMM', 'AMMAR', 2), (3, 'MIQ', 'MIQDAD', 3), (4, 'ABU', 'ABUZAR', 4), (5, 'SAL', 'SALMAN', 5)
+VALUES (1, 'SM', 'SALMAN', 1), (2, 'AG', 'ABUZAR', 2), (3, 'MK', 'MIQDAD', 3), (4, 'AY', 'AMMAR', 4), (5, 'B', 'BILAL', 5)
 ON CONFLICT DO NOTHING;
 
 INSERT INTO classes.tags (id, name) VALUES (9001, 'synthetic-beginners'), (9002, 'synthetic-online') ON CONFLICT DO NOTHING;
@@ -52,13 +52,13 @@ INSERT INTO classes.classes
   (id, code, language_id, link, name, class_level_id, started_on, teacher, gender, format, address, city, country, lat, lng, location,
    extra_students, status, shutdown_on, completed_on, comments, created_by)
 VALUES
-  (9001, 'SYN-G-001', 1, 'synlnk0001', 'Synthetic Gents Class', 1, DATE '2025-09-01', 900107, 1, 'Offline', '1 Invented Street', 'Mumbai', 'India',
+  (9001, 'SYN-G-001', 1, 'synlnk0001', 'Synthetic Gents Class', 1, DATE '2025-09-01', 900303, 1, 'Offline', '1 Invented Street', 'Mumbai', 'India',
    19.07600000, 72.87770000, 'Synthetic Hall', NULL, 'A', NULL, NULL, NULL, 900003),
-  (9002, 'SYN-L-001', 2, 'synlnk0002', 'Synthetic Ladies Class', 2, DATE '2025-09-08', 900104, 2, 'Offline', '2 Invented Road', 'Dubai', 'United Arab Emirates',
+  (9002, 'SYN-L-001', 2, 'synlnk0002', 'Synthetic Ladies Class', 2, DATE '2025-09-08', 900304, 2, 'Offline', '2 Invented Road', 'Dubai', 'United Arab Emirates',
    25.20480000, 55.27080000, 'Synthetic Centre', 'Invented Guest One, Invented Guest Two', 'A', NULL, NULL, 'Invented comment', 900003),
-  (9003, 'SYN-G-002', 1, 'synlnk0003', 'Synthetic Closed Gents Class', 3, DATE '2024-09-01', 900107, 1, 'Offline', NULL, 'Mumbai', 'India',
+  (9003, 'SYN-G-002', 1, 'synlnk0003', 'Synthetic Closed Gents Class', 3, DATE '2024-09-01', 900303, 1, 'Offline', NULL, 'Mumbai', 'India',
    NULL, NULL, NULL, NULL, 'I', DATE '2025-06-30', DATE '2025-06-30', 'Closed for the synthetic story', 900003),
-  (9004, 'SYN-L-002', 3, 'synlnk0004', 'Synthetic Online Ladies Class', 3, DATE '2025-10-01', 900104, 2, 'Online', NULL, 'Karachi', 'Pakistan',
+  (9004, 'SYN-L-002', 3, 'synlnk0004', 'Synthetic Online Ladies Class', 3, DATE '2025-10-01', 900304, 2, 'Online', NULL, 'Karachi', 'Pakistan',
    NULL, NULL, NULL, NULL, 'A', NULL, NULL, NULL, 900003)
 ON CONFLICT DO NOTHING;
 
@@ -80,10 +80,10 @@ INSERT INTO classes.class_sessions
   (id, class_id, teacher, conducted_on, conducted, non_conduction_reason, conducted_by, duration, attendance, quran_recitation_surah,
    quran_recitation_verse, aqaed_conducted, aqaed_topic, akhlaq_conducted, akhlaq_topic, assignments, assignment_count, team_request, created_by)
 VALUES
-  (9001, 9001, 900107, DATE '2025-09-06', 1, NULL, 900107, 60, 1, 1, 7, 'Y', 'Synthetic belief topic', 'N', NULL, 'Invented assignment', 1, NULL, 900107),
-  (9002, 9001, 900107, DATE '2025-09-13', 0, 'Synthetic: teacher unwell', NULL, NULL, NULL, NULL, NULL, 'N', NULL, 'N', NULL, NULL, 0, NULL, 900107),
-  (9003, 9002, 900104, DATE '2025-09-14', 1, NULL, 900104, 45, 1, 2, 5, 'Y', 'Synthetic belief topic', 'Y', 'Synthetic manners topic', NULL, 0, 'Invented request', 900104),
-  (9004, 9004, 900104, DATE '2025-10-08', 1, NULL, 900104, 50, 0, NULL, NULL, 'Y', 'Synthetic belief topic', 'N', NULL, NULL, 0, NULL, 900104)
+  (9001, 9001, 900303, DATE '2025-09-06', 1, NULL, 900303, 60, 1, 1, 7, 'Y', 'Synthetic belief topic', 'N', NULL, 'Invented assignment', 1, NULL, 900303),
+  (9002, 9001, 900303, DATE '2025-09-13', 0, 'Synthetic: teacher unwell', NULL, NULL, NULL, NULL, NULL, 'N', NULL, 'N', NULL, NULL, 0, NULL, 900303),
+  (9003, 9002, 900304, DATE '2025-09-14', 1, NULL, 900304, 45, 1, 2, 5, 'Y', 'Synthetic belief topic', 'Y', 'Synthetic manners topic', NULL, 0, 'Invented request', 900304),
+  (9004, 9004, 900304, DATE '2025-10-08', 1, NULL, 900304, 50, 0, NULL, NULL, 'Y', 'Synthetic belief topic', 'N', NULL, NULL, 0, NULL, 900304)
 ON CONFLICT DO NOTHING;
 
 INSERT INTO classes.class_attendance (id, session_id, token, name, extra_student, present, recitation, pages_read, assignments_done, followup)
@@ -96,9 +96,9 @@ ON CONFLICT DO NOTHING;
 INSERT INTO classes.class_students
   (id, class_id, token_no, joined_on, data_admin, mcq_admin, assignment_admin, removed_at, removed_reason, removed_by, status, notes, added_by)
 VALUES
-  (9001, 9001, 900001, DATE '2025-09-01', 0, 1, 0, NULL, NULL, NULL, 'A', 'Invented class-specific note', 900107),
-  (9002, 9002, 900002, DATE '2025-09-08', 1, 0, 1, NULL, NULL, NULL, 'A', NULL, 900104),
-  (9003, 9003, 900001, DATE '2024-09-01', 0, 0, 0, TIMESTAMPTZ '2025-06-30 00:00:00+00', 'Synthetic: class closed', 900003, 'I', NULL, 900107)
+  (9001, 9001, 900001, DATE '2025-09-01', 0, 1, 0, NULL, NULL, NULL, 'A', 'Invented class-specific note', 900303),
+  (9002, 9002, 900002, DATE '2025-09-08', 1, 0, 1, NULL, NULL, NULL, 'A', NULL, 900304),
+  (9003, 9003, 900001, DATE '2024-09-01', 0, 0, 0, TIMESTAMPTZ '2025-06-30 00:00:00+00', 'Synthetic: class closed', 900003, 'I', NULL, 900303)
 ON CONFLICT DO NOTHING;
 
 INSERT INTO classes.student_transfers (id, token_no, from_class_id, to_class_id, type, reason, transferred_by, transferred_at)
@@ -112,11 +112,11 @@ VALUES
 ON CONFLICT DO NOTHING;
 
 INSERT INTO classes.teachers (token, salman, abuzar, miqdad, ammar, bilal, comments, status, created_by)
-VALUES (900107, 0, 0, 1, 1, 1, 'Invented teacher note', 'A', 900003), (900104, 0, 0, 0, 1, 1, NULL, 'A', 900003)
+VALUES (900303, 0, 0, 1, 1, 1, 'Invented teacher note', 'A', 900003), (900304, 0, 0, 0, 1, 1, NULL, 'A', 900003)
 ON CONFLICT DO NOTHING;
 
 INSERT INTO classes.teachers_history (id, token, salman, abuzar, miqdad, ammar, bilal, comments, status, created_by)
-VALUES (9001, 900107, 0, 0, 0, 1, 1, 'Before miqdad training', 'A', 900003)
+VALUES (9001, 900303, 0, 0, 0, 1, 1, 'Before miqdad training', 'A', 900003)
 ON CONFLICT DO NOTHING;
 
 INSERT INTO classes.syllabus (id, level_id, subject_name, description, link_type, url, sort_order, is_active, created_by)
@@ -150,9 +150,9 @@ INSERT INTO assessment.spot_quizzes
    published_at, published_by, created_by, created_at)
 VALUES
   (9001, 'SYNQ0001', 'SYN-MCQ-1', 1, 1, 9001, NULL, NULL, 'Synthetic published quiz', 9001, 'Synthetic belief topic', 1, 1,
-   TIMESTAMPTZ '2025-09-06 12:00:00+00', 900107, 900107, TIMESTAMPTZ '2025-09-06 11:00:00+00'),
+   TIMESTAMPTZ '2025-09-06 12:00:00+00', 900303, 900303, TIMESTAMPTZ '2025-09-06 11:00:00+00'),
   (9002, 'SYNQ0002', NULL, 1, 2, NULL, NULL, NULL, 'Synthetic draft quiz', 9002, NULL, NULL, 0,
-   NULL, NULL, 900104, TIMESTAMPTZ '2025-09-14 11:00:00+00')
+   NULL, NULL, 900304, TIMESTAMPTZ '2025-09-14 11:00:00+00')
 ON CONFLICT DO NOTHING;
 
 INSERT INTO assessment.spot_quiz_questions
@@ -189,7 +189,7 @@ ON CONFLICT DO NOTHING;
 INSERT INTO notifications.notifications
   (notification_id, title, body, target_audience_criteria, sent_at, created_by, device_count, success_count, failure_count, priority, image_url, action_link)
 VALUES
-  (9001, 'Synthetic notice', 'Invented body text.', '{"class_id":9001}', TIMESTAMPTZ '2026-01-10 09:00:00+00', 900107, 1, 1, 0, 'NORMAL', NULL, NULL),
+  (9001, 'Synthetic notice', 'Invented body text.', '{"class_id":9001}', TIMESTAMPTZ '2026-01-10 09:00:00+00', 900303, 1, 1, 0, 'NORMAL', NULL, NULL),
   (9002, 'Synthetic announcement', 'Another invented body.', '{"gender":"all"}', TIMESTAMPTZ '2026-01-11 09:00:00+00', 900003, 2, 1, 1, 'HIGH',
    'https://example.invalid/image.png', 'https://example.invalid/link')
 ON CONFLICT DO NOTHING;
@@ -219,9 +219,9 @@ ON CONFLICT DO NOTHING;
 INSERT INTO notifications.notifier_sent_messages
   (id, run_id, teacher_token, teacher_mobile, teacher_name, total_missing, message_excerpt, status, error, sent_at)
 VALUES
-  (9001, 9001, 900107, '+910000000001', 'Synthetic Teacher One', 3, 'Invented excerpt of the reminder', 'sent', NULL, TIMESTAMPTZ '2026-01-12 03:30:30+00'),
+  (9001, 9001, 900303, '+910000000001', 'Synthetic Teacher One', 3, 'Invented excerpt of the reminder', 'sent', NULL, TIMESTAMPTZ '2026-01-12 03:30:30+00'),
   (9002, 9001, NULL, '+910000000003', NULL, NULL, NULL, 'skipped', NULL, TIMESTAMPTZ '2026-01-12 03:30:40+00'),
-  (9003, 9002, 900104, '+910000000002', 'Synthetic Teacher Two', 1, 'Invented excerpt', 'dry_run', NULL, TIMESTAMPTZ '2026-01-12 04:00:02+00')
+  (9003, 9002, 900304, '+910000000002', 'Synthetic Teacher Two', 1, 'Invented excerpt', 'dry_run', NULL, TIMESTAMPTZ '2026-01-12 04:00:02+00')
 ON CONFLICT DO NOTHING;
 
 -- send_at and send_time are wall-clock values in tz, not UTC.
@@ -229,11 +229,11 @@ INSERT INTO notifications.class_scheduled_notifications
   (id, class_id, created_by, created_by_user_id, title, body, action_link, kind, send_at, weekdays, send_time, tz,
    class_schedule_id, offset_minutes, repeat_weekly, status, last_run_at, last_run_key)
 VALUES
-  (9001, 9001, 900107, 900107, 'Synthetic one-off', 'Invented body', NULL, 'ONCE', TIMESTAMP '2026-02-01 18:00:00', NULL, NULL, 'Asia/Kolkata',
+  (9001, 9001, 900303, 900303, 'Synthetic one-off', 'Invented body', NULL, 'ONCE', TIMESTAMP '2026-02-01 18:00:00', NULL, NULL, 'Asia/Kolkata',
    NULL, NULL, 0, 'done', TIMESTAMPTZ '2026-02-01 12:30:00+00', 'once-2026-02-01'),
-  (9002, 9001, 900107, 900107, 'Synthetic weekly', 'Invented body', 'https://example.invalid/link', 'WEEKLY', NULL, '1,3', TIME '19:30', 'Asia/Kolkata',
+  (9002, 9001, 900303, 900303, 'Synthetic weekly', 'Invented body', 'https://example.invalid/link', 'WEEKLY', NULL, '1,3', TIME '19:30', 'Asia/Kolkata',
    NULL, NULL, 0, 'active', NULL, NULL),
-  (9003, 9002, 900104, 900104, 'Synthetic reminder before class', 'Invented body', NULL, 'REMINDER', NULL, NULL, NULL, 'Asia/Dubai',
+  (9003, 9002, 900304, 900304, 'Synthetic reminder before class', 'Invented body', NULL, 'REMINDER', NULL, NULL, NULL, 'Asia/Dubai',
    9002, -30, 1, 'active', NULL, NULL)
 ON CONFLICT DO NOTHING;
 

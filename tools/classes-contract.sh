@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+# Run classes's Hurl contract files (domains/classes/spec/tests/*.hurl) against one side.
+# Usage: tools/classes-contract.sh test|parity [--prepare] [extra hurl args]
+#   test    the new API on the synthetic TEST stack (http://localhost:8089; tools/test-stack.sh up); never run against the dev stack (real data)
+#   parity  the PHP API on the parity stack (http://127.0.0.1:18091, tools/parity-php/README.md; synthetic data only)
+#   --prepare  do the preparation below and stop
+# Preparation, so both sides answer from the same data: loads the classes fixtures (db/synthetic/classes-fixtures.sql for the new API,
+# tools/parity-php/classes-fixtures.sql for PHP: the same members, classes, enrolments, sessions, guardian links, guides and syllabus), signs
+# each fixture member in at that side's Auth emulator and writes build/<side>/classes.vars (auth_<alias>=Bearer ...). The slices only read, so a
+# file can be run again and files can run in parallel.
+# Only the tsr-app-test and tsr-parity compose projects are touched. Needs docker, curl, jq, hurl. Prints no secret.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SIDE="${1:?usage: classes-contract.sh test|parity [--prepare] [hurl args]}"
+shift || true
+cd "$ROOT"
+
+PREPARE_ONLY=0
+if [ "${1:-}" = "--prepare" ]; then
+  PREPARE_ONLY=1
+  shift
+fi
+
+FILES=(domains/classes/spec/tests/*.hurl)
+
+# alias=email: the fixture members the files sign in as (Hurl variable auth_<alias>); tokens are in db/synthetic/classes-fixtures.sql.
+MEMBERS=(
+  "teacher_g=cls.teacher.gents@example.invalid"
+  "teacher_l=cls.teacher.ladies@example.invalid"
+  "student_g=cls.student.gents@example.invalid"
+  "student_l=cls.student.ladies@example.invalid"
+  "outsider=cls.outsider@example.invalid"
+  "nogender=cls.nogender@example.invalid"
+  "admin=cls.admin@example.invalid"
+  "removed=cls.removed@example.invalid"
+  "parent=cls.parent@example.invalid"
+)
+
+parity() { docker compose -p tsr-parity -f tools/parity-php/compose.parity.yml --env-file tools/parity-php/parity.env "$@"; }
+php_sql() { parity exec -T db sh -c 'mariadb -uroot -p"$MARIADB_ROOT_PASSWORD" tsr_synth'; }
+test_sql() { docker compose -p tsr-app-test -f docker-compose.dev.yml exec -T db psql -v ON_ERROR_STOP=1 -q -U tsr -d tsr; }
+
+case "$SIDE" in
+  test)
+    export TSR_EMULATOR_PORT=19100
+    "$ROOT/tools/require-synthetic-stack.sh" tsr-app-test
+    test_sql < db/synthetic/classes-fixtures.sql
+    MINT="tools/dev-auth/mint-token.sh"
+    BASE="http://localhost:8089"
+    VARS="build/test/classes.vars" ;;
+  parity)
+    php_sql < tools/parity-php/classes-fixtures.sql
+    # Files named *-new-api.hurl hold cases PHP gets wrong (a PHP bug is not copied); they run on the new API only.
+    KEPT=()
+    for f in "${FILES[@]}"; do case "$f" in *-new-api.hurl) ;; *) KEPT+=("$f") ;; esac; done
+    FILES=("${KEPT[@]}")
+    MINT="tools/parity-php/mint-token.sh"
+    BASE="http://127.0.0.1:18091"
+    VARS="build/parity-php/classes.vars" ;;
+  *) echo "side must be test or parity" >&2; exit 1 ;;
+esac
+
+mkdir -p "$(dirname "$VARS")"
+umask 077
+: > "$VARS"
+TMP="$(mktemp)"
+trap 'rm -f "$TMP"' EXIT
+for entry in "${MEMBERS[@]}"; do
+  alias="${entry%%=*}"
+  email="${entry#*=}"
+  "$MINT" "$email" "$TMP" > /dev/null
+  printf 'auth_%s=%s\n' "$alias" "$(sed -n 's/^auth_value=//p' "$TMP")" >> "$VARS"
+done
+echo "classes fixtures loaded on $SIDE; tokens in $VARS"
+
+if [ "$PREPARE_ONLY" = 1 ]; then
+  exit 0
+fi
+
+hurl --test --variable "base_url=$BASE" --variables-file "$VARS" "$@" "${FILES[@]}"

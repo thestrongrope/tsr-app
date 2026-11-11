@@ -1,7 +1,6 @@
 # GET /class-levels contract: 2 cases, one file per slice. Runs against any implementation.
-# Variables: base_url, auth_header, auth_value (a token is never written into this file). Synthetic members only.
-#   hurl --test --variable base_url=http://localhost:8089 --variables-file build/test/token.vars class-levels.hurl
-# (tools/identity-contract.sh test writes build/test/token.vars; PHP parity: build/parity-php/token.vars.)
+# Variables: base_url and auth_<alias> (tools/classes-contract.sh signs the fixture members in). Synthetic members only.
+#   hurl --test --variable base_url=http://localhost:8089 --variables-file build/test/classes.vars class-levels.hurl
 
 # 1. Without sign-in: 401 with a detail
 GET {{base_url}}/class-levels
@@ -11,7 +10,7 @@ jsonpath "$.detail" matches /\S/
 
 # 2. A signed-in member gets the levels: id, code and name, nothing else
 GET {{base_url}}/class-levels
-{{auth_header}}: {{auth_value}}
+Authorization: {{auth_student_g}}
 HTTP 200
 [Asserts]
 header "Content-Type" contains "application/json"
@@ -22,11 +21,11 @@ jsonpath "$[0].name" isString
 jsonpath "$[0].sort_order" not exists
 jsonpath "$[0].sortOrder" not exists
 
-# The synthetic seed holds five levels with sort_order 1 to 5 (db/synthetic/schema-phase-fixtures.sql): order is sort_order, then id
-jsonpath "$[0].code" == "BIL"
-jsonpath "$[1].code" == "AMM"
-jsonpath "$[2].code" == "MIQ"
-jsonpath "$[3].code" == "ABU"
-jsonpath "$[4].code" == "SAL"
+# The five levels are PHP's reference data (db/synthetic/classes-fixtures.sql aligns the seed to them): order is sort_order, then id
+jsonpath "$[0].code" == "SM"
+jsonpath "$[1].code" == "AG"
+jsonpath "$[2].code" == "MK"
+jsonpath "$[3].code" == "AY"
+jsonpath "$[4].code" == "B"
 jsonpath "$[4].id" == 5
 

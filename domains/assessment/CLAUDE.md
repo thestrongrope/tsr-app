@@ -30,4 +30,4 @@ dotnet test db/tests                       # the migrated database
 
 | View | Columns | Known readers |
 |---|---|---|
-| `v_quiz_results` | class_id, token, quiz_id, published_at, correct, max_marks | classes (my and child performance, roster, student reports) |
+| `v_quiz_results` | class_id, token, quiz_id, published_at, correct, max_marks, answered (the member's response count), answered_at (their first response's time); migration `QuizResultsAnswered` | classes (my and child performance, roster, student reports) |
