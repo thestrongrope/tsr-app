@@ -18,6 +18,7 @@ example**: copy its layout when you build another domain (`domains/CLAUDE.md`).
 | `geo-postal` | `POST /geo/postal` | built; signed in, rate limited |
 | `geo-cities` | `POST /geo/cities` | built; signed in, rate limited |
 | `lookups` table, public `Lookups` and `Geo` read interfaces | - | built (no route); `membership` uses them | 
+| `ReportExport` (public): xlsx and PDF report downloads for every domain | - | built (batch B5d); no route of its own; used by 9 classes and 3 membership download routes |
 | access log (`GET /admin/access-log` and its download) | - | not started; PHP still serves it (waits for the report generator: phase-3-platform-design.md) |
 
 ## What it owns
@@ -52,6 +53,14 @@ definition names it unqualified). The geo rate limit (60 calls a minute per memb
 
 `PlatformCommands.RecordAdminAccessAsync(db, httpContext, userId, token, roleId, ct)` (`api/PlatformCommands.cs`): PHP's `api_log_admin_action`. One `admin_access_log` row for a caller whose role is 1, 3, 4, 5 or 7 (path, method, client address, user agent, referer cut to the column lengths, no session id), written on the caller's connection outside a transaction; a failed write is logged and never fails the request. Used by `classes`; proved by `db/tests/AdminAuditTests.cs`.
 
+## Report downloads (`ReportExport`)
+
+PHP's `ReportExportModel` and `api_send_report_download`, one public class (`api/ReportExport.cs`; with `ReportFormat` and `ReportSection(heading, headers, rows)`). A download route calls `ReportExport.TryGetFormat` (and passes `ReportExport.FormatRefusal` as `RequireMember(precheck:)`, so a bad `?format=` is 422 BEFORE the sign-in, as PHP), then `export.DownloadAsync(format, title, sections, filenameBase, ct)`, which answers 200 with PHP's headers (`attachment; filename="X.xlsx"`), or 503 `{"detail": ...}` when the PDF renderer is down (PHP has no such answer). A file name is cut to letters, digits, space, `.`, `_`, `-`.
+
+- **xlsx**: ClosedXML 0.105.1 (MIT; the only project that references it). Layout as PHP: bold title at 14, per section a bold heading, a bold header row, the rows, a blank row; ints and floats are numbers, everything else text (so a leading `=` is text, never a formula); null and "" leave no cell; sheet name = title with `[]:*?/\` as spaces, 31 characters. Differences: a cell is cut at 32767 characters (ClosedXML throws), control characters XML cannot carry are dropped, an empty sheet name is "Report".
+- **PDF**: `domain/ReportHtml.cs` builds the page PHP gave Dompdf with every value HTML-encoded and no external resource; `domain/GotenbergRenderer.cs` posts it to Gotenberg (`POST /forms/chromium/convert/html`, A4 landscape, 60 s, 50 MB) through the one boundary interface `IPdfRenderer` (internal; the db tests swap it for a fake). Setting `TSR_GOTENBERG_URL` is **required**: the API refuses to start without an http(s) URL (the `--migrate` job needs none). The compose service `gotenberg` (image `gotenberg/gotenberg:8`, no published port, curl healthcheck) is in `docker-compose.dev.yml`.
+- Tests: `domain/ReportXlsx.Tests.cs`, `ReportHtml.Tests.cs`, `GotenbergRenderer.Tests.cs`, `GotenbergSettings.Tests.cs`, `api/ReportExport.Tests.cs`; `hosts/api/tests/GotenbergSettingTests.cs`; the real renderer is proved by the Hurl download files on the test stack. Notes: `docs/specs/initial-build/fill-b5d-notes.md`.
+
 ## Public read interfaces
 
 `Geo` (`HasCountriesAsync`, `CountryByNameAsync`, `ByPostalCodeAsync`, `FromPostalCodeAsync`, with `GeoCountryInfo` and `GeoPlace`) is the one geo lookup code: the postal code slice answers from it and `membership` validates a profile with it. A missing geo table answers "nothing" (logged), as PHP. `Lookups.LabelsAsync(type)` returns the active labels in display order and throws for an unseeded type (PHP `labelsOrFail`).
@@ -75,6 +84,7 @@ dependency.
 | One use case end to end | `api/features/submit-feedback/SubmitFeedback.cs` |
 | App version and release notes rules (the catalog file) | `api/domain/AppCatalog.cs`, `AppCatalogSource.cs` |
 | Geo rules (body, fields, postal tries, LIKE, entities, rate limit) | `api/domain/Geo*.cs`, `PhpText.cs` |
+| Report downloads (xlsx, PDF) | `api/ReportExport.cs`, `api/domain/ReportXlsx.cs`, `ReportHtml.cs`, `GotenbergRenderer.cs` |
 | Rules shared by slices | `api/domain/` (`ClientId`, `FeedbackText`) |
 | The feedback screen (Flutter) | `app/lib/features/submit_feedback/` |
 

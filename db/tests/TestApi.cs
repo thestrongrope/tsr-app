@@ -26,6 +26,7 @@ internal static class TestApi
             builder.UseSetting("TSR_DB", TestDatabase.AppConnection);
             builder.UseSetting("TSR_FIREBASE_PROJECT_ID", "demo-tsr-test");
             builder.UseSetting("TSR_AUTH_EMULATOR_HOST", "localhost:9099");
+            builder.UseSetting("TSR_GOTENBERG_URL", "http://gotenberg.invalid:3000");
             builder.ConfigureTestServices(services => services.AddSingleton<ICallerVerifier, StubVerifier>());
         });
 

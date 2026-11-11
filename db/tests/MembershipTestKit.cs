@@ -2,7 +2,10 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json.Nodes;
+using ClosedXML.Excel;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Tsr.Db.Tests;
 
@@ -12,7 +15,11 @@ namespace Tsr.Db.Tests;
 /// </summary>
 internal sealed class MembershipTestKit : IDisposable
 {
-    private readonly WebApplicationFactory<Program> _factory = TestApi.Create();
+    private readonly WebApplicationFactory<Program> _factory;
+
+    /// <param name="configure">Replaces services of the API under test (for example the PDF renderer, which needs a Gotenberg container).</param>
+    public MembershipTestKit(Action<IServiceCollection>? configure = null) =>
+        _factory = configure is null ? TestApi.Create() : TestApi.Create().WithWebHostBuilder(builder => builder.ConfigureTestServices(configure));
 
     public static Task ResetAsync() => TestDatabase.ExecuteAsync(
         """
@@ -64,7 +71,46 @@ internal sealed class MembershipTestKit : IDisposable
         return new Reply(response.StatusCode, text);
     }
 
+    /// <summary>A download as one caller (or, with <paramref name="signedIn"/> false, as nobody): the status, the headers that matter and the raw bytes.</summary>
+    public async Task<Download> DownloadAsync(int token, string path, bool signedIn = true)
+    {
+        using var client = _factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, path);
+        if (signedIn)
+        {
+            foreach (var (name, value) in TestApi.SignedInAs("uid-" + token, EmailOf(token)))
+            {
+                request.Headers.Add(name, value);
+            }
+        }
+        else
+        {
+            request.Headers.Add(TestApi.Outcome, "missing");
+        }
+
+        using var response = await client.SendAsync(request);
+        return new Download(
+            response.StatusCode,
+            response.Content.Headers.ContentType?.ToString(),
+            response.Content.Headers.ContentDisposition?.ToString(),
+            await response.Content.ReadAsByteArrayAsync());
+    }
+
     public void Dispose() => _factory.Dispose();
+
+    /// <summary>One download answer. <see cref="Text"/> is the body read as UTF-8 (for a JSON refusal); <see cref="Cells"/> every non-empty cell of a workbook, as text.</summary>
+    internal sealed record Download(HttpStatusCode Status, string? ContentType, string? Disposition, byte[] Bytes)
+    {
+        public string Text => Encoding.UTF8.GetString(Bytes);
+
+        public XLWorkbook Workbook() => new(new MemoryStream(Bytes));
+
+        public IReadOnlyList<string> Cells()
+        {
+            using var book = Workbook();
+            return [.. book.Worksheets.SelectMany(sheet => sheet.CellsUsed()).Select(cell => cell.GetString())];
+        }
+    }
 
     /// <summary>A status and the body text; <see cref="Json"/> parses it.</summary>
     internal sealed record Reply(HttpStatusCode Status, string Body)

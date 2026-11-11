@@ -149,6 +149,29 @@ internal static class ConductionReport
             : Math.Round((decimal)row.Attendance.Value / students, 4, MidpointRounding.AwayFromZero).ToString("0.0000", CultureInfo.InvariantCulture);
     }
 
+    /// <summary>What the screen and the download both show of a loaded report: the figures and the week rows narrowed to a level (PHP: after the figures, by exact name), the week's dates and the window.</summary>
+    internal sealed record Shaped(IReadOnlyList<string> Levels, IReadOnlyList<ClassFigures> Classes, IReadOnlyList<Row> LastWeek, string WeekOf, string SummaryStart, string SummaryEnd);
+
+    public static Shaped Shape(Loaded report, string level)
+    {
+        ArgumentNullException.ThrowIfNull(report);
+        ArgumentNullException.ThrowIfNull(level);
+        var figures = Summarise(report.Rows);
+        var thisWeek = report.Rows.Where(r => r.Week == report.Week && r.Year == report.Year).ToList();
+        var weekOf = thisWeek.Count == 0 ? string.Empty : ShortDay(thisWeek[^1].From) + " to " + ShortDay(thisWeek[^1].To);
+        return new Shaped(
+            [.. figures.Select(f => f.Level).Distinct()],
+            [.. figures.Where(f => level.Length == 0 || f.Level == level)],
+            [.. thisWeek.Where(r => level.Length == 0 || r.Level == level)],
+            weekOf,
+            LongDay(report.WindowStart),
+            LongDay(report.WindowEnd));
+    }
+
+    private static string ShortDay(DateOnly day) => day.ToString("dd-MMM", CultureInfo.InvariantCulture);
+
+    private static string LongDay(DateOnly day) => day.ToString("ddd, dd-MMM-yy", CultureInfo.InvariantCulture);
+
     /// <summary>What <see cref="OpenAsync"/> gives: the chosen week, the window's dates, and every row of the window.</summary>
     internal sealed record Loaded(int Gender, int Year, int Week, DateOnly WindowStart, DateOnly WindowEnd, IReadOnlyList<Row> Rows);
 

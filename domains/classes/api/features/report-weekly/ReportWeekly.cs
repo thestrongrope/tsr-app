@@ -2,7 +2,6 @@ using System.Globalization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
 using Tsr.Shared.Api;
@@ -10,21 +9,14 @@ using Tsr.Shared.Api;
 namespace Tsr.Classes.Api.Features.ReportWeekly;
 
 // Slice: GET /reports/weekly?gender&from&to&level (months MM-YYYY, default this month) -> every class the caller reaches and, for each week of the months, held (how many times), not held or not filled.
-// PHP: routes/reports.php route_reports_weekly (:291, api_require_weekly_report :245), mis.php weeklyReport. Queries: the class ids of the scope, the classes, the sessions.
-// Scope as PHP's reportClasses: the reports:read reach AND, for a caller whose classes:read is assigned-only, those classes only. A class whose teacher has no member row loses its sessions (PHP's inner join).
-// Copied: a day with two sessions counts once (the later wins), the week cells follow WeeklyGrid, "level" narrows by exact name after the list of levels is read.
+// PHP: routes/reports.php route_reports_weekly (:291, api_require_weekly_report :245). The query and its rules are domain/WeeklyReport.cs (shared with the download).
 
 internal static class ReportWeeklySlice
 {
     internal sealed record WeekItem(string Month, string Label, string From, string To);
 
-    internal sealed record CellItem(string Status, int Sessions);
-
-    internal sealed record ClassItem(int ClassId, string Level, string Class, string? Teacher, IReadOnlyList<CellItem> Weeks);
-
-    internal sealed record Answer(int Gender, string From, string To, IReadOnlyList<string> Levels, IReadOnlyList<WeekItem> Weeks, IReadOnlyList<ClassItem> Classes);
-
-    private sealed record ClassRow(int Id, string Level, string Code, string? TeacherName);
+    internal sealed record Answer(
+        int Gender, string From, string To, IReadOnlyList<string> Levels, IReadOnlyList<WeekItem> Weeks, IReadOnlyList<WeeklyReport.ClassItem> Classes);
 
     public static IEndpointRouteBuilder MapReportWeekly(this IEndpointRouteBuilder routes)
     {
@@ -40,57 +32,14 @@ internal static class ReportWeeklySlice
             return Problem.Unauthenticated();
         }
 
-        var (scope, refusal) = await ReportScope.OpenAsync(context, permissions, caller, ct);
+        var today = DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
+        var (report, refusal) = await WeeklyReport.OpenAsync(context, db, permissions, caller, today, ct);
         if (refusal is not null)
         {
             return refusal;
         }
 
-        var today = DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
-        var from = ReportMonths.Param(context, "from") ?? today.ToString("MM-yyyy", CultureInfo.InvariantCulture);
-        var to = ReportMonths.Param(context, "to") ?? from;
-        var invalid = ReportMonths.Check(from, to, limitToTwelve: true);
-        if (invalid is not null)
-        {
-            return Problem.Detail(StatusCodes.Status422UnprocessableEntity, invalid);
-        }
-
-        var ids = await ReportScope.KeepAssignedAsync(await scope!.ClassIdsAsync(db, 0, ct), permissions, caller, ct);
-
-        var classes = await ClassesAsync(db, ids, ct);
-        var (start, end) = ReportCalendar.Window(from, to, today);
-        var sessions = await WeeklySessions.ByClassAndDayAsync(db, ids, start, end, ct);
-        var months = WeeklyGrid.Months(start, end);
-
-        var level = ReportScope.LevelOf(context);
-        var items = classes
-            .Where(c => level.Length == 0 || c.Level == level)
-            .Select(c => ToItem(c, sessions.GetValueOrDefault(c.Id) ?? [], months))
-            .ToList();
-        return Results.Json(new Answer(scope.Gender, from, to, [.. classes.Select(c => c.Level).Distinct()], WeekItems(months), items));
-    }
-
-    // PHP getAll: the class's level must exist (inner join), the teacher's name may be missing (left join); order gender, level order, id.
-    private static async Task<List<ClassRow>> ClassesAsync(ClassesContext db, int[] ids, CancellationToken ct) =>
-        await db.Database
-            .SqlQuery<ClassRow>($"""
-                select c.id as "Id", cl.name::text as "Level", c.code::text as "Code", u.name::text as "TeacherName"
-                from classes.classes c
-                join classes.class_levels cl on cl.id = c.class_level_id
-                left join membership.v_members u on u.token = c.teacher
-                where c.id = any({ids})
-                order by c.gender, cl.sort_order, c.id
-                """)
-            .ToListAsync(ct);
-
-    private static ClassItem ToItem(ClassRow c, Dictionary<DateOnly, int> conducted, IReadOnlyList<WeeklyGrid.Month> months)
-    {
-        var cells = months
-            .SelectMany(m => m.Weeks)
-            .Select(days => WeeklyGrid.Read(WeeklyGrid.CellOf(conducted, days)))
-            .Select(cell => new CellItem(cell.Status, cell.Sessions))
-            .ToList();
-        return new ClassItem(c.Id, c.Level, c.Code, PhpCast.StrOrNull(c.TeacherName), cells);
+        return Results.Json(new Answer(report!.Gender, report.From, report.To, report.Levels, WeekItems(report.Months), report.Classes));
     }
 
     private static List<WeekItem> WeekItems(IReadOnlyList<WeeklyGrid.Month> months) =>

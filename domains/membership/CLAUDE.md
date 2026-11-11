@@ -13,7 +13,7 @@ copied (facts: `docs/specs/initial-build/phase-3-membership-recon.md`; design: `
 | The ten HTTP operations: profile `GET` and `PATCH /me`, class request form `GET` and `POST /registration`, guardian self-service (links, inspect, accept, two revokes, parents) | built (task 3b-2), one slice each under `api/features/`; PHP parity proven by the Hurl files on both stacks. Gateway routes in `hosts/gateway/default.conf` |
 | Batch B4b, nine more operations: `GET /me/children`, the five staff parent-link routes (create invite, list, cancel, candidate, add by token), `POST /registrations/{id}/reject`, `GET /admin/donors`, `GET /subscribers/{token}` | built, one slice each under `api/features/` (`me-children`, `member-parent-link-create`, `member-parent-links`, `member-parent-link-cancel`, `member-parent-candidate`, `member-parents-add`, `registration-reject`, `admin-donors`, `subscriber-card`); notes `docs/specs/initial-build/fill-b4b-notes.md`. Fixtures `db/synthetic/membership-b4b-fixtures.sql` and `tools/parity-php/membership-b4b-fixtures.sql` (tokens 9011xx, classes 9561 to 9563), loaded by `tools/membership-contract.sh` |
 | Batch B5b: `GET /reports/registrations` (the waiting list; slice `report-registrations`, Hurl `report-registrations.hurl`) and `GET /students/{token}` (slice `student-card`, shared rules `domain/CardRules.cs`; the level name comes from `classes.v_classes.level_name`); fixtures `db/synthetic/membership-b5b-fixtures.sql` and `tools/parity-php/membership-b5b-fixtures.sql` (tokens 9018xx); notes `docs/specs/initial-build/fill-b5b-notes.md` | built |
-| The remaining 3 operations: `GET /reports/registrations/download` and `/allocated/download` and `GET /admin/donors/download` (xlsx or pdf only: wait for the export library) | planned (501) in `api/Planned.cs` |
+| Batch B5d: the three downloads `GET /reports/registrations/download`, `/reports/registrations/allocated/download` and `GET /admin/donors/download` (xlsx or PDF through platform's `ReportExport`; slices `report-registrations-download`, `report-registrations-allocated-download`, `admin-donors-download`; shared `domain/WaitingRegistrations.cs`, `AllocatedRegistrations.cs` (rules unit tested), `DonorList.cs`; Hurl files beside the others (the PDF cases in `*-new-api.hurl`); B5D fixtures `db/synthetic/membership-b5d-fixtures.sql` and `tools/parity-php/membership-b5d-fixtures.sql`, tokens 9021xx, the coordinator `b5d_coord`; db tests in `db/tests/ReportsB5dTests.cs`; notes `docs/specs/initial-build/fill-b5d-notes.md`). **Reach copied exactly:** the waiting-list file has no row scope beyond the gender; the placed file gives a super or gender administrator every placed person of the gender, a coordinator only registrations naming a class of people placed in their assigned classes; the donors file lists every member in an active class with email and mobile (PHP applies no limit) | built |
 
 ## Owns
 
@@ -24,7 +24,7 @@ copied (facts: `docs/specs/initial-build/phase-3-membership-recon.md`; design: `
   the lock the handlers take.
 - PHP's enums and SET are text with CHECKs. The columns are `citext`, so a CHECK matches ignoring case (MariaDB's enums did too, but stored the listed spelling:
   a handler that stores a value must store the canonical spelling). The two JSON text columns are `jsonb`.
-- Dependencies: `access`, `identity`, `platform` (`MembershipModule.Dependencies`). `classes` is not a dependency: it will supply `IClassEnrolments`.
+- Dependencies: `access`, `identity`, `platform` (`MembershipModule.Dependencies`; platform for `Geo`, `Lookups` and `ReportExport`). `classes` is not a dependency: it will supply `IClassEnrolments`.
 - Events (outbox, same transaction as the change; none consumed; a refusal or no-op writes none):
 
 | Event | Payload | Written by |
@@ -86,7 +86,7 @@ tools/parity-php/membership-fixtures.sh    # only the fixture reset on the PHP p
 
 ## Placeholders
 
-Operations of this domain not built yet are 501 placeholders in `api/Planned.cs` (after the sign-in check; they create nothing). Building one deletes its line there and flips its state in `docs/specs/initial-build/operations.csv`.
+Every operation of this domain is built, so there is no `api/Planned.cs` any more.
 
 ## Published views (rule 2; migration `PublishedViews`, read-only to the API role)
 

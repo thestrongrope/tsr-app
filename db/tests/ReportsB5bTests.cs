@@ -1,5 +1,7 @@
 using System.Net;
+using Microsoft.Extensions.DependencyInjection;
 using NUnit.Framework;
+using Tsr.Platform.Api.Domain;
 
 namespace Tsr.Db.Tests;
 
@@ -7,7 +9,7 @@ namespace Tsr.Db.Tests;
 /// The class reports of batch B5b (active teachers, this week, students, tsr, pending) for callers who are NOT the super administrator: a gender administrator asking for the other gender, a coordinator limited to one
 /// assigned class, and a coordinator with classes of both genders asking for one gender must each see only their classes. The Hurl files cover the contract.
 /// </summary>
-public sealed class ReportsB5bTests
+public sealed partial class ReportsB5bTests
 {
     private const int Admin = 901701;
     private const int GentsAdmin = 901702;
@@ -24,9 +26,10 @@ public sealed class ReportsB5bTests
     private const string Closed = "RT-G-4";
 
     private MembershipTestKit kit = null!;
+    private readonly FakePdfRenderer renderer = new();
 
     [OneTimeSetUp]
-    public void Start() => kit = new MembershipTestKit();
+    public void Start() => kit = new MembershipTestKit(services => services.AddSingleton<IPdfRenderer>(renderer));
 
     [OneTimeTearDown]
     public void Stop() => kit.Dispose();

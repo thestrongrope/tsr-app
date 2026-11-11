@@ -36,13 +36,6 @@ HTTP 501
 [Asserts]
 jsonpath "$.detail" == "Not implemented"
 
-# membership
-GET {{base_url}}/reports/registrations/download
-{{auth_header}}: {{auth_value}}
-HTTP 501
-[Asserts]
-jsonpath "$.detail" == "Not implemented"
-
 # classes (a path with parameters: any non-slash segment)
 GET {{base_url}}/classes/900009/mcq/topics
 {{auth_header}}: {{auth_value}}

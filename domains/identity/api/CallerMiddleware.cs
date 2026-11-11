@@ -22,6 +22,13 @@ internal sealed class CallerMiddleware(RequestDelegate next, ICallerVerifier ver
             return;
         }
 
+        var early = route.Precheck?.Invoke(context);
+        if (early is not null)
+        {
+            await early.ExecuteAsync(context);
+            return;
+        }
+
         var (refusal, caller) = await AuthenticateAsync(context, members, route.CreatesMember);
         if (refusal is not null)
         {

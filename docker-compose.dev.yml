@@ -52,6 +52,21 @@ services:
       retries: 30
       start_period: 60s
 
+  # HTML to PDF with Chromium for the report downloads (platform ReportExport). No published port: only the api reaches it, on the compose
+  # network. Verified with docker run: the image ships curl (not wget), so the check uses curl; /health answers {"status":"up",...}.
+  gotenberg:
+    image: gotenberg/gotenberg:8
+    environment:
+      # The report HTML references nothing outside itself: Chromium may fetch no address at all (defence in depth).
+      CHROMIUM_DENY_PRIVATE_IPS: "true"
+      CHROMIUM_DENY_PUBLIC_IPS: "true"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "--max-time", "3", "http://127.0.0.1:3000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
   migrate:
     # The same image as the API, run once with --migrate (production: the same, as a Dokploy job).
     build:
@@ -91,6 +106,8 @@ services:
       TSR_AUTH_EMULATOR_HOST: firebase-emulator:9099
       # The synthetic catalog GET /app-version and /release-notes read (the parity stack mounts the same file).
       TSR_APP_VERSIONS_FILE: /etc/tsr/app_versions.json
+      # Where PDF downloads are rendered (the gotenberg service). Required: the API does not start without it. A renderer that is down answers 503 for a PDF; xlsx still works.
+      TSR_GOTENBERG_URL: http://gotenberg:3000
     volumes:
       - ./domains/platform/spec/tests/app_versions.synthetic.json:/etc/tsr/app_versions.json:ro
     depends_on:

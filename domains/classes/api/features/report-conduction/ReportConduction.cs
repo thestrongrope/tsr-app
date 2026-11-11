@@ -9,7 +9,8 @@ using Tsr.Shared.Api;
 namespace Tsr.Classes.Api.Features.ReportConduction;
 
 // Slice: GET /reports/conduction?gender&year&week&level -> the week's conduction of every class the caller reaches and the figures over the weeks around it. Contract: spec/api.yaml.
-// PHP: routes/reports.php route_reports_conduction (:100, api_require_conduction_report :66), models/mis.php conductionReport. Queries: the class ids of the scope, then one for the rows.
+// PHP: routes/reports.php route_reports_conduction (:100, api_require_conduction_report :66), models/mis.php conductionReport. Queries: the class ids of the scope, then one for the rows. The rows and their narrowing to a level
+// are domain/ConductionReport.cs (shared with the download).
 // Quirks copied: a class that held two sessions in a week has two week rows (and counts twice); weekOf is the dates of the last row of the week; "level" narrows by exact name after the figures.
 
 internal static class ReportConductionSlice
@@ -48,25 +49,15 @@ internal static class ReportConductionSlice
             return refusal;
         }
 
-        var figures = ConductionReport.Summarise(report!.Rows);
-        var level = ReportScope.LevelOf(context);
-        var thisWeek = report.Rows.Where(r => r.Week == report.Week && r.Year == report.Year).ToList();
-        var (previous, next) = ReportCalendar.Neighbours(report.Year, report.Week, today);
-        var weekOf = thisWeek.Count == 0 ? string.Empty : Short(thisWeek[^1].From) + " to " + Short(thisWeek[^1].To);
+        var shaped = ConductionReport.Shape(report!, ReportScope.LevelOf(context));
+        var (previous, next) = ReportCalendar.Neighbours(report!.Year, report.Week, today);
 
         return Results.Json(new Answer(
-            report.Gender, report.Year, report.Week, Ref(previous), Ref(next), weekOf,
-            Long(report.WindowStart), Long(report.WindowEnd),
-            [.. figures.Select(f => f.Level).Distinct()],
-            [.. figures.Where(f => level.Length == 0 || f.Level == level).Select(ToItem)],
-            [.. thisWeek.Where(r => level.Length == 0 || r.Level == level).Select(ToWeek)]));
+            report.Gender, report.Year, report.Week, Ref(previous), Ref(next), shaped.WeekOf, shaped.SummaryStart, shaped.SummaryEnd,
+            shaped.Levels, [.. shaped.Classes.Select(ToItem)], [.. shaped.LastWeek.Select(ToWeek)]));
     }
 
     private static WeekRef? Ref(ReportCalendar.Week? week) => week is { } w ? new WeekRef(w.Year, w.Number) : null;
-
-    private static string Short(DateOnly day) => day.ToString("dd-MMM", CultureInfo.InvariantCulture);
-
-    private static string Long(DateOnly day) => day.ToString("ddd, dd-MMM-yy", CultureInfo.InvariantCulture);
 
     private static ClassItem ToItem(ConductionReport.ClassFigures f) =>
         new(f.Level, f.Gender, f.Class, PhpCast.StrOrNull(f.Teacher), f.Expected, f.Conducted, f.NotFilled, f.NotConducted, f.Students, f.Attendance, f.PercentNotFilled, f.PercentConduction, f.PercentAttendance);

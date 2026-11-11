@@ -38,6 +38,14 @@ public static class PlatformModule
         services.AddScoped<GeoCitiesHandler>();
         services.AddScoped(provider => new Lookups(provider.GetRequiredService<PlatformContext>()));
         services.AddScoped(provider => new Geo(provider.GetRequiredService<PlatformContext>(), provider.GetRequiredService<ILogger<Geo>>()));
+        // The PDF renderer: Gotenberg over HTTP, 60 seconds and 50 MB at most per call (required setting TSR_GOTENBERG_URL, checked at start).
+        GotenbergSettings.AddGotenbergSettings(services);
+        services.AddHttpClient<IPdfRenderer, GotenbergRenderer>(client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(60);
+            client.MaxResponseContentBufferSize = 50_000_000;
+        });
+        services.AddScoped(provider => new ReportExport(provider.GetRequiredService<IPdfRenderer>(), provider.GetRequiredService<ILogger<ReportExport>>()));
         return services;
     }
 

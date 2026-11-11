@@ -22,7 +22,7 @@ what the member may do (that is `access`). Parity first: PHP's behaviour is copi
 
 ## How a request is judged
 
-An endpoint opts in with `.RequireMember()` (`.RequireMember(createsMember: true)` for PHP's `api_authenticate(true)`). Then, in PHP's order: no/odd header 401 `Not authenticated`; bad token 401 `Invalid auth token`; no email 401 `Email not present in token`; create routes only: deleted within 2 h 403 (+`deletion_status: completed`); no row 404 `User not found` (an unverified email never claims a row); token 0 403 `Registration incomplete`; live deletion off the allow list 403 `Account deletion pending` (+status); then the sign-in is recorded. Endpoints without the marker are never authenticated (health, public reads).
+An endpoint opts in with `.RequireMember()` (`.RequireMember(createsMember: true)` for PHP's `api_authenticate(true)`). A `precheck:` given to the marker runs before the sign-in and may only refuse (the report downloads use it for PHP's `format must be xlsx or pdf` 422, which PHP answers unsigned); without one nothing changes. Then, in PHP's order: no/odd header 401 `Not authenticated`; bad token 401 `Invalid auth token`; no email 401 `Email not present in token`; create routes only: deleted within 2 h 403 (+`deletion_status: completed`); no row 404 `User not found` (an unverified email never claims a row); token 0 403 `Registration incomplete`; live deletion off the allow list 403 `Account deletion pending` (+status); then the sign-in is recorded. Endpoints without the marker are never authenticated (health, public reads).
 
 ## Configuration (fails closed)
 

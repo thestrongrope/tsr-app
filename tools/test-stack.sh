@@ -2,7 +2,7 @@
 # The synthetic TEST stack: docker-compose.dev.yml run as its own compose project (tsr-app-test), so contract tests
 # have a database that never holds real data. It shares nothing with the dev stack (tsr-app-dev): containers,
 # network and volumes are prefixed by the project name, and the three published ports differ.
-#   gateway http://localhost:8089, database localhost:5434, Auth emulator localhost:19100 (all 127.0.0.1 only)
+#   gateway http://localhost:8089, database localhost:5434, Auth emulator localhost:19100 (all 127.0.0.1 only); the internal-only gotenberg PDF renderer has no host port
 # Usage: tools/test-stack.sh up | down | remove | status
 #   up      build and start (migrate and seed run once); waits for the API through the gateway
 #   down    stop and delete the containers, KEEP the volume

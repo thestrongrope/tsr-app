@@ -1,0 +1,29 @@
+# alias path (xlsx only), one line per built download route and case; read by tools/export-parity.sh
+# --unordered: PHP leaves rows (also: one student in two classes ties on score, name and token, and PHP keeps the database order, which changes between loads) in no defined order inside a tie (two sessions of one class in one week), so the rows are compared as a set.
+# Use callers whose reach is FIXTURE classes only (a coordinator): an administrator also sees each side's own seed data, which differs between PHP's database and the new one.
+rb_coord /reports/active-teachers/download?format=xlsx
+rp_coord /reports/class-sessions/9581/download?format=xlsx
+rp_coord /reports/conduction/download?format=xlsx&year=2025&week=45 --unordered
+rp_coord /reports/conduction/download?format=xlsx&year=2025&week=45&level=MIQDAD --unordered
+rp_coord /reports/weekly/download?format=xlsx&from=11-2025&to=11-2025
+rp_coord /reports/weekly/download?format=xlsx&from=10-2025&to=11-2025&level=MIQDAD
+rp_coord /reports/summary/download?format=xlsx&from=10-2025&to=11-2025
+rp_coord /reports/summary/download?format=xlsx&from=11-2025&to=11-2025&level=ABUZAR
+rp_coord /reports/subject-conduction/download?format=xlsx&from=11-2025&to=11-2025
+rp_coord /reports/subject-conduction/download?format=xlsx&from=10-2025&to=11-2025&classId=9581
+rc_coord /reports/pending/download?format=xlsx&from=10-2025&to=10-2025
+rc_coord /reports/pending/download?format=xlsx&from=10-2025&to=10-2025&gender=2
+rc_coord /reports/tsr/download?format=xlsx&from=2025-10-01&to=2025-11-30
+rc_coord /reports/tsr/download?format=xlsx&from=2025-10-01&to=2025-11-05&gender=2
+rc_coord /reports/students/download?format=xlsx&from=2025-10-01&to=2025-11-30 --unordered
+rc_coord /reports/students/download?format=xlsx&from=2025-10-01&to=2025-11-05&gender=2
+rc_coord /reports/students/download?format=xlsx&from=2025-10-01&to=2025-11-30&level=MIQDAD&class=RC-G-564
+# Run after tools/membership-contract.sh parity --prepare and test --prepare (a membership reset clears the classes fixtures: prepare classes again before the classes cases).
+# Administrators also see each side's own seed data: compare the fixture members only (token column B starting 9018), ignoring the row number in column A.
+b5b_admin /reports/registrations/download?format=xlsx --filter B:9018 --ignore A
+b5b_admin /reports/registrations/download?format=xlsx&gender=2 --filter B:9018 --ignore A
+b4b_donor_admin /admin/donors/download?format=xlsx --filter B:b4b.9011
+b5b_admin /reports/registrations/allocated/download?format=xlsx --filter B:9021 --ignore A
+b5b_admin /reports/registrations/allocated/download?format=xlsx&gender=2 --filter B:9021 --ignore A
+b5b_gents_admin /reports/registrations/allocated/download?format=xlsx --filter B:9021 --ignore A
+b5d_coord /reports/registrations/allocated/download?format=xlsx --filter B:9021 --ignore A

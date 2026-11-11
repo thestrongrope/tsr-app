@@ -13,16 +13,7 @@ internal static class Planned
     {
         routes.MapPlanned(
             ("GET", "/me/guides"),
-            ("GET", "/me/guides/{slug}"),
-            ("GET", "/reports/conduction/download"),
-            ("GET", "/reports/weekly/download"),
-            ("GET", "/reports/summary/download"),
-            ("GET", "/reports/students/download"),
-            ("GET", "/reports/tsr/download"),
-            ("GET", "/reports/pending/download"),
-            ("GET", "/reports/subject-conduction/download"),
-            ("GET", "/reports/class-sessions/{class_id}/download"),
-            ("GET", "/reports/active-teachers/download"));
+            ("GET", "/me/guides/{slug}"));
         return routes;
     }
 }

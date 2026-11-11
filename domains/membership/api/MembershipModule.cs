@@ -10,8 +10,11 @@ using Tsr.Membership.Api.Features.MemberParentCandidate;
 using Tsr.Membership.Api.Features.MemberParentsAdd;
 using Tsr.Membership.Api.Features.RegistrationReject;
 using Tsr.Membership.Api.Features.ReportRegistrations;
+using Tsr.Membership.Api.Features.ReportRegistrationsAllocatedDownload;
+using Tsr.Membership.Api.Features.ReportRegistrationsDownload;
 using Tsr.Membership.Api.Features.StudentCard;
 using Tsr.Membership.Api.Features.AdminDonors;
+using Tsr.Membership.Api.Features.AdminDonorsDownload;
 using Tsr.Membership.Api.Features.SubscriberCard;
 using Tsr.Membership.Api.Features.ChildrenLinkAccept;
 using Tsr.Membership.Api.Features.ChildrenLinkInspect;
@@ -83,10 +86,12 @@ public static class MembershipModule
         routes.MapMemberParentsAdd();
         routes.MapRegistrationReject();
         routes.MapReportRegistrations();
+        routes.MapReportRegistrationsDownload();
+        routes.MapReportRegistrationsAllocatedDownload();
         routes.MapStudentCard();
         routes.MapAdminDonors();
+        routes.MapAdminDonorsDownload();
         routes.MapSubscriberCard();
-        routes.MapPlannedRoutes();
         return routes;
     }
 }

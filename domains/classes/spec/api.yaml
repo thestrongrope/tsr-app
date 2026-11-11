@@ -1509,6 +1509,235 @@ paths:
               schema: {type: object}
         "401": {$ref: "#/components/responses/Problem"}
         "403": {$ref: "#/components/responses/Problem"}
+  /reports/active-teachers/download:
+    get:
+      operationId: reportActiveTeachersDownload
+      summary: The active teachers report as an xlsx or PDF file
+      description: |
+        format must be xlsx or pdf (422, checked before the sign-in), then reports:read for the gender (403). The same rows as GET /reports/active-teachers, one row per teacher; the file is named Active-teachers-Gents or -Ladies. A PDF that cannot be rendered is 503. Slice: features/report-active-teachers-download/ReportActiveTeachersDownload.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: format, in: query, required: true, schema: {type: string, enum: [xlsx, pdf]}}
+        - {name: gender, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: The file (attachment)
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: {type: string, format: binary}
+            application/pdf:
+              schema: {type: string, format: binary}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
+  /reports/class-sessions/{class_id}/download:
+    get:
+      operationId: reportClassSessionHistoryDownload
+      summary: One class session history as an xlsx or PDF file
+      description: |
+        format must be xlsx or pdf (422, checked before the sign-in), then reports:read with no target (403). The same sessions as GET /reports/class-sessions/{class_id}, oldest first and numbered; a class that is missing or out of reach is a file with headers only. Named Class-sessions-<class_id>. A PDF that cannot be rendered is 503. Slice: features/report-class-session-history-download/ReportClassSessionHistoryDownload.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+        - {name: format, in: query, required: true, schema: {type: string, enum: [xlsx, pdf]}}
+      responses:
+        "200":
+          description: The file (attachment)
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: {type: string, format: binary}
+            application/pdf:
+              schema: {type: string, format: binary}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
+  /reports/conduction/download:
+    get:
+      operationId: reportConductionDownload
+      summary: The conduction report as an xlsx or PDF file
+      description: |
+        format must be xlsx or pdf (422, checked before the sign-in), then reports:read for the gender (403), then year and week (422 "Invalid year or week"). The same rows and level narrowing as GET /reports/conduction: a section of the week's classes (Class, Level, Teacher, Status Held / Not held / Not filled, Date, Present, Minutes, Reason) and a section of the overall figures (whole percentages). Named Conduction-Gents-week-W-YYYY. A PDF that cannot be rendered is 503. Slice: features/report-conduction-download/ReportConductionDownload.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: format, in: query, required: true, schema: {type: string, enum: [xlsx, pdf]}}
+        - {name: gender, in: query, required: false, schema: {type: string}}
+        - {name: year, in: query, required: false, schema: {type: integer}}
+        - {name: week, in: query, required: false, schema: {type: integer}}
+        - {name: level, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: The file (attachment)
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: {type: string, format: binary}
+            application/pdf:
+              schema: {type: string, format: binary}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
+  /reports/weekly/download:
+    get:
+      operationId: reportWeeklyDownload
+      summary: The weekly report as an xlsx or PDF file
+      description: |
+        format must be xlsx or pdf (422, checked before the sign-in), then reports:read for the gender (403), then the months (422). One table of the same classes as GET /reports/weekly: Class, Level, Teacher and a column per week (Held, Held (n), Not held, Not filled). Named Weekly-Gents-MM-YYYY or Weekly-Gents-MM-YYYY-to-MM-YYYY. A PDF that cannot be rendered is 503. Slice: features/report-weekly-download/ReportWeeklyDownload.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: format, in: query, required: true, schema: {type: string, enum: [xlsx, pdf]}}
+        - {name: gender, in: query, required: false, schema: {type: string}}
+        - {name: from, in: query, required: false, schema: {type: string}}
+        - {name: to, in: query, required: false, schema: {type: string}}
+        - {name: level, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: The file (attachment)
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: {type: string, format: binary}
+            application/pdf:
+              schema: {type: string, format: binary}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
+  /reports/summary/download:
+    get:
+      operationId: reportSummaryDownload
+      summary: The class summary as an xlsx or PDF file
+      description: |
+        format must be xlsx or pdf (422, checked before the sign-in), then reports:read for the gender (403), then the months (422; from is required). The same classes and whole-number figures as GET /reports/summary, a row per class, the subjects as "count (percent%)" (empty when the class held no subject). Named Summary-Gents-MM-YYYY-to-MM-YYYY. A PDF that cannot be rendered is 503. Slice: features/report-summary-download/ReportSummaryDownload.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: format, in: query, required: true, schema: {type: string, enum: [xlsx, pdf]}}
+        - {name: gender, in: query, required: false, schema: {type: string}}
+        - {name: from, in: query, required: true, schema: {type: string}}
+        - {name: to, in: query, required: false, schema: {type: string}}
+        - {name: level, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: The file (attachment)
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: {type: string, format: binary}
+            application/pdf:
+              schema: {type: string, format: binary}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
+  /reports/subject-conduction/download:
+    get:
+      operationId: reportSubjectConductionDownload
+      summary: The subject conduction report as an xlsx or PDF file
+      description: |
+        format must be xlsx or pdf (422, checked before the sign-in), then reports:read for the gender (403), the months (422), a classId the caller does not reach (403). The same rows as GET /reports/subject-conduction, one per class and week (Class, Level, Teacher, Week, Held on and a column per subject). Named Subject-conduction-Gents-MM-YYYY or with -to-MM-YYYY. A PDF that cannot be rendered is 503. Slice: features/report-subject-conduction-download/ReportSubjectConductionDownload.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: format, in: query, required: true, schema: {type: string, enum: [xlsx, pdf]}}
+        - {name: gender, in: query, required: false, schema: {type: string}}
+        - {name: from, in: query, required: false, schema: {type: string}}
+        - {name: to, in: query, required: false, schema: {type: string}}
+        - {name: level, in: query, required: false, schema: {type: string}}
+        - {name: classId, in: query, required: false, schema: {type: integer}}
+      responses:
+        "200":
+          description: The file (attachment)
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: {type: string, format: binary}
+            application/pdf:
+              schema: {type: string, format: binary}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
+  /reports/pending/download:
+    get:
+      operationId: reportPendingDownload
+      summary: The pending work report as an xlsx or PDF file
+      description: |
+        format must be xlsx or pdf (422, checked before the sign-in), then reports:read for the gender (403), then the months (422). The same teachers and classes as GET /reports/pending, a row per pending class (Teacher, Class, Level, Forms not filled, MCQs pending, MCQs conducted, MCQs in the syllabus). Named Pending-Gents-MM-YYYY-to-MM-YYYY. A PDF that cannot be rendered is 503. Slice: features/report-pending-download/ReportPendingDownload.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: format, in: query, required: true, schema: {type: string, enum: [xlsx, pdf]}}
+        - {name: gender, in: query, required: false, schema: {type: string}}
+        - {name: from, in: query, required: false, schema: {type: string}}
+        - {name: to, in: query, required: false, schema: {type: string}}
+        - {name: level, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: The file (attachment)
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: {type: string, format: binary}
+            application/pdf:
+              schema: {type: string, format: binary}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
+  /reports/tsr/download:
+    get:
+      operationId: reportTsrDownload
+      summary: TSR at a glance as an xlsx or PDF file
+      description: |
+        format must be xlsx or pdf (422, checked before the sign-in), then reports:read for the gender (403), then the dates (422). The same figures as GET /reports/tsr as eight tables: per level and per class for conduction, MCQ, attendance and recitation; a class that never held or set an MCQ reads "None in this period". Named TSR-Gents-YYYY-MM-DD-to-YYYY-MM-DD. A PDF that cannot be rendered is 503. Slice: features/report-tsr-download/ReportTsrDownload.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: format, in: query, required: true, schema: {type: string, enum: [xlsx, pdf]}}
+        - {name: gender, in: query, required: false, schema: {type: string}}
+        - {name: from, in: query, required: false, schema: {type: string}}
+        - {name: to, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: The file (attachment)
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: {type: string, format: binary}
+            application/pdf:
+              schema: {type: string, format: binary}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
+  /reports/students/download:
+    get:
+      operationId: reportStudentsDownload
+      summary: The student performance report as an xlsx or PDF file
+      description: |
+        format must be xlsx or pdf (422, checked before the sign-in), then reports:read for the gender (403), then the dates (422). The same students as GET /reports/students narrowed to the level and class named (exact text, trimmed), best TSR score first, then name, then token; the token is text in the file. Named Students-Gents-YYYY-MM-DD-to-YYYY-MM-DD. A PDF that cannot be rendered is 503. Slice: features/report-students-download/ReportStudentsDownload.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: format, in: query, required: true, schema: {type: string, enum: [xlsx, pdf]}}
+        - {name: gender, in: query, required: false, schema: {type: string}}
+        - {name: from, in: query, required: false, schema: {type: string}}
+        - {name: to, in: query, required: false, schema: {type: string}}
+        - {name: level, in: query, required: false, schema: {type: string}}
+        - {name: class, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: The file (attachment)
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: {type: string, format: binary}
+            application/pdf:
+              schema: {type: string, format: binary}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
   /reports/this-week:
     get:
       operationId: reportThisWeek

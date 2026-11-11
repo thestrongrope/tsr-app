@@ -390,6 +390,29 @@ paths:
         "403": {$ref: "#/components/responses/Problem"}
         "409": {$ref: "#/components/responses/Problem"}
         "422": {$ref: "#/components/responses/Problem"}
+  /admin/donors/download:
+    get:
+      operationId: adminDonorsDownload
+      summary: The donors list as an xlsx or PDF file
+      description: |
+        format must be xlsx or pdf (422, checked before the sign-in), then donors:read (403). The same rows as GET /admin/donors (every member in an active class, one row per enrolment, no reach limit as in PHP): Name, Email, Mobile, City, State, Country, Zip. 404 "There are no donors to download" when there are none. Named TSR_Donors_Export_YYYYMMDD_HHMMSS. A PDF that cannot be rendered is 503. Slice: features/admin-donors-download/AdminDonorsDownload.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: format, in: query, required: true, schema: {type: string, enum: [xlsx, pdf]}}
+      responses:
+        "200":
+          description: The file (attachment)
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: {type: string, format: binary}
+            application/pdf:
+              schema: {type: string, format: binary}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
   /admin/donors:
     get:
       operationId: listDonors
@@ -415,6 +438,52 @@ paths:
         "401": {$ref: "#/components/responses/Problem"}
         "403": {$ref: "#/components/responses/Problem"}
         "404": {$ref: "#/components/responses/Problem"}
+  /reports/registrations/download:
+    get:
+      operationId: reportRegistrationsDownload
+      summary: The people waiting to be placed in a class, as an xlsx or PDF file
+      description: |
+        format must be xlsx or pdf (422, checked before the sign-in), then registrations:read for the gender (403; the gender is locked for a gender administrator or a coordinator of one gender). The same people as GET /reports/registrations (no row scope beyond the gender), newest first and numbered, with email, mobile and address; the cells are the raw values (full creation time). Named Registrations-Gents-YYYYMMDD. A PDF that cannot be rendered is 503. Slice: features/report-registrations-download/ReportRegistrationsDownload.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: format, in: query, required: true, schema: {type: string, enum: [xlsx, pdf]}}
+        - {name: gender, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: The file (attachment)
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: {type: string, format: binary}
+            application/pdf:
+              schema: {type: string, format: binary}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
+  /reports/registrations/allocated/download:
+    get:
+      operationId: reportRegistrationsAllocatedDownload
+      summary: The people who registered and are placed in a class, as an xlsx or PDF file
+      description: |
+        format must be xlsx or pdf (422, checked before the sign-in), then registrations:read for the gender (403). 25 columns per person (contact details, address, registration answers, the class, level and teacher placed with). Reach as PHP: a super administrator or a gender administrator gets every placed person of the gender, open registrations too; anyone else holding registrations:read (a coordinator) gets only registrations that name a class, of people placed in their assigned classes. Named Registrations-placed-Gents-YYYYMMDD. A PDF that cannot be rendered is 503. Slice: features/report-registrations-allocated-download/ReportRegistrationsAllocatedDownload.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: format, in: query, required: true, schema: {type: string, enum: [xlsx, pdf]}}
+        - {name: gender, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: The file (attachment)
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: {type: string, format: binary}
+            application/pdf:
+              schema: {type: string, format: binary}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
   /reports/registrations:
     get:
       operationId: reportRegistrations

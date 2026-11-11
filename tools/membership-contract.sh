@@ -69,6 +69,7 @@ MEMBERS=(
   "b5b_gents_admin=b5b.901802@example.invalid"
   "b5b_ladies_admin=b5b.901803@example.invalid"
   "b5b_plain=b5b.901804@example.invalid"
+  "b5d_coord=b5d.902101@example.invalid"
 )
 
 parity() { docker compose -p tsr-parity -f tools/parity-php/compose.parity.yml --env-file tools/parity-php/parity.env "$@"; }
@@ -81,7 +82,7 @@ case "$SIDE" in
     "$ROOT/tools/require-synthetic-stack.sh" "$PROJECT"
     # TSR_FIXTURES_LOADED=1: the members are already in the database (a database filled by tools/data-load from the
     # parity source, which holds the same fixtures); do not add db/synthetic/membership-fixtures.sql on top.
-    [ -n "${TSR_FIXTURES_LOADED:-}" ] || { dev_sql < db/synthetic/membership-fixtures.sql; dev_sql < db/synthetic/membership-b4b-fixtures.sql; dev_sql < db/synthetic/membership-b5b-fixtures.sql; }
+    [ -n "${TSR_FIXTURES_LOADED:-}" ] || { dev_sql < db/synthetic/membership-fixtures.sql; dev_sql < db/synthetic/membership-b4b-fixtures.sql; dev_sql < db/synthetic/membership-b5b-fixtures.sql; dev_sql < db/synthetic/membership-b5d-fixtures.sql; }
 
     { echo "set search_path = platform, public;"; cat db/synthetic/geo-fixtures.sql; } | dev_sql
     MINT="tools/dev-auth/mint-token.sh"
@@ -90,6 +91,7 @@ case "$SIDE" in
     tools/parity-php/membership-fixtures.sh
     php_sql < tools/parity-php/membership-b4b-fixtures.sql
     php_sql < tools/parity-php/membership-b5b-fixtures.sql
+    php_sql < tools/parity-php/membership-b5d-fixtures.sql
     php_sql < db/synthetic/geo-fixtures.sql
     MINT="tools/parity-php/mint-token.sh"
     BASE="http://127.0.0.1:18091"
