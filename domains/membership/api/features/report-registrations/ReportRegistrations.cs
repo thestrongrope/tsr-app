@@ -30,13 +30,13 @@ internal static class ReportRegistrationsSlice
             return Problem.Unauthenticated();
         }
 
-        var (gender, refusal) = await WaitingRegistrations.GuardAsync(context, permissions, caller, ct);
+        var (gender, classIds, refusal) = await WaitingRegistrations.GuardAsync(context, permissions, caller, ct);
         if (refusal is not null)
         {
             return refusal;
         }
 
-        var rows = await WaitingRegistrations.LoadAsync(db, gender, ct);
+        var rows = await WaitingRegistrations.LoadAsync(db, gender, classIds, ct);
         return Results.Json(new Answer(gender, [.. rows.Select(WaitingRegistrations.ToItem)]));
     }
 }

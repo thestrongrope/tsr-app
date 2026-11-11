@@ -42,16 +42,13 @@ internal static class ReportRegistrationsAllocatedDownloadSlice
             return Problem.Unauthenticated();
         }
 
-        var (gender, refusal) = await WaitingRegistrations.GuardAsync(context, permissions, caller, ct);
+        var (gender, classIds, refusal) = await WaitingRegistrations.GuardAsync(context, permissions, caller, ct);
         if (refusal is not null)
         {
             return refusal;
         }
 
-        var reach = await permissions.ReachAsync(caller, "registrations:read", ct);
-        var seesOpen = reach.All || reach.Gender is not null;
-        int[]? classIds = seesOpen ? null : [.. reach.ClassIds];
-        var people = await AllocatedRegistrations.LoadAsync(db, gender, classOnly: !seesOpen, classIds, ct);
+        var people = await AllocatedRegistrations.LoadAsync(db, gender, classOnly: classIds is not null, classIds, ct);
 
         IReadOnlyList<IReadOnlyList<object?>> rows = [.. people.Select((p, i) => Row(i + 1, p))];
         var day = clock.GetUtcNow().UtcDateTime;

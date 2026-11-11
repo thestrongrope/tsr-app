@@ -40,13 +40,13 @@ internal static class ReportRegistrationsDownloadSlice
             return Problem.Unauthenticated();
         }
 
-        var (gender, refusal) = await WaitingRegistrations.GuardAsync(context, permissions, caller, ct);
+        var (gender, classIds, refusal) = await WaitingRegistrations.GuardAsync(context, permissions, caller, ct);
         if (refusal is not null)
         {
             return refusal;
         }
 
-        var people = await WaitingRegistrations.LoadAsync(db, gender, ct);
+        var people = await WaitingRegistrations.LoadAsync(db, gender, classIds, ct);
         IReadOnlyList<IReadOnlyList<object?>> rows = [.. people.Select((p, i) => Row(i + 1, p))];
         var day = clock.GetUtcNow().UtcDateTime;
         var name = gender == 2 ? "Ladies" : "Gents";

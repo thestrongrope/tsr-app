@@ -1,6 +1,6 @@
 using NUnit.Framework;
 
-namespace Tsr.Classes.Api.Domain;
+namespace Tsr.Shared.Api;
 
 [TestFixture]
 internal sealed class ClientAddressTests

@@ -284,7 +284,7 @@ public sealed class SignInTests
 
         var row = await UserAsync(900001);
         Assert.That(row["lastlogin"], Is.Not.Null);
-        Assert.That(row["lastloginip"], Is.EqualTo("203.0.113.9"));
+        Assert.That(row["lastloginip"], Is.Null, "a forwarded address is believed only from our own proxy; the test server has no peer address");
         Assert.That(row["lastdevice"], Is.EqualTo("TsrTest/1.0"));
         Assert.That(row["device"], Is.EqualTo("Pixel"));
         Assert.That(row["platform"], Is.EqualTo("Android 15"));

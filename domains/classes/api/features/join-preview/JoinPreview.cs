@@ -32,7 +32,7 @@ internal static partial class JoinPreviewSlice
 
     private static async Task<IResult> HandleAsync(string code, HttpContext context, ClassesContext db, MemberRateLimit limit, CancellationToken ct)
     {
-        var address = ClientAddress.Of(context.Connection.RemoteIpAddress?.ToString(), context.Request.Headers["X-Forwarded-For"].ToString());
+        var address = ClientAddress.Of(context);
         if (!limit.Allow("join_preview", KeyOf(address), 30, 60))
         {
             return Problem.Detail(StatusCodes.Status429TooManyRequests, "Too many requests; try again later");

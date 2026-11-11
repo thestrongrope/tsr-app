@@ -32,7 +32,7 @@ public static partial class PlatformCommands
         var request = context.Request;
         var path = Cut(request.Path.ToUriComponent(), 255) ?? string.Empty;
         var method = Cut(request.Method, 10) ?? string.Empty;
-        var ip = Cut(ClientAddress(context), 45) ?? string.Empty;
+        var ip = Cut(CallerAddress(context), 45) ?? string.Empty;
         var userAgent = Cut(request.Headers.UserAgent.ToString(), 512);
         var referer = Cut(request.Headers.Referer.ToString(), 512);
         try
@@ -57,18 +57,11 @@ public static partial class PlatformCommands
     [LoggerMessage(Level = LogLevel.Warning, Message = "The admin access log row could not be written")]
     private static partial void LogAuditFailed(ILogger logger, Exception exception);
 
-    // PHP getRealIpAddr: Client-IP, else X-Forwarded-For (the whole header), else the peer address.
-    private static string ClientAddress(HttpContext context)
+    // Stricter than PHP's getRealIpAddr (decided 11 Nov 2026), which believes Client-IP and X-Forwarded-For as sent: the peer, or the hop our own proxy added; "" when there is no peer.
+    private static string CallerAddress(HttpContext context)
     {
-        var headers = context.Request.Headers;
-        var clientIp = headers["Client-IP"].ToString();
-        if (clientIp.Length > 0)
-        {
-            return clientIp;
-        }
-
-        var forwarded = headers["X-Forwarded-For"].ToString();
-        return forwarded.Length > 0 ? forwarded : context.Connection.RemoteIpAddress?.ToString() ?? string.Empty;
+        var address = Tsr.Shared.Api.ClientAddress.Of(context);
+        return address == Tsr.Shared.Api.ClientAddress.Unknown ? string.Empty : address;
     }
 
     // PHP substr to the column length; null stays null (an absent header is NULL, as PHP's `$x ? substr : null`).

@@ -1,19 +1,30 @@
 using System.Net;
 using System.Net.Sockets;
+using Microsoft.AspNetCore.Http;
 
-namespace Tsr.Classes.Api.Domain;
+namespace Tsr.Shared.Api;
 
 /// <summary>
 /// PHP <c>client_ip()</c> (functions.php): the peer's address, unless the peer is a trusted proxy (loopback, 10/8, 172.16/12, 192.168/16: PHP's default TRUSTED_PROXIES), when it is the last hop of
-/// X-Forwarded-For that is a valid address and not itself trusted. "unknown" when there is no peer address.
+/// X-Forwarded-For that is a valid address and not itself trusted. "unknown" when there is no peer address. The one reading of a caller's address: the join-preview rate limit (classes), the sign-in record
+/// (identity) and the admin access log (platform). A Client-IP header is never read.
 /// </summary>
-internal static class ClientAddress
+public static class ClientAddress
 {
+    public const string Unknown = "unknown";
+
+    /// <summary>The address of the caller of this request (see the class summary).</summary>
+    public static string Of(HttpContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        return Of(context.Connection.RemoteIpAddress?.ToString(), context.Request.Headers["X-Forwarded-For"].ToString());
+    }
+
     public static string Of(string? remote, string? forwarded)
     {
         if (string.IsNullOrEmpty(remote))
         {
-            return "unknown";
+            return Unknown;
         }
 
         if (!IsTrusted(remote) || string.IsNullOrEmpty(forwarded))

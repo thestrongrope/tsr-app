@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Http;
+using Tsr.Shared.Api;
 
 namespace Tsr.Identity.Api;
 
@@ -16,10 +17,9 @@ internal sealed record LoginTracking(string? Ip, string? UserAgent, string? Devi
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        // PHP's getRealIpAddr(): Client-IP, then X-Forwarded-For, trusted as sent (a quirk, kept for parity).
-        var ip = First(request.Headers["Client-IP"].ToString())
-            ?? First(request.Headers["X-Forwarded-For"].ToString())
-            ?? request.HttpContext.Connection.RemoteIpAddress?.ToString();
+        // Stricter than PHP's getRealIpAddr() (decided 11 Nov 2026), which believes Client-IP and X-Forwarded-For as sent: the peer, or the hop our own proxy added.
+        var address = ClientAddress.Of(request.HttpContext);
+        var ip = address == ClientAddress.Unknown ? null : address;
         return new LoginTracking(
             Fit(ip, 100),
             Fit(First(request.Headers.UserAgent.ToString()), 2000),

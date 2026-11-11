@@ -173,8 +173,8 @@ public sealed partial class ReportsB5bTests
         await MembershipTestKit.AddMemberAsync(901712, "=HYPERLINK(\"http://evil.invalid\",\"x\")", "1");
         await MembershipTestKit.AddMemberAsync(901713, "Rt Waiting Woman", "2");
         await TestDatabase.ExecuteAsync(
-            "insert into membership.class_registrations (token, status, created_at) values "
-            + "(901711, 'Pending', timestamptz '2025-04-01 10:00:00+00'), (901712, 'Pending', timestamptz '2025-04-02 10:05:06+00'), (901713, 'Pending', timestamptz '2025-04-03 10:00:00+00')");
+            "insert into membership.class_registrations (token, for_classid, status, created_at) values "
+            + "(901711, 9701, 'Pending', timestamptz '2025-04-01 10:00:00+00'), (901712, null, 'Pending', timestamptz '2025-04-02 10:05:06+00'), (901713, 9703, 'Pending', timestamptz '2025-04-03 10:00:00+00')");
 
         async Task<(IReadOnlyList<double> Tokens, IReadOnlyList<string> Created)> ReadAsync(int caller, string query)
         {
@@ -189,7 +189,7 @@ public sealed partial class ReportsB5bTests
         Assert.That(gents.Tokens, Is.EqualTo((double[])[901712, 901711]));
         Assert.That(gents.Created, Is.EqualTo((string[])["2025-04-02 10:05:06", "2025-04-01 10:00:00"]));
         Assert.That((await ReadAsync(LadiesAdmin, "&gender=1")).Tokens, Is.EqualTo((double[])[901713]));
-        Assert.That((await ReadAsync(Coordinator, "&gender=2")).Tokens, Is.EqualTo((double[])[901712, 901711]));
+        Assert.That((await ReadAsync(Coordinator, "&gender=2")).Tokens, Is.EqualTo((double[])[901711]), "only the person who asked for the assigned class 9701, not the open request");
         Assert.That((await ReadAsync(Both, "&gender=2")).Tokens, Is.EqualTo((double[])[901713]));
 
         var file = await kit.DownloadAsync(GentsAdmin, "/reports/registrations/download?format=xlsx");

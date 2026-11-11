@@ -145,15 +145,17 @@ public sealed partial class ReportsB5bTests
         var older = await MembershipTestKit.AddMemberAsync(901711, "Rt Waiting Older", "1");
         var newer = await MembershipTestKit.AddMemberAsync(901712, "Rt Waiting Newer", "1");
         var woman = await MembershipTestKit.AddMemberAsync(901713, "Rt Waiting Woman", "2");
+        await MembershipTestKit.AddMemberAsync(901714, "Rt Waiting Other Class", "1");
         Assert.That(older + newer + woman, Is.GreaterThan(0));
         await TestDatabase.ExecuteAsync(
-            "insert into membership.class_registrations (token, status, created_at) values "
-            + "(901711, 'Pending', timestamptz '2025-04-01 10:00:00+00'), (901712, 'Pending', timestamptz '2025-04-02 10:00:00+00'), (901713, 'Pending', timestamptz '2025-04-03 10:00:00+00')");
+            "insert into membership.class_registrations (token, for_classid, status, created_at) values "
+            + "(901711, 9701, 'Pending', timestamptz '2025-04-01 10:00:00+00'), (901712, null, 'Pending', timestamptz '2025-04-02 10:00:00+00'), (901713, 9703, 'Pending', timestamptz '2025-04-03 10:00:00+00'), "
+            + "(901714, 9702, 'Pending', timestamptz '2025-04-04 10:00:00+00')");
 
         var gents = await kit.SendAsync(GentsAdmin, HttpMethod.Get, "/reports/registrations?gender=2");
         Assert.That(gents.Status, Is.EqualTo(HttpStatusCode.OK), gents.Body);
         Assert.That(gents.Json!["gender"]!.GetValue<int>(), Is.EqualTo(1));
-        Assert.That(Ids(gents.Json["registrants"], "token"), Is.EqualTo((int[])[901712, 901711]));
+        Assert.That(Ids(gents.Json["registrants"], "token"), Is.EqualTo((int[])[901714, 901712, 901711]));
 
         var ladies = await kit.SendAsync(LadiesAdmin, HttpMethod.Get, "/reports/registrations?gender=1");
         Assert.That(Ids(ladies.Json!["registrants"], "token"), Is.EqualTo((int[])[901713]));
@@ -161,7 +163,10 @@ public sealed partial class ReportsB5bTests
         var assigned = await kit.SendAsync(Coordinator, HttpMethod.Get, "/reports/registrations?gender=2");
         Assert.That(assigned.Status, Is.EqualTo(HttpStatusCode.OK), assigned.Body);
         Assert.That(assigned.Json!["gender"]!.GetValue<int>(), Is.EqualTo(1));
-        Assert.That(Ids(assigned.Json["registrants"], "token"), Is.EqualTo((int[])[901712, 901711]));
+        Assert.That(Ids(assigned.Json["registrants"], "token"), Is.EqualTo((int[])[901711]), "decided 11 Nov 2026, stricter than PHP: only the people who asked for an assigned class (9701), not an open request or another class");
+
+        var file = await kit.SendAsync(Coordinator, HttpMethod.Get, "/reports/registrations/download?format=xlsx");
+        Assert.That(file.Status, Is.EqualTo(HttpStatusCode.OK));
 
         var both = await kit.SendAsync(Both, HttpMethod.Get, "/reports/registrations?gender=2");
         Assert.That(Ids(both.Json!["registrants"], "token"), Is.EqualTo((int[])[901713]));
