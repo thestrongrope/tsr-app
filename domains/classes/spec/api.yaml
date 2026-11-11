@@ -1324,6 +1324,173 @@ paths:
         "401": {$ref: "#/components/responses/Problem"}
         "403": {$ref: "#/components/responses/Problem"}
         "500": {$ref: "#/components/responses/Problem"}
+  /reports/conduction:
+    get:
+      operationId: reportConduction
+      summary: The conduction of one week for every class the caller reaches, and the figures around it
+      description: |
+        reports:read for the gender (403); the gender is the caller's locked gender, else 2 only for the text 2, else 1. year and week (default: the last completed week; 422 Invalid year or week; weeks are Sunday to Saturday, numbered per calendar year, week 0 is the days before the first Sunday). Answers {gender, year, week, previous, next, weekOf, summaryStart, summaryEnd, levels, classes, lastWeek}; level narrows classes and lastWeek by exact name. A week with no day in the calendar or one not yet begun answers an empty report (PHP prints a fatal error). Slice: features/report-conduction/ReportConduction.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: gender, in: query, required: false, schema: {type: string}}
+        - {name: year, in: query, required: false, schema: {type: integer}}
+        - {name: week, in: query, required: false, schema: {type: integer}}
+        - {name: level, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /reports/conduction/download-all:
+    get:
+      operationId: reportConductionDownloadAll
+      summary: Every week's raw rows of the conduction window as CSV
+      description: |
+        As /reports/conduction (the level is not read). text/csv, Content-Disposition Class_Report_All_<Ymd_His>.csv (UTC); 404 No data to download when there are no rows. Cells that would run as a formula get a leading quote. Slice: features/report-conduction-all/ReportConductionAll.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: gender, in: query, required: false, schema: {type: string}}
+        - {name: year, in: query, required: false, schema: {type: integer}}
+        - {name: week, in: query, required: false, schema: {type: integer}}
+      responses:
+        "200":
+          description: The file
+          content:
+            text/csv:
+              schema: {type: string}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /reports/weekly:
+    get:
+      operationId: reportWeekly
+      summary: Every class the caller reaches and how each week of the months went
+      description: |
+        reports:read for the gender (403). from and to are months MM-YYYY (default this month; to defaults to from); 422 from and to must be months as MM-YYYY, from not after to; 422 The range can cover at most 12 months. Answers {gender, from, to, levels, weeks[{month, label, from, to}], classes[{classId, level, class, teacher, weeks[{status held|notHeld|notFilled, sessions}]}]}. The classes are also limited to the assigned ones for a caller whose classes:read is assigned-only (PHP getAll). Slice: features/report-weekly/ReportWeekly.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: gender, in: query, required: false, schema: {type: string}}
+        - {name: from, in: query, required: false, schema: {type: string}}
+        - {name: to, in: query, required: false, schema: {type: string}}
+        - {name: level, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /reports/summary:
+    get:
+      operationId: reportSummary
+      summary: Per class over the months: sessions expected, held, not filled, averages, subjects
+      description: |
+        reports:read for the gender (403). from (required: PHP's default is built from an invalid date text, so a request without it is always 422) and to (default this month) are months MM-YYYY; no 12-month limit. Answers {gender, from, to, levels, classes[{classId, level, class, teacher, expected, conducted, notFilled, notConducted, avgStudents, avgDuration, percentNotFilled, percentConduction, percentAttendance, subjects|null}]}, every figure a whole number. A class with no schedule slot in a finished week is not listed. Slice: features/report-summary/ReportSummary.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: gender, in: query, required: false, schema: {type: string}}
+        - {name: from, in: query, required: true, schema: {type: string}}
+        - {name: to, in: query, required: false, schema: {type: string}}
+        - {name: level, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /reports/subject-conduction:
+    get:
+      operationId: reportSubjectConduction
+      summary: Per class and week, the date it last met and the topics each subject covered
+      description: |
+        reports:read for the gender (403). from and to are months MM-YYYY (default this month), at most 12; classId must be a class the caller reaches (403 otherwise, checked after the months). Answers {gender, from, to, levels, classes[{classId, class, level, teacher}], rows[{class, level, teacher, week, heldOn, arabic, aqaed, ahkam, akhlaq, other}]}. Slice: features/report-subject-conduction/ReportSubjectConduction.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: gender, in: query, required: false, schema: {type: string}}
+        - {name: from, in: query, required: false, schema: {type: string}}
+        - {name: to, in: query, required: false, schema: {type: string}}
+        - {name: level, in: query, required: false, schema: {type: string}}
+        - {name: classId, in: query, required: false, schema: {type: integer}}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /reports/class-sessions:
+    get:
+      operationId: reportClassSessions
+      summary: Every class the caller reaches with its session count and last session
+      description: |
+        reports:read for the gender (403). Answers {gender, levels, classes[{classId, class, level, teacher, totalSessions, lastDate, lastQuran, lastArabic, lastAqaed, lastAhkam, lastAkhlaq, lastOther}]}. Slice: features/report-class-sessions/ReportClassSessions.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: gender, in: query, required: false, schema: {type: string}}
+        - {name: level, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+  /reports/class-sessions/download-all:
+    get:
+      operationId: reportClassSessionsDownloadAll
+      summary: Every session of every class the caller reaches as CSV
+      description: |
+        As /reports/class-sessions (the level is not read). text/csv, Content-Disposition Class_Sessions_Report_<Gents|Ladies>_<Ymd_His>.csv; 404 No sessions to download. At most 200000 rows. Slice: features/report-class-sessions-all/ReportClassSessionsAll.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: gender, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: The file
+          content:
+            text/csv:
+              schema: {type: string}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /reports/class-sessions/{class_id}:
+    get:
+      operationId: reportClassSessionHistory
+      summary: A class's sessions, newest day first
+      description: |
+        reports:read with no target (403). A class that is missing, closed or out of the caller's reach answers 200 {sessions: []}. At most 5000 sessions. Slice: features/report-class-session-history/ReportClassSessionHistory.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
 components:
   securitySchemes:
     memberToken:

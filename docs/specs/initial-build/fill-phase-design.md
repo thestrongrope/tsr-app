@@ -75,7 +75,7 @@ If B1 lands near its target, the 99 operations cost roughly 2.5 million tokens; 
 
 ## Open risks
 
-- **Export libraries (B5):** PHP uses PhpSpreadsheet and Dompdf. The .NET choice (and its licence) is decided in B5; byte-equal files are not the bar, same rows and columns are.
+- **Export libraries (B5):** PHP uses PhpSpreadsheet and Dompdf. Decided in `docs/specs/dotnet-stack.md` (Asif, 9 Nov 2026; confirmed 11 Nov 2026): **ClosedXML** for xlsx and a **Gotenberg** container (HTML to PDF over HTTP) for PDF. Byte-equal files are not the bar, same rows and columns are.
 - **Bulk add (B2)** creates members in identity and membership from classes, under a lock; it is the hardest published command.
 - **Duplicate rows:** `class_students` has no unique key and `users.token` is not unique, so some PHP joins repeat rows. SQL ported from PHP repeats them the same way; no fix in the baseline.
 - **Not determined by recon:** the PHP `calendar_table` week numbering, whether API calls reach PHP's admin audit log behind the gateway, and how MariaDB compares text gender to a number for odd values.
