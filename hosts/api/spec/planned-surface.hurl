@@ -37,7 +37,7 @@ HTTP 501
 jsonpath "$.detail" == "Not implemented"
 
 # membership
-GET {{base_url}}/me/children
+GET {{base_url}}/reports/registrations
 {{auth_header}}: {{auth_value}}
 HTTP 501
 [Asserts]

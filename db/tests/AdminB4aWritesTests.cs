@@ -303,4 +303,37 @@ public sealed class AdminB4aWritesTests
         Assert.That(trained.Status, Is.EqualTo(HttpStatusCode.UnprocessableEntity), trained.Body);
         Assert.That(await MembershipTestKit.CountAsync("platform.outbox"), Is.EqualTo(0));
     }
+
+    /// <summary>Decided 11 Nov 2026, stricter than PHP: the transfer history and the deactivated-classes screen are limited to the assigned classes like the other admin class lists.</summary>
+    [Test]
+    public async Task A_coordinator_holding_a_named_grant_sees_history_and_closed_classes_of_the_assigned_classes_only()
+    {
+        const int Coordinator = 901303;
+        var coordinator = await MembershipTestKit.AddMemberAsync(Coordinator, "B4 Coordinator", "2");
+        await AddStudentsAsync(901311, 901312);
+        await TestDatabase.ExecuteAsync(
+            "truncate access.class_access_rule_conditions, access.class_access_rules, access.user_permissions restart identity cascade; "
+            + $"insert into access.user_roles (user_id, roleid) values ({coordinator}, 5); "
+            + $"insert into access.user_permissions (user_id, permission) values ({coordinator}, 'students:transfer:all'), ({coordinator}, 'deactivated-classes:manage:all'); "
+            + $"insert into access.class_access_rules (id, token, gender, note) values (1, {Coordinator}, 2, 'ladies level 1'); "
+            + "insert into access.class_access_rule_conditions (rule_id, field, negate, level_id) values (1, 'level', false, 1); "
+            + "insert into classes.student_transfers (token_no, from_class_id, to_class_id, type, reason, transferred_by) values "
+            + $"(901311, {Source}, {Destination}, 'transfer', 'outside', {Admin}), (901312, {Source}, {LadiesClass}, 'transfer', 'inside', {Admin}); "
+            + $"insert into classes.class_audit_log (class_id, action, performed_by) values ({Cohort}, 'deactivated', {Admin})");
+
+        var history = await kit.SendAsync(Coordinator, HttpMethod.Get, "/admin/transfers/history");
+        Assert.That(history.Status, Is.EqualTo(HttpStatusCode.OK), history.Body);
+        Assert.That(history.Json!["total"]!.GetValue<int>(), Is.EqualTo(1));
+        Assert.That(history.Json!["items"]!.AsArray().Single()!["studentToken"]!.GetValue<int>(), Is.EqualTo(901312));
+
+        var closed = await kit.SendAsync(Coordinator, HttpMethod.Get, "/admin/deactivated-classes");
+        Assert.That(closed.Status, Is.EqualTo(HttpStatusCode.OK), closed.Body);
+        Assert.That(closed.Json!["deactivated"]!.AsArray(), Is.Empty);
+        Assert.That(closed.Json!["log"]!.AsArray(), Is.Empty);
+
+        var all = await kit.SendAsync(Admin, HttpMethod.Get, "/admin/deactivated-classes");
+        Assert.That(all.Json!["deactivated"]!.AsArray(), Has.Count.EqualTo(1), "the super admin still sees the closed class");
+        Assert.That(all.Json!["log"]!.AsArray(), Has.Count.EqualTo(1));
+        Assert.That((await kit.SendAsync(Admin, HttpMethod.Get, "/admin/transfers/history")).Json!["total"]!.GetValue<int>(), Is.EqualTo(2));
+    }
 }

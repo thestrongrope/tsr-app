@@ -50,7 +50,6 @@ public sealed class PlannedRoutesTests
     }
 
     [TestCase("GET", "/search")]
-    [TestCase("GET", "/me/children")]
     [TestCase("POST", "/notifications/send")]
     public async Task A_planned_route_PHP_creates_a_member_on_does_not_create_one(string method, string path)
     {

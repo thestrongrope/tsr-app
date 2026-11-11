@@ -11,7 +11,8 @@ copied (facts: `docs/specs/initial-build/phase-3-membership-recon.md`; design: `
 | Sign-in profile sink (name and picture, same request) | built; `api/ProfileSink.cs`, supplies identity's `IProfileSink` |
 | Public `MemberNames` (name by user ids, bounded) and port `IClassEnrolments` (default: not enrolled) | built |
 | The ten HTTP operations: profile `GET` and `PATCH /me`, class request form `GET` and `POST /registration`, guardian self-service (links, inspect, accept, two revokes, parents) | built (task 3b-2), one slice each under `api/features/`; PHP parity proven by the Hurl files on both stacks. Gateway routes in `hosts/gateway/default.conf` |
-| The other 16 operations (children list, staff parent links, waiting list, reject, reports, donors, cards) | wait for `classes` (design, "What is built now") |
+| Batch B4b, nine more operations: `GET /me/children`, the five staff parent-link routes (create invite, list, cancel, candidate, add by token), `POST /registrations/{id}/reject`, `GET /admin/donors`, `GET /subscribers/{token}` | built, one slice each under `api/features/` (`me-children`, `member-parent-link-create`, `member-parent-links`, `member-parent-link-cancel`, `member-parent-candidate`, `member-parents-add`, `registration-reject`, `admin-donors`, `subscriber-card`); notes `docs/specs/initial-build/fill-b4b-notes.md`. Fixtures `db/synthetic/membership-b4b-fixtures.sql` and `tools/parity-php/membership-b4b-fixtures.sql` (tokens 9011xx, classes 9561 to 9563), loaded by `tools/membership-contract.sh` |
+| The remaining 5 operations: the three `/reports/registrations*` (batch B5), `GET /admin/donors/download` (xlsx or pdf only: waits for the export library, B5) and `GET /students/{token}` (needs the class level name: no published view carries it) | planned (501) in `api/Planned.cs` |
 
 ## Owns
 
@@ -23,7 +24,18 @@ copied (facts: `docs/specs/initial-build/phase-3-membership-recon.md`; design: `
 - PHP's enums and SET are text with CHECKs. The columns are `citext`, so a CHECK matches ignoring case (MariaDB's enums did too, but stored the listed spelling:
   a handler that stores a value must store the canonical spelling). The two JSON text columns are `jsonb`.
 - Dependencies: `access`, `identity`, `platform` (`MembershipModule.Dependencies`). `classes` is not a dependency: it will supply `IClassEnrolments`.
-- Events: `membership.member_created` (token; `CreateProfileAsync`), `membership.member_contact_changed` (token, nameChanged; written by `ChangeContactAsync`); none consumed (PHP sends no notification and the search touch is deferred).
+- Events (outbox, same transaction as the change; none consumed; a refusal or no-op writes none):
+
+| Event | Payload | Written by |
+|---|---|---|
+| `membership.member_created` | token | `MembershipCommands.CreateProfileAsync` |
+| `membership.member_contact_changed` | token, nameChanged | `MembershipCommands.ChangeContactAsync` |
+| `membership.parent_invite_created` | inviteId, childToken, createdBy (never the code) | POST /members/{child_token}/parent-links |
+| `membership.parent_invite_cancelled` | inviteId, childToken, cancelledBy | DELETE /members/{child_token}/parent-links/{id} |
+| `membership.parent_link_added` | linkId, parentToken, childToken, relationship, createdBy | POST /members/{child_token}/parents |
+| `membership.registration_rejected` | registrationId, token, rejectedBy | POST /registrations/{id}/reject |
+
+  PHP sends no notification for any of them.
 
 ## Interfaces
 
@@ -32,7 +44,7 @@ copied (facts: `docs/specs/initial-build/phase-3-membership-recon.md`; design: `
 | `MemberNames.ByUserIdsAsync(ids)` | public; users without a name are left out; more than 500 ids throws |
 | `IClassEnrolments.IsEnrolledAsync(token)` | port declared here; `classes` supplies it; default `NoEnrolments` answers false |
 | `IProfileSink` | declared by identity; `ProfileSink` here replaces identity's no-op. Register membership after identity |
-| uses `UserDirectory` (identity: `ByTokenAsync`, `ByTokensAsync`, `ByIdsAsync`), `Geo`, `Lookups` (platform), `Permissions` (access: `CanAsync`, `RoleIdAsync`), `MemberRateLimit` (shared) | by the ten slices |
+| uses `UserDirectory` (identity: `ByTokenAsync`, `ByTokensAsync`, `ByIdsAsync`), `Geo`, `Lookups` (platform), `Permissions` (access: `CanAsync`, `ReachAsync`, `RoleIdAsync`), `MemberRateLimit` (shared) | by the ten slices |
 | advisory lock class 3001 (`pg_advisory_xact_lock(3001, child_user_id)`) | membership's guardian lock; no other code may use class 3001 |
 
 ## Published commands
@@ -47,7 +59,7 @@ copied (facts: `docs/specs/initial-build/phase-3-membership-recon.md`; design: `
 
 | Need | File |
 |---|---|
-| A slice (endpoint, handler) | `api/features/<slice>/` (profile-get, profile-update, registration-get, registration-save, children-links, children-link-inspect, children-link-accept, children-link-revoke, parents-list, parent-revoke) |
+| A slice (endpoint, handler) | `api/features/<slice>/` (the nine B4b slices above, profile-get, profile-update, registration-get, registration-save, children-links, children-link-inspect, children-link-accept, children-link-revoke, parents-list, parent-revoke) |
 | PHP's rules without a database (casts, validation, the form, link rules, views) | `api/domain/` (`PhpText`, `PhpValue`, `JsonBody`, `ProfileFields`, `PlaceRules`, `RegistrationForm`, `GuardianRules`, `GenderLock`, `LinkRowView`...), tests beside them |
 | What a capability does today, with every quirk copied | `capabilities/profile.md`, `class-request.md`, `guardian-links.md` |
 | Words, contract | `spec/glossary.md`, `spec/api.yaml`, `spec/tests/*.hurl` |
@@ -60,14 +72,14 @@ copied (facts: `docs/specs/initial-build/phase-3-membership-recon.md`; design: `
 - Guardian writes that check then act take `GuardianLock` inside a transaction. "One active link per pair" and "five pending invites" have no key.
 - A body is read with `BodyReader` and `JsonBody` (PHP's `api_body`, 1 MiB cap), never with minimal-API binding: a malformed body must be 422 `Invalid JSON body`.
 - The 403 text is PHP's (`Refusals.NotPermitted`), not the shared `Problem.Forbidden`.
-- Deferred: the search touch of `PATCH /me` (no `outbound_messages` table here), `TSR_PUBLIC_WEB_BASE` (arrives with the staff operation that builds an invite link), erasure on account deletion.
+- Deferred: the search touch of `PATCH /me` (no `outbound_messages` table here), erasure on account deletion. `TSR_PUBLIC_WEB_BASE` (configuration; unset means no base, as PHP without `REDIRECT_URI`) prefixes the invite link of `POST /members/{child_token}/parent-links`.
 
 ## Checks
 
 ```
 dotnet test domains/membership/api/tests   # the pure rules, with PHP's edge cases (casts, validation, the form, link rules, the gender lock with a fake port)
-dotnet test db/tests                       # schema, the sink, the ten operations through the API as the limited role, the lock, the role's rights (Docker)
-tools/membership-contract.sh dev           # the ten Hurl files on the dev stack (resets the fixtures first); also: parity
+dotnet test db/tests                       # schema, the sink, the nineteen operations through the API as the limited role, the lock, the role's rights (Docker)
+tools/membership-contract.sh test          # the 20 Hurl files (19 on parity) on the TEST stack (resets the fixtures first); also: parity
 tools/parity-php/membership-fixtures.sh    # only the fixture reset on the PHP parity stack (db/synthetic/membership-fixtures.sql holds the same rows for the new API)
 ```
 
@@ -82,3 +94,5 @@ Operations of this domain not built yet are 501 placeholders in `api/Planned.cs`
 | `v_members` | token, user_id, name, mobile, gender (raw text), city, state, country, zip | classes (teacher and student names, contact, gender), assessment reports |
 | `v_registrations` | id, token, for_classid, class_level, class_number, preferred_location, status, created_at | classes (waiting list, placement); columns to re-check in B4 |
 | `v_guardian_links` | id, parent_token, child_token, status | classes (children routes: active link) |
+
+This domain's SQL reads `classes.v_enrolments`, `classes.v_classes` (children's classes, waiting registrant, donors, reach, cards) and `identity.v_users`. `classes` already lists membership as a reader of its own views; `MembershipModule.Dependencies` is unchanged (`access`, `identity`, `platform`).

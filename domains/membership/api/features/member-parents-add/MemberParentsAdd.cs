@@ -1,0 +1,129 @@
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Routing;
+using Microsoft.EntityFrameworkCore;
+using Tsr.Access.Api;
+using Tsr.Identity.Api;
+using Tsr.Membership.Api.Domain;
+using Tsr.Shared.Api;
+
+namespace Tsr.Membership.Api.Features.MemberParentsAdd;
+
+// Slice: POST /members/{child_token}/parents {parent_token, relationship} -> 201 {id, parent_token, child_token, relationship, status: "active"}: staff add an active parent link by token.
+// Order (PHP, route_member_parents_add_direct; there is no early token <= 0 check here, unlike the invite routes): staff in reach of the child (domain/GuardianChecks.StaffMayAddForAsync,
+// direct) else 403 for a caller without parents:add-direct or 404 "Student not found"; the body (422 Invalid JSON; parent_token is an (int) cast, relationship a string cast); then
+// GuardiansModel::addDirect: the parent (a guest or unknown is 404 "Member or student not found", a shared token 422 code ambiguous_token), the child (same), a self link or the caller
+// as the parent (422 "Invalid relationship or self-link not allowed"), the relationship (father, mother or guardian after trim and lower-case, else the same 422), then under the child's
+// guardian lock: an active link for the pair is 409 "An active link already exists for this parent and child"; a pair the child ended is 403 "Child previously revoked this parent; admin
+// approval required" unless the caller holds parents:manage for the child's gender; else the row (source token_entry, active now). Contract: spec/api.yaml.
+// Event membership.parent_link_added (linkId, parentToken, childToken, relationship, createdBy).
+
+internal static class MemberParentsAddSlice
+{
+    internal sealed record ParentLinkAdded(int LinkId, int ParentToken, int ChildToken, string Relationship, int CreatedBy);
+
+    public static IEndpointRouteBuilder MapMemberParentsAdd(this IEndpointRouteBuilder routes)
+    {
+        routes.MapPost("/members/{child_token}/parents", HandleAsync).RequireMember(createsMember: true);
+        return routes;
+    }
+
+    private static async Task<IResult> HandleAsync(
+        string child_token,
+        HttpContext context,
+        MembershipContext db,
+        Permissions permissions,
+        UserDirectory users,
+        TimeProvider clock,
+        CancellationToken ct)
+    {
+        var caller = context.GetCaller();
+        if (caller is null)
+        {
+            return Problem.Unauthenticated();
+        }
+
+        var childToken = PhpValue.IntOfText(child_token);
+        if (!await GuardianChecks.StaffMayAddForAsync(db, permissions, caller, childToken, direct: true, ct))
+        {
+            return await permissions.CanAsync(caller, "parents:add-direct", AccessTarget.None, ct)
+                ? Problem.Detail(StatusCodes.Status404NotFound, GuardianChecks.StudentNotFound)
+                : Refusals.NotPermitted();
+        }
+
+        var raw = await BodyReader.ReadAsync(context.Request, ct);
+        if (raw is null)
+        {
+            return Problem.Detail(StatusCodes.Status413PayloadTooLarge, "Request body too large");
+        }
+
+        var parsed = JsonBody.Parse(raw);
+        if (!parsed.IsSuccess)
+        {
+            return Problem.Detail(StatusCodes.Status422UnprocessableEntity, parsed.Error!);
+        }
+
+        var parentToken = PhpValue.ToInteger(parsed.Value!.Get("parent_token"));
+        var relationship = PhpValue.Text(parsed.Value.Get("relationship"));
+        return await AddAsync(db, permissions, users, clock, caller, parentToken, childToken, relationship, ct);
+    }
+
+    private static async Task<IResult> AddAsync(
+        MembershipContext db, Permissions permissions, UserDirectory users, TimeProvider clock, Caller caller, long parentToken, long childToken, string typed, CancellationToken ct)
+    {
+        var parent = await GuardianChecks.ValidateMemberAsync(db, users, parentToken, ct);
+        if (parent.Status != MemberCheck.Ok)
+        {
+            return Unknown(parent.Status);
+        }
+
+        var child = await GuardianChecks.ValidateMemberAsync(db, users, childToken, ct);
+        if (child.Status != MemberCheck.Ok)
+        {
+            return Unknown(child.Status);
+        }
+
+        var parentValue = (int)parentToken;
+        var childValue = (int)childToken;
+        var callerToken = await GuardianChecks.TokenOfUserAsync(users, caller.UserId, ct);
+        if (ParentLinkRules.DirectRefusal(parentValue, childValue, callerToken, typed) is { } invalid)
+        {
+            return Problem.Detail(StatusCodes.Status422UnprocessableEntity, invalid);
+        }
+
+        var relationship = ParentLinkRules.DirectRelationship(typed)!;
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        await GuardianLock.TakeAsync(db, child.UserId, ct);
+        if (await db.UserGuardians.AnyAsync(g => g.ParentToken == parentValue && g.ChildToken == childValue && g.Status == "active", ct))
+        {
+            return Problem.Detail(StatusCodes.Status409Conflict, GuardianRules.AlreadyLinked);
+        }
+
+        if (await GuardianChecks.RemovedByChildBlocksAsync(db, users, permissions, parentValue, childValue, child.UserId, caller, ct))
+        {
+            return Problem.Detail(StatusCodes.Status403Forbidden, "Child previously revoked this parent; admin approval required");
+        }
+
+        var now = clock.GetUtcNow();
+        var link = new UserGuardian
+        {
+            ParentToken = parentValue, ChildToken = childValue, Relationship = relationship, Status = "active", Source = "token_entry",
+            CreatedBy = caller.UserId, CreatedAt = now, ActivatedAt = now,
+        };
+        db.UserGuardians.Add(link);
+        await db.SaveChangesAsync(ct);
+        await Outbox.WriteAsync(db, "membership.parent_link_added", new ParentLinkAdded(link.Id, parentValue, childValue, relationship, caller.UserId), clock, ct);
+        await transaction.CommitAsync(ct);
+        return Results.Json(
+            new Dictionary<string, object?>
+            {
+                ["id"] = link.Id, ["parent_token"] = parentValue, ["child_token"] = childValue, ["relationship"] = relationship, ["status"] = "active",
+            },
+            statusCode: StatusCodes.Status201Created);
+    }
+
+    private static IResult Unknown(MemberCheck status) =>
+        status == MemberCheck.Ambiguous
+            ? Refusals.AmbiguousToken()
+            : Problem.Detail(StatusCodes.Status404NotFound, "Member or student not found");
+}
