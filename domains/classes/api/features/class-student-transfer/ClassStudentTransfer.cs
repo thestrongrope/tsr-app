@@ -23,8 +23,6 @@ internal static class ClassStudentTransferSlice
     private const int MaxReason = 500;
     private static readonly string[] Types = ["transfer", "promotion", "demotion"];
 
-    internal sealed record StudentTransferred(int FromClassId, int ToClassId, int Token, string Type, int TransferredBy);
-
     public static IEndpointRouteBuilder MapClassStudentTransfer(this IEndpointRouteBuilder routes)
     {
         routes.MapPost("/classes/{class_id}/students/{token}/transfer", HandleAsync).RequireMember(createsMember: true);
@@ -139,15 +137,7 @@ internal static class ClassStudentTransferSlice
             return "reason must be at most 500 characters";
         }
 
-        await db.Database.ExecuteSqlAsync(
-            $"update classes.class_students set removed_at = now(), removed_by = {by}, status = 'I', removed_reason = {removal} where class_id = {from} and token_no = {student} and removed_at is null",
-            ct);
-        await db.Database.ExecuteSqlAsync(
-            $"insert into classes.class_students (class_id, token_no, joined_on) values ({to}, {student}, (now() at time zone 'UTC')::date)", ct);
-        await db.Database.ExecuteSqlAsync(
-            $"insert into classes.student_transfers (token_no, from_class_id, to_class_id, type, reason, transferred_by) values ({student}, {from}, {to}, {input.Type}, {input.Reason}, {by})",
-            ct);
-        await Outbox.WriteAsync(db, "classes.student_transferred", new StudentTransferred(from, to, student, input.Type, by), clock, ct);
+        await StudentMove.WriteAsync(db, clock, from, to, student, input.Type, input.Reason, by, removeFromSource: true, ct);
         await transaction.CommitAsync(ct);
         return null;
     }

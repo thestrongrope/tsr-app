@@ -18,7 +18,7 @@ namespace Tsr.Classes.Api.Features.ClassStudentEdit;
 // the email (domain/StudentEditRules.cs: another member's token address, then a malformed one, 422), then identity's command: a different email is refused (422 "This member signs in with their own email; it cannot be changed
 // here.") unless the member's address is blank or <token>@thestrongrope.com AND they have no Firebase link. Then one transaction: identity's ChangeEmailAsync (only a non-blank email), membership's ChangeContactAsync (the
 // name only when not "" or "0" as PHP empty(); the mobile ALWAYS, an omitted one wipes it) and the note on every enrolment row of the pair (always, "" when omitted). Any database failure (a value too long for its column)
-// rolls everything back: 422 "Failed to update student". No other field is read (no mass assignment), no history row, no uniqueness check on the email (PHP has none).
+// rolls everything back: 422 "Failed to update student". No other field is read (no mass assignment), no history row. An email another member already has is 422 "This email already belongs to another member." (decided 11 Nov 2026; PHP has no such check).
 // Deviations: the email column holds 255 characters here and 200 in PHP; a NUL in a field is 422 (PostgreSQL cannot store it). Events: identity.member_email_changed, membership.member_contact_changed (written by the owners'
 // commands) and classes.student_edited (the note), each in the same transaction. PHP's search touch is not sent (PHP has none for this route).
 
@@ -88,6 +88,7 @@ internal static class ClassStudentEditSlice
         var saved = await SaveAsync(db, clock, head.Id, student, values, caller.Token, ct);
         return saved switch
         {
+            Outcome.EmailTaken => Problem.Detail(StatusCodes.Status422UnprocessableEntity, "This email already belongs to another member."),
             Outcome.EmailRefused => Problem.Detail(StatusCodes.Status422UnprocessableEntity, "This member signs in with their own email; it cannot be changed here."),
             Outcome.Failed => Problem.Detail(StatusCodes.Status422UnprocessableEntity, "Failed to update student"),
             _ => Results.Json(await ClassRoster.BuildAsync(db, permissions, caller, head.Id, ct)),
@@ -118,6 +119,7 @@ internal static class ClassStudentEditSlice
     {
         Saved,
         EmailRefused,
+        EmailTaken,
         Failed,
     }
 
@@ -126,6 +128,11 @@ internal static class ClassStudentEditSlice
         await using var transaction = await db.Database.BeginTransactionAsync(ct);
         try
         {
+            if (values["email"].Length > 0 && await IdentityCommands.EmailTakenAsync(db, student, values["email"], ct))
+            {
+                return Outcome.EmailTaken;
+            }
+
             if (values["email"].Length > 0 && !await IdentityCommands.ChangeEmailAsync(db, student, values["email"], clock, ct))
             {
                 return Outcome.EmailRefused;

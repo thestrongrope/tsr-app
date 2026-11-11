@@ -16,8 +16,8 @@ public static class IdentityCommands
     /// <summary>
     /// PHP <c>ClassStudentsModel::canChangeEmail</c> and the email write of <c>updateStudentInClass</c>: sign-in matches members by email, so only a placeholder (blank, or
     /// <c>&lt;token&gt;@thestrongrope.com</c>) that has never signed in (no Firebase link) may be given another address. Returns false, writing nothing, when the member does not exist or may not
-    /// be changed; true when the member now has <paramref name="email"/> (an address the member already has is left alone, one that differs only in case is rewritten). The email is not checked for
-    /// uniqueness, as PHP does not (its column has no unique key). Writes one outbox row, <c>identity.member_email_changed</c>, when it changes the address. Run inside the caller's transaction.
+    /// be changed; true when the member now has <paramref name="email"/> (an address the member already has is left alone, one that differs only in case is rewritten). An address another member
+    /// already has is refused too (<see cref="EmailTakenAsync"/>; decided 11 Nov 2026, PHP has no such check). Writes one outbox row, <c>identity.member_email_changed</c>, when it changes the address. Run inside the caller's transaction.
     /// </summary>
     public static async Task<bool> ChangeEmailAsync(DbContext db, int token, string email, TimeProvider clock, CancellationToken ct)
     {
@@ -46,7 +46,7 @@ public static class IdentityCommands
             return true;
         }
 
-        if (!rows.All(row => MayTake(row, token, wanted)))
+        if (!rows.All(row => MayTake(row, token, wanted)) || await EmailTakenAsync(db, token, wanted, ct))
         {
             return false;
         }
@@ -54,6 +54,21 @@ public static class IdentityCommands
         await db.Database.ExecuteSqlAsync($"update identity.users set email = {wanted} where token = {token}", ct);
         await Outbox.WriteAsync(db, "identity.member_email_changed", new MemberEmailChanged(token), clock, ct);
         return true;
+    }
+
+    /// <summary>
+    /// True when a member with another token already has <paramref name="email"/>, compared without letter case. A caller asks first to give its own refusal message;
+    /// <see cref="ChangeEmailAsync"/> refuses such an address in any case. No unique index backs this: two changes at the same moment can both pass.
+    /// </summary>
+    public static async Task<bool> EmailTakenAsync(DbContext db, int token, string email, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(email);
+        var wanted = PhpText.Trim(email);
+        var found = await db.Database
+            .SqlQuery<int>($"""select 1 as "Value" from identity.users where lower(email) = lower({wanted}) and token <> {token} limit 1""")
+            .ToListAsync(ct);
+        return found.Count > 0;
     }
 
     private static bool MayTake(Current row, int token, string wanted)

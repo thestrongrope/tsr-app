@@ -36,22 +36,7 @@ internal static class Planned
             ("GET", "/reports/active-teachers"),
             ("GET", "/reports/active-teachers/download"),
             ("GET", "/reports/this-week"),
-            ("GET", "/reports/this-week/class/{class_id}"),
-            ("GET", "/admin/syllabus"),
-            ("POST", "/admin/syllabus"),
-            ("GET", "/admin/transfers/classes"),
-            ("GET", "/admin/transfers/classes/{class_id}/students"),
-            ("GET", "/admin/transfers/history"),
-            ("POST", "/admin/transfers"),
-            ("GET", "/admin/members/{token}"),
-            ("POST", "/admin/members/{token}/enrolments"),
-            ("GET", "/admin/deactivated-classes"),
-            ("GET", "/admin/deactivated-classes/candidates"),
-            ("GET", "/admin/teachers"),
-            ("POST", "/admin/teachers/training"),
-            ("POST", "/admin/teachers/import"),
-            ("PUT", "/admin/syllabus/{syllabus_id}"),
-            ("DELETE", "/admin/syllabus/{syllabus_id}"));
+            ("GET", "/reports/this-week/class/{class_id}"));
         return routes;
     }
 }

@@ -1030,6 +1030,300 @@ paths:
         "401": {$ref: "#/components/responses/Problem"}
         "403": {$ref: "#/components/responses/Problem"}
         "404": {$ref: "#/components/responses/Problem"}
+  /admin/syllabus:
+    get:
+      operationId: listAdminSyllabus
+      summary: Every level with its live syllabus items
+      description: |
+        Super admin only (syllabus:update, 403 "Only super admins can access this resource"). Query include_inactive (true/1/yes/on, false/0/no/off; else 422). Answers [{level_id, level_name, level_code, items}] for every level. Slice: features/admin-syllabus-list/AdminSyllabusList.cs.
+      security:
+        - memberToken: []
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+    post:
+      operationId: createAdminSyllabus
+      summary: Add a syllabus item
+      description: |
+        Body {level_id, subject_name, url, link_type?, sort_order?, description?}. 403 as the list, 422 in order (level_id, subject_name, url, link_type, sort_order, description), 400 "Invalid level_id". 201 with the item. Slice: features/admin-syllabus-create/AdminSyllabusCreate.cs. Event: classes.syllabus_item_created.
+      security:
+        - memberToken: []
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "400": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /admin/syllabus/{syllabus_id}:
+    put:
+      operationId: updateAdminSyllabus
+      summary: Edit a syllabus item
+      description: |
+        Partial body; a field is given when present and not null. 404 "Syllabus item not found" (before the field checks), 422 per field, 400 "No fields to update". Answers the item. Slice: features/admin-syllabus-update/AdminSyllabusUpdate.cs. Event: classes.syllabus_item_updated.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: syllabus_id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "400": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+    delete:
+      operationId: deleteAdminSyllabus
+      summary: Soft-delete a syllabus item
+      description: |
+        404 "Syllabus not found". Answers {success: true}. Slice: features/admin-syllabus-delete/AdminSyllabusDelete.cs. Event: classes.syllabus_item_deleted.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: syllabus_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /admin/transfers/classes:
+    get:
+      operationId: listTransferClasses
+      summary: Every class and the level names, for transfers
+      description: |
+        students:transfer (403 "Only administrators can transfer students"). Answers {classes, levels}. Slice: features/admin-transfer-classes/AdminTransferClasses.cs.
+      security:
+        - memberToken: []
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+  /admin/transfers/classes/{class_id}/students:
+    get:
+      operationId: listTransferStudents
+      summary: Who can be moved out of a class
+      description: |
+        students:transfer (403), the class in any status (404). Answers {students}: the active students, or for a closed class with none its deactivation cohort. Slice: features/admin-transfer-students/AdminTransferStudents.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /admin/transfers/history:
+    get:
+      operationId: listTransferHistory
+      summary: The transfer log
+      description: |
+        students:transfer (403). Query q, page, pageSize (1 to 100, default 50). Answers {total, page, pageSize, items}. Slice: features/admin-transfer-history/AdminTransferHistory.cs.
+      security:
+        - memberToken: []
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+  /admin/transfers:
+    post:
+      operationId: saveTransfers
+      summary: Move several students between two classes
+      description: |
+        Body {fromClassId, toClassId, type, reason?, tokens}. students:transfer (403), 422 in order, 404 "Class not found", 422 destination not active or other gender. Answers {moved, failed}, 200 even when all failed; each student moves in a transaction of its own. Slice: features/admin-transfer-save/AdminTransferSave.cs. Event: classes.student_transferred.
+      security:
+        - memberToken: []
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /admin/members/{token}:
+    get:
+      operationId: getAdminMember
+      summary: A member's details by token
+      description: |
+        members:enrol-by-token (403), 30 lookups an hour per caller (429). 404 "No registered member has this token"; 422 with code ambiguous_token when two members hold it. Slice: features/admin-member-get/AdminMemberGet.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: token, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "429": {$ref: "#/components/responses/Problem"}
+  /admin/members/{token}/enrolments:
+    post:
+      operationId: enrolMemberByToken
+      summary: Enrol a member, found by token, in a class
+      description: |
+        Body {classId}. members:enrol-by-token (403), classId an integer above 0 (422), an active class (404), students:enrol (403), 30 an hour per caller (429). Refusals with a code: 409 already_enrolled, 422 other_gender, 422 ambiguous_token, 409 class_inactive. Answers {saved: true} with the class roster. Slice: features/admin-member-enrol/AdminMemberEnrol.cs. Events: classes.student_enrolled (source by_token), classes.student_restored.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: token, in: path, required: true, schema: {type: string}}
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "429": {$ref: "#/components/responses/Problem"}
+        "500": {$ref: "#/components/responses/Problem"}
+  /admin/deactivated-classes:
+    get:
+      operationId: listDeactivatedClasses
+      summary: The closed classes and the deactivation log
+      description: |
+        deactivated-classes:manage (403). Answers {deactivated, log}. Slice: features/admin-deactivated-classes/AdminDeactivatedClasses.cs.
+      security:
+        - memberToken: []
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+  /admin/deactivated-classes/candidates:
+    get:
+      operationId: listDeactivationCandidates
+      summary: The active classes one may deactivate
+      description: |
+        deactivated-classes:manage (403). Answers {classes}. Slice: features/admin-deactivated-candidates/AdminDeactivatedCandidates.cs.
+      security:
+        - memberToken: []
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+  /admin/teachers:
+    get:
+      operationId: listAdminTeachers
+      summary: A gender's trained teachers
+      description: |
+        Query gender (a gender administrator is held to their own; exactly 2 is ladies, anything else gents), teachers:read for it (403). Answers {gender, levels, teachers}. Slice: features/admin-teachers/AdminTeachers.cs.
+      security:
+        - memberToken: []
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+  /admin/teachers/training:
+    post:
+      operationId: changeTeacherTraining
+      summary: Add or remove the levels teachers are trained for
+      description: |
+        Body {changes: [{token, level, action}], comments}. teachers:read (403 before the body), 422/404/403 per PHP's order. Answers {changed}. Slice: features/admin-teachers-training/AdminTeachersTraining.cs. Event: classes.teacher_training_changed.
+      security:
+        - memberToken: []
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "500": {$ref: "#/components/responses/Problem"}
+  /admin/teachers/import:
+    post:
+      operationId: importTeachers
+      summary: Give teachers of active classes a training record
+      description: |
+        Body {gender?}. teachers:read for the gender (403). Answers {added}. Slice: features/admin-teachers-import/AdminTeachersImport.cs. Event: classes.teacher_training_changed.
+      security:
+        - memberToken: []
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "500": {$ref: "#/components/responses/Problem"}
 components:
   securitySchemes:
     memberToken:

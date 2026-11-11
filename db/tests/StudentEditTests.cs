@@ -119,4 +119,19 @@ public sealed class StudentEditTests
         Assert.That(await MembershipTestKit.CountAsync("identity.users", "email = 'new.address@example.invalid'"), Is.EqualTo(0));
         Assert.That(await EventsAsync("identity.member_email_changed"), Is.EqualTo(0));
     }
+
+    /// <summary>Decided 11 Nov 2026 (PHP has no such check): an address another member already has is refused, in any letter case, and nothing is written.</summary>
+    [Test]
+    public async Task An_email_another_member_already_has_is_refused_and_nothing_is_written()
+    {
+        await TestDatabase.ExecuteAsync($"update identity.users set email = 'taken@example.invalid' where token = {Linked}");
+
+        var reply = await EditAsync(Placeholder, """{"name": "Must Not Save", "email": "TAKEN@example.invalid", "notes": "no"}""");
+
+        Assert.That(reply.Status, Is.EqualTo(HttpStatusCode.UnprocessableEntity), reply.Body);
+        Assert.That(reply.Body, Does.Contain("This email already belongs to another member."));
+        Assert.That(await MembershipTestKit.CountAsync("identity.users", $"token = {Placeholder} and email = '{Placeholder}@thestrongrope.com'"), Is.EqualTo(1));
+        Assert.That(await MembershipTestKit.CountAsync("membership.member_profiles", "name = 'Must Not Save'"), Is.EqualTo(0));
+        Assert.That(await MembershipTestKit.CountAsync("platform.outbox"), Is.EqualTo(0));
+    }
 }

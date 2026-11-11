@@ -16,37 +16,11 @@ internal static class SyllabusLevelSlice
 {
     internal sealed record Level(int Id, string Name, string Code);
 
-    internal sealed record Row(
-        int Id,
-        int LevelId,
-        string SubjectName,
-        string? Description,
-        string LinkType,
-        string Url,
-        int SortOrder,
-        bool IsActive,
-        DateTime CreatedAt,
-        DateTime? ModifiedAt);
-
-    internal sealed record Item(
-        int Id,
-        [property: JsonPropertyName("level_id")] int LevelId,
-        [property: JsonPropertyName("subject_name")] string SubjectName,
-        string? Description,
-        [property: JsonPropertyName("link_type")] string LinkType,
-        string Url,
-        [property: JsonPropertyName("sort_order")] int SortOrder,
-        [property: JsonPropertyName("is_active")] bool IsActive,
-        [property: JsonPropertyName("created_at")] string CreatedAt,
-        [property: JsonPropertyName("modified_at")] string? ModifiedAt);
-
     internal sealed record Body(
         [property: JsonPropertyName("level_id")] int LevelId,
         [property: JsonPropertyName("level_name")] string LevelName,
         [property: JsonPropertyName("level_code")] string LevelCode,
-        IReadOnlyList<Item> Items);
-
-    private const string Naive = "yyyy-MM-dd'T'HH:mm:ss";
+        IReadOnlyList<SyllabusItems.Item> Items);
 
     public static IEndpointRouteBuilder MapSyllabusLevel(this IEndpointRouteBuilder routes)
     {
@@ -76,27 +50,7 @@ internal static class SyllabusLevelSlice
             return Problem.Detail(StatusCodes.Status404NotFound, "Level not found");
         }
 
-        var rows = await db.Database
-            .SqlQuery<Row>($"""
-                select id as "Id", level_id as "LevelId", subject_name as "SubjectName", description as "Description", link_type as "LinkType",
-                       url as "Url", coalesce(sort_order, 0) as "SortOrder", is_active <> 0 as "IsActive",
-                       created_at at time zone 'UTC' as "CreatedAt", modified_at at time zone 'UTC' as "ModifiedAt"
-                from classes.syllabus
-                where level_id = {levelId} and is_active = 1 and deleted_at is null
-                order by sort_order, subject_name
-                """)
-            .ToListAsync(ct);
-        var items = rows.Select(r => new Item(
-            r.Id,
-            r.LevelId,
-            r.SubjectName,
-            string.IsNullOrEmpty(r.Description) ? null : r.Description,
-            r.LinkType,
-            r.Url,
-            r.SortOrder,
-            r.IsActive,
-            r.CreatedAt.ToString(Naive, System.Globalization.CultureInfo.InvariantCulture),
-            r.ModifiedAt?.ToString(Naive, System.Globalization.CultureInfo.InvariantCulture))).ToList();
+        var items = await SyllabusItems.ActiveOfLevelAsync(db, levelId, ct);
         return Results.Json(new Body(levels[0].Id, levels[0].Name, levels[0].Code, items));
     }
 }
