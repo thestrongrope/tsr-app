@@ -11,7 +11,7 @@ namespace Tsr.Classes.Api.Features.ClassSessions;
 
 // Slice: GET /classes/{class_id}/sessions?page&pageSize -> the class's sessions, newest day first, as a bare array. Contract: spec/api.yaml.
 // PHP: routes/classes.php route_class_sessions (classes.php:337). Guards: gender set (400), class active (404), classes:read on the class (403).
-// Copied quirks: no deleted_at filter and not-conducted sessions are included; page = max(1, (int)), pageSize = min(100, max(1, (int))) default 20.
+// A subject flag is true for '1' or 'Y' (PHP's API writes 0/1, the web form Y/N; the column is citext, so 'y' too). Copied quirks: no deleted_at filter and not-conducted sessions are included; page = max(1, (int)), pageSize = min(100, max(1, (int))) default 20.
 
 internal static class ClassSessionsSlice
 {
@@ -92,8 +92,8 @@ internal static class ClassSessionsSlice
         var rows = await db.Database
             .SqlQuery<Session>($"""
                 select id as "Id", conducted_on as "ConductedOn", conducted = 1 as "Conducted", duration as "Duration", attendance as "Attendance",
-                       arabic_conducted = 'Y' as "ArabicConducted", aqaed_conducted = 'Y' as "AqaedConducted", ahkam_conducted = 'Y' as "AhkamConducted",
-                       akhlaq_conducted = 'Y' as "AkhlaqConducted", other_conducted = 'Y' as "OtherConducted",
+                       arabic_conducted in ('1', 'Y') as "ArabicConducted", aqaed_conducted in ('1', 'Y') as "AqaedConducted", ahkam_conducted in ('1', 'Y') as "AhkamConducted",
+                       akhlaq_conducted in ('1', 'Y') as "AkhlaqConducted", other_conducted in ('1', 'Y') as "OtherConducted",
                        arabic_topic as "ArabicTopic", aqaed_topic as "AqaedTopic", ahkam_topic as "AhkamTopic", akhlaq_topic as "AkhlaqTopic",
                        other_topic as "OtherTopic", non_conduction_reason as "NonConductionReason"
                 from classes.class_sessions

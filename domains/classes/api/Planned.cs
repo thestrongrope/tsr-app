@@ -14,12 +14,6 @@ internal static class Planned
         routes.MapPlanned(
             ("GET", "/me/guides"),
             ("GET", "/me/guides/{slug}"),
-            ("GET", "/classes/{class_id}/conduction"),
-            ("GET", "/classes/{class_id}/conduction/new"),
-            ("GET", "/classes/{class_id}/conduction/check"),
-            ("POST", "/classes/{class_id}/conduction"),
-            ("GET", "/classes/{class_id}/conduction/{session_id}"),
-            ("PUT", "/classes/{class_id}/conduction/{session_id}"),
             ("GET", "/reports/conduction"),
             ("GET", "/reports/conduction/download"),
             ("GET", "/reports/conduction/download-all"),

@@ -44,7 +44,7 @@ HTTP 501
 jsonpath "$.detail" == "Not implemented"
 
 # classes (a path with parameters: any non-slash segment)
-GET {{base_url}}/classes/900009/conduction/new
+GET {{base_url}}/classes/900009/mcq/topics
 {{auth_header}}: {{auth_value}}
 HTTP 501
 [Asserts]
@@ -102,8 +102,8 @@ HTTP 405
 [Asserts]
 jsonpath "$.detail" == "Method Not Allowed"
 
-# The overlap PHP resolves by listing the literal path first: /classes/{id}/conduction/new is not /classes/{id}/conduction/{session_id}
-GET {{base_url}}/classes/1/conduction/new
+# A planned literal path under a class (a path with parameters answers 501 the same way)
+GET {{base_url}}/classes/1/mcq/standard
 {{auth_header}}: {{auth_value}}
 HTTP 501
 [Asserts]

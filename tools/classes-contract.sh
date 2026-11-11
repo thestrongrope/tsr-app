@@ -10,6 +10,7 @@
 # files change only the rows of the WRITE fixtures (db/synthetic/classes-write-fixtures.sql and tools/parity-php/classes-write-fixtures.sql, tokens 9003xx/9004xx, classes 94xx and every class
 # created by the write admin), the BULK-ADD fixtures (classes-bulk-fixtures.sql, tokens 9007xx, classes 9451 and up; they first delete the members a bulk add created) and the ENROLMENT fixtures (classes-enrol-fixtures.sql beside them, tokens 9005xx, classes 9411 and up), which are RESET on every run, so a
 # file can be run again and files can run in parallel.
+# The CONDUCTION fixtures (classes-conduction-fixtures.sql, tokens 9008xx, classes 9471 and up, sessions 947101 and up) are reset the same way, run-created sessions included.
 # Only the tsr-app-test and tsr-parity compose projects are touched. Needs docker, curl, jq, hurl. Prints no secret.
 set -euo pipefail
 
@@ -61,6 +62,13 @@ MEMBERS=(
   "bk_adm_f=bk.900706@example.invalid"
   "bk_teacher=bk.900711@example.invalid"
   "bk_student=bk.900721@example.invalid"
+  "cd_teacher=cd.900801@example.invalid"
+  "cd_teacher2=cd.900802@example.invalid"
+  "cd_lteacher=cd.900803@example.invalid"
+  "cd_teacher4=cd.900804@example.invalid"
+  "cd_student=cd.900811@example.invalid"
+  "cd_student2=cd.900821@example.invalid"
+  "cd_outsider=cd.900826@example.invalid"
 )
 
 parity() { docker compose -p tsr-parity -f tools/parity-php/compose.parity.yml --env-file tools/parity-php/parity.env "$@"; }
@@ -77,6 +85,7 @@ case "$SIDE" in
     test_sql < db/synthetic/classes-enrol-fixtures.sql
     test_sql < db/synthetic/classes-b2c-fixtures.sql
     test_sql < db/synthetic/classes-bulk-fixtures.sql
+    test_sql < db/synthetic/classes-conduction-fixtures.sql
     MINT="tools/dev-auth/mint-token.sh"
     BASE="http://localhost:8089"
     VARS="build/test/classes.vars" ;;
@@ -87,6 +96,7 @@ case "$SIDE" in
     php_sql < tools/parity-php/classes-enrol-fixtures.sql
     php_sql < tools/parity-php/classes-b2c-fixtures.sql
     php_sql < tools/parity-php/classes-bulk-fixtures.sql
+    php_sql < tools/parity-php/classes-conduction-fixtures.sql
     # Files named *-new-api.hurl hold cases PHP gets wrong (a PHP bug is not copied); they run on the new API only.
     KEPT=()
     for f in "${FILES[@]}"; do case "$f" in *-new-api.hurl) ;; *) KEPT+=("$f") ;; esac; done

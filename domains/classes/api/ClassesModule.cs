@@ -29,6 +29,12 @@ using Tsr.Classes.Api.Features.ClassCreateTeachers;
 using Tsr.Classes.Api.Features.ClassManage;
 using Tsr.Classes.Api.Features.ClassCreate;
 using Tsr.Classes.Api.Features.ClassUpdate;
+using Tsr.Classes.Api.Features.ConductionCheck;
+using Tsr.Classes.Api.Features.ConductionCreate;
+using Tsr.Classes.Api.Features.ConductionGet;
+using Tsr.Classes.Api.Features.ConductionList;
+using Tsr.Classes.Api.Features.ConductionNew;
+using Tsr.Classes.Api.Features.ConductionUpdate;
 using Tsr.Classes.Api.Features.ClassScheduleUpdate;
 using Tsr.Classes.Api.Features.ClassStudentAdmin;
 using Tsr.Classes.Api.Features.ClassStudentAdd;
@@ -102,6 +108,12 @@ public static class ClassesModule
         routes.MapClassStudentRestore();
         routes.MapClassStudentsPerformance();
         routes.MapTeacherDetail();
+        routes.MapConductionList();
+        routes.MapConductionCheck();
+        routes.MapConductionNew();
+        routes.MapConductionGet();
+        routes.MapConductionCreate();
+        routes.MapConductionUpdate();
         routes.MapPlannedRoutes();
         return routes;
     }

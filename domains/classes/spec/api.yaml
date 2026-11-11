@@ -221,6 +221,146 @@ paths:
         "401": {$ref: "#/components/responses/Problem"}
         "403": {$ref: "#/components/responses/Problem"}
         "404": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}/conduction:
+    get:
+      operationId: listClassConduction
+      summary: A class's conduction records for the teacher's screen
+      description: |
+        Active class (404), then sessions:create on it (403 "You do not have permission to manage this class"); no gender check. Query page, pageSize (default 20, at most 100). Newest day first; no deleted filter; totalPages is a float.
+        Slice: features/conduction-list/ConductionList.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+        - {name: page, in: query, schema: {type: integer}}
+        - {name: pageSize, in: query, schema: {type: integer}}
+      responses:
+        "200":
+          description: "{class: {id, code, name, level, levelName, gender, status, teacherName, students, extraStudents, totalStudents}, sessions: [session], totalRecords, totalPages, page}"
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+    post:
+      operationId: recordClassConduction
+      summary: Record a class session (201; a repeat of the same request answers 200 with the record it made)
+      description: |
+        Active class (404), then sessions:create on it (403 "You do not have permission to manage this class"); no gender check. Then the body (422), the payload rules in PHP order, the replay (same class, day, caller and recordedAt), a session already on the day (409).
+        Body: conductedOn, conducted (default true), nonConductionReason, duration, quranRecitationSurah, quranRecitationVerse, students [{token, present, recitation}], extraStudents [{name, token, present}], <five>Conducted, <five>Topic, recordedAt. Students who never were in the class are dropped.
+        Slice: features/conduction-create/ConductionCreate.cs; the rules in domain/ConductionRules.cs, the write in domain/ConductionWriter.cs. Event classes.session_recorded.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        "201":
+          description: "the saved session"
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}/conduction/new:
+    get:
+      operationId: getClassConductionForm
+      summary: The data of the new-record form
+      description: |
+        Active class (404), then sessions:create on it (403 "You do not have permission to manage this class"); no gender check.
+        lastSessionDate (the newest session, else the class start day), nextSessionDate (schedule rows of every state), futureDate (the next day when after today), latestTopics (newest non-blank per subject among held sessions), latestSurah, holyQuran.
+        Slice: features/conduction-new/ConductionNew.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: "{class, lastSessionDate, nextSessionDate, futureDate, latestTopics, latestSurah, holyQuran}"
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}/conduction/check:
+    get:
+      operationId: checkClassConductionDay
+      summary: Is there a session on the day, and is its week full
+      description: |
+        Active class (404), then sessions:create on it (403 "You do not have permission to manage this class"); no gender check. Query date (read as PHP strtotime: Y-m-d with time and offset, YYYYMMDD, d-m-Y, m/d/Y, "20 September 2025", today, tomorrow, yesterday); missing or unreadable is 422.
+        Slice: features/conduction-check/ConductionCheck.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+        - {name: date, in: query, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: "{alreadyConducted, sameWeek}"
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}/conduction/{session_id}:
+    get:
+      operationId: getClassConduction
+      summary: One record for editing, with its attendance
+      description: |
+        Active class (404), then sessions:update on it (403 "You do not have permission to manage this class"). The session must belong to the class (404 "Session not found").
+        Slice: features/conduction-get/ConductionGet.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+        - {name: session_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: "{class, session, attendance: [{token, name, present, recitation, extra}], holyQuran}"
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+    put:
+      operationId: updateClassConduction
+      summary: Replace a record and its attendance (within ten days of its making)
+      description: |
+        Active class (404), then sessions:update on it (403 "You do not have permission to manage this class"). The session must belong to the class (404), still be editable (403 "Session is not editable"); then the body as for the POST (422); another session on the new day is 409.
+        Slice: features/conduction-update/ConductionUpdate.cs. Event classes.session_updated. Teacher, author and creation time stay.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+        - {name: session_id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        "200":
+          description: "the saved session"
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
   /classes/create-options:
     get:
       operationId: getClassCreateOptions
