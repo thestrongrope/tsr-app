@@ -93,7 +93,7 @@ GET,/classes/{class_id}/schedule,classes,create,built
 PUT,/classes/{class_id}/schedule,classes,create,built
 POST,/classes/{class_id}/students,classes,create,built
 POST,/classes/{class_id}/students/bulk,classes,create,planned
-PUT,/classes/{class_id}/students/{token},classes,create,planned
+PUT,/classes/{class_id}/students/{token},classes,create,built
 POST,/classes/{class_id}/students/{token}/remove,classes,create,built
 POST,/classes/{class_id}/students/{token}/restore,classes,create,built
 PUT,/classes/{class_id}/students/{token}/class-admin,classes,create,built
@@ -166,7 +166,7 @@ GET,/admin/members/{token},classes,member,planned
 POST,/admin/members/{token}/enrolments,classes,member,planned
 GET,/admin/deactivated-classes,classes,create,planned
 GET,/admin/deactivated-classes/candidates,classes,create,planned
-POST,/classes/{class_id}/deactivate,classes,create,planned
+POST,/classes/{class_id}/deactivate,classes,create,built
 GET,/admin/whatsapp/reminders,notifications,create,planned
 PUT,/admin/whatsapp/reminders/{reminder_id},notifications,create,planned
 POST,/admin/whatsapp/reminders/{reminder_id}/run,notifications,create,planned

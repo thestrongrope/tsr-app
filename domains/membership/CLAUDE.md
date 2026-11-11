@@ -23,7 +23,7 @@ copied (facts: `docs/specs/initial-build/phase-3-membership-recon.md`; design: `
 - PHP's enums and SET are text with CHECKs. The columns are `citext`, so a CHECK matches ignoring case (MariaDB's enums did too, but stored the listed spelling:
   a handler that stores a value must store the canonical spelling). The two JSON text columns are `jsonb`.
 - Dependencies: `access`, `identity`, `platform` (`MembershipModule.Dependencies`). `classes` is not a dependency: it will supply `IClassEnrolments`.
-- Events: none published, none consumed (PHP sends no notification and the search touch is deferred).
+- Events: `membership.member_contact_changed` (token, nameChanged; written by `ChangeContactAsync`); none consumed (PHP sends no notification and the search touch is deferred).
 
 ## Interfaces
 
@@ -38,6 +38,8 @@ copied (facts: `docs/specs/initial-build/phase-3-membership-recon.md`; design: `
 ## Published commands
 
 `MembershipCommands.RecordAcceptedRegistrationAsync(db, token, classId, ct)` (`api/MembershipCommands.cs`): PHP `writeEnrolment`'s first step. A member with no `class_registrations` row gets an Accepted one naming the class; a member with any row keeps it. Runs on the caller's transaction (it throws outside one). Used by `classes` (add, join, place); proved by `db/tests/EnrolmentWritesTests.cs`.
+
+`MembershipCommands.ChangeContactAsync(db, token, name, mobile, clock, ct)` (`api/MembershipCommands.cs`): PHP `updateStudentInClass`'s write of name (only when given; null leaves it) and mobile (always overwritten, empty included) on every profile row of the token. Validates its inputs (`MaxNameLength` 200, `MaxMobileLength` 100, throws), runs on the caller's transaction, writes the event `membership.member_contact_changed` (token, nameChanged). Used by `classes` (edit a student); proved by `db/tests/StudentEditTests.cs`.
 
 ## Where things are
 

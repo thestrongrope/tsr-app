@@ -37,6 +37,10 @@ tools/identity-contract.sh dev             # Hurl contract on the dev stack (emu
 tools/identity-contract.sh parity          # the same file on PHP (parity stack up, tools/parity-php/README.md)
 ```
 
+## Published commands
+
+`IdentityCommands.ChangeEmailAsync(db, token, email, clock, ct)` (`api/IdentityCommands.cs`): PHP `canChangeEmail` and the email write of `updateStudentInClass`. Only a placeholder (blank or `<token>@thestrongrope.com`) with no Firebase link may be given another address; an address the member already has is left alone; no uniqueness check (PHP has none). Returns false and writes nothing otherwise. Validates its inputs (throws), runs on the caller's transaction, writes the event `identity.member_email_changed` (token) when it changes the address. Used by `classes` (edit a student); proved by `db/tests/StudentEditTests.cs`.
+
 ## Placeholders
 
 Operations of this domain not built yet are 501 placeholders in `api/Planned.cs` (after the sign-in check; they create nothing). Building one deletes its line there and flips its state in `docs/specs/initial-build/operations.csv`.

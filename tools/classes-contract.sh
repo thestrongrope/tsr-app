@@ -66,6 +66,7 @@ case "$SIDE" in
     test_sql < db/synthetic/classes-fixtures.sql
     test_sql < db/synthetic/classes-write-fixtures.sql
     test_sql < db/synthetic/classes-enrol-fixtures.sql
+    test_sql < db/synthetic/classes-b2c-fixtures.sql
     MINT="tools/dev-auth/mint-token.sh"
     BASE="http://localhost:8089"
     VARS="build/test/classes.vars" ;;
@@ -73,6 +74,7 @@ case "$SIDE" in
     php_sql < tools/parity-php/classes-fixtures.sql
     php_sql < tools/parity-php/classes-write-fixtures.sql
     php_sql < tools/parity-php/classes-enrol-fixtures.sql
+    php_sql < tools/parity-php/classes-b2c-fixtures.sql
     # Files named *-new-api.hurl hold cases PHP gets wrong (a PHP bug is not copied); they run on the new API only.
     KEPT=()
     for f in "${FILES[@]}"; do case "$f" in *-new-api.hurl) ;; *) KEPT+=("$f") ;; esac; done

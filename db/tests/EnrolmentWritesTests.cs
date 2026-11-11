@@ -117,4 +117,19 @@ public sealed class EnrolmentWritesTests
         Assert.That(await MembershipTestKit.CountAsync("classes.student_transfers", $"token_no = {Fresh} and from_class_id = {ClassId} and to_class_id = 9912 and type = 'promotion' and transferred_by = {Admin}"), Is.EqualTo(1));
         Assert.That(await EventsAsync("classes.student_transferred"), Is.EqualTo(1));
     }
+
+    [Test]
+    public async Task A_member_removed_by_someone_else_cannot_rejoin_even_when_an_older_row_of_the_pair_was_self_removed()
+    {
+        // Duplicate rows of one member in one class exist (no unique index, as in PHP, where the row judged is arbitrary). Any removal by another person refuses the rejoin.
+        await TestDatabase.ExecuteAsync(
+            "insert into classes.class_students (class_id, token_no, joined_on, status, removed_at, removed_by) values "
+            + $"({ClassId}, {Fresh}, current_date, 'I', now(), {Fresh}), ({ClassId}, {Fresh}, current_date, 'I', now(), {Admin})");
+
+        var rejoin = await kit.SendAsync(Fresh, HttpMethod.Post, "/classes/join", """{"link": "enlink1"}""");
+
+        Assert.That(rejoin.Status, Is.EqualTo(HttpStatusCode.Forbidden), rejoin.Body);
+        Assert.That(await MembershipTestKit.CountAsync("classes.class_students", $"token_no = {Fresh} and status = 'A'"), Is.EqualTo(0));
+        Assert.That(await EventsAsync("classes.student_rejoined"), Is.EqualTo(0));
+    }
 }

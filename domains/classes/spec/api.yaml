@@ -512,6 +512,58 @@ paths:
         "403": {$ref: "#/components/responses/Problem"}
         "404": {$ref: "#/components/responses/Problem"}
         "422": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}/students/{token}:
+    put:
+      operationId: editClassStudent
+      summary: Edit a student's name, email, mobile and class note
+      description: |
+        Body {name, email, mobile, notes}, each absent (empty) or text of at most 500 characters, trimmed; no other field is read. Active complete class (404), classes:update on the class (403), the member is on the active roster (404); an email that is another member's token address or malformed (422); a different email only for a member whose address is blank or their token address and who has no Firebase link (422). The name is written only when not "" or "0"; the mobile and the note are always written (an omitted one blanks it). A database refusal (a value too long) rolls everything back: 422 "Failed to update student". Answers with the roster payload.
+        Slice: features/class-student-edit/ClassStudentEdit.cs. Events: identity.member_email_changed, membership.member_contact_changed, classes.student_edited.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+        - {name: token, in: path, required: true, schema: {type: string}}
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}/deactivate:
+    post:
+      operationId: deactivateClass
+      summary: Retire a class and remove its students
+      description: |
+        Body {type, effectiveDate, reason}. deactivated-classes:manage with no target (403), then 422 in order: type completed or shutdown, effectiveDate a real YYYY-MM-DD date, reason non-blank after trimming and at most 300 bytes; the class exists (404 "Class #<id> not found") and is active (409 "Class #<id> is not active (status=<s>)"). Answers {deactivated, classId, auditId}. One transaction: the class, its active enrolments, its schedules and topics, one class_audit_log row.
+        Slice: features/class-deactivate/ClassDeactivate.cs. Event: classes.class_deactivated.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
   /classes/join:
     post:
       operationId: joinClass

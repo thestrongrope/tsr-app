@@ -6,6 +6,7 @@
     <ProjectReference Include="../../access/api/Tsr.Access.Api.csproj" />
     <ProjectReference Include="../../platform/api/Tsr.Platform.Api.csproj" />
     <ProjectReference Include="../../membership/api/Tsr.Membership.Api.csproj" />
+    <ProjectReference Include="../../identity/api/Tsr.Identity.Api.csproj" />
   </ItemGroup>
   <ItemGroup>
     <!-- PHP data file web/data/syllabus_topics.json: the topic catalogue by level name (today only MIQDAD). -->

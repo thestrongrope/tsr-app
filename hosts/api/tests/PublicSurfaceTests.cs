@@ -12,8 +12,8 @@ public sealed class PublicSurfaceTests
 {
     private static readonly Dictionary<string, string[]> Allowed = new()
     {
-        // identity: the module; UserDirectory with the record it returns (UserRef); IProfileSink, the one port it declares (membership supplies it).
-        ["identity"] = ["IdentityModule", "UserDirectory", "UserRef", "IProfileSink"],
+        // identity: the module; UserDirectory with the record it returns (UserRef); IProfileSink, the one port it declares (membership supplies it); IdentityCommands (published commands: the email change).
+        ["identity"] = ["IdentityModule", "UserDirectory", "UserRef", "IProfileSink", "IdentityCommands"],
         // access: the module; Permissions (the interface every domain calls) and the types in its signatures
         // (AccessTarget, Reach, SearchReach, UserAccess, AccessScopes); IClassScopes, the one port classes will supply, with the
         // two records it returns (ClassMemberships, ClassFacts). Nothing else.
