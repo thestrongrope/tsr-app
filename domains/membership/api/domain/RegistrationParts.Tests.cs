@@ -7,7 +7,7 @@ namespace Tsr.Membership.Api.Tests.Domain;
 /// <summary>The languages map, the interest ids and the stored form's read-back (PHP: SubscribersModel::saveLanguageProficiencies, saveStudentInterests, routes/registration.php).</summary>
 public sealed class RegistrationPartsTests
 {
-    private static JsonElement Json(string json) => JsonDocument.Parse(json, new JsonDocumentOptions { AllowDuplicateProperties = true }).RootElement.Clone();
+    private static JsonElement Json(string json) => JsonElement.Parse(json, new JsonDocumentOptions { AllowDuplicateProperties = true });
 
     [TestCase("null")]
     [TestCase("[]")]

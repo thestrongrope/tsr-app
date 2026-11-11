@@ -66,3 +66,11 @@ tools/parity-php/membership-fixtures.sh    # only the fixture reset on the PHP p
 ## Placeholders
 
 Operations of this domain not built yet are 501 placeholders in `api/Planned.cs` (after the sign-in check; they create nothing). Building one deletes its line there and flips its state in `docs/specs/initial-build/operations.csv`.
+
+## Published views (rule 2; migration `PublishedViews`, read-only to the API role)
+
+| View | Columns | Known readers |
+|---|---|---|
+| `v_members` | token, user_id, name, mobile, gender (raw text), city, state, country, zip | classes (teacher and student names, contact, gender), assessment reports |
+| `v_registrations` | id, token, for_classid, class_level, class_number, preferred_location, status, created_at | classes (waiting list, placement); columns to re-check in B4 |
+| `v_guardian_links` | id, parent_token, child_token, status | classes (children routes: active link) |

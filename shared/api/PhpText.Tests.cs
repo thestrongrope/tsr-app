@@ -1,9 +1,8 @@
 using NUnit.Framework;
-using Tsr.Membership.Api.Domain;
 
-namespace Tsr.Membership.Api.Tests.Domain;
+namespace Tsr.Shared.Api.Tests;
 
-/// <summary>PHP's trim, ucfirst, mb_strlen, strtolower and html_entity_decode as the profile rules use them.</summary>
+/// <summary>PHP's trim, ucfirst, strtoupper, strtolower, mb_strlen and html_entity_decode, which the geo, profile and registration rules are defined in terms of.</summary>
 public sealed class PhpTextTests
 {
     [Test]
@@ -20,6 +19,12 @@ public sealed class PhpTextTests
     [TestCase("\u00e9cole", "\u00e9cole")]
     public void UcFirst_upper_cases_an_ascii_first_letter_only(string input, string expected) =>
         Assert.That(PhpText.UcFirst(input), Is.EqualTo(expected));
+
+    [Test]
+    public void ToUpperAscii_changes_a_to_z_only()
+    {
+        Assert.That(PhpText.ToUpperAscii("sw1a \u00e9\u00fc\u00df i"), Is.EqualTo("SW1A \u00e9\u00fc\u00df I"));
+    }
 
     [Test]
     public void CodePointCount_counts_code_points_not_utf16_units()

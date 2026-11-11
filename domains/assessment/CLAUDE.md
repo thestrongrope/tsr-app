@@ -25,3 +25,9 @@ Spot quizzes, standard MCQs, quiz competitions.
 dotnet test domains/assessment/api/tests   # the model: the 7 tables in schema "assessment"
 dotnet test db/tests                       # the migrated database
 ```
+
+## Published views (rule 2; migration `PublishedViews`, read-only to the API role)
+
+| View | Columns | Known readers |
+|---|---|---|
+| `v_quiz_results` | class_id, token, quiz_id, published_at, correct, max_marks | classes (my and child performance, roster, student reports) |

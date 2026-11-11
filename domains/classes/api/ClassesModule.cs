@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
+using Tsr.Classes.Api.Features.ClassLevels;
 using Tsr.Shared.Api;
 
 namespace Tsr.Classes.Api;
@@ -21,6 +22,7 @@ public static class ClassesModule
 
     public static IEndpointRouteBuilder MapClasses(this IEndpointRouteBuilder routes)
     {
+        routes.MapClassLevels();
         routes.MapPlannedRoutes();
         return routes;
     }

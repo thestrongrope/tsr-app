@@ -1,3 +1,4 @@
+using Tsr.Shared.Api;
 using System.Text.Json.Nodes;
 
 namespace Tsr.Membership.Api.Domain;

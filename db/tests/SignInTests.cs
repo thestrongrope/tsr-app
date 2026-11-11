@@ -371,7 +371,7 @@ public sealed class SignInTests
 
         using var response = await client.SendAsync(request);
         var text = await response.Content.ReadAsStringAsync();
-        return new Reply(response.StatusCode, text.Length == 0 ? default : JsonDocument.Parse(text).RootElement.Clone());
+        return new Reply(response.StatusCode, text.Length == 0 ? default : JsonElement.Parse(text));
     }
 
     private sealed record Reply(HttpStatusCode Status, JsonElement Body);

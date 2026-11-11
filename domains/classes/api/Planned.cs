@@ -15,7 +15,6 @@ internal static class Planned
             ("GET", "/me/children/{child_token}/classes"),
             ("GET", "/me/children/{child_token}/classes/{class_id}/attendance"),
             ("GET", "/me/children/{child_token}/classes/{class_id}/performance"),
-            ("GET", "/class-levels"),
             ("GET", "/classes"),
             ("POST", "/classes/join"),
             ("POST", "/classes"),

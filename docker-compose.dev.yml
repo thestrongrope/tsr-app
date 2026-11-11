@@ -7,6 +7,9 @@
 # Start order: db healthy, then migrate (one-off: every domain's EF migrations), then seed (one-off:
 # synthetic members and articles), then api. To start again from scratch:
 #   docker compose -f docker-compose.dev.yml down -v
+# The separate synthetic TEST stack (contract tests; own containers, network and volumes) is this same file under
+# the override docker-compose.test.yml (other project name, other ports): tools/test-stack.sh up/down/remove. No environment
+# variable can move a stack: the dev ports are literal here.
 
 name: tsr-app-dev
 

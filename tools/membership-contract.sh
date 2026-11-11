@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Run membership's Hurl contract files (domains/membership/spec/tests/*.hurl) against one side.
-# Usage: tools/membership-contract.sh dev|parity [--prepare] [extra hurl args]
+# Usage: tools/membership-contract.sh dev|test|parity [--prepare] [extra hurl args]
 #   dev     the new API on the dev stack (http://localhost:8088; docker-compose.dev.yml must be up)
+#   test    the new API on the synthetic TEST stack (http://localhost:8089; tools/test-stack.sh up); never run dev against real data
 #   parity  the PHP API on the parity stack (http://127.0.0.1:18091, tools/parity-php/README.md; synthetic data only)
 #   --prepare  do the preparation below and stop (for the all-files command in CLAUDE.md, Commands)
 # Preparation, so both sides answer from the same data and a file can be run again:
@@ -10,11 +11,11 @@
 #     rows (accept an invite, revoke a link, save a profile), so run this script, or --prepare, before each run;
 #   - loads the geo rows (db/synthetic/geo-fixtures.sql) that PATCH /me checks a country and postal code against;
 #   - signs each fixture member in at that side's Auth emulator and writes build/<side>/membership.vars (auth_<alias>=Bearer ...).
-# Only the tsr-app-dev and tsr-parity compose projects are touched. Needs docker, curl, jq, hurl. Prints no secret.
+# Only the tsr-app-dev, tsr-app-test and tsr-parity compose projects are touched. Needs docker, curl, jq, hurl. Prints no secret.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SIDE="${1:?usage: membership-contract.sh dev|parity [--prepare] [hurl args]}"
+SIDE="${1:?usage: membership-contract.sh dev|test|parity [--prepare] [hurl args]}"
 shift || true
 cd "$ROOT"
 
@@ -53,25 +54,27 @@ MEMBERS=(
 
 parity() { docker compose -p tsr-parity -f tools/parity-php/compose.parity.yml --env-file tools/parity-php/parity.env "$@"; }
 php_sql() { parity exec -T db sh -c 'mariadb -uroot -p"$MARIADB_ROOT_PASSWORD" tsr_synth'; }
-dev_sql() { docker compose -p tsr-app-dev -f docker-compose.dev.yml exec -T db psql -v ON_ERROR_STOP=1 -q -U tsr -d tsr; }
+dev_sql() { docker compose -p "${PROJECT:-tsr-app-dev}" -f docker-compose.dev.yml exec -T db psql -v ON_ERROR_STOP=1 -q -U tsr -d tsr; }
 
 case "$SIDE" in
-  dev)
+  dev|test)
+    if [ "$SIDE" = test ]; then PROJECT=tsr-app-test; PORT=8089; export TSR_EMULATOR_PORT=19100; else PROJECT=tsr-app-dev; PORT=8088; export TSR_EMULATOR_PORT=19099; fi
+    "$ROOT/tools/require-synthetic-stack.sh" "$PROJECT"
     # TSR_FIXTURES_LOADED=1: the members are already in the database (a database filled by tools/data-load from the
     # parity source, which holds the same fixtures); do not add db/synthetic/membership-fixtures.sql on top.
     [ -n "${TSR_FIXTURES_LOADED:-}" ] || dev_sql < db/synthetic/membership-fixtures.sql
     { echo "set search_path = platform, public;"; cat db/synthetic/geo-fixtures.sql; } | dev_sql
     MINT="tools/dev-auth/mint-token.sh"
-    BASE="http://localhost:8088" ;;
+    BASE="http://localhost:$PORT" ;;
   parity)
     tools/parity-php/membership-fixtures.sh
     php_sql < db/synthetic/geo-fixtures.sql
     MINT="tools/parity-php/mint-token.sh"
     BASE="http://127.0.0.1:18091" ;;
-  *) echo "side must be dev or parity" >&2; exit 1 ;;
+  *) echo "side must be dev, test or parity" >&2; exit 1 ;;
 esac
 
-VARS="build/$([ "$SIDE" = dev ] && echo dev || echo parity-php)/membership.vars"
+VARS="build/$([ "$SIDE" = parity ] && echo parity-php || echo "$SIDE")/membership.vars"
 mkdir -p "$(dirname "$VARS")"
 umask 077
 : > "$VARS"

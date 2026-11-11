@@ -1,3 +1,4 @@
+using Tsr.Shared.Api;
 namespace Tsr.Membership.Api.Domain;
 
 /// <summary>The guardian link rules that need no database (PHP: models/guardians.php, routes/children.php).</summary>

@@ -2,14 +2,14 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
-namespace Tsr.Membership.Api.Domain;
+namespace Tsr.Shared.Api;
 
 /// <summary>
 /// PHP's loose conversions of a decoded JSON value: what <c>(string)</c>, <c>(int)</c> and <c>is_numeric</c> make of it. A missing
 /// value (<c>default</c>) behaves as null. The patterns spell out ASCII classes: PCRE and PHP's number parser are ASCII, .NET's
 /// <c>\d</c> and <c>\s</c> are not.
 /// </summary>
-internal static partial class PhpValue
+public static partial class PhpValue
 {
     private const string Blank = " \t\n\r\v\f";
 
@@ -32,7 +32,7 @@ internal static partial class PhpValue
     };
 
     /// <summary>(int): a number truncates, text takes its numeric prefix, true is 1, an empty array is 0 and any other array 1.</summary>
-    public static long Int(JsonElement value) => value.ValueKind switch
+    public static long ToInteger(JsonElement value) => value.ValueKind switch
     {
         JsonValueKind.Number => value.TryGetInt64(out var whole) ? whole : Clamp(Math.Truncate(value.GetDouble())),
         JsonValueKind.String => IntOfText(value.GetString() ?? string.Empty),

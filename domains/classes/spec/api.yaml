@@ -1,0 +1,61 @@
+openapi: 3.1.0
+info:
+  title: TSR classes
+  version: 0.1.0
+  description: |
+    The classes domain's actions. Words: glossary.md (not written yet). Behaviour: tests/ (run against any base URL).
+    Forward compatible: a store-live app keeps calling these, so add fields and routes freely but
+    never remove or change one without the release process. Every error body is {"detail": "..."}.
+servers:
+  - url: http://localhost:8088
+    description: Local dev stack (gateway)
+paths:
+  /class-levels:
+    get:
+      operationId: listClassLevels
+      summary: The class levels in display order
+      description: |
+        Any signed-in member; no permission is checked (as PHP). A first sign-in creates the member's row
+        (PHP's api_authenticate(true)). Ordered by sort order then id; the sort order itself is not returned
+        (GET /syllabus/levels has it). Slice: features/class-levels/ClassLevels.cs.
+      security:
+        - memberToken: []
+      responses:
+        "200":
+          description: The levels
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ClassLevel"
+        "401":
+          $ref: "#/components/responses/Problem"
+components:
+  securitySchemes:
+    memberToken:
+      type: http
+      scheme: bearer
+      bearerFormat: Firebase ID token
+  responses:
+    Problem:
+      description: An error. The body is always {"detail": "..."}
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [detail]
+            properties:
+              detail:
+                type: string
+  schemas:
+    ClassLevel:
+      type: object
+      required: [id, code, name]
+      properties:
+        id:
+          type: integer
+        code:
+          type: string
+        name:
+          type: string

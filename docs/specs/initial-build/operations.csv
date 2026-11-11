@@ -30,7 +30,7 @@ GET,/me/children/{child_token}/classes/{class_id}/scores,assessment,create,plann
 POST,/devices,notifications,create,planned
 DELETE,/devices,notifications,create,planned
 POST,/feedback,platform,member,built
-GET,/class-levels,classes,create,planned
+GET,/class-levels,classes,create,built
 GET,/classes,classes,create,planned
 POST,/classes/join,classes,create,planned
 GET,/join/{code},classes,public,planned

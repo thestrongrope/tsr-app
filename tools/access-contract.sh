@@ -1,17 +1,18 @@
 #!/usr/bin/env bash
 # Run access's Hurl contract files (domains/access/spec/tests/*.hurl) against one side.
-# Usage: tools/access-contract.sh dev|parity [extra hurl args]
+# Usage: tools/access-contract.sh dev|test|parity [extra hurl args]
 #   dev     the new API on the dev stack (http://localhost:8088; the fixture members are in db/synthetic/seed.sql)
+#   test    the new API on the synthetic TEST stack (http://localhost:8089; tools/test-stack.sh up); never run dev against real data
 #   parity  the PHP API on the parity stack (http://127.0.0.1:18091, tools/parity-php/README.md; synthetic data only)
 # The fixture members (one per role, a guest, one with named grants) must exist identically on both sides. On the
 # parity side this script creates them in PHP's synthetic database, then checks they have NO class relationship at all
 # (no class taught, no enrolment, no class_access, no rule): the new API has no classes yet, so a fixture that touches
 # a class could never match. The files sign each fixture member in at that side's Auth emulator themselves.
-# Only the tsr-app-dev and tsr-parity compose projects are touched. Needs docker, curl, jq, hurl. Prints no secret.
+# Only the tsr-app-dev, tsr-app-test and tsr-parity compose projects are touched. Needs docker, curl, jq, hurl. Prints no secret.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SIDE="${1:?usage: access-contract.sh dev|parity [hurl args]}"
+SIDE="${1:?usage: access-contract.sh dev|test|parity [hurl args]}"
 shift || true
 cd "$ROOT"
 
@@ -60,14 +61,16 @@ SQL
 }
 
 case "$SIDE" in
-  dev)
-    tools/dev-auth/mint-token.sh member.gents@example.invalid build/dev/token.vars
-    BASE="http://localhost:8088"; VARS="build/dev/token.vars" ;;
+  dev|test)
+    if [ "$SIDE" = test ]; then PROJECT=tsr-app-test; PORT=8089; export TSR_EMULATOR_PORT=19100; else PROJECT=tsr-app-dev; PORT=8088; export TSR_EMULATOR_PORT=19099; fi
+    "$ROOT/tools/require-synthetic-stack.sh" "$PROJECT"
+    tools/dev-auth/mint-token.sh member.gents@example.invalid build/$SIDE/token.vars
+    BASE="http://localhost:$PORT"; VARS="build/$SIDE/token.vars" ;;
   parity)
     parity_fixtures
     tools/parity-php/mint-token.sh member.gents@example.invalid build/parity-php/token.vars
     BASE="http://127.0.0.1:18091"; VARS="build/parity-php/token.vars" ;;
-  *) echo "side must be dev or parity" >&2; exit 1 ;;
+  *) echo "side must be dev, test or parity" >&2; exit 1 ;;
 esac
 
 hurl --test --variable "base_url=$BASE" --variables-file "$VARS" --variables-file "$FIXTURES" "$@" "${FILES[@]}"

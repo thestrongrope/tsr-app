@@ -1,14 +1,13 @@
 using System.Text.Json;
-using Tsr.Shared.Api;
 
-namespace Tsr.Membership.Api.Domain;
+namespace Tsr.Shared.Api;
 
 /// <summary>
 /// A request body as PHP's <c>api_body()</c> reads it: an empty body is an empty array, a JSON object is its fields, a list has
 /// no named fields, anything else is "Invalid JSON body". Presence is <c>array_key_exists</c> (an explicit null counts); a repeated
 /// key keeps its first position and its last value; a lone surrogate escape anywhere makes PHP refuse the whole document.
 /// </summary>
-internal sealed class JsonBody
+public sealed class JsonBody
 {
     private const string InvalidJson = "Invalid JSON body";
 

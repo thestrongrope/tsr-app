@@ -4,13 +4,14 @@ Classes, levels, tags, schedules, sessions, attendance, enrolment, teachers, syl
 
 ## Status
 
-**Tables and placeholder routes (2026-11-10).** No slices and no public interface yet: every operation of this domain is a 501 placeholder in `api/Planned.cs` (catalog: `docs/specs/initial-build/operations.csv`). Facts and decisions:
+**Tables, 1 slice (2026-11-11).** `GET /class-levels` is built (`api/features/class-levels/ClassLevels.cs`, the slice template; contract `spec/tests/class-levels.hurl`); no public interface yet. The other operations are 501 placeholders in `api/Planned.cs` (catalog: `docs/specs/initial-build/operations.csv`). Facts and decisions:
 `docs/specs/initial-build/schema-phase-design.md`, `schema-phase-tables.csv`, `schema-phase-notes.md`.
 
 | Part | State |
 |---|---|
 | Schema `classes`, 16 tables: `classes`, `class_levels`, `tags`, `class_tags`, `class_schedules`, `topics`, `class_schedule_topics`, `class_sessions`, `class_attendance`, `class_students` (enrolment), `student_transfers`, `class_audit_log`, `teachers`, `teachers_history`, `syllabus`, `guides` | built; migration `Initial` |
 | Port `IClassScopes` (access) and `IClassEnrolments` (membership), supplied from here | not yet: access and membership use their defaults |
+| Published views `classes.v_classes`, `classes.v_enrolments` (migration `PublishedViews`) | built |
 | PHP's trigger on `classes` (the share `link`) | not ported: the slice that creates a class will set it |
 
 ## Owns
@@ -28,3 +29,10 @@ Classes, levels, tags, schedules, sessions, attendance, enrolment, teachers, syl
 dotnet test domains/classes/api/tests   # the model: the 16 tables in schema "classes"
 dotnet test db/tests                    # the migrated database: citext, no cross-schema key, the limited role's rights
 ```
+
+## Published views (rule 2; migration `PublishedViews`, read-only to the API role)
+
+| View | Columns | Known readers |
+|---|---|---|
+| `v_classes` | id, code, name, class_level_id, gender, teacher, status, city, country | access (scopes), membership (waiting list, gender lock), assessment reports |
+| `v_enrolments` | id, class_id, token_no, status, removed_at, mcq_admin | access (mcq scope), membership (placed, gender lock), assessment reports |

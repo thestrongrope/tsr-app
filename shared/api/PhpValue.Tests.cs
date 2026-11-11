@@ -1,13 +1,12 @@
 using System.Text.Json;
 using NUnit.Framework;
-using Tsr.Membership.Api.Domain;
 
-namespace Tsr.Membership.Api.Tests.Domain;
+namespace Tsr.Shared.Api.Tests;
 
 /// <summary>What PHP's (string), (int) and is_numeric make of a decoded JSON value.</summary>
 public sealed class PhpValueTests
 {
-    private static JsonElement Json(string json) => JsonDocument.Parse(json).RootElement.Clone();
+    private static JsonElement Json(string json) => JsonElement.Parse(json);
 
     [TestCase("\"abc\"", "abc")]
     [TestCase("5", "5")]
@@ -43,7 +42,7 @@ public sealed class PhpValueTests
     [TestCase("[7]", 1)]
     [TestCase("{\"a\":1}", 1)]
     public void Int_is_the_int_cast(string json, long expected) =>
-        Assert.That(PhpValue.Int(Json(json)), Is.EqualTo(expected));
+        Assert.That(PhpValue.ToInteger(Json(json)), Is.EqualTo(expected));
 
     [Test]
     public void Int_of_a_huge_number_text_clamps_like_PHP()

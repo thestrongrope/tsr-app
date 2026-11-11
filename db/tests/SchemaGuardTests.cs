@@ -39,6 +39,8 @@ public sealed class SchemaGuardTests
         ["platform.geo_cities.name"] = GeoReason,
         ["classes.classes.city"] = ClassesReason,
         ["classes.classes.country"] = ClassesReason,
+        ["classes.v_classes.city"] = ClassesReason, // the view repeats the table column, collation included
+        ["classes.v_classes.country"] = ClassesReason,
     };
 
     /// <summary>Domains that own no table (routes only), so no context.</summary>

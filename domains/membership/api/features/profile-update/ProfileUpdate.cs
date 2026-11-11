@@ -102,7 +102,7 @@ internal sealed partial class ProfileUpdateHandler(
     // PHP: genderChangeAllowed(), only when the body names gender. The rule is GenderLock (unit tested with a fake classes port).
     private async Task<bool> GenderRefusedAsync(Caller caller, ProfileChanges changes, MemberProfile? stored, CancellationToken ct)
     {
-        if (!changes.Has("gender") || !await genderLock.RefusesAsync(caller.Token, stored?.Gender, PhpValue.Int(changes.Value("gender")), ct))
+        if (!changes.Has("gender") || !await genderLock.RefusesAsync(caller.Token, stored?.Gender, PhpValue.ToInteger(changes.Value("gender")), ct))
         {
             return false;
         }

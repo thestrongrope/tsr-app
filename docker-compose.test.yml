@@ -1,0 +1,13 @@
+# Override for the synthetic TEST stack, used only with docker-compose.dev.yml by tools/test-stack.sh (project tsr-app-test):
+# the same services on other published ports, so it cannot collide with the dev stack (8088, 5433, 19099).
+# Literal values on purpose: no shell variable can move the test stack onto dev's ports or the reverse.
+services:
+  db:
+    ports: !override
+      - "127.0.0.1:5434:5432"
+  firebase-emulator:
+    ports: !override
+      - "127.0.0.1:19100:9099"
+  gateway:
+    ports: !override
+      - "127.0.0.1:8089:8080"

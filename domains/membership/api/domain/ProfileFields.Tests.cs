@@ -7,7 +7,7 @@ namespace Tsr.Membership.Api.Tests.Domain;
 /// <summary>PHP's api_validate_profile_field(), field by field, first problem wins. The messages are the ones the app shows.</summary>
 public sealed class ProfileFieldsTests
 {
-    private static JsonElement Json(string json) => JsonDocument.Parse(json).RootElement.Clone();
+    private static JsonElement Json(string json) => JsonElement.Parse(json);
 
     private static string? Check(string field, string json) => ProfileFields.Validate(field, Json(json));
 

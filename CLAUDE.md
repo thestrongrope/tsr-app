@@ -5,6 +5,23 @@ Flutter app, a static public site), one API. This copy is a **working sample**: 
 (`platform/submit-feedback`) runs end to end; the rest is structure. The full design is
 `docs/specs/repo-structure.md` (Part 1 is the one-page summary).
 
+## North star (Asif, 11 Nov 2026): everything else is secondary
+
+The repo is built and changed by AI agents, checked by a person. Every choice of architecture, language,
+framework or pattern serves the five points below. The tech stack is not fixed: if another one serves them
+better, we switch.
+
+1. **Clean, simple code for agentic development.** Domains exist to keep one change in one place.
+2. **Light context.** An agent reads one slice and its domain's `CLAUDE.md`, not the whole repo.
+3. **A short development and verification loop**, including diagnosing a failure and the next change.
+4. **Verifiable, testable output**, because agents are not deterministic. A change that cannot be checked is not done.
+5. **Use the broader stack** where it lowers cost or improves performance.
+
+**The test for any design choice:** cost per verified change = understanding + implementation + verification
++ rework (tokens, wall-clock time, tool calls and human review). An abstraction, layer, interface or second
+representation of the same data stays only if it lowers that cost. "It is the proper pattern" is not a reason.
+When a rule below works against the north star, say so and propose the change; do not follow it silently.
+
 ## Find your way
 
 Folders exist only once they hold real files; the planned layout is in `repo-structure.md`.
@@ -33,7 +50,7 @@ one has its slice; a `planned` one is a placeholder in its domain's `api/Planned
 route will (never creating a member), then answers 501 `{"detail": "Not implemented"}`. **Building a slice replaces its
 placeholder:** delete its line in `Planned.cs`, flip its state in `operations.csv` to `built` (the tests in `hosts/api/tests`
 fail until both match; a gateway block per path already exists). Built today: identity 1, access 3, platform 7,
-membership 10 (21); the rest are planned (192). Tables only, besides routes: `classes`, `assessment`, `notifications`.
+membership 10, classes 1 (22); the rest are planned (191). Tables only, besides routes: `assessment`, `notifications`.
 `search` has routes only. Which owns what: `domains/CLAUDE.md`.
 
 ## Rules (the ones that must load without opening another file)
@@ -43,9 +60,10 @@ membership 10 (21); the rest are planned (192). Tables only, besides routes: `cl
    can build a modified client.
 2. **Permissions go through `access`** (`Permissions.CanAsync(caller, action, target)`), checked in the slice's handler.
    **Gender segregation** is a scope from `access`, applied by each domain to its own data.
-3. **A slice never calls another slice; a domain never reads another domain's tables.** Use the
-   domain's listed public interface or its events. Dependencies are listed in
-   `<Context>Module.Dependencies` and enforced by `hosts/api/tests` (`domains/CLAUDE.md` rule 7).
+3. **A slice never calls another slice. SQL may read another domain only through its published `v_*` views** (never its
+   tables); **a cross-domain write is that domain's published command** (a static method on the caller's transaction). Other
+   calls use the listed public interface or events. Dependencies are listed in
+   `<Context>Module.Dependencies`; both are enforced by `hosts/api/tests` (`domains/CLAUDE.md` rules 2 and 7).
 4. **Every table has one owner** (a domain, or platform for outbox/infra tables). Migrations are
    expand-then-contract; never edit an applied migration.
 5. **Prepared statements only.** Never build SQL from strings.
@@ -61,16 +79,17 @@ membership 10 (21); the rest are planned (192). Tables only, besides routes: `cl
 
 | Task | Command |
 |---|---|
-| Start the local stack (PostgreSQL, migrate, seed, API, gateway on :8088) | `docker compose -f docker-compose.dev.yml up -d --build` |
+| Start the local stack (the dev database may hold REAL data: no contract script, seed or reset on it; PostgreSQL, migrate, seed, API, gateway on :8088) | `docker compose -f docker-compose.dev.yml up -d --build` |
 | Reset the local database | `docker compose -f docker-compose.dev.yml down -v` |
+| Start, stop, remove the synthetic TEST stack (own project `tsr-app-test`, gateway :8089, db :5434, emulator :19100; the only stack Hurl may run against, because dev holds real data) | `tools/test-stack.sh up`, `down` (keeps its volume), `remove` (deletes it), `status` |
 | Build all .NET | `dotnet build TsrApp.slnx` |
 | Unit + boundary tests (no DB needed, NUnit) | `dotnet test domains/platform/api/tests` (likewise `domains/identity`, `domains/access`, `domains/membership`, `shared/api`), `dotnet test hosts/api/tests`, `dotnet test hosts/site/tests` |
 | Database-backed tests (needs Docker: Testcontainers starts a throwaway postgres:18) | `dotnet test db/tests` |
-| Contract tests, every Hurl file (stack must be up; `tools/identity-contract.sh dev` first mints the token into `build/dev/token.vars` and refreshes the 2 hour fixture; `tools/membership-contract.sh dev --prepare` resets the membership fixtures, loads the geo rows and mints one token per fixture member into `build/dev/membership.vars`; Hurl runs the files in parallel, so no two files change the same member) | `hurl --test --glob "domains/*/spec/tests/*.hurl" --glob "hosts/api/spec/*.hurl" --variable base_url=http://localhost:8088 --variables-file build/dev/token.vars --variables-file domains/identity/spec/tests/fixtures.vars --variables-file domains/access/spec/tests/fixtures.vars --variables-file build/dev/membership.vars` (22 files, 288 requests; `hosts/api/spec/planned-surface.hurl` is the cross-domain spot check of the 501 placeholders, new API only) |
-| One implementation's contract (any base URL) | `tools/identity-contract.sh dev` or `... parity` runs the sign-in contract on either side. For another file, same command with another `base_url` and `--variables-file` (PHP: `build/parity-php/token.vars`, written by `tools/parity-php/mint-token.sh <.invalid email>`); `--glob` is expanded by Hurl itself, so it works in any shell on Mac and Windows when the pattern is quoted. Hurl must be installed. |
-| Access contract on PHP or the new API (stack up; PHP: parity stack) | `tools/access-contract.sh dev` or `parity` (also `tools/identity-contract.sh`) |
-| Membership contract on PHP or the new API (resets its fixture rows first, loads the geo rows, signs 21 fixture members in; the files accept invites and change profiles, so it must reset before each run; invite inspection allows 60 an hour per member, so the files make few calls) | `tools/membership-contract.sh dev` or `parity` (`--prepare` stops after the preparation) |
-| Platform contract on PHP or the new API (loads the geo rows from `db/synthetic/geo-fixtures.sql` into that side first; the three geo files spend about 35 of a member's 60 calls a minute, so do not run one side twice within a minute) | `tools/platform-contract.sh dev` or `parity` |
+| Contract tests, every Hurl file (on the TEST stack, never dev; `tools/test-stack.sh up` first; `tools/identity-contract.sh test` first mints the token into `build/test/token.vars` and refreshes the 2 hour fixture; `tools/membership-contract.sh test --prepare` resets the membership fixtures, loads the geo rows and mints one token per fixture member into `build/test/membership.vars`; Hurl runs the files in parallel, so no two files change the same member) | `hurl --test --glob "domains/*/spec/tests/*.hurl" --glob "hosts/api/spec/*.hurl" --variable base_url=http://localhost:8089 --variables-file build/test/token.vars --variables-file domains/identity/spec/tests/fixtures.vars --variables-file domains/access/spec/tests/fixtures.vars --variables-file build/test/membership.vars` (23 files, 290 requests; `hosts/api/spec/planned-surface.hurl` is the cross-domain spot check of the 501 placeholders, new API only) |
+| One implementation's contract (any base URL) | `tools/identity-contract.sh test` or `... parity` runs the sign-in contract on either side. For another file, same command with another `base_url` and `--variables-file` (PHP: `build/parity-php/token.vars`, written by `tools/parity-php/mint-token.sh <.invalid email>`); `--glob` is expanded by Hurl itself, so it works in any shell on Mac and Windows when the pattern is quoted. Hurl must be installed. |
+| Access contract on PHP or the new API (stack up; PHP: parity stack) | `tools/access-contract.sh test` or `parity` (also `tools/identity-contract.sh`) |
+| Membership contract on PHP or the new API (resets its fixture rows first, loads the geo rows, signs 21 fixture members in; the files accept invites and change profiles, so it must reset before each run; invite inspection allows 60 an hour per member, so the files make few calls) | `tools/membership-contract.sh test` or `parity` (`--prepare` stops after the preparation) |
+| Platform contract on PHP or the new API (loads the geo rows from `db/synthetic/geo-fixtures.sql` into that side first; the three geo files spend about 35 of a member's 60 calls a minute, so do not run one side twice within a minute) | `tools/platform-contract.sh test` or `parity` |
 | Build the static site (stack must be up) | `dotnet run --project hosts/site` (writes `build/site/`; `TSR_BASE_URL` picks the API) |
 | Flutter: resolve the workspace | `flutter pub get` (once, at the root) |
 | Flutter: analyze, test | `flutter analyze hosts/app shared/app domains/platform/app`, then `flutter test` inside each |

@@ -1,9 +1,8 @@
 using System.Text;
 using System.Text.Json;
 using NUnit.Framework;
-using Tsr.Membership.Api.Domain;
 
-namespace Tsr.Membership.Api.Tests.Domain;
+namespace Tsr.Shared.Api.Tests;
 
 /// <summary>A body as PHP's api_body() reads it: empty is an empty array, an object or list is fine, anything else is "Invalid JSON body".</summary>
 public sealed class JsonBodyTests
@@ -56,7 +55,7 @@ public sealed class JsonBodyTests
     [Test]
     public void Entries_of_an_object_keep_the_first_position_and_the_last_value()
     {
-        var element = JsonDocument.Parse("{\"x\":1,\"y\":2,\"x\":3}", new JsonDocumentOptions { AllowDuplicateProperties = true }).RootElement;
+        var element = JsonElement.Parse("{\"x\":1,\"y\":2,\"x\":3}", new JsonDocumentOptions { AllowDuplicateProperties = true });
 
         var entries = JsonBody.Entries(element);
 
@@ -67,7 +66,7 @@ public sealed class JsonBodyTests
     [Test]
     public void Entries_of_a_list_are_keyed_by_position_and_a_scalar_has_none()
     {
-        Assert.That(JsonBody.Entries(JsonDocument.Parse("[\"a\",\"b\"]").RootElement).Select(e => e.Key), Is.EqualTo(["0", "1"]));
-        Assert.That(JsonBody.Entries(JsonDocument.Parse("5").RootElement), Is.Empty);
+        Assert.That(JsonBody.Entries(JsonElement.Parse("[\"a\",\"b\"]")).Select(e => e.Key), Is.EqualTo(["0", "1"]));
+        Assert.That(JsonBody.Entries(JsonElement.Parse("5")), Is.Empty);
     }
 }

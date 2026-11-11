@@ -1,3 +1,4 @@
+using Tsr.Shared.Api;
 namespace Tsr.Membership.Api.Domain;
 
 /// <summary>

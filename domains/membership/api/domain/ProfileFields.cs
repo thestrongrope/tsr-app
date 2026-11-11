@@ -1,3 +1,4 @@
+using Tsr.Shared.Api;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -35,8 +36,8 @@ internal static partial class ProfileFields
 
         return field switch
         {
-            "gender" => PhpValue.Int(value) is 1 or 2 ? null : "Invalid gender value. Use 1 for Male, 2 for Female.",
-            "language" => PhpValue.Int(value) is >= 1 and <= 3 ? null : "Invalid language value. Use 1 for English, 2 for Urdu, 3 for Gujarati.",
+            "gender" => PhpValue.ToInteger(value) is 1 or 2 ? null : "Invalid gender value. Use 1 for Male, 2 for Female.",
+            "language" => PhpValue.ToInteger(value) is >= 1 and <= 3 ? null : "Invalid language value. Use 1 for English, 2 for Urdu, 3 for Gujarati.",
             "mobile" => IsEmptyString(value) || Mobile().IsMatch(PhpValue.Text(value)) ? null : "Invalid mobile number",
             "zip" => IsEmptyString(value) || Zip().IsMatch(PhpValue.Text(value)) ? null : "Invalid ZIP code",
             "name" or "city" or "state" or "country" => ValidateText(field, PhpValue.Text(value)),

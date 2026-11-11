@@ -40,3 +40,9 @@ tools/identity-contract.sh parity          # the same file on PHP (parity stack 
 ## Placeholders
 
 Operations of this domain not built yet are 501 placeholders in `api/Planned.cs` (after the sign-in check; they create nothing). Building one deletes its line there and flips its state in `docs/specs/initial-build/operations.csv`.
+
+## Published views (rule 2; migration `PublishedViews`, read-only to the API role)
+
+| View | Columns | Known readers |
+|---|---|---|
+| `v_users` | id, token, email, created_on, has_firebase_link | membership (`v_members`); email filters and token to id in classes reports |

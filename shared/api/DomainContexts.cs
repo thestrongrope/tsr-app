@@ -86,6 +86,15 @@ public static partial class DomainContexts
                 ALTER DEFAULT PRIVILEGES IN SCHEMA "{schema}" GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO {AppRole};
                 ALTER DEFAULT PRIVILEGES IN SCHEMA "{schema}" GRANT USAGE ON SEQUENCES TO {AppRole};
                 REVOKE ALL ON "{schema}".__ef_migrations_history FROM {AppRole};
+                -- A published view is read-only to the API role (domains/CLAUDE.md rule 2): the blanket grant above also covers views.
+                DO $$
+                DECLARE v text;
+                BEGIN
+                    FOR v IN SELECT quote_ident(schemaname) || '.' || quote_ident(viewname) FROM pg_views WHERE schemaname = '{schema}' LOOP
+                        EXECUTE 'REVOKE ALL ON ' || v || ' FROM {AppRole}';
+                        EXECUTE 'GRANT SELECT ON ' || v || ' TO {AppRole}';
+                    END LOOP;
+                END $$;
                 """;
             command.CommandTimeout = MigrationTimeoutSeconds;
             await command.ExecuteNonQueryAsync(ct);
