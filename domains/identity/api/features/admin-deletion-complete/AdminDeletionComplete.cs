@@ -14,7 +14,7 @@ namespace Tsr.Identity.Api.Features.AdminDeletionComplete;
 // then identity's own users row), deletes the member's devices (notifications' command) and feedback (platform's command), and completes the request. Order as PHP: signed in (a create route),
 // deletion-requests:manage (403), the request (404), a request naming token 0 (409), the rate limit of 1 a minute per request (409; the key is held even when a refusal follows, so a retry waits),
 // then the model's refusals, each 409 with its text: not live, no confirmation recorded, a reviewer demo member, a token with no user row, a token with more than 20 user rows (before any Firebase call), Firebase failing (the database is then untouched).
-// A token can have several user rows: every row's Firebase account is deleted (a row's stored uid, which is unique; a row with none by its own email), then every row is anonymised and its feedback erased.
+// A token can have several user rows: every row's Firebase account is deleted (a row's stored uid, which is unique; a row with none the uid Firebase returns for its own email, refused 409 when that email or uid belongs to another token), then every row is anonymised and its feedback erased.
 // The Firebase call is OUTSIDE the transaction and cannot be rolled back, so a later database failure leaves the sign-in deleted and the request open for a retry.
 // Deviation: a bug or database failure is a 500 here, not a 409 carrying the exception text (PHP catches Throwable and shows it). Events identity.member_erased (token, userId) and
 // identity.deletion_completed (requestId, token, handledBy). Contract: spec/api.yaml.
@@ -24,6 +24,8 @@ internal static class AdminDeletionCompleteSlice
     private const string RateLimited = "This request was just completed or is being completed. Wait a minute and reload.";
     // A token is not unique; more rows than this is refused before any Firebase call so the work stays bounded.
     private const int MaxUserRows = 20;
+    private const string SharedAddress =
+        "An email address of this member is also held by another member, so the Firebase account cannot be told apart. Handle the Firebase account by hand.";
     private const string NeedsConfirmation = "Send the confirmation email and record it before completing this request";
 
     private sealed record Member(int Id, string? Email, string? FirebaseUid, string? Mobile);
@@ -98,7 +100,7 @@ internal static class AdminDeletionCompleteSlice
                 $"Deletion request {request.Id} names token {request.Token}, which has more than {MaxUserRows} user rows; at most {MaxUserRows} can be completed here. Remove the extra rows first.");
         }
 
-        var deleted = await DeleteFirebaseAsync(firebase, members, ct);
+        var deleted = await DeleteFirebaseAsync(db, firebase, request.Token, members, ct);
         if (deleted is not null)
         {
             return Result.Fail<bool>(deleted);
@@ -151,15 +153,40 @@ internal static class AdminDeletionCompleteSlice
             .ToListAsync(ct);
 
     // Outside the transaction on purpose: a Google call cannot be rolled back, so it happens first and a failure leaves the database clean.
-    // Every row of the token: each row's stored uid (the unique index makes them distinct), and a row without one by its own email. The first failure stops here; accounts already deleted stay deleted, and a retry
-    // succeeds because the real client counts an account Firebase no longer knows as done.
-    private static async Task<string?> DeleteFirebaseAsync(IFirebaseAccounts firebase, List<Member> members, CancellationToken ct)
+    // Every row of the token: each row's stored uid (the unique index makes them distinct), and for a row without one the uid Firebase returns for its own email. ALL lookups and the shared-address checks run before the
+    // FIRST delete, so a refusal deletes nothing. The first failure stops here; accounts already deleted stay deleted, and a retry succeeds because the real client counts an account Firebase no longer knows as done.
+    private static async Task<string?> DeleteFirebaseAsync(IdentityContext db, IFirebaseAccounts firebase, int? token, List<Member> members, CancellationToken ct)
     {
         try
         {
+            var noUid = members.Where(m => string.IsNullOrEmpty(m.FirebaseUid) && !string.IsNullOrEmpty(m.Email)).ToList();
+            if (await EmailHeldByAnotherTokenAsync(db, token, noUid.Select(m => m.Email!).ToArray(), ct))
+            {
+                return SharedAddress;
+            }
+
+            var found = new Dictionary<int, string>();
+            foreach (var member in noUid)
+            {
+                var uid = await firebase.FindUidByEmailAsync(member.Email!, ct);
+                if (!string.IsNullOrEmpty(uid))
+                {
+                    found[member.Id] = uid;
+                }
+            }
+
+            if (await UidHeldByAnotherTokenAsync(db, token, found.Values.ToArray(), ct))
+            {
+                return SharedAddress;
+            }
+
             foreach (var member in members)
             {
-                await firebase.DeleteAsync(string.IsNullOrEmpty(member.FirebaseUid) ? null : member.FirebaseUid, member.Email, ct);
+                var uid = string.IsNullOrEmpty(member.FirebaseUid) ? found.GetValueOrDefault(member.Id) : member.FirebaseUid;
+                if (!string.IsNullOrEmpty(uid))
+                {
+                    await firebase.DeleteAsync(uid, member.Email, ct);
+                }
             }
 
             return null;
@@ -169,6 +196,15 @@ internal static class AdminDeletionCompleteSlice
             return e.Message;
         }
     }
+
+    // email is citext, so the comparison ignores letter case.
+    private static async Task<bool> EmailHeldByAnotherTokenAsync(IdentityContext db, int? token, string[] emails, CancellationToken ct) =>
+        emails.Length > 0
+        && (await db.Database.SqlQuery<int>($"""select 1 as "Value" from identity.users where token <> {token} and email = any({emails}::citext[]) limit 1""").ToListAsync(ct)).Count > 0;
+
+    private static async Task<bool> UidHeldByAnotherTokenAsync(IdentityContext db, int? token, string[] uids, CancellationToken ct) =>
+        uids.Length > 0
+        && (await db.Database.SqlQuery<int>($"""select 1 as "Value" from identity.users where token <> {token} and firebase_uid = any({uids}::citext[]) limit 1""").ToListAsync(ct)).Count > 0;
 
     private static async Task<string?> EraseAndCompleteAsync(
         IdentityContext db, IMemberErasure memberErasure, TimeProvider clock, DeletionRow request, List<Member> members, int operatorToken, CancellationToken ct)
@@ -202,13 +238,7 @@ internal static class AdminDeletionCompleteSlice
     // Before the profile mobile is cleared, not after: outbound_messages has no member key, so a member's rows are found only by matching their recipient values.
     private static async Task EraseMemberAsync(IdentityContext db, IMemberErasure memberErasure, int token, List<Member> members, CancellationToken ct)
     {
-        var member = members[0];
-        var recipients = new List<string>();
-        if (!string.IsNullOrEmpty(member.Mobile))
-        {
-            recipients.Add(member.Mobile);
-        }
-
+        var recipients = members.Where(m => !string.IsNullOrEmpty(m.Mobile)).Select(m => m.Mobile!).Distinct().ToList();
         recipients.AddRange(await NotificationsErasure.EraseDevicesAsync(db, token, ct));
         await PlatformCommands.RedactRecipientsAsync(db, recipients, ct);
         await memberErasure.EraseAsync(db, token, ct);

@@ -142,7 +142,7 @@ paths:
       summary: IRREVERSIBLE. Delete the member's sign-in and anonymise them
       description: |
         Permission deletion-requests:manage. 409 (detail is the reason) for: a request naming token 0, a second call within a minute, not live, no confirmation recorded, a reviewer demo member,
-        a token with no user row, a token with more than 20 user rows, Firebase failing or not configured. Every user row of the token has its Firebase account deleted (new API; PHP deletes one). Slice: features/admin-deletion-complete/AdminDeletionComplete.cs.
+        a token with no user row, a token with more than 20 user rows, an email address of a row with no stored uid (or the Firebase account found for it) that belongs to another token's row (detail: "An email address of this member is also held by another member, so the Firebase account cannot be told apart. Handle the Firebase account by hand."; checked before any delete; new API), Firebase failing or not configured. Every user row of the token has its Firebase account deleted (new API; PHP deletes one). Slice: features/admin-deletion-complete/AdminDeletionComplete.cs.
       security: [{memberToken: []}]
       parameters: [{name: request_id, in: path, required: true, schema: {type: string}}]
       responses:

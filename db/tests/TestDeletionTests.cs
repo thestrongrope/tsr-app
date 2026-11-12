@@ -187,10 +187,11 @@ public sealed class TestDeletionTests
     {
         var requestId = await AddTargetWithRequestAsync();
         await TestDatabase.ExecuteAsync($"insert into identity.users (token, email) values ({TestDeletionKit.Target}, 'noid-924010@example.invalid')");
+        firebase.UidByEmail["noid-924010@example.invalid"] = "uid-noid";
 
         ReplyAssert.Expect(await api.CompleteAsync(TestDeletionKit.Admin, requestId), HttpStatusCode.OK);
 
-        Assert.That(firebase.Calls, Is.EqualTo(new[] { ((string?)"uid-924010", (string?)"m924010@example.invalid"), (null, "noid-924010@example.invalid") }));
+        Assert.That(firebase.Calls, Is.EqualTo(new[] { ((string?)"uid-924010", (string?)"m924010@example.invalid"), ("uid-noid", "noid-924010@example.invalid") }), "the uid Firebase returned for the address");
     }
 
     [Test]
@@ -245,14 +246,69 @@ public sealed class TestDeletionTests
     }
 
     [Test]
-    public async Task A_row_with_no_stored_uid_is_passed_to_Firebase_by_email_alone_and_Firebase_may_delete_whichever_account_owns_it_FINDING_2()
+    public async Task A_row_with_no_stored_uid_and_an_unshared_email_has_the_account_found_by_that_email_deleted_FINDING_2()
     {
+        firebase.UidByEmail["owner@example.invalid"] = "uid-owner";
         await TestDatabase.ExecuteAsync($"insert into identity.users (token, email) values ({TestDeletionKit.Target}, 'owner@example.invalid')");
         var requestId = await TestDeletionKit.AddRequestAsync(TestDeletionKit.Target);
 
         ReplyAssert.Expect(await api.CompleteAsync(TestDeletionKit.Admin, requestId), HttpStatusCode.OK);
 
-        Assert.That(firebase.Calls, Is.EqualTo(new[] { ((string?)null, (string?)"owner@example.invalid") }), "uid null, email given: the real client then looks the account up by that address (PHP's getUserByEmail)");
+        Assert.That(firebase.Calls, Is.EqualTo(new[] { ((string?)"uid-owner", (string?)"owner@example.invalid") }), "the account the address looked up to (PHP's getUserByEmail) is deleted by its uid");
+    }
+
+    private const string SharedAddressRefusal = "An email address of this member is also held by another member, so the Firebase account cannot be told apart. Handle the Firebase account by hand.";
+
+    [Test]
+    public async Task A_row_with_no_stored_uid_whose_email_another_token_also_holds_is_refused_409_with_nothing_deleted_or_written_REGRESSION_FINDING_A()
+    {
+        var requestId = await AddTargetWithRequestAsync();
+        await TestDatabase.ExecuteAsync(
+            $"insert into identity.users (token, email) values ({TestDeletionKit.Target}, 'shared@example.invalid'); "
+            + $"insert into identity.users (token, email, firebase_uid) values ({TestDeletionKit.Bystander}, 'SHARED@example.invalid', 'uid-bystander')");
+        var before = await TestDeletionKit.WholeDatabaseAsync();
+
+        var reply = await api.CompleteAsync(TestDeletionKit.Admin, requestId);
+
+        ReplyAssert.Expect(reply, HttpStatusCode.Conflict, SharedAddressRefusal);
+        Assert.That(firebase.Calls, Is.Empty, "not even the first row's stored uid is deleted: every check runs before the first delete");
+        Assert.That(firebase.Lookups, Is.Empty);
+        Assert.That(await TestDeletionKit.WholeDatabaseAsync(), Is.EqualTo(before));
+    }
+
+    [Test]
+    public async Task An_email_lookup_that_returns_the_uid_of_another_tokens_row_is_refused_409_with_nothing_deleted_or_written_REGRESSION_FINDING_A()
+    {
+        var requestId = await AddTargetWithRequestAsync();
+        await TestDatabase.ExecuteAsync(
+            $"insert into identity.users (token, email) values ({TestDeletionKit.Target}, 'owner@example.invalid'); "
+            + $"insert into identity.users (token, email, firebase_uid) values ({TestDeletionKit.Bystander}, 'bystander@example.invalid', 'uid-of-bystander')");
+        firebase.UidByEmail["owner@example.invalid"] = "uid-of-bystander";
+        var before = await TestDeletionKit.WholeDatabaseAsync();
+
+        var reply = await api.CompleteAsync(TestDeletionKit.Admin, requestId);
+
+        ReplyAssert.Expect(reply, HttpStatusCode.Conflict, SharedAddressRefusal);
+        Assert.That(firebase.Calls, Is.Empty);
+        Assert.That(await TestDeletionKit.WholeDatabaseAsync(), Is.EqualTo(before));
+    }
+
+    [Test]
+    public async Task A_queued_message_to_the_mobile_of_every_user_row_of_the_token_is_redacted_REGRESSION_FINDING_B()
+    {
+        var requestId = await AddTargetWithRequestAsync();
+        var secondId = await TestDatabase.ScalarAsync<int>(
+            $"insert into identity.users (token, email, firebase_uid) values ({TestDeletionKit.Target}, 'second-924010@example.invalid', 'uid-second') returning id",
+            TestDatabase.OwnerConnection);
+        await TestDatabase.ExecuteAsync(
+            $"""
+            insert into membership.member_profiles (user_id, name, mobile) values ({secondId}, 'Second', '+15550924011');
+            insert into platform.outbound_messages (channel, recipient, payload, dedupe_key) values ('whatsapp', '+15550924011', '[]', 'k-second-mobile')
+            """);
+
+        ReplyAssert.Expect(await api.CompleteAsync(TestDeletionKit.Admin, requestId), HttpStatusCode.OK);
+
+        Assert.That(await MembershipTestKit.CountAsync("platform.outbound_messages", "dedupe_key = 'k-second-mobile' and recipient = '[deleted]'"), Is.EqualTo(1));
     }
 
     [Test]
