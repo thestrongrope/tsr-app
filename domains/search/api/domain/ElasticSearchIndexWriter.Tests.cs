@@ -78,6 +78,7 @@ internal sealed class ElasticSearchIndexWriterTests
         await IndexOn(server).EnsureIndexAsync(CancellationToken.None);
 
         Assert.That(server.Requests.Select(r => r.Line), Is.EqualTo(ExpectedEnsureLines));
+        Assert.That(server.Requests[1].ContentType, Is.EqualTo("application/json"), "a real Elasticsearch answers 400 media_type_header_exception to any other type (found on the test stack, 12 Nov 2026)");
         var body = JsonNode.Parse(server.Requests[1].Body)!;
         Assert.That(body["settings"]!["number_of_shards"]!.GetValue<int>(), Is.EqualTo(1));
         Assert.That(body["settings"]!["number_of_replicas"]!.GetValue<int>(), Is.Zero);
@@ -155,6 +156,7 @@ internal sealed class ElasticSearchIndexWriterTests
 
         Assert.That(ids, Is.EqualTo(ExpectedIds));
         Assert.That(server.Requests.Select(r => r.Line), Is.EqualTo(ExpectedScrollLines));
+        Assert.That(server.Requests.Select(r => r.ContentType), Is.All.EqualTo("application/json"));
         var first = JsonNode.Parse(server.Requests[0].Body)!;
         Assert.That(first["size"]!.GetValue<int>(), Is.EqualTo(1000));
         Assert.That(first["_source"]!.GetValue<bool>(), Is.False);

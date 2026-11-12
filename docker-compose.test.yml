@@ -11,3 +11,12 @@ services:
   gateway:
     ports: !override
       - "127.0.0.1:8089:8080"
+  # The test stack runs the profile "workers" (tools/test-stack.sh): its API searches the stack's own Elasticsearch, and the
+  # one worker that sends nothing outward feeds it. Literal, so no shell variable can switch a sending worker on.
+  api:
+    environment:
+      TSR_ELASTICSEARCH_URL: http://elasticsearch:9200
+      TSR_ELASTICSEARCH_PASSWORD: local-only-es
+  workers:
+    environment:
+      TSR_WORKERS: search-feed

@@ -9,7 +9,7 @@ namespace Tsr.Search.Api;
 
 /// <summary>
 /// search: the read model behind <c>GET /search</c>. No tables: the index lives in Elasticsearch (settings <c>TSR_ELASTICSEARCH_URL</c> and
-/// <c>TSR_ELASTICSEARCH_PASSWORD</c>, both optional), fed by a worker that is not built yet (docs/specs/initial-build/lane-search-notes.md).
+/// <c>TSR_ELASTICSEARCH_PASSWORD</c>, both optional), fed by the search-feed worker (workers/SearchFeedWorker.cs).
 /// It reads other domains only through their published views, and asks <c>access</c> what the caller may see.
 /// </summary>
 public static class SearchModule

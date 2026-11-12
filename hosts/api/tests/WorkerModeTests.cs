@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using NUnit.Framework;
@@ -91,7 +92,7 @@ public sealed class WorkerModeTests
     {
         var entry = typeof(Program).Assembly.EntryPoint ?? throw new InvalidOperationException("The API assembly has no entry point.");
         // --workers goes last: the command line reader takes the argument after a bare switch as its value.
-        string[] args = ["--environment=Production", "--TSR_DB=Host=unused", "--TSR_WORKERS=nonsense", "--workers"];
+        string[] args = ["--environment=Production", "--TSR_DB=Host=unused", "--TSR_FIREBASE_PROJECT_ID=demo-tsr-test", "--TSR_WORKERS=nonsense", "--workers"];
 
         var error = await Assert.ThrowsAsync<System.Reflection.TargetInvocationException>(async () =>
         {
@@ -104,6 +105,34 @@ public sealed class WorkerModeTests
 
         Assert.That(error!.InnerException, Is.InstanceOf<InvalidOperationException>());
         Assert.That(error.InnerException!.Message, Does.Contain("nonsense"));
+    }
+
+    // Found by starting the real container (12 Nov 2026): the worker host did not start in Development, where the container is validated when it is built,
+    // because a service other modules' slices need was not registered in this run mode.
+    [Test]
+    public void The_worker_host_builds_a_valid_container_with_every_worker_named()
+    {
+        var configuration = new Microsoft.Extensions.Configuration.ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["TSR_FIREBASE_PROJECT_ID"] = "demo-tsr-test",
+                ["TSR_AUTH_EMULATOR_HOST"] = "localhost:9099",
+                ["TSR_GOTENBERG_URL"] = "http://gotenberg.invalid:3000",
+            })
+            .Build();
+        var services = new ServiceCollection();
+        services.AddSingleton(new DbSettings("Host=localhost;Database=unused"));
+        services.AddSingleton(TimeProvider.System);
+        services.AddLogging();
+        services.AddSingleton<Microsoft.Extensions.Configuration.IConfiguration>(configuration);
+        var environment = new Microsoft.Extensions.Hosting.Internal.HostingEnvironment { EnvironmentName = Environments.Development };
+
+        HostServices.AddDomains(services, environment, configuration, RunMode.Workers);
+        var enabled = WorkerMode.Register(services, workersMode: true, "push-drain,class-schedules,search-feed");
+
+        Assert.That(enabled, Has.Count.EqualTo(3));
+        using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateOnBuild = true, ValidateScopes = true });
+        Assert.That(provider.GetServices<IHostedService>().OfType<PeriodicWorker>().Select(w => w.Name), Is.EquivalentTo((string[])["push-drain", "class-schedules", "search-feed"]));
     }
 
     private sealed class OneLine : Microsoft.Extensions.Logging.ILogger

@@ -38,11 +38,17 @@ services:
 YML
 fi
 
-stack() { docker compose -p "$TSR_TEST_PROJECT" -f docker-compose.dev.yml -f "$OVERRIDE" "$@"; }
+# The default test stack also runs Elasticsearch and the search-feed worker (compose profile "workers"); a lane stack does not
+# (about 1 GB each), so its API answers every search "unavailable".
+PROFILE=()
+if [ -z "${TSR_STACK:-}" ]; then PROFILE=(--profile workers); fi
+stack() { docker compose -p "$TSR_TEST_PROJECT" -f docker-compose.dev.yml -f "$OVERRIDE" ${PROFILE[@]+"${PROFILE[@]}"} "$@"; }
 
 case "${1:?usage: test-stack.sh up|down|remove|status}" in
   up)
     stack up -d --build
+    # nginx keeps the address of the API container it started with, and a single-file mount goes stale when git rewrites the file: after a rebuild the gateway must start again.
+    stack restart gateway > /dev/null
     for _ in $(seq 1 60); do
       if curl -fsS --max-time 3 -o /dev/null "$TSR_TEST_BASE_URL/health"; then echo "test stack $TSR_TEST_PROJECT up on $TSR_TEST_BASE_URL"; exit 0; fi
       sleep 2

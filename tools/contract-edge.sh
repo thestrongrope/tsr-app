@@ -35,6 +35,7 @@ FILES=(
   domains/platform/spec/tests/admin-access-log-download.hurl
   domains/search/spec/tests/search.hurl
   domains/search/spec/tests/search-new-api.hurl
+  domains/search/spec/tests/search-php-only.hurl
 )
 
 # alias=email: the fixture members (Hurl variable auth_edge_<alias>); the tokens are in db/synthetic/edge-fixtures.sql.
@@ -59,6 +60,23 @@ case "$SIDE" in
     export TSR_EMULATOR_PORT="$TSR_TEST_EMULATOR_PORT"
     "$ROOT/tools/require-synthetic-stack.sh" "$TSR_TEST_PROJECT"
     test_sql < db/synthetic/edge-fixtures.sql
+    # Files named *-php-only.hurl pin what only PHP's stack does (no search index); they run on PHP only.
+    KEPT=()
+    for f in "${FILES[@]}"; do case "$f" in *-php-only.hurl) ;; *) KEPT+=("$f") ;; esac; done
+    FILES=("${KEPT[@]}")
+    # The search cases need the fixtures in the index: the search-feed worker rebuilds it when it starts, so start it again and wait for its line.
+    # A lane stack (TSR_STACK=n) has no workers container and no Elasticsearch: search-new-api.hurl cannot pass there.
+    WORKERS="$(docker compose -p "$TSR_TEST_PROJECT" -f docker-compose.dev.yml --profile workers ps -q workers 2>/dev/null || true)"
+    if [ -n "$WORKERS" ]; then
+      SINCE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+      docker restart "$WORKERS" > /dev/null
+      FED=0
+      for _ in $(seq 1 60); do
+        if docker logs --since "$SINCE" "$WORKERS" 2>&1 | grep -q "Search feed: upserted"; then FED=1; break; fi
+        sleep 1
+      done
+      if [ "$FED" != 1 ]; then echo "the search-feed worker did not rebuild the index within 60 seconds" >&2; exit 1; fi
+    fi
     MINT="tools/dev-auth/mint-token.sh"
     BASE="$TSR_TEST_BASE_URL"
     VARS="$TSR_TEST_VARS_DIR/edge.vars" ;;

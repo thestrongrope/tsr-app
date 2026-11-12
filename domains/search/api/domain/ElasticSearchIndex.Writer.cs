@@ -15,6 +15,10 @@ internal sealed partial class ElasticSearchIndex : ISearchIndexWriter
 
     public bool IsConfigured => true;
 
+    // Every request asks for plain JSON (Accept), so a body must be sent as plain JSON too: the client's own default type carries a version
+    // ("compatible-with"), and Elasticsearch refuses a request whose two headers disagree (400 media_type_header_exception).
+    private const string JsonType = "application/json";
+
     public async Task EnsureIndexAsync(CancellationToken ct)
     {
         var head = await SendAsync(HttpMethod.HEAD, "/" + IndexName, PostData.Empty, null, ct);
@@ -24,7 +28,7 @@ internal sealed partial class ElasticSearchIndex : ISearchIndexWriter
             return;
         }
 
-        Require(await SendAsync(HttpMethod.PUT, "/" + IndexName, PostData.String(SearchIndexMapping.Json), null, ct));
+        Require(await SendAsync(HttpMethod.PUT, "/" + IndexName, PostData.String(SearchIndexMapping.Json), JsonType, ct));
     }
 
     public async Task BulkUpsertAsync(IReadOnlyList<SearchDocument> documents, CancellationToken ct)
@@ -76,7 +80,7 @@ internal sealed partial class ElasticSearchIndex : ISearchIndexWriter
 
     private async Task<(IReadOnlyList<string> Ids, string ScrollId)> ReadPageAsync(HttpMethod method, string path, string body, CancellationToken ct)
     {
-        var response = await SendAsync(method, path, PostData.String(body), null, ct);
+        var response = await SendAsync(method, path, PostData.String(body), JsonType, ct);
         Require(response);
         var node = System.Text.Json.Nodes.JsonNode.Parse(response.Body) ?? throw new SearchUnavailableException("Elasticsearch answered without a body");
         var hits = node["hits"]?["hits"]?.AsArray() ?? [];
@@ -93,7 +97,7 @@ internal sealed partial class ElasticSearchIndex : ISearchIndexWriter
         }
 
         var body = new System.Text.Json.Nodes.JsonObject { ["scroll_id"] = scrollId }.ToJsonString();
-        _ = await SendAsync(HttpMethod.DELETE, "/_search/scroll", PostData.String(body), null, ct);
+        _ = await SendAsync(HttpMethod.DELETE, "/_search/scroll", PostData.String(body), JsonType, ct);
     }
 
     private async Task BulkAsync(string ndjson, CancellationToken ct)
@@ -123,11 +127,26 @@ internal sealed partial class ElasticSearchIndex : ISearchIndexWriter
         }
     }
 
+    // The reason names the request and Elasticsearch's own error type (a fixed word such as "illegal_argument_exception"), never the request's content.
     private static void Require(StringResponse response)
     {
         if (!response.ApiCallDetails.HasSuccessfulStatusCode)
         {
-            throw new SearchUnavailableException("Elasticsearch answered " + response.ApiCallDetails.HttpStatusCode);
+            var details = response.ApiCallDetails;
+            throw new SearchUnavailableException($"Elasticsearch answered {details.HttpStatusCode} to {details.HttpMethod} {details.Uri?.AbsolutePath} ({ErrorType(response.Body)})");
+        }
+    }
+
+    private static string ErrorType(string? body)
+    {
+        try
+        {
+            var type = System.Text.Json.Nodes.JsonNode.Parse(body ?? string.Empty)?["error"]?["type"]?.GetValue<string>();
+            return type is { Length: > 0 and <= 80 } ? type : "no error type";
+        }
+        catch (Exception exception) when (exception is System.Text.Json.JsonException or InvalidOperationException)
+        {
+            return "no error type";
         }
     }
 }

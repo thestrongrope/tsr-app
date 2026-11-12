@@ -116,6 +116,52 @@ services:
       firebase-emulator:
         condition: service_healthy
 
+  # Elasticsearch and the background workers start only with the compose profile "workers" (COMPOSE_PROFILES=workers):
+  # a plain `up` of the dev stack starts neither. The dev database may hold real member data and real device tokens, so
+  # never set TSR_WORKERS to a sending worker (push-drain, class-schedules) on the dev stack. tools/test-stack.sh turns the
+  # profile on for the synthetic test stack only, with TSR_WORKERS=search-feed (docker-compose.test.yml).
+  elasticsearch:
+    # The image and settings production runs for the PHP system (tsr-account docker-compose.yml).
+    image: elastic/elasticsearch:9.2.3
+    profiles: ["workers"]
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "true"
+      ELASTIC_PASSWORD: local-only-es
+      ES_JAVA_OPTS: -Xms512m -Xmx512m
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+    healthcheck:
+      # The official image ships curl (production uses the same check).
+      test: ["CMD-SHELL", "curl -fsS -u elastic:$$ELASTIC_PASSWORD http://localhost:9200/_cluster/health >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+
+  # The API image in its second run mode: it serves only /health and runs the workers named in TSR_WORKERS (none by default).
+  workers:
+    build:
+      context: .
+      dockerfile: hosts/api/Dockerfile
+    profiles: ["workers"]
+    command: ["--workers"]
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      TSR_DB: "Host=db;Port=5432;Database=tsr;Username=tsr_app;Password=local-only-app"
+      # The worker host loads the same modules as the API, so it takes the same identity settings.
+      TSR_FIREBASE_PROJECT_ID: demo-tsr-app
+      TSR_AUTH_EMULATOR_HOST: firebase-emulator:9099
+      TSR_GOTENBERG_URL: http://gotenberg:3000
+      TSR_ELASTICSEARCH_URL: http://elasticsearch:9200
+      TSR_ELASTICSEARCH_PASSWORD: local-only-es
+      TSR_WORKERS: ${TSR_WORKERS:-}
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+      elasticsearch:
+        condition: service_healthy
+
   gateway:
     image: nginx:1.27-alpine
     ports:
@@ -134,3 +180,4 @@ services:
 volumes:
   db-data:
   emulator-cache:
+  es-data:

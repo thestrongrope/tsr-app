@@ -1,8 +1,7 @@
-# GET /search contract up to the index: sign-in, the numeric gender check (400), q and kinds (422), what a caller with no way in to a kind gets (no group), and the "index cannot be reached" answer.
-# Neither test stack has Elasticsearch (PHP: ELASTICSEARCH_URL is not set; the new API: TSR_ELASTICSEARCH_URL is not set), so every kind a caller may search is in `unavailable` and the others are left out.
-# What the index returns and what the re-check keeps is proved on the new API with a fake index in db/tests/TestEdgeSearchTests.cs. Runs against any implementation.
+# GET /search contract that holds with or without an index: sign-in, the numeric gender check (400), q and kinds (422), and what a caller with no way in to a kind gets (no group, never "unavailable").
+# What the answer is WITHOUT an index (every kind a caller may search is in `unavailable`) is in search-php-only.hurl: the PHP parity stack has no Elasticsearch.
+# What it is WITH one is in search-new-api.hurl: the default test stack runs Elasticsearch and the search-feed worker. The re-check of each hit is proved with a fake index in db/tests/TestEdgeSearchTests.cs.
 # Variables: base_url, auth_edge_search (super admin), auth_edge_gents (gents admin), auth_edge_plain (no role), auth_edge_nogender (no gender stored).
-
 # 1. Without sign-in: 401
 GET {{base_url}}/search?q=edge
 HTTP 401
@@ -54,14 +53,6 @@ GET {{base_url}}/search?q=edge&kinds=Class
 Authorization: {{auth_edge_search}}
 HTTP 422
 
-# 5. The text and the kinds are values, never query syntax: nothing breaks, the answer is the unavailable one
-GET {{base_url}}/search?q=*%3A*%20OR%20%22x%22%20AND%20(a)%5B1%5D%5C
-Authorization: {{auth_edge_search}}
-HTTP 200
-[Asserts]
-jsonpath "$.groups" count == 0
-jsonpath "$.unavailable" count == 5
-
 # 6. A kind list that is only "0" or "," is an empty answer, not a 422
 GET {{base_url}}/search?q=edge&kinds=0
 Authorization: {{auth_edge_search}}
@@ -76,35 +67,7 @@ HTTP 200
 [Asserts]
 jsonpath "$.unavailable" count == 0
 
-# 7. A super admin may search every kind: with no index all five are unavailable, none is an empty group
-GET {{base_url}}/search?q=edge
-Authorization: {{auth_edge_search}}
-HTTP 200
-[Asserts]
-header "Content-Type" startsWith "application/json"
-jsonpath "$.groups" count == 0
-jsonpath "$.unavailable" count == 5
-jsonpath "$.unavailable[0]" == "class"
-jsonpath "$.unavailable[1]" == "teacher"
-jsonpath "$.unavailable[2]" == "guide"
-jsonpath "$.unavailable[3]" == "student"
-jsonpath "$.unavailable[4]" == "subscriber"
-
-GET {{base_url}}/search?q=edge&kinds=class,teacher
-Authorization: {{auth_edge_search}}
-HTTP 200
-[Asserts]
-jsonpath "$.unavailable" count == 2
-
-# 8. A gents admin has no way in to subscribers (super admin only): the kind is left out, not unavailable
-GET {{base_url}}/search?q=edge
-Authorization: {{auth_edge_gents}}
-HTTP 200
-[Asserts]
-jsonpath "$.groups" count == 0
-jsonpath "$.unavailable" count == 4
-jsonpath "$.unavailable" not contains "subscriber"
-
+# 8. A gents admin has no way in to subscribers (super admin only): asking for that kind alone is an empty answer, never unavailable
 GET {{base_url}}/search?q=edge&kinds=subscriber
 Authorization: {{auth_edge_gents}}
 HTTP 200
@@ -118,10 +81,3 @@ HTTP 200
 [Asserts]
 jsonpath "$.groups" count == 0
 jsonpath "$.unavailable" count == 0
-
-# 10. A NUL at either end of q is trimmed, as PHP trim does: that text is "ab"
-GET {{base_url}}/search?q=ab%00
-Authorization: {{auth_edge_search}}
-HTTP 200
-[Asserts]
-jsonpath "$.unavailable" count == 5

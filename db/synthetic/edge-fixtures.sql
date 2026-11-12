@@ -10,7 +10,10 @@ SELECT v.token, 'edge.' || v.token || '@example.invalid' FROM (VALUES
 ) AS v (token)
 WHERE NOT EXISTS (SELECT 1 FROM identity.users u WHERE u.token = v.token);
 
-UPDATE identity.users u SET email = 'edge.' || u.token || '@example.invalid' WHERE u.token BETWEEN 927000 AND 927999 AND u.email <> 'edge.' || u.token || '@example.invalid';
+-- Only this fixture's own members: a member another run created in this token range (a bulk add hands out the next token, which lands here) keeps its email,
+-- because tools/classes-contract.sh finds the members it must delete by that email.
+UPDATE identity.users u SET email = 'edge.' || u.token || '@example.invalid'
+WHERE u.token IN (927002, 927003, 927004, 927005, 927006, 927007, 927008, 927009, 927012, 927100) AND u.email <> 'edge.' || u.token || '@example.invalid';
 
 INSERT INTO membership.member_profiles (user_id, name, gender, mobile)
 SELECT u.id, 'Edge Member ' || v.token, CASE WHEN v.token = 927009 THEN NULL ELSE '1' END, '+91000092' || right(v.token::text, 4) FROM (VALUES

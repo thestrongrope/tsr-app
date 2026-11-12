@@ -25,29 +25,12 @@ builder.Services.AddSingleton(TimeProvider.System);
 // verifier, so it runs in any environment. Normal start-up still fails closed outside Development.
 var migrating = args.Contains("--migrate");
 
-// The worker run mode (hosts/api/WorkerMode.cs): background workers named in TSR_WORKERS, no API routes. Like the migrate job it needs no caller verifier. Put --workers LAST on a command line:
+// The worker run mode (hosts/api/WorkerMode.cs): background workers named in TSR_WORKERS, no API routes. It loads the same modules as the API, so it needs the same settings. Put --workers LAST on a command line:
 // the command line reader takes the argument after a bare switch as its value.
 var workerMode = args.Contains("--workers") && !migrating;
 
-// Registration order is migration order: identity owns users, which other domains reference.
-if (migrating || workerMode)
-{
-    builder.Services.AddIdentityTables();
-}
-else
-{
-    builder.Services.AddIdentity(builder.Environment, builder.Configuration);
-}
-
-builder.Services.AddAccess();
-builder.Services.AddPlatform();
-builder.Services.AddMembership();
-builder.Services.AddContent();
-// Tables only so far (schema phase); registered after platform, whose migration creates the collation classes uses.
-builder.Services.AddClasses();
-builder.Services.AddAssessment();
-builder.Services.AddNotifications();
-builder.Services.AddSearch();
+var mode = migrating ? RunMode.Migrate : workerMode ? RunMode.Workers : RunMode.Api;
+HostServices.AddDomains(builder.Services, builder.Environment, builder.Configuration, mode);
 
 // Only in the worker run mode, and only the workers TSR_WORKERS names; an unknown name stops the start here.
 var enabledWorkers = WorkerMode.Register(builder.Services, workerMode, builder.Configuration[WorkerMode.Setting]);

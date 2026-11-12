@@ -82,10 +82,11 @@ internal static partial class SearchFeed
             LogDone(log, upserted, deleted, seconds);
             return new ReconcileReport(upserted, deleted, false);
         }
-        catch (SearchUnavailableException)
+        catch (SearchUnavailableException unavailable)
         {
             var failedAfter = Stopwatch.GetElapsedTime(started).TotalSeconds;
-            LogFailed(log, upserted, failedAfter);
+            // The message is a status code or an exception type, never data (ElasticSearchIndex.Writer.cs).
+            LogFailed(log, unavailable.Message, upserted, failedAfter);
             return null;
         }
     }
@@ -126,6 +127,6 @@ internal static partial class SearchFeed
     [LoggerMessage(Level = LogLevel.Information, Message = "Search feed: upserted {Upserted}, deleted {Deleted} ({Seconds:F1} s)")]
     private static partial void LogDone(ILogger logger, int upserted, int deleted, double seconds);
 
-    [LoggerMessage(Level = LogLevel.Error, Message = "Search feed: Elasticsearch failed after {Upserted} upserted; nothing was deleted, the next tick starts over ({Seconds:F1} s)")]
-    private static partial void LogFailed(ILogger logger, int upserted, double seconds);
+    [LoggerMessage(Level = LogLevel.Error, Message = "Search feed: {Reason} after {Upserted} upserted; nothing was deleted, the next tick starts over ({Seconds:F1} s)")]
+    private static partial void LogFailed(ILogger logger, string reason, int upserted, double seconds);
 }
