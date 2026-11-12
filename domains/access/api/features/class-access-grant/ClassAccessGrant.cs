@@ -12,7 +12,7 @@ namespace Tsr.Access.Api.Features.ClassAccessGrant;
 // Slice: POST /admin/class-access/members/{token}/rules {gender, conditions, reason, version, previewHash} -> {saved: true} and the refreshed member view (as GET /admin/class-access/members/{token}).
 // PHP: routes/class_access.php route_class_access_grant (:272), ClassAccessModel::grant. Order: sign-in (401), class-access:manage (403), the body (422 Invalid JSON), gender a whole number (422), conditions a list (422),
 // reason text (422), version and previewHash required text (422); then the model: the reason 1 to 300 characters (422), gender 1 or 2 or left out (422), the conditions valid, IN only, levels that exist (422), the member
-// (404), the operator's guards (own access 422 "You cannot change your own access"; the rule's gender and the member's gender both ones the operator manages, 403 "This member belongs to the other gender"), each
+// (404), the operator's guards (own access 422 "You cannot change your own access"; the rule's gender and the member's gender both ones the operator manages, 403 "This member belongs to the other gender"; stricter than PHP: only a super admin adds a rule to a super admin or a gender admin, 403 "You do not have permission to do that"), each
 // city, country and tag one the operator is offered (422). Then one transaction under the member's lock (class 6001; PHP's UPDATE users row lock): the member read again and the guards again, the version the client saw
 // (409 member_changed), a Finance member (422), the same access already held (409 already_has_access), the access reaches no class (422), the classes still hash to previewHash (409 preview_changed, with the classes now
 // reached), then the rule and its conditions are written, and a member whose role is 0 becomes a class admin (role 5; any other role stays; PHP's UPDATE users SET roleid = 5 where roleid = 0). The operator is recorded as
@@ -109,7 +109,7 @@ internal static class ClassAccessGrantSlice
             return new Refusal(StatusCodes.Status404NotFound, "Member not found");
         }
 
-        var guard = await op.GuardAsync(found.Value.Member, input.Gender, ct);
+        var guard = await op.GuardAsync(found.Value.Member, found.Value.RoleId, input.Gender, ct);
         if (guard is not null)
         {
             return guard;
@@ -136,7 +136,7 @@ internal static class ClassAccessGrantSlice
         }
 
         var (member, roleId) = locked.Value;
-        var guard = await op.GuardAsync(member, draft.Gender, ct);
+        var guard = await op.GuardAsync(member, roleId, draft.Gender, ct);
         var rules = await ClassAccessStore.LiveRulesAsync(db, token, ct);
         var refused = guard ?? await RefuseAsync(classes, roleId, rules, draft, ct);
         if (refused is not null)

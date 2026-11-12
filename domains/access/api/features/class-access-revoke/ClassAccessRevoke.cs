@@ -14,13 +14,14 @@ namespace Tsr.Access.Api.Features.ClassAccessRevoke;
 // then the model: the reason 1 to 300 characters (422), the rule and its member (404 "Rule not found"), the operator's guards (own access 422; the RULE's gender and the MEMBER's gender both ones the operator manages, 403, so a
 // rule of the other gender or of either gender on a member is removed by a super admin only), already removed (409), then one transaction under the member's lock (class 6001): the member read again and the guards again, the
 // version (409 member_changed), the update (409 if another request removed it first), and a class admin (role 5) whose last live rule this was returns to role 0 (any other role stays). Event
-// access.class_access_rule_revoked (ruleId, token, revokedBy). A failure before the commit is a 500 "Nothing was changed". Contract: spec/api.yaml.
+// access.class_access_rule_revoked (ruleId, token, revokedBy). Stricter than PHP: after the guards, a rule is removed only by the operator who granted it or a super admin (403), and only a super admin changes
+// the access of a super admin or a gender admin (also on add: class-access-grant), both repeated inside the lock. A failure before the commit is a 500 "Nothing was changed". Contract: spec/api.yaml.
 
 internal static class ClassAccessRevokeSlice
 {
     internal sealed record RuleRevoked(int RuleId, int Token, int RevokedBy);
 
-    private sealed record Revocation(int RuleId, int? RuleGender, string Reason, string Version);
+    private sealed record Revocation(int RuleId, int? RuleGender, int? GrantedBy, string Reason, string Version);
 
     public static IEndpointRouteBuilder MapClassAccessRevoke(this IEndpointRouteBuilder routes)
     {
@@ -81,7 +82,7 @@ internal static class ClassAccessRevokeSlice
             return (new Refusal(StatusCodes.Status404NotFound, "Rule not found"), 0);
         }
 
-        var guard = await op.GuardAsync(found.Value.Member, rule.Gender, ct);
+        var guard = await GuardAsync(op, found.Value.Member, found.Value.RoleId, rule.Gender, rule.GrantedBy, ct);
         if (guard is not null)
         {
             return (guard, 0);
@@ -92,7 +93,7 @@ internal static class ClassAccessRevokeSlice
             return (AlreadyRemoved(), 0);
         }
 
-        var revocation = new Revocation(ruleId, rule.Gender, reason.Value!, version);
+        var revocation = new Revocation(ruleId, rule.Gender, rule.GrantedBy, reason.Value!, version);
         return (await WriteAsync(db, op, clock, rule.Token, revocation, ct), rule.Token);
     }
 
@@ -107,7 +108,7 @@ internal static class ClassAccessRevokeSlice
         }
 
         var (member, roleId) = locked.Value;
-        var guard = await op.GuardAsync(member, revocation.RuleGender, ct);
+        var guard = await GuardAsync(op, member, roleId, revocation.RuleGender, revocation.GrantedBy, ct);
         if (guard is not null)
         {
             return guard;
@@ -141,6 +142,9 @@ internal static class ClassAccessRevokeSlice
         await transaction.CommitAsync(ct);
         return null;
     }
+
+    private static async Task<Refusal?> GuardAsync(ClassAccessOperator op, MemberRow member, int roleId, int? ruleGender, int? grantedBy, CancellationToken ct) =>
+        await op.GuardAsync(member, roleId, ruleGender, ct) ?? await op.RevokeGuardAsync(grantedBy, ct);
 
     private static Refusal AlreadyRemoved() => new(StatusCodes.Status409Conflict, "That access was already removed");
 }

@@ -96,12 +96,23 @@ public sealed class TestGrantsTests
     }
 
     [Test]
-    public async Task A_super_admin_may_grant_themselves_a_permission_no_role_gives_as_PHP_allows_finding_10()
+    public async Task A_grant_to_oneself_is_refused_with_422_and_writes_no_row_and_no_event()
     {
         var reply = await kit.SendAsync(Super, HttpMethod.Post, $"/admin/permissions/members/{Super}/grants", """{"permission": "quiz:admin:all", "reason": "Self"}""");
 
-        Assert.That(reply.Status, Is.EqualTo(HttpStatusCode.OK), reply.Body);
-        Assert.That(await CountAsync("access.user_permissions", $"user_id = {await UserIdAsync(Super)} and granted_by = {await UserIdAsync(Super)} and permission = 'quiz:admin:all'"), Is.EqualTo(1));
+        Assert.That((int)reply.Status, Is.EqualTo(422), reply.Body);
+        Assert.That(reply.Detail, Is.EqualTo("You cannot grant a permission to yourself"));
+        Assert.That(await CountAsync("access.user_permissions"), Is.Zero);
+        Assert.That(await CountAsync("platform.outbox"), Is.Zero);
+    }
+
+    [Test]
+    public async Task A_grant_to_oneself_by_a_member_without_permission_is_still_a_403()
+    {
+        var reply = await kit.SendAsync(Plain, HttpMethod.Post, $"/admin/permissions/members/{Plain}/grants", """{"permission": "donors:read:all", "reason": "Self"}""");
+
+        Assert.That((int)reply.Status, Is.EqualTo(403), reply.Body);
+        Assert.That(reply.Detail, Is.EqualTo("Only super admins can manage permissions"));
     }
 
     [Test]
@@ -307,17 +318,72 @@ public sealed class TestGrantsTests
     }
 
     [Test]
-    public async Task A_gender_admin_removes_a_rule_of_another_gender_admin_of_their_gender_as_PHP_allows_finding_11()
+    public async Task A_gender_admin_cannot_add_a_rule_to_or_remove_a_rule_from_a_gender_admin_or_a_super_admin()
     {
         await MembershipTestKit.AddMemberAsync(925005, "Gr 925005", "1");
         await TestDatabase.ExecuteAsync("insert into access.user_roles (user_id, roleid) select id, 3 from identity.users where token = 925005");
-        var rule = await AddRuleAsync(925005, 1, "Gents, GRville");
-        var view = await kit.SendAsync(GentsAdmin, HttpMethod.Get, "/admin/class-access/members/925005");
+        var peerRule = await AddRuleAsync(925005, 1, "Gents, GRville");
+        var superRule = await AddRuleAsync(Super, 1, "Gents, GRville");
+        await TestDatabase.ExecuteAsync($"update access.class_access_rules set granted_by = {await UserIdAsync(GentsAdmin)} where id in ({peerRule}, {superRule})");
 
-        var reply = await kit.SendAsync(GentsAdmin, HttpMethod.Post, $"/admin/class-access/rules/{rule}/revoke", $$"""{"reason": "Peer", "version": "{{view.Json!["version"]!.GetValue<string>()}}"}""");
+        foreach (var target in new[] { 925005, Super })
+        {
+            var (version, hash) = await DraftAsync(GentsAdmin, target, 1, "{\"field\": \"city\", \"value\": \"GRother\"}");
+            var add = await kit.SendAsync(GentsAdmin, HttpMethod.Post, $"/admin/class-access/members/{target}/rules", Body(1, "{\"field\": \"city\", \"value\": \"GRother\"}", "Why", version, hash));
+            Assert.That((int)add.Status, Is.EqualTo(403), $"add to {target}: {add.Body}");
+            Assert.That(add.Detail, Is.EqualTo("You do not have permission to do that"));
+        }
 
-        Assert.That(reply.Status, Is.EqualTo(HttpStatusCode.OK), reply.Body);
-        Assert.That(await CountAsync("access.user_roles", $"user_id = {await UserIdAsync(925005)} and roleid = 3"), Is.EqualTo(1), "the peer keeps their own role");
+        foreach (var rule in new[] { peerRule, superRule })
+        {
+            var remove = await kit.SendAsync(GentsAdmin, HttpMethod.Post, $"/admin/class-access/rules/{rule}/revoke", """{"reason": "Why", "version": "x"}""");
+            Assert.That((int)remove.Status, Is.EqualTo(403), $"remove {rule}: {remove.Body}");
+            Assert.That(remove.Detail, Is.EqualTo("You do not have permission to do that"));
+        }
+
+        Assert.That(await CountAsync("access.class_access_rules", "revoked_at is null"), Is.EqualTo(2));
+        Assert.That(await CountAsync("platform.outbox"), Is.Zero);
+    }
+
+    [Test]
+    public async Task A_super_admin_may_add_a_rule_to_a_gender_admin_and_remove_a_rule_it_did_not_grant()
+    {
+        await MembershipTestKit.AddMemberAsync(925005, "Gr 925005", "1");
+        await TestDatabase.ExecuteAsync("insert into access.user_roles (user_id, roleid) select id, 3 from identity.users where token = 925005");
+        var (version, hash) = await DraftAsync(Super, 925005, 1, Ville);
+        var added = await kit.SendAsync(Super, HttpMethod.Post, "/admin/class-access/members/925005/rules", Body(1, Ville, "Peer", version, hash));
+        Assert.That(added.Status, Is.EqualTo(HttpStatusCode.OK), added.Body);
+
+        var fixtureRule = await AddRuleAsync(Other, 1, "Gents, GRville");
+        var view = await kit.SendAsync(Super, HttpMethod.Get, $"/admin/class-access/members/{Other}");
+        var removed = await kit.SendAsync(Super, HttpMethod.Post, $"/admin/class-access/rules/{fixtureRule}/revoke", $$"""{"reason": "Why", "version": "{{view.Json!["version"]!.GetValue<string>()}}"}""");
+
+        Assert.That(removed.Status, Is.EqualTo(HttpStatusCode.OK), removed.Body);
+    }
+
+    [Test]
+    public async Task A_rule_may_be_removed_only_by_the_operator_who_granted_it_or_a_super_admin()
+    {
+        var (version, hash) = await DraftAsync(GentsAdmin, Subject, 1, Ville);
+        var saved = await kit.SendAsync(GentsAdmin, HttpMethod.Post, $"/admin/class-access/members/{Subject}/rules", Body(1, Ville, "Mine", version, hash));
+        var ruleId = saved.Json!["rules"]![0]!["id"]!.GetValue<int>();
+        var current = saved.Json["version"]!.GetValue<string>();
+        var fixtureRule = await AddRuleAsync(Other, 1, "Gents, GRville");
+        var otherVersion = (await kit.SendAsync(GentsAdmin, HttpMethod.Get, $"/admin/class-access/members/{Other}")).Json!["version"]!.GetValue<string>();
+        await MembershipTestKit.AddMemberAsync(925005, "Gr 925005", "1");
+        await TestDatabase.ExecuteAsync("insert into access.user_roles (user_id, roleid) select id, 3 from identity.users where token = 925005");
+
+        var byPeer = await kit.SendAsync(925005, HttpMethod.Post, $"/admin/class-access/rules/{ruleId}/revoke", $$"""{"reason": "Why", "version": "{{current}}"}""");
+        var ungranted = await kit.SendAsync(GentsAdmin, HttpMethod.Post, $"/admin/class-access/rules/{fixtureRule}/revoke", $$"""{"reason": "Why", "version": "{{otherVersion}}"}""");
+
+        Assert.That((int)byPeer.Status, Is.EqualTo(403), byPeer.Body);
+        Assert.That(byPeer.Detail, Is.EqualTo("You do not have permission to do that"));
+        Assert.That((int)ungranted.Status, Is.EqualTo(403), ungranted.Body);
+        Assert.That(await CountAsync("access.class_access_rules", "revoked_at is null"), Is.EqualTo(2));
+        Assert.That(await CountAsync("platform.outbox", "event_type = 'access.class_access_rule_revoked'"), Is.Zero);
+
+        var bySuper = await kit.SendAsync(Super, HttpMethod.Post, $"/admin/class-access/rules/{ruleId}/revoke", $$"""{"reason": "Why", "version": "{{current}}"}""");
+        Assert.That(bySuper.Status, Is.EqualTo(HttpStatusCode.OK), bySuper.Body);
     }
 
     [Test]

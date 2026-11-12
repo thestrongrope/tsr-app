@@ -12,7 +12,7 @@ namespace Tsr.Access.Api.Features.AdminPermissionGrant;
 // permission a non-empty string (422 "permission is required"), reason text (422), the reason 1 to 300 characters (422), the member (404), the permission grantable (409 held, 422 not grantable:
 // only scope `all`, never permissions:manage:all, class-access:manage:all or members:enrol-by-token:all), then in one transaction the live-grant check (409) and the insert. The operator is
 // the session's user, recorded as granted_by. Event access.permission_granted (grantId, token, permission, grantedBy). Contract: spec/api.yaml.
-// Stricter than PHP: the member's lock (class 6001) is taken first, so two grants at once cannot both insert. Not checked, as in PHP: a super admin may grant to themselves.
+// Stricter than PHP: the member's lock (class 6001) is taken first, so two grants at once cannot both insert. Also stricter than PHP: a grant to the operator themself is 422 "You cannot grant a permission to yourself", after the member is found and before any write.
 
 internal static class AdminPermissionGrantSlice
 {
@@ -56,6 +56,11 @@ internal static class AdminPermissionGrantSlice
         if (member is null)
         {
             return Problem.Detail(StatusCodes.Status404NotFound, "Member not found");
+        }
+
+        if (member.Token == context.GetCaller()!.Token)
+        {
+            return Problem.Detail(StatusCodes.Status422UnprocessableEntity, "You cannot grant a permission to yourself");
         }
 
         var (grantable, held) = await PermissionGrants.GrantableAsync(db, permissions, member, ct);

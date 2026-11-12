@@ -28,6 +28,9 @@ The app also reads the caller's own permissions to show or hide screens.
 | PERM-R12 | WHEN a signed-in caller requests `GET /me/permissions`, the system SHALL return version 4, `issued_at`, the permissions in catalog order and the scopes, identical to PHP. | The app reads it. | Must | Test: Hurl `me-permissions.hurl` (PHP and new API) |
 | PERM-R13 | WHEN a caller requests `GET /me/permissions/{permission}`, the system SHALL return the scopes held, or 404 `Unknown permission`. | Parity. | Must | Test: Hurl `me-permission.hurl` |
 | PERM-R14 | WHEN a caller requests `GET /user/permissions`, the system SHALL return PHP's legacy answer, including that the derived roles grant no pages. | The router still reads it. | Must | Test: Hurl `user-permissions.hurl`; `LegacyPermissions.Tests.cs` |
+| PERM-R15 | IF a member with `permissions:manage` grants a named permission to themself, THEN the system SHALL refuse with 422 `You cannot grant a permission to yourself`, after the permission check and before any write, with no event. | Owner decision 12 Nov 2026 (stricter than PHP). | Must | Test: `db/tests/TestGrantsTests.cs` `A_grant_to_oneself_is_refused_with_422_and_writes_no_row_and_no_event`; Hurl `admin-permission-self-new-api.hurl` |
+| PERM-R16 | IF an operator who is not a super admin adds a class access rule to, or removes one from, a member who holds the super admin or a gender admin role, THEN the system SHALL refuse with 403 `You do not have permission to do that`, both before and again inside the member lock. | Owner decision 12 Nov 2026. | Must | Test: `TestGrantsTests.cs` `A_gender_admin_cannot_add_a_rule_to_or_remove_a_rule_from_a_gender_admin_or_a_super_admin`, `A_super_admin_may_add_a_rule_to_a_gender_admin_and_remove_a_rule_it_did_not_grant`; Hurl `class-access-peers-new-api.hurl`, `class-access-revoke-new-api.hurl` |
+| PERM-R17 | IF an operator who is neither a super admin nor the one who granted a class access rule removes it, THEN the system SHALL refuse with 403 `You do not have permission to do that`. | Owner decision 12 Nov 2026. | Must | Test: `TestGrantsTests.cs` `A_rule_may_be_removed_only_by_the_operator_who_granted_it_or_a_super_admin`; Hurl `class-access-revoke-new-api.hurl` |
 
 ## 4. Quality requirements
 | ID | Characteristic | Requirement | Rationale | Priority | Verification |
@@ -52,6 +55,7 @@ Schema `access`: `roles`, `permissions`, `role_permissions`, `user_permissions`,
 | PERM-D1 | Classes reach access through one port, `IClassScopes`; the default answers "no classes". | `classes` depends on access; the port breaks the cycle. |
 | PERM-D2 | Catalog ordering is ordinal; the catalog is a PHP copy (`tools/access-catalog/export.sh`). | Equals MariaDB's order for these names. |
 | PERM-D3 | Quirks are copied, each with a test named Quirk. | Parity first; fixes are separate changes. |
+| PERM-D4 | The grant and class access routes are stricter than PHP in the three ways of PERM-R15 to R17 (findings 10 and 11). Their Hurl cases that pin PHP are in `*-php-only.hurl` files, the new behaviour in `*-new-api.hurl`. | Owner decision, 12 Nov 2026. |
 
 ## 9. Known limitations, gaps and open questions
 - Class-dependent paths (own, taught, enrolled, assigned with real classes) are unit tested but not yet proven on PHP: the contract fixtures have no classes.

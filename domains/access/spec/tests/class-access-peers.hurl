@@ -1,43 +1,8 @@
 # Class access rules between operators of equal rank, and what a rule may reach: the looseness PHP has and the new API keeps (findings 10 and 11 of docs/specs/initial-build/build-out-findings.md). Runs against any implementation.
-# Variables: base_url and auth_grants_<token> (tools/contract-grants.sh). Fixtures: db/synthetic/grants-fixtures.sql (read its header). This file changes 925045 (a gents admin, role 3), 925046 (a super admin, role 1),
+# Variables: base_url and auth_grants_<token> (tools/contract-grants.sh). Fixtures: db/synthetic/grants-fixtures.sql (read its header). This file changes 925046 (a super admin, role 1),
 # 925047 (role 6) and 925049 (a gents member) only. Every case here PINS what PHP does today; none is a wish. The proposals for the owner are in docs/specs/initial-build/test-grants-notes.md.
 
-# 1. A gents admin gives ANOTHER gents admin a rule, and a rule on a level with no city: the "offered" list limits city, country and tag, not levels. PHP accepts both; the peer keeps role 3
-GET {{base_url}}/admin/class-access/members/925045
-Authorization: {{auth_grants_925003}}
-HTTP 200
-[Asserts]
-jsonpath "$.version" matches "^3:[0-9a-f]{16}$"
-[Captures]
-v45: jsonpath "$.version"
-
-POST {{base_url}}/admin/class-access/preview
-Authorization: {{auth_grants_925003}}
-{"gender": 1, "conditions": [{"field": "level", "value": 2}]}
-HTTP 200
-[Asserts]
-jsonpath "$.classes[?(@.id==98501)]" exists
-jsonpath "$.classes[?(@.id==98503)]" exists
-[Captures]
-level2_hash: jsonpath "$.previewHash"
-
-POST {{base_url}}/admin/class-access/members/925045/rules
-Authorization: {{auth_grants_925003}}
-{"gender": 1, "conditions": [{"field": "level", "value": 2}], "reason": "Peer rule", "version": "{{v45}}", "previewHash": "{{level2_hash}}"}
-HTTP 200
-[Asserts]
-jsonpath "$.saved" == true
-jsonpath "$.member.token" == 925045
-jsonpath "$.rules" count == 1
-jsonpath "$.rules[0].note" == "Gents, level 2"
-jsonpath "$.rules[0].classes[?(@.id==98503)]" exists
-jsonpath "$.version" matches "^3:[0-9a-f]{16}$"
-
-GET {{base_url}}/user/permissions
-Authorization: {{auth_grants_925045}}
-HTTP 200
-[Asserts]
-jsonpath "$.role_id" == 3
+# 1. (A gents admin giving ANOTHER gents admin a rule is PHP's looseness: class-access-peers-php-only.hurl; the new API refuses it with 403: class-access-peers-new-api.hurl.)
 
 # 2. A super admin gives another super admin a rule (role 1 stays) and a role 6 member a rule (role 6 stays)
 GET {{base_url}}/admin/class-access/members/925046

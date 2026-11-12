@@ -5,6 +5,9 @@
 # PHP's order: sign-in, class-access:manage, reason text and version required (422), then the model: the reason 1 to 300 characters (422), the rule and its member (404), the operator guards (own access 422,
 # rule gender 403, member gender 403), already removed (409), then under the member lock: the guards again, the version (409 member_changed), the update.
 
+# The new API is stricter in two places (decision of 12 Nov 2026): only the operator who granted a rule or a super admin removes it (every fixture rule was granted by 925001, so cases 6 to 9 use the super admin), and only a
+# super admin changes the rules of a super admin or a gender admin. PHP's looseness for those is pinned in class-access-revoke-php-only.hurl, the new API's refusals in class-access-revoke-new-api.hurl.
+
 # 1. Without sign-in: 401. Who may not use the screen: 403
 POST {{base_url}}/admin/class-access/rules/9750021/revoke
 {"reason": "Done", "version": "x"}
@@ -175,7 +178,7 @@ jsonpath "$.detail" == "You cannot change your own access"
 
 # 6. An already removed rule: 409 (the guards pass for a gents admin on a gents member)
 POST {{base_url}}/admin/class-access/rules/9750024/revoke
-Authorization: {{auth_grants_925003}}
+Authorization: {{auth_grants_925001}}
 {"reason": "Done", "version": "x"}
 HTTP 409
 [Asserts]
@@ -192,7 +195,7 @@ jsonpath "$.version" matches "^5:[0-9a-f]{16}$"
 vA: jsonpath "$.version"
 
 POST {{base_url}}/admin/class-access/rules/9750021/revoke
-Authorization: {{auth_grants_925003}}
+Authorization: {{auth_grants_925001}}
 {"reason": "Done", "version": "5:0000000000000000"}
 HTTP 409
 [Asserts]
@@ -201,7 +204,7 @@ jsonpath "$.detail" == "This member was just changed by someone else. Open them 
 
 # 8. Revoke one of two rules: 200 {saved: true}, the refreshed view without it; the member stays a class admin (role 5); the old version is stale
 POST {{base_url}}/admin/class-access/rules/9750021/revoke
-Authorization: {{auth_grants_925003}}
+Authorization: {{auth_grants_925001}}
 {"reason": "  Moved to another city  ", "version": "{{vA}}"}
 HTTP 200
 [Asserts]
@@ -219,14 +222,14 @@ jsonpath "$.version" != "{{vA}}"
 vB: jsonpath "$.version"
 
 POST {{base_url}}/admin/class-access/rules/9750022/revoke
-Authorization: {{auth_grants_925003}}
+Authorization: {{auth_grants_925001}}
 {"reason": "Stale", "version": "{{vA}}"}
 HTTP 409
 [Asserts]
 jsonpath "$.code" == "member_changed"
 
 POST {{base_url}}/admin/class-access/rules/9750021/revoke
-Authorization: {{auth_grants_925003}}
+Authorization: {{auth_grants_925001}}
 {"reason": "Again", "version": "{{vB}}"}
 HTTP 409
 [Asserts]
@@ -240,7 +243,7 @@ jsonpath "$.role_id" == 5
 
 # 9. Revoke the last rule: the member is back to role 0 (the version starts with 0) on their very next request
 POST {{base_url}}/admin/class-access/rules/9750022/revoke
-Authorization: {{auth_grants_925003}}
+Authorization: {{auth_grants_925001}}
 {"reason": "No longer a coordinator", "version": "{{vB}}"}
 HTTP 200
 [Asserts]
@@ -255,36 +258,8 @@ HTTP 200
 jsonpath "$.role_id" == 0
 
 POST {{base_url}}/admin/class-access/rules/9750022/revoke
-Authorization: {{auth_grants_925003}}
+Authorization: {{auth_grants_925001}}
 {"reason": "Again", "version": "x"}
 HTTP 409
 [Asserts]
 jsonpath "$.detail" == "That access was already removed"
-
-# 10. A gents admin removes a rule of ANOTHER gents admin (equal rank): allowed, the only self guard is the operator's own token (finding 11). The other admin keeps their role 3
-GET {{base_url}}/admin/class-access/members/925005
-Authorization: {{auth_grants_925003}}
-HTTP 200
-[Asserts]
-jsonpath "$.rules" count == 2
-jsonpath "$.version" matches "^3:[0-9a-f]{16}$"
-jsonpath "$.fromRole" == "Classes of their own gender"
-[Captures]
-vC: jsonpath "$.version"
-
-POST {{base_url}}/admin/class-access/rules/9750052/revoke
-Authorization: {{auth_grants_925003}}
-{"reason": "Peer rule removed", "version": "{{vC}}"}
-HTTP 200
-[Asserts]
-jsonpath "$.saved" == true
-jsonpath "$.member.token" == 925005
-jsonpath "$.rules" count == 1
-jsonpath "$.rules[0].id" == 9750051
-jsonpath "$.version" matches "^3:[0-9a-f]{16}$"
-
-GET {{base_url}}/user/permissions
-Authorization: {{auth_grants_925005}}
-HTTP 200
-[Asserts]
-jsonpath "$.role_id" == 3

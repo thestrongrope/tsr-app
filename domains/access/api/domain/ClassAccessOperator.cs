@@ -12,6 +12,7 @@ internal sealed class ClassAccessOperator(Permissions permissions, Caller caller
 {
     public const string Action = "class-access:manage";
     public const string OtherGender = "This member belongs to the other gender";
+    public const string Denied = "You do not have permission to do that";
 
     public Caller Caller { get; } = caller;
 
@@ -73,7 +74,7 @@ internal sealed class ClassAccessOperator(Permissions permissions, Caller caller
     /// May the operator change this member's access with a rule of <paramref name="ruleGender"/>? Never their own (422); the rule's gender and the member's
     /// gender must both be ones the operator manages (403), so a gender admin always has them equal. Null when allowed.
     /// </summary>
-    public async Task<Refusal?> GuardAsync(MemberRow member, int? ruleGender, CancellationToken ct)
+    public async Task<Refusal?> GuardAsync(MemberRow member, int memberRoleId, int? ruleGender, CancellationToken ct)
     {
         if (Caller.Token != 0 && Caller.Token == member.Token)
         {
@@ -86,6 +87,20 @@ internal sealed class ClassAccessOperator(Permissions permissions, Caller caller
         }
 
         var memberGender = AdminMembers.GenderOf(member.Gender);
-        return memberGender is int g && await MayManageAsync(g, ct) ? null : new Refusal(403, OtherGender);
+        if (memberGender is not int g || !await MayManageAsync(g, ct))
+        {
+            return new Refusal(403, OtherGender);
+        }
+
+        // Stricter than PHP: only a super admin changes the access of a super admin or a gender admin.
+        var protectedMember = memberRoleId is ClassAccessRules.RoleSuperAdmin or ClassAccessRules.RoleGentsAdmin or ClassAccessRules.RoleLadiesAdmin;
+        return protectedMember && !await IsSuperAdminAsync(ct) ? new Refusal(403, Denied) : null;
     }
+
+    /// <summary>Stricter than PHP: a rule is removed by the operator who granted it or by a super admin (403 otherwise). Null when allowed.</summary>
+    public async Task<Refusal?> RevokeGuardAsync(int? grantedBy, CancellationToken ct) =>
+        grantedBy == Caller.UserId || await IsSuperAdminAsync(ct) ? null : new Refusal(403, Denied);
+
+    private async Task<bool> IsSuperAdminAsync(CancellationToken ct) =>
+        await permissions.RoleIdAsync(Caller, ct) == ClassAccessRules.RoleSuperAdmin;
 }
