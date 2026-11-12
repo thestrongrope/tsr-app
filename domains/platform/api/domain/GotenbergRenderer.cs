@@ -12,13 +12,17 @@ internal sealed class GotenbergRenderer(HttpClient http, IOptions<GotenbergSetti
 {
     private const int MaxPdfBytes = 50_000_000;
 
-    public async Task<Result<byte[]>> RenderAsync(string html, CancellationToken ct)
+    public Task<Result<byte[]>> RenderAsync(string html, CancellationToken ct) => PostAsync(html, landscape: true, ct);
+
+    public Task<Result<byte[]>> RenderPortraitAsync(string html, CancellationToken ct) => PostAsync(html, landscape: false, ct);
+
+    private async Task<Result<byte[]>> PostAsync(string html, bool landscape, CancellationToken ct)
     {
         using var form = new MultipartFormDataContent
         {
             { new StringContent("8.27"), "paperWidth" },
             { new StringContent("11.69"), "paperHeight" },
-            { new StringContent("true"), "landscape" },
+            { new StringContent(landscape ? "true" : "false"), "landscape" },
             { new StringContent("0.4"), "marginTop" },
             { new StringContent("0.4"), "marginBottom" },
             { new StringContent("0.4"), "marginLeft" },

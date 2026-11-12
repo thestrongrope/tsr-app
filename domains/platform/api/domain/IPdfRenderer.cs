@@ -6,4 +6,7 @@ namespace Tsr.Platform.Api.Domain;
 internal interface IPdfRenderer
 {
     Task<Result<byte[]>> RenderAsync(string html, CancellationToken ct);
+
+    /// <summary>The same on an A4 page held upright (the reports are landscape). A renderer that has no page orientation answers as <see cref="RenderAsync"/> does.</summary>
+    Task<Result<byte[]>> RenderPortraitAsync(string html, CancellationToken ct) => RenderAsync(html, ct);
 }

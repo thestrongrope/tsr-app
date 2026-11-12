@@ -72,9 +72,29 @@ internal static class QuizEdit
         return refusal is not null ? Result.Fail<Edit>(refusal) : Result.Ok(new Edit(name, topic, Restriction(body.Get("restrictToClass")), rows.Select(r => r.Question).ToList(), counted));
     }
 
+    /// <summary>The name and topic of a new quiz (POST /classes/{class_id}/mcq): the same rules as an edit's, in PHP's order (name first), then the length and NUL limits.</summary>
+    public static Result<(string Name, string Topic)> ParseHeader(JsonBody body)
+    {
+        var name = Field(body.Get("name"));
+        if (name.Length == 0)
+        {
+            return Result.Fail<(string Name, string Topic)>("name is required");
+        }
+
+        var topic = Field(body.Get("topic"));
+        if (topic.Length == 0)
+        {
+            return Result.Fail<(string Name, string Topic)>("topic is required");
+        }
+
+        var refusal = Refusal("name", name, MaxTitle) ?? Refusal("topic", topic, MaxTitle);
+        return refusal is not null ? Result.Fail<(string Name, string Topic)>(refusal) : Result.Ok((name, topic));
+    }
+
     private static string Field(JsonElement value) => PhpText.Trim(PhpValue.Text(value));
 
-    private static int? Restriction(JsonElement value) =>
+    /// <summary>restrictToClass: null when absent or null, else 0 when (int) of it is 0, else 1.</summary>
+    internal static int? Restriction(JsonElement value) =>
         value.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null ? null : PhpValue.ToInteger(value) == 0 ? 0 : 1;
 
     private static JsonElement Property(IReadOnlyList<KeyValuePair<string, JsonElement>> entries, string name) =>

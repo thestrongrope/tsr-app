@@ -134,12 +134,16 @@ internal static class ReportPendingNudgeSlice
         var criteria = JsonSerializer.Serialize(new { type = "CC_NUDGE", teacher, classes = classIds });
         var data = new Dictionary<string, string>
         {
+            ["type"] = "cc_reminder",
+            ["title"] = message.Title,
+            ["body"] = message.Body,
             ["sent_at"] = now.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss.ffffff", CultureInfo.InvariantCulture),
             ["class_ids"] = string.Join(',', classIds),
         };
-        var extras = new AnnouncementExtras(criteria, sender, data, SkipDemoDevices: true);
         var key = $"cc_nudge:{teacher}:{now.ToUnixTimeSeconds()}";
-        var announcement = new Announcement(message.Title, message.Body, null, "cc_reminder", key, [teacher], extras);
+        var announcement = new Announcement(
+            message.Title, message.Body, null, "cc_reminder", key, [teacher],
+            Sender: sender, Criteria: criteria, Data: data, ReuseExisting: false, SkipDemoDevices: true);
         var devices = await NotificationsCommands.AnnounceAsync(db, announcement, ct);
         await Outbox.WriteAsync(db, "classes.teacher_nudged", new TeacherNudged(teacher, sender, classIds), clock, ct);
         await transaction.CommitAsync(ct);

@@ -15,10 +15,18 @@ using Tsr.Assessment.Api.Features.ClassQuizzes;
 using Tsr.Assessment.Api.Features.CopyClasses;
 using Tsr.Assessment.Api.Features.CopyQuizzes;
 using Tsr.Assessment.Api.Features.CopyTopics;
+using Tsr.Assessment.Api.Features.ManageCopy;
+using Tsr.Assessment.Api.Features.ManageCreate;
 using Tsr.Assessment.Api.Features.ManageDeactivate;
 using Tsr.Assessment.Api.Features.ManageList;
+using Tsr.Assessment.Api.Features.ManageOffline;
+using Tsr.Assessment.Api.Features.ManageOfflineSave;
+using Tsr.Assessment.Api.Features.ManagePublish;
 using Tsr.Assessment.Api.Features.ManageQuiz;
+using Tsr.Assessment.Api.Features.ManageScores;
+using Tsr.Assessment.Api.Features.ManageSheet;
 using Tsr.Assessment.Api.Features.ManageStandard;
+using Tsr.Assessment.Api.Features.ManageStandardCopy;
 using Tsr.Assessment.Api.Features.ManageTopics;
 using Tsr.Assessment.Api.Features.ManageUpdate;
 using Tsr.Assessment.Api.Features.OpenQuizzes;
@@ -34,12 +42,12 @@ using Tsr.Shared.Api;
 namespace Tsr.Assessment.Api;
 
 /// <summary>
-/// assessment: spot quizzes, standard MCQs and quiz campaigns. Tables, the student quiz slices (batch A1), and placeholder routes (Planned.cs) so far; no public interface yet.
+/// assessment: spot quizzes, standard MCQs and quiz campaigns. Tables and every route of the MCQ surface; no public interface.
 /// </summary>
 public static class AssessmentModule
 {
-    /// <summary>Other domain modules this one may use (domains/CLAUDE.md rule 7). access (permissions); notifications (the quiz announcement command); classes, membership and identity are read through their v_* views.</summary>
-    public static readonly IReadOnlyList<string> Dependencies = ["access", "notifications"];
+    /// <summary>Other domain modules this one may use (domains/CLAUDE.md rule 7). access (permissions); notifications (the quiz announcement command); platform (ReportExport: the PDF of a quiz sheet); classes, membership and identity are read through their v_* views.</summary>
+    public static readonly IReadOnlyList<string> Dependencies = ["access", "notifications", "platform"];
 
     public static IServiceCollection AddAssessment(this IServiceCollection services)
     {
@@ -92,7 +100,14 @@ public static class AssessmentModule
         routes.MapManageTopics();
         routes.MapManageQuiz();
         routes.MapManageUpdate();
-        routes.MapPlannedRoutes();
+        routes.MapManageCreate();
+        routes.MapManageStandardCopy();
+        routes.MapManageCopy();
+        routes.MapManageScores();
+        routes.MapManageOffline();
+        routes.MapManageOfflineSave();
+        routes.MapManageSheet();
+        routes.MapManagePublish();
         return routes;
     }
 }

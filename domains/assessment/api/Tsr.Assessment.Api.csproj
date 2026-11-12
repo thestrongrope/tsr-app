@@ -1,10 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- assessment: spot quizzes, standard MCQs, quiz campaigns. The quiz slices; lists access. -->
+  <!-- assessment: spot quizzes, standard MCQs, quiz campaigns. The quiz slices; lists access, notifications and platform (the PDF of a printable sheet). -->
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <ProjectReference Include="../../../shared/api/Tsr.Shared.Api.csproj" />
     <ProjectReference Include="../../access/api/Tsr.Access.Api.csproj" />
     <ProjectReference Include="../../notifications/api/Tsr.Notifications.Api.csproj" />
+    <ProjectReference Include="../../platform/api/Tsr.Platform.Api.csproj" />
   </ItemGroup>
   <ItemGroup>
     <!-- Tests sit next to the code they test; tests/ compiles them. -->
