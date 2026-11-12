@@ -2,7 +2,7 @@
 # Run membership's Hurl contract files (domains/membership/spec/tests/*.hurl) against one side.
 # Usage: tools/membership-contract.sh dev|test|parity [--prepare] [extra hurl args]
 #   dev     the new API on the dev stack (http://localhost:8088; docker-compose.dev.yml must be up)
-#   test    the new API on the synthetic TEST stack (http://localhost:8089; tools/test-stack.sh up); never run dev against real data
+#   test    the new API on the synthetic TEST stack (http://localhost:8089, or TSR_STACK=n for lane n; tools/test-stack.sh up); never run dev against real data
 #   parity  the PHP API on the parity stack (http://127.0.0.1:18091, tools/parity-php/README.md; synthetic data only)
 #   --prepare  do the preparation below and stop (for the all-files command in CLAUDE.md, Commands)
 # Preparation, so both sides answer from the same data and a file can be run again:
@@ -19,6 +19,10 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SIDE="${1:?usage: membership-contract.sh dev|test|parity [--prepare] [hurl args]}"
 shift || true
 cd "$ROOT"
+# shellcheck disable=SC1091
+. tools/stack-env.sh
+# shellcheck disable=SC1091
+. tools/parity-lock.sh
 
 PREPARE_ONLY=0
 if [ "${1:-}" = "--prepare" ]; then
@@ -78,7 +82,8 @@ dev_sql() { docker compose -p "${PROJECT:-tsr-app-dev}" -f docker-compose.dev.ym
 
 case "$SIDE" in
   dev|test)
-    if [ "$SIDE" = test ]; then PROJECT=tsr-app-test; PORT=8089; export TSR_EMULATOR_PORT=19100; else PROJECT=tsr-app-dev; PORT=8088; export TSR_EMULATOR_PORT=19099; fi
+    if [ "$SIDE" = test ]; then PROJECT="$TSR_TEST_PROJECT"; PORT="$TSR_TEST_GATEWAY_PORT"; VARS_DIR="$TSR_TEST_VARS_DIR"; export TSR_EMULATOR_PORT="$TSR_TEST_EMULATOR_PORT"
+    else PROJECT=tsr-app-dev; PORT=8088; VARS_DIR=build/dev; export TSR_EMULATOR_PORT=19099; fi
     "$ROOT/tools/require-synthetic-stack.sh" "$PROJECT"
     # TSR_FIXTURES_LOADED=1: the members are already in the database (a database filled by tools/data-load from the
     # parity source, which holds the same fixtures); do not add db/synthetic/membership-fixtures.sql on top.
@@ -88,6 +93,7 @@ case "$SIDE" in
     MINT="tools/dev-auth/mint-token.sh"
     BASE="http://localhost:$PORT" ;;
   parity)
+    parity_lock
     tools/parity-php/membership-fixtures.sh
     php_sql < tools/parity-php/membership-b4b-fixtures.sql
     php_sql < tools/parity-php/membership-b5b-fixtures.sql
@@ -102,12 +108,13 @@ case "$SIDE" in
   *) echo "side must be dev, test or parity" >&2; exit 1 ;;
 esac
 
-VARS="build/$([ "$SIDE" = parity ] && echo parity-php || echo "$SIDE")/membership.vars"
+case "$SIDE" in test) VARS_DIR="$TSR_TEST_VARS_DIR" ;; parity) VARS_DIR=build/parity-php ;; *) VARS_DIR=build/dev ;; esac
+VARS="$VARS_DIR/membership.vars"
 mkdir -p "$(dirname "$VARS")"
 umask 077
 : > "$VARS"
 TMP="$(mktemp)"
-trap 'rm -f "$TMP"' EXIT
+trap 'rm -f "$TMP"; parity_unlock' EXIT
 for entry in "${MEMBERS[@]}"; do
   alias="${entry%%=*}"
   email="${entry#*=}"

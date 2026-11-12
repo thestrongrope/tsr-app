@@ -2,7 +2,7 @@
 # Run the sign-in contract (domains/identity/spec/tests/link-account.hurl) against one side.
 # Usage: tools/identity-contract.sh dev|test|parity [extra hurl args]
 #   dev     the new API on the dev stack (http://localhost:8088, docker-compose.dev.yml must be up)
-#   test    the new API on the synthetic TEST stack (http://localhost:8089; tools/test-stack.sh up); never run dev against real data
+#   test    the new API on the synthetic TEST stack (http://localhost:8089, or TSR_STACK=n for lane n; tools/test-stack.sh up); never run dev against real data
 #   parity  the PHP API on the parity stack (http://127.0.0.1:18091, tools/parity-php/README.md; synthetic data only)
 # Steps: refresh the synthetic fixtures (the "deleted a moment ago" row is time-bound: 2 hours),
 # sign a member in at that side's Auth emulator (mint-token.sh), run Hurl. Needs docker, curl, jq, hurl.
@@ -13,6 +13,10 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SIDE="${1:?usage: identity-contract.sh dev|test|parity [hurl args]}"
 shift || true
 cd "$ROOT"
+# shellcheck disable=SC1091
+. tools/stack-env.sh
+# shellcheck disable=SC1091
+. tools/parity-lock.sh
 
 FIXTURES="domains/identity/spec/tests/fixtures.vars"
 FILE="domains/identity/spec/tests/link-account.hurl"
@@ -48,12 +52,14 @@ SQL
 
 case "$SIDE" in
   dev|test)
-    if [ "$SIDE" = test ]; then PROJECT=tsr-app-test; PORT=8089; export TSR_EMULATOR_PORT=19100; else PROJECT=tsr-app-dev; PORT=8088; export TSR_EMULATOR_PORT=19099; fi
+    if [ "$SIDE" = test ]; then PROJECT="$TSR_TEST_PROJECT"; PORT="$TSR_TEST_GATEWAY_PORT"; VARS_DIR="$TSR_TEST_VARS_DIR"; export TSR_EMULATOR_PORT="$TSR_TEST_EMULATOR_PORT"
+    else PROJECT=tsr-app-dev; PORT=8088; VARS_DIR=build/dev; export TSR_EMULATOR_PORT=19099; fi
     "$ROOT/tools/require-synthetic-stack.sh" "$PROJECT"
     dev_fixtures
-    tools/dev-auth/mint-token.sh member.gents@example.invalid build/$SIDE/token.vars
-    BASE="http://localhost:$PORT"; VARS="build/$SIDE/token.vars" ;;
+    tools/dev-auth/mint-token.sh member.gents@example.invalid "$VARS_DIR"/token.vars
+    BASE="http://localhost:$PORT"; VARS="$VARS_DIR/token.vars" ;;
   parity)
+    parity_lock
     parity_fixtures
     tools/parity-php/mint-token.sh member.gents@example.invalid build/parity-php/token.vars
     BASE="http://127.0.0.1:18091"; VARS="build/parity-php/token.vars" ;;

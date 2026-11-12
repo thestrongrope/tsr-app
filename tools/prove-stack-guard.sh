@@ -5,8 +5,10 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
-sql() { docker compose -p tsr-app-test -f docker-compose.dev.yml exec -T db psql -U tsr -d tsr -X -q -v ON_ERROR_STOP=1 -c "$1"; }
-guard() { tools/require-synthetic-stack.sh tsr-app-test 2>/dev/null; }
+# shellcheck disable=SC1091
+. tools/stack-env.sh
+sql() { docker compose -p "$TSR_TEST_PROJECT" -f docker-compose.dev.yml exec -T db psql -U tsr -d tsr -X -q -v ON_ERROR_STOP=1 -c "$1"; }
+guard() { tools/require-synthetic-stack.sh "$TSR_TEST_PROJECT" 2>/dev/null; }
 PROBE_TOKEN=""
 cleanup() { [ -z "$PROBE_TOKEN" ] || sql "delete from identity.users where token = $PROBE_TOKEN"; }
 trap cleanup EXIT
@@ -21,7 +23,7 @@ probe() {
   [ "$answer" = "$3" ] || { echo "FAIL: guard did ${answer} for token $1 with that address, expected $3" >&2; exit 1; }
 }
 
-tools/require-synthetic-stack.sh tsr-app-test
+tools/require-synthetic-stack.sh "$TSR_TEST_PROJECT"
 probe 900990 "900990@thestrongrope.com" pass
 probe 999999 "guard.probe@real-looking.example" refuse
 probe 899999 "899999@thestrongrope.com" refuse

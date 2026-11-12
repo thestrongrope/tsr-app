@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Run classes's Hurl contract files (domains/classes/spec/tests/*.hurl) against one side.
 # Usage: tools/classes-contract.sh test|parity [--prepare] [extra hurl args]
-#   test    the new API on the synthetic TEST stack (http://localhost:8089; tools/test-stack.sh up); never run against the dev stack (real data)
+#   test    the new API on the synthetic TEST stack (http://localhost:8089, or TSR_STACK=n for lane n; tools/test-stack.sh up); never run against the dev stack (real data)
 #   parity  the PHP API on the parity stack (http://127.0.0.1:18091, tools/parity-php/README.md; synthetic data only)
 #   --prepare  do the preparation below and stop
 # Preparation, so both sides answer from the same data and a file can be run again: loads the classes fixtures (db/synthetic/classes-fixtures.sql for the new API,
@@ -21,6 +21,10 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SIDE="${1:?usage: classes-contract.sh test|parity [--prepare] [hurl args]}"
 shift || true
 cd "$ROOT"
+# shellcheck disable=SC1091
+. tools/stack-env.sh
+# shellcheck disable=SC1091
+. tools/parity-lock.sh
 
 PREPARE_ONLY=0
 if [ "${1:-}" = "--prepare" ]; then
@@ -88,12 +92,12 @@ MEMBERS=(
 
 parity() { docker compose -p tsr-parity -f tools/parity-php/compose.parity.yml --env-file tools/parity-php/parity.env "$@"; }
 php_sql() { parity exec -T db sh -c 'mariadb -uroot -p"$MARIADB_ROOT_PASSWORD" tsr_synth'; }
-test_sql() { docker compose -p tsr-app-test -f docker-compose.dev.yml exec -T db psql -v ON_ERROR_STOP=1 -q -t -A -U tsr -d tsr > /dev/null; }
+test_sql() { docker compose -p "$TSR_TEST_PROJECT" -f docker-compose.dev.yml exec -T db psql -v ON_ERROR_STOP=1 -q -t -A -U tsr -d tsr > /dev/null; }
 
 case "$SIDE" in
   test)
-    export TSR_EMULATOR_PORT=19100
-    "$ROOT/tools/require-synthetic-stack.sh" tsr-app-test
+    export TSR_EMULATOR_PORT="$TSR_TEST_EMULATOR_PORT"
+    "$ROOT/tools/require-synthetic-stack.sh" "$TSR_TEST_PROJECT"
     test_sql < db/synthetic/classes-bulk-cleanup.sql
     test_sql < db/synthetic/classes-fixtures.sql
     test_sql < db/synthetic/classes-write-fixtures.sql
@@ -106,9 +110,10 @@ case "$SIDE" in
     test_sql < db/synthetic/classes-b5b-fixtures.sql
     test_sql < db/synthetic/classes-b5c-fixtures.sql
     MINT="tools/dev-auth/mint-token.sh"
-    BASE="http://localhost:8089"
-    VARS="build/test/classes.vars" ;;
+    BASE="$TSR_TEST_BASE_URL"
+    VARS="$TSR_TEST_VARS_DIR/classes.vars" ;;
   parity)
+    parity_lock
     php_sql < tools/parity-php/classes-bulk-cleanup.sql
     php_sql < tools/parity-php/classes-fixtures.sql
     php_sql < tools/parity-php/classes-write-fixtures.sql
@@ -134,7 +139,7 @@ mkdir -p "$(dirname "$VARS")"
 umask 077
 : > "$VARS"
 TMP="$(mktemp)"
-trap 'rm -f "$TMP"' EXIT
+trap 'rm -f "$TMP"; parity_unlock' EXIT
 for entry in "${MEMBERS[@]}"; do
   alias="${entry%%=*}"
   email="${entry#*=}"
