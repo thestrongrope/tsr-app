@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Npgsql;
 using NUnit.Framework;
 using Tsr.Notifications.Api;
 using Tsr.Notifications.Api.Domain;
@@ -33,6 +34,12 @@ public sealed class TestPushDrainTests
 
         public TimeSpan Pause { get; set; } = TimeSpan.Zero;
 
+        /// <summary>A device token whose send throws an exception the real sender does not catch.</summary>
+        public string? ThrowFor { get; set; }
+
+        /// <summary>Called when a send has started (a test stops the host from here).</summary>
+        public Action? Started { get; set; }
+
         public ConcurrentBag<(PushMessage Message, string Token)> Sent { get; } = [];
 
         public int Calls => Volatile.Read(ref calls);
@@ -49,12 +56,24 @@ public sealed class TestPushDrainTests
             }
 
             Sent.Add((message, deviceToken));
-            if (Pause > TimeSpan.Zero)
+            Started?.Invoke();
+            try
             {
-                await Task.Delay(Pause, ct);
+                if (Pause > TimeSpan.Zero)
+                {
+                    await Task.Delay(Pause, ct);
+                }
+            }
+            finally
+            {
+                Interlocked.Decrement(ref active);
             }
 
-            Interlocked.Decrement(ref active);
+            if (deviceToken == ThrowFor)
+            {
+                throw new InvalidOperationException("the fake sender threw for device-token-SECRET");
+            }
+
             return Decide(deviceToken);
         }
     }
@@ -101,12 +120,23 @@ public sealed class TestPushDrainTests
     }
 
     [TearDown]
-    public void Stop() => factory.Dispose();
+    public async Task StopAsync()
+    {
+        factory.Dispose();
+        await TestDatabase.ExecuteAsync("drop trigger if exists tsr_test_refuse_sent on platform.outbound_messages");
+    }
 
-    private async Task<DrainReport> TickAsync(IPushSender? sender = null)
+    private async Task<DrainReport> TickAsync(CancellationToken ct = default)
     {
         await using var scope = factory.Services.CreateAsyncScope();
-        return await PushDrain.TickAsync(scope.ServiceProvider.GetRequiredService<NotificationsContext>(), sender ?? fake, clock, log, CancellationToken.None);
+        return await PushDrain.TickAsync(scope.ServiceProvider.GetRequiredService<NotificationsContext>(), fake, clock, log, ct);
+    }
+
+    private async Task<long[]> ClaimAsync(DateTimeOffset now, CancellationToken ct = default)
+    {
+        await using var scope = factory.Services.CreateAsyncScope();
+        var rows = await PlatformCommands.ClaimMessagesAsync(scope.ServiceProvider.GetRequiredService<NotificationsContext>(), PushDrain.Channel, PushDrain.MaxRows, now, ct);
+        return [.. rows.Select(r => r.Id)];
     }
 
     private static string Quote(string? value) => value is null ? "null" : "'" + value.Replace("'", "''", StringComparison.Ordinal) + "'";
@@ -377,19 +407,128 @@ public sealed class TestPushDrainTests
     }
 
     [Test]
-    public async Task Two_ticks_at_once_over_sixty_rows_send_each_row_exactly_once()
+    public async Task A_claim_skips_the_rows_another_claim_holds_locked_and_takes_only_the_others()
     {
-        for (var i = 0; i < 60; i++)
+        var first = await AddAsync("device-1");
+        var second = await AddAsync("device-2");
+        var third = await AddAsync("device-3");
+        var fourth = await AddAsync("device-4");
+        await using var other = new NpgsqlConnection(TestDatabase.OwnerConnection);
+        await other.OpenAsync();
+        await using var held = await other.BeginTransactionAsync();
+        await using (var lockRows = new NpgsqlCommand($"select id from platform.outbound_messages where id in ({first}, {second}) for update", other, held))
+        {
+            await lockRows.ExecuteNonQueryAsync();
+        }
+
+        using var limit = new CancellationTokenSource(TimeSpan.FromSeconds(4));
+        var whileLocked = await ClaimAsync(T0, limit.Token);
+        await held.RollbackAsync();
+        var afterwards = await ClaimAsync(T0);
+
+        Assert.That(whileLocked, Is.EqualTo(new[] { third, fourth }), "the locked rows are skipped, not waited for");
+        Assert.That(afterwards, Is.EqualTo(new[] { first, second }), "each row is claimed exactly once");
+        Assert.That(await MembershipTestKit.CountAsync("platform.outbound_messages", "status = 'sending' and attempts = 1"), Is.EqualTo(4));
+    }
+
+    [Test]
+    public async Task A_claim_stamps_the_time_so_a_claim_that_never_recorded_is_taken_over_after_the_lease()
+    {
+        var id = await AddAsync("device-1");
+
+        var claimed = await ClaimAsync(T0);
+
+        Assert.That(claimed, Is.EqualTo(new[] { id }));
+        var stamp = await TestDatabase.RowAsync($"select extract(epoch from claimed_at)::bigint as at from platform.outbound_messages where id = {id}");
+        Assert.That(stamp!["at"], Is.EqualTo(T0.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture)));
+
+        clock.Now = T0.AddMinutes(9);
+        await TickAsync();
+        Assert.That((await RowAsync(id))["status"], Is.EqualTo("sending"), "inside the lease the claim is left alone");
+
+        clock.Now = T0.AddMinutes(11);
+        await TickAsync();
+        var row = await RowAsync(id);
+        Assert.That(row["status"], Is.EqualTo("sent"));
+        Assert.That(row["attempts"], Is.EqualTo("2"));
+    }
+
+    [Test]
+    public async Task A_stale_claim_that_has_used_its_five_attempts_is_dead_and_not_sent_again()
+    {
+        var spent = await AddAsync("device-spent", status: "sending", attempts: 5, claimed: T0.AddMinutes(-11));
+        var last = await AddAsync("device-last", status: "sending", attempts: 4, claimed: T0.AddMinutes(-11));
+        var running = await AddAsync("device-running", status: "sending", attempts: 5, claimed: T0.AddMinutes(-9));
+
+        await TickAsync();
+
+        var row = await RowAsync(spent);
+        Assert.That(row["status"], Is.EqualTo("dead"));
+        Assert.That(row["attempts"], Is.EqualTo("5"));
+        Assert.That(row["error"], Is.EqualTo("reclaim_exhausted"));
+        Assert.That(fake.Sent.Select(s => s.Token), Is.EqualTo(["device-last"]), "the fifth attempt is still made; a sixth never");
+        Assert.That((await RowAsync(last))["attempts"], Is.EqualTo("5"));
+        Assert.That((await RowAsync(running))["status"], Is.EqualTo("sending"), "a claim inside its lease is not touched");
+    }
+
+    [Test]
+    public async Task A_result_that_cannot_be_recorded_does_not_stop_the_other_rows_from_being_recorded()
+    {
+        await TestDatabase.ExecuteAsync(
+            "create or replace function public.tsr_test_refuse_sent() returns trigger language plpgsql as $$ begin "
+            + "if new.recipient = 'device-boom' and new.status = 'sent' then raise exception 'test failure'; end if; return new; end $$; "
+            + "create trigger tsr_test_refuse_sent before update on platform.outbound_messages for each row execute function public.tsr_test_refuse_sent()");
+        var boom = await AddAsync("device-boom");
+        var second = await AddAsync("device-2");
+        var third = await AddAsync("device-3");
+
+        var report = await TickAsync();
+
+        Assert.That((await RowAsync(boom))["status"], Is.EqualTo("sending"), "its result could not be written; the lease takes it over later");
+        Assert.That((await RowAsync(second))["status"], Is.EqualTo("sent"));
+        Assert.That((await RowAsync(third))["status"], Is.EqualTo("sent"));
+        Assert.That((report.Sent, report.Unrecorded), Is.EqualTo((2, 1)));
+        Assert.That(string.Join('\n', log.Lines), Does.Contain("PostgresException"));
+    }
+
+    [Test]
+    public async Task A_sender_that_throws_for_one_row_burns_that_attempt_and_the_other_rows_are_still_recorded()
+    {
+        fake.ThrowFor = "device-bad";
+        var good = await AddAsync("device-good");
+        var bad = await AddAsync("device-bad");
+        var tail = await AddAsync("device-tail");
+
+        var report = await TickAsync();
+
+        Assert.That((await RowAsync(good))["status"], Is.EqualTo("sent"));
+        Assert.That((await RowAsync(tail))["status"], Is.EqualTo("sent"));
+        var row = await RowAsync(bad);
+        Assert.That(row["status"], Is.EqualTo("queued"));
+        Assert.That(row["attempts"], Is.EqualTo("1"));
+        Assert.That(row["error"], Is.EqualTo("send_failed"));
+        Assert.That((report.Sent, report.Retrying), Is.EqualTo((2, 1)));
+        var lines = string.Join('\n', log.Lines);
+        Assert.That(lines, Does.Contain("InvalidOperationException").And.Not.Contain("SECRET"), "the exception's type is logged, never its message");
+    }
+
+    [Test]
+    public async Task Stopping_the_host_starts_no_new_send_and_the_sends_in_flight_finish_and_are_recorded()
+    {
+        fake.Pause = TimeSpan.FromMilliseconds(200);
+        using var host = new CancellationTokenSource();
+        fake.Started = host.Cancel;
+        for (var i = 0; i < 40; i++)
         {
             await AddAsync("device-" + i);
         }
 
-        await Task.WhenAll(TickAsync(), TickAsync());
+        var report = await TickAsync(host.Token);
 
-        var tokens = fake.Sent.Select(s => s.Token).ToList();
-        Assert.That(tokens, Has.Count.EqualTo(60));
-        Assert.That(tokens.Distinct().Count(), Is.EqualTo(60));
-        Assert.That(await MembershipTestKit.CountAsync("platform.outbound_messages", "status = 'sent' and attempts = 1"), Is.EqualTo(60));
+        Assert.That(fake.Calls, Is.InRange(1, 16), "no send starts after the stop");
+        Assert.That(report.Sent, Is.EqualTo(fake.Calls), "a send in flight finishes and its result is written");
+        Assert.That(await MembershipTestKit.CountAsync("platform.outbound_messages", "status = 'sent' and attempts = 1"), Is.EqualTo(fake.Calls));
+        Assert.That(await MembershipTestKit.CountAsync("platform.outbound_messages", "status = 'queued' and attempts = 0"), Is.EqualTo(40 - fake.Calls), "a row never started is released with its attempt given back");
     }
 
     [Test]

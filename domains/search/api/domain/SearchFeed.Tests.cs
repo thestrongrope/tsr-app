@@ -93,7 +93,9 @@ internal sealed class SearchFeedTests
 
     private static readonly int[] ExpectedBatches = [500, 500, 200];
 
-    private static readonly string[] ExpectedDeletes = ["student:2", "class:9"];
+    private static readonly string[] ExpectedDeletes = ["subscriber:9", "student:2", "class:9"];
+
+    private static readonly string[] OnlyTheSubscriber = ["subscriber:9"];
 
     private static List<SearchDocument> Subscribers(int count) =>
         Enumerable.Range(1, count).Select(i => SearchDocument.ForSubscriber(i, "Secret Name " + i, 1)).ToList();
@@ -113,12 +115,26 @@ internal sealed class SearchFeedTests
     [Test]
     public async Task Exactly_the_ids_present_and_not_seen_are_deleted()
     {
-        var index = new FakeIndex { Present = { "subscriber:1", "student:2", "class:9" } };
+        var index = new FakeIndex { Present = { "subscriber:1", "subscriber:9", "student:2", "class:9" } };
+        List<SearchDocument> wanted = [.. Subscribers(2), SearchDocument.ForStudent(5, "Secret Student", 1, [], []), SearchDocument.ForClass(1, "C1", 1, 2, "Level")];
 
-        var report = await SearchFeed.TickAsync(index, new FakeSource(Subscribers(2)), new CapturingLog(), CancellationToken.None);
+        var report = await SearchFeed.TickAsync(index, new FakeSource(wanted), new CapturingLog(), CancellationToken.None);
 
         Assert.That(index.Deleted, Is.EquivalentTo(ExpectedDeletes));
-        Assert.That(report!.Deleted, Is.EqualTo(2));
+        Assert.That(report!.Deleted, Is.EqualTo(3));
+    }
+
+    [Test]
+    public async Task A_kind_whose_read_came_back_empty_keeps_its_documents_while_the_other_kinds_are_reconciled()
+    {
+        var index = new FakeIndex { Present = { "subscriber:1", "subscriber:9", "student:2", "student:3", "teacher:4", "odd-id" } };
+        var log = new CapturingLog();
+
+        var report = await SearchFeed.TickAsync(index, new FakeSource(Subscribers(2)), log, CancellationToken.None);
+
+        Assert.That(index.Deleted, Is.EqualTo(OnlyTheSubscriber), "no student or teacher was read, so none of theirs is deleted");
+        Assert.That(report, Is.EqualTo(new ReconcileReport(2, 1, false)));
+        Assert.That(string.Join("\n", log.Lines), Does.Contain("kept 4").And.Not.Contain("student:").And.Not.Contain("odd-id"));
     }
 
     [Test]
