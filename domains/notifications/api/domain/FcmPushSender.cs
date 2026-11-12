@@ -32,6 +32,7 @@ internal sealed partial class FcmPushSender : IPushSender, IDisposable
     private readonly SemaphoreSlim _gate = new(1, 1);
     private string? _accessToken;
     private DateTimeOffset _accessExpires = DateTimeOffset.MinValue;
+    private DateTimeOffset _exchangeRetryAt = DateTimeOffset.MinValue;
 
     public FcmPushSender(IConfiguration configuration, IHttpClientFactory clients, ILogger<FcmPushSender> log, TimeProvider clock)
     {
@@ -132,7 +133,7 @@ internal sealed partial class FcmPushSender : IPushSender, IDisposable
     internal static PushResult Classify(HttpStatusCode status, string body)
     {
         var detail = ReadError(body);
-        if (detail.ErrorCode == "UNREGISTERED" || detail.Status == "NOT_FOUND")
+        if (detail.ErrorCode == "UNREGISTERED")
         {
             return PushResult.TokenInvalid;
         }
@@ -230,7 +231,15 @@ internal sealed partial class FcmPushSender : IPushSender, IDisposable
                 return _accessToken;
             }
 
-            return await ExchangeAsync(now, ct);
+            // A refused exchange is not asked again for a minute: a batch must not repeat it once per device.
+            if (now < _exchangeRetryAt)
+            {
+                return null;
+            }
+
+            var token = await ExchangeAsync(now, ct);
+            _exchangeRetryAt = token is null ? now.AddSeconds(60) : DateTimeOffset.MinValue;
+            return token;
         }
         finally
         {

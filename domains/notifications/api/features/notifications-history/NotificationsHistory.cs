@@ -77,7 +77,13 @@ internal static class NotificationsHistorySlice
                 """)
             .ToListAsync(ct);
 
-        var criteria = rows.ToDictionary(r => r.NotificationId, r => Criteria.Parse(r.TargetAudienceCriteria));
+        // A sender whose token is shared repeats a notification's row: the same id is read twice, so no ToDictionary.
+        var criteria = new Dictionary<int, JsonElement?>();
+        foreach (var row in rows)
+        {
+            criteria[row.NotificationId] = Criteria.Parse(row.TargetAudienceCriteria);
+        }
+
         var names = await AudienceWords.LookUpAsync(db, AudienceWords.IdsNeeded(criteria.Values), ct);
         var counts = await RecipientCountsAsync(db, rows.Select(r => r.NotificationId).Distinct().ToArray(), ct);
         var items = rows.Select(r => Item(r, criteria[r.NotificationId], names, counts)).ToList();

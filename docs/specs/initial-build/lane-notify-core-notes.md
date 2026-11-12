@@ -59,9 +59,12 @@ New published views (classes migration `20261112120000_ClassScheduleAndLevelView
 
 - Request body: `{"message": {"token", "notification": {"title","body"}, "data": {string: string}, "android": {"priority":"HIGH","notification":{"sound":"default","channel_id":"high_importance_channel"}}, "apns": {"payload":{"aps":{"sound":"default","badge":1}}}}}`.
 - Token exchange: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=<jwt>`, claims iss, scope `https://www.googleapis.com/auth/firebase.messaging`, aud, iat, exp; response `access_token`, `expires_in`.
-- Error classification (`FcmPushSender.Classify`): a dead token is `UNREGISTERED` (in `error.details[].errorCode`) or status `NOT_FOUND`, or an `INVALID_ARGUMENT`/400 whose message contains "registration token". `INVALID_ARGUMENT` for a bad payload must NOT delete devices; the message match is a guess at Google's wording. Everything else (401, 403 SENDER_ID_MISMATCH, 429, 5xx) is a plain failure. PHP (Kreait) deleted `unknown` and `invalid` tokens.
+- Error classification (`FcmPushSender.Classify`, unit tested): a dead token is `UNREGISTERED` (in `error.details[].errorCode`; a bare 404 `NOT_FOUND` is NOT enough, a wrong project id also answers it), or an `INVALID_ARGUMENT`/400 whose message contains "registration token". `INVALID_ARGUMENT` for a bad payload must NOT delete devices; the message match is a guess at Google's wording. Everything else (401, 403 SENDER_ID_MISMATCH, 429, 5xx) is a plain failure. PHP (Kreait) deleted `unknown` and `invalid` tokens.
 - PHP reported that every token in production failed with `SenderId mismatch` at one time: expect that case to show as failures, not deletions.
-- No retry and no backoff on 429 or 5xx (bounded work); a 401 clears the cached token for the next call.
+- No retry and no backoff on 429 or 5xx (bounded work); a 401 clears the cached token for the next call; a refused token exchange is not asked again for 60 seconds (the batch fails fast).
+- `hosts/api/spec/planned-surface.hurl` asserts `POST /devices` is a 501 placeholder: it now fails by design. The main thread should point that spot check at a route that is still planned (`/admin/whatsapp/*`).
+- The history slice reads a shared-token sender once per account (the same notification twice): the code tolerates it (a dictionary overwrite as PHP); test it.
+- `db/tests/PublishedViewsTests.cs` got the two new view names (a one-line list edit, no new database test).
 - `PEM` import (`ImportFromPem`) of the service account's PKCS#8 key.
 
 ## Looks like a security or privacy hole in PHP (copied, flagged)
