@@ -1,6 +1,10 @@
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Tsr.Access.Api.Features.AdminPermissionGrant;
+using Tsr.Access.Api.Features.AdminPermissionMember;
+using Tsr.Access.Api.Features.AdminPermissionMembers;
+using Tsr.Access.Api.Features.AdminPermissionRevoke;
 using Tsr.Access.Api.Features.MePermission;
 using Tsr.Access.Api.Features.MePermissions;
 using Tsr.Access.Api.Features.UserPermissions;
@@ -40,6 +44,10 @@ public static class AccessModule
         routes.MapMePermissions();
         routes.MapMePermission();
         routes.MapUserPermissions();
+        routes.MapAdminPermissionMembers();
+        routes.MapAdminPermissionMember();
+        routes.MapAdminPermissionGrant();
+        routes.MapAdminPermissionRevoke();
         routes.MapPlannedRoutes();
         return routes;
     }

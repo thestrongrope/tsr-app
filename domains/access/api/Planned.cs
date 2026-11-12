@@ -12,10 +12,6 @@ internal static class Planned
     public static IEndpointRouteBuilder MapPlannedRoutes(this IEndpointRouteBuilder routes)
     {
         routes.MapPlanned(
-            ("GET", "/admin/permissions/members"),
-            ("GET", "/admin/permissions/members/{token}"),
-            ("POST", "/admin/permissions/members/{token}/grants"),
-            ("POST", "/admin/permissions/grants/{id}/revoke"),
             ("GET", "/admin/class-access/members"),
             ("GET", "/admin/class-access/members/{token}"),
             ("GET", "/admin/class-access/options"),

@@ -152,10 +152,10 @@ GET,/admin/transfers/classes,classes,create,built
 GET,/admin/transfers/classes/{class_id}/students,classes,create,built
 GET,/admin/transfers/history,classes,create,built
 POST,/admin/transfers,classes,create,built
-GET,/admin/permissions/members,access,member,planned
-GET,/admin/permissions/members/{token},access,member,planned
-POST,/admin/permissions/members/{token}/grants,access,member,planned
-POST,/admin/permissions/grants/{id}/revoke,access,member,planned
+GET,/admin/permissions/members,access,create,built
+GET,/admin/permissions/members/{token},access,create,built
+POST,/admin/permissions/members/{token}/grants,access,create,built
+POST,/admin/permissions/grants/{id}/revoke,access,create,built
 GET,/admin/class-access/members,access,member,planned
 GET,/admin/class-access/members/{token},access,member,planned
 GET,/admin/class-access/options,access,member,planned

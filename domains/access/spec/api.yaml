@@ -104,6 +104,102 @@ paths:
                   issued_at: { type: string }
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
+  /admin/permissions/members:
+    get:
+      operationId: searchPermissionMembers
+      summary: Members by name, token, email or mobile (at most 20; name and token come back)
+      description: Needs permissions:manage (super admin). `q` under two characters finds nobody.
+      security:
+        - memberToken: []
+      parameters:
+        - { name: q, in: query, required: false, schema: { type: string } }
+      responses:
+        "200":
+          description: The matches, by name then token
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [members]
+                properties:
+                  members:
+                    type: array
+                    items:
+                      type: object
+                      required: [token, name]
+                      properties:
+                        token: { type: integer }
+                        name: { type: string }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /admin/permissions/members/{token}:
+    get:
+      operationId: getPermissionMember
+      summary: What a member holds (from the role, by grant) and what may still be granted
+      description: Needs permissions:manage. Unknown member or token 0 is 404.
+      security:
+        - memberToken: []
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { $ref: "#/components/responses/PermissionMember" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /admin/permissions/members/{token}/grants:
+    post:
+      operationId: grantPermission
+      summary: Give a member a named permission
+      description: |
+        Needs permissions:manage. Only catalog permissions of scope `all` are grantable, never permissions:manage:all,
+        class-access:manage:all or members:enrol-by-token:all. 409 when the member already holds it, 422 when it cannot be granted.
+      security:
+        - memberToken: []
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [permission, reason]
+              properties:
+                permission: { type: string }
+                reason: { type: string, maxLength: 300 }
+      responses:
+        "200": { $ref: "#/components/responses/PermissionMember" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /admin/permissions/grants/{id}/revoke:
+    post:
+      operationId: revokePermissionGrant
+      summary: Revoke a named grant (the row stays, with who, when and why)
+      description: Needs permissions:manage. 404 unknown grant, 409 already revoked.
+      security:
+        - memberToken: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string, maxLength: 300 }
+      responses:
+        "200": { $ref: "#/components/responses/PermissionMember" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
 components:
   securitySchemes:
     memberToken:
@@ -120,3 +216,43 @@ components:
             required: [detail]
             properties:
               detail: { type: string }
+    PermissionMember:
+      description: The member, what the role gives, the live named grants, and what may still be granted
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [member, fromRole, granted, grantable]
+            properties:
+              member:
+                type: object
+                required: [token, name]
+                properties:
+                  token: { type: integer }
+                  name: { type: string }
+              fromRole:
+                type: array
+                items: { $ref: "#/components/schemas/PermissionInfo" }
+              granted:
+                type: array
+                items:
+                  allOf:
+                    - { $ref: "#/components/schemas/PermissionInfo" }
+                    - type: object
+                      required: [id, grantedAt]
+                      properties:
+                        id: { type: integer }
+                        reason: { type: [string, "null"] }
+                        grantedBy: { type: [string, "null"] }
+                        grantedAt: { type: string }
+              grantable:
+                type: array
+                items: { $ref: "#/components/schemas/PermissionInfo" }
+  schemas:
+    PermissionInfo:
+      type: object
+      required: [name, description, reach]
+      properties:
+        name: { type: string }
+        description: { type: string }
+        reach: { type: string }
