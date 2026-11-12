@@ -153,7 +153,8 @@ paths:
       summary: Give a member a named permission
       description: |
         Needs permissions:manage. Only catalog permissions of scope `all` are grantable, never permissions:manage:all,
-        class-access:manage:all or members:enrol-by-token:all. 409 when the member already holds it, 422 when it cannot be granted.
+        class-access:manage:all or members:enrol-by-token:all. 409 when the member already holds it, 422 when it cannot be granted, and 422 when the member is the operator themself
+        (`You cannot grant a permission to yourself`; stricter than PHP, new API only).
       security:
         - memberToken: []
       parameters:
@@ -327,6 +328,7 @@ paths:
       summary: Give a member a class access rule
       description: |
         Needs class-access:manage. The operator cannot change their own access, and needs the rule's gender and the member's gender (a rule of either gender needs both: super admin only).
+        Stricter than PHP (new API only): 403 when the operator is not a super admin and the member is a super admin or a gender admin.
         `version` is the one the member view gave; `previewHash` the one the preview gave. 409 with `code` member_changed (someone else changed the member), already_has_access,
         or preview_changed (the body then lists the classes now reached, `classCount` and the new `previewHash`). 422: no reason, no condition, a Finance member, own access, a rule that reaches no class.
         A member with no role becomes a class admin (role 5).
@@ -360,7 +362,7 @@ paths:
       operationId: revokeClassAccess
       summary: Remove a class access rule (it stays, with who, when and why)
       description: |
-        Needs class-access:manage, the rule's gender and the member's gender; never the operator's own access. 404 unknown rule, 409 already removed or `code` member_changed.
+        Needs class-access:manage, the rule's gender and the member's gender; never the operator's own access. Stricter than PHP (new API only): 403 unless the operator granted the rule or is a super admin, and 403 when the operator is not a super admin and the member is a super admin or a gender admin. 404 unknown rule, 409 already removed or `code` member_changed.
         A class admin whose last live rule this was returns to no role.
       security:
         - memberToken: []

@@ -1,6 +1,6 @@
 # POST /admin/permissions/members/{token}/grants {permission, reason} contract: a super admin gives a member one named permission. Runs against any implementation.
 # Variables: base_url and auth_grants_<token> (tools/contract-grants.sh). Fixtures: db/synthetic/grants-fixtures.sql (read its header). This file changes members 925021 (grant and duplicate),
-# 925023 (takes effect at once, then revoked), 925024 (the reasons) and 925002 (a super admin grants themselves); no other file writes them. 925011 is a super admin used as a target of refusals only.
+# 925023 (takes effect at once, then revoked), 925024 (the reasons); no other file writes them. A grant to oneself is in admin-permission-self-php-only.hurl and admin-permission-self-new-api.hurl (member 925002). 925011 is a super admin used as a target of refusals only.
 # PHP's order: sign-in, permissions:manage, permission text (422), reason type (422), then the model: the reason 1 to 300 characters (422), the member (404), grantable (422) or held (409).
 
 # 1. Without sign-in: 401
@@ -338,26 +338,3 @@ Authorization: {{auth_grants_925023}}
 HTTP 200
 [Asserts]
 jsonpath "$.scopes" count == 0
-
-# 13. A super admin grants themselves a permission no role gives (PHP has no self guard here: finding 10), and the member who holds it can use it; then revokes it
-POST {{base_url}}/admin/permissions/members/925002/grants
-Authorization: {{auth_grants_925002}}
-{"permission": "quiz:admin:all", "reason": "Self grant"}
-HTTP 200
-[Asserts]
-jsonpath "$.member.token" == 925002
-jsonpath "$.granted[0].name" == "quiz:admin:all"
-jsonpath "$.granted[0].grantedBy" == "Gr Member 925002"
-[Captures]
-self_grant_id: jsonpath "$.granted[0].id"
-
-GET {{base_url}}/me/permissions
-Authorization: {{auth_grants_925002}}
-HTTP 200
-[Asserts]
-jsonpath "$.permissions" contains "quiz:admin:all"
-
-POST {{base_url}}/admin/permissions/grants/{{self_grant_id}}/revoke
-Authorization: {{auth_grants_925002}}
-{"reason": "Self grant, over"}
-HTTP 200

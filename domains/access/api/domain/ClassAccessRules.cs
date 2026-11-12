@@ -22,6 +22,9 @@ internal static partial class ClassAccessRules
     public const int MaxOffered = 500;
     public const int MaxNote = 255;
     public const int RoleMember = 0;
+    public const int RoleSuperAdmin = 1;
+    public const int RoleGentsAdmin = 3;
+    public const int RoleLadiesAdmin = 4;
     public const int RoleClassAdmin = 5;
     public const int RoleFinance = 7;
 

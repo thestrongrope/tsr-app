@@ -43,6 +43,12 @@ when the class is inactive, even with scope `all`; the legacy `/user/permissions
 grants their pages. Not in access: token 1001 is always an eligible teacher (`classes.php`, a classes rule) and
 `users.gender` holding `'1'` and `'Male'` (membership owns it; the admin routes read it from `membership.v_members` and map it with `AdminMembers.GenderOf`).
 
+## Stricter than PHP, on purpose (owner decision, 12 Nov 2026)
+
+A grant to oneself is 422 (`admin-permission-grant`). Class access: only a super admin (role 1) adds a rule to, or removes one from, a super admin or gender admin (roles 1, 3, 4), and a rule is removed only by who granted it
+(`class_access_rules.granted_by`) or a super admin; both 403 `You do not have permission to do that` (`ClassAccessOperator.GuardAsync`, `RevokeGuardAsync`), checked again inside the member lock. Hurl cases that pin PHP's
+looseness are in `*-php-only.hurl`, the new rules in `*-new-api.hurl` (`admin-permission-self`, `class-access-peers`, `class-access-revoke`). Whoever runs `tools/contract-grants.sh test` must leave the `*-php-only.hurl` files out.
+
 ## Known open difference
 
 Rule text (city, country, tag) matches ordinal ignore-case; PHP's `LOWER()=LOWER()` under MariaDB's accent-insensitive collation
