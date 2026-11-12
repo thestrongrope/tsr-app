@@ -1,4 +1,4 @@
-# Class access rules between operators of equal rank, and what a rule may reach: the looseness PHP has and the new API keeps (findings 10 and 11 of docs/specs/initial-build/build-out-findings.md). Runs against any implementation.
+# Class access rules between operators of equal rank, and what a rule may reach: the cases PHP and the new API still answer alike (the looseness the new API no longer has is in class-access-peers-php-only.hurl and class-access-peers-new-api.hurl). Runs against any implementation.
 # Variables: base_url and auth_grants_<token> (tools/contract-grants.sh). Fixtures: db/synthetic/grants-fixtures.sql (read its header). This file changes 925046 (a super admin, role 1),
 # 925047 (role 6) and 925049 (a gents member) only. Every case here PINS what PHP does today; none is a wish. The proposals for the owner are in docs/specs/initial-build/test-grants-notes.md.
 

@@ -33,7 +33,7 @@ Spot quizzes, standard MCQs, quiz competitions.
 
 ## An answered quiz is not edited (owner's decision, 12 Nov 2026; PHP edits it and orphans the answers)
 
-`PUT /mcq/manage/{quiz_id}` answers 409 "This quiz has answers and can no longer be edited" when the quiz has a row in `spot_quiz_responses` or `spot_quiz_submissions`: after the permission check and the body rules, no write, no event. The check runs in the edit's transaction after `select ... for update` on the quiz row (`domain/QuizLock.cs`). Every answer writer (`quiz-submit`, `manage-offline-save`) takes that row `for share` first and refuses with 409 when the quiz's questions changed since it read them, so an edit and an answer never interleave. Contract: `manage-update-new-api.hurl` (new API) and `manage-update-php-only.hurl` (PHP's old behaviour; run on PHP only: `tools/assessment-contract.sh` does not yet skip `*-php-only.hurl` on the new API).
+`PUT /mcq/manage/{quiz_id}` answers 409 "This quiz has answers and can no longer be edited" when the quiz has a row in `spot_quiz_responses` or `spot_quiz_submissions`: after the permission check and the body rules, no write, no event. The check runs in the edit's transaction after `select ... for update` on the quiz row (`domain/QuizLock.cs`). Every answer writer (`quiz-submit`, `manage-offline-save`) takes that row `for share` first and refuses with 409 when the quiz's questions changed since it read them, so an edit and an answer never interleave. Contract: `manage-update-new-api.hurl` (new API) and `manage-update-php-only.hurl` (PHP's old behaviour; `tools/assessment-contract.sh` runs it on PHP only).
 
 ## Google Sheets, quiz state, locks, settings (lane sheets, build-out)
 

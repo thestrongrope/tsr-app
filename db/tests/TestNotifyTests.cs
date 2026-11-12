@@ -173,6 +173,18 @@ public sealed class TestNotifyTests
     }
 
     [Test]
+    public async Task Registering_a_device_the_member_already_holds_is_never_rate_limited_so_an_app_that_registers_on_every_start_is_not_locked_out()
+    {
+        for (var i = 0; i < 15; i++)
+        {
+            var again = await kit.SendAsync(A, HttpMethod.Post, "/devices", """{"fcmToken": "dev-a1"}""");
+            Assert.That(again.Status, Is.EqualTo(HttpStatusCode.Created), Id(i));
+        }
+
+        Assert.That(await CountAsync("notifications.user_devices", $"token = {A}"), Is.EqualTo(2));
+    }
+
+    [Test]
     public async Task A_member_removes_only_their_own_device_rows()
     {
         var other = await kit.SendAsync(C, HttpMethod.Delete, "/devices", """{"fcmToken": "dev-a1"}""");

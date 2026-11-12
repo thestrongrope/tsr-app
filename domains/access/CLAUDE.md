@@ -47,7 +47,7 @@ grants their pages. Not in access: token 1001 is always an eligible teacher (`cl
 
 A grant to oneself is 422 (`admin-permission-grant`). Class access: only a super admin (role 1) adds a rule to, or removes one from, a super admin or gender admin (roles 1, 3, 4), and a rule is removed only by who granted it
 (`class_access_rules.granted_by`) or a super admin; both 403 `You do not have permission to do that` (`ClassAccessOperator.GuardAsync`, `RevokeGuardAsync`), checked again inside the member lock. Hurl cases that pin PHP's
-looseness are in `*-php-only.hurl`, the new rules in `*-new-api.hurl` (`admin-permission-self`, `class-access-peers`, `class-access-revoke`). Whoever runs `tools/contract-grants.sh test` must leave the `*-php-only.hurl` files out.
+looseness are in `*-php-only.hurl`, the new rules in `*-new-api.hurl` (`admin-permission-self`, `class-access-peers`, `class-access-revoke`). `tools/contract-grants.sh` runs the `*-php-only.hurl` files on PHP only and the `*-new-api.hurl` files on the new API only.
 
 ## Known open difference
 

@@ -54,16 +54,16 @@ internal static class DeviceRegisterSlice
             return Problem.Detail(StatusCodes.Status422UnprocessableEntity, token.Error!);
         }
 
-        if (!limiter.Allow("device_register", caller.Token, MaxRegistrationsPerHour, 3600))
+        if (!await SaveAsync(db, clock, limiter, caller.Token, token.Value!, ct))
         {
             return Problem.Detail(StatusCodes.Status429TooManyRequests, "Too many device registrations. Please wait a while and try again.");
         }
 
-        await SaveAsync(db, clock, caller.Token, token.Value!, ct);
         return Results.Json(new Dictionary<string, object> { ["ok"] = true }, statusCode: StatusCodes.Status201Created);
     }
 
-    private static async Task SaveAsync(NotificationsContext db, TimeProvider clock, int member, string device, CancellationToken ct)
+    // False when a device id new to the member is over the hourly limit (nothing is written). A device the member already holds is never limited: an app may register on every start.
+    private static async Task<bool> SaveAsync(NotificationsContext db, TimeProvider clock, MemberRateLimit limiter, int member, string device, CancellationToken ct)
     {
         await using var transaction = await db.Database.BeginTransactionAsync(ct);
         await db.Database.ExecuteSqlAsync($"select pg_advisory_xact_lock(hashtextextended(lower({device}), 0))", ct);
@@ -72,6 +72,11 @@ internal static class DeviceRegisterSlice
             ct);
         if (touched == 0)
         {
+            if (!limiter.Allow("device_register", member, MaxRegistrationsPerHour, 3600))
+            {
+                return false;
+            }
+
             await db.Database.ExecuteSqlAsync($"insert into notifications.user_devices (token, device_id) values ({member}, {device})", ct);
             await TrimToCapAsync(db, member, ct);
         }
@@ -79,6 +84,7 @@ internal static class DeviceRegisterSlice
         var moved = await db.Database.ExecuteSqlAsync($"delete from notifications.user_devices where device_id = {device}::citext and token <> {member}", ct);
         await Outbox.WriteAsync(db, "notifications.device_registered", new DeviceRegistered(member, moved), clock, ct);
         await transaction.CommitAsync(ct);
+        return true;
     }
 
     // A member holds at most MaxDevices: a phone must always be able to register, so the least recently used rows (oldest last_accessed_at, then oldest id) make room.

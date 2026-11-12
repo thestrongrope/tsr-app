@@ -16,7 +16,7 @@ paths:
       summary: Register the caller's push address
       description: |
         Permission devices:manage. Body {fcmToken} (or fcm_token), trimmed, 1 to 500 characters. The caller's own row is updated or inserted; the same token held by any other member is deleted
-        (a device belongs to whoever registered it last). Limits (the owner's rule; PHP has none): at most 10 registrations an hour per member (429 "Too many device registrations. Please wait a while and try again.", counted after the 403 and 422), and at most 20 devices: a new device id beyond that deletes the member's least recently used rows so 20 remain, a device the caller already holds is never affected. Slice: features/device-register/DeviceRegister.cs. Event notifications.device_registered.
+        (a device belongs to whoever registered it last). Limits (the owner's rule; PHP has none): at most 10 registrations an hour of a device id new to the member (429 "Too many device registrations. Please wait a while and try again."; a device the caller already holds is never counted or refused), and at most 20 devices: a new device id beyond that deletes the member's least recently used rows so 20 remain, a device the caller already holds is never affected. Slice: features/device-register/DeviceRegister.cs. Event notifications.device_registered.
       security: [{memberToken: []}]
       requestBody:
         required: true
