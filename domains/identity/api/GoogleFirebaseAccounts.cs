@@ -65,13 +65,15 @@ internal sealed class GoogleFirebaseAccounts(IHttpClientFactory httpClients, Goo
 
     public void Dispose() => _tokenGate.Dispose();
 
+    public async Task<string?> FindUidByEmailAsync(string email, CancellationToken ct)
+    {
+        CheckProject();
+        return string.IsNullOrEmpty(email) ? null : await LookUpByEmailAsync(email, ct);
+    }
+
     public async Task DeleteAsync(string? uid, string? email, CancellationToken ct)
     {
-        if (!string.Equals(account.ProjectId, expectedProjectId, StringComparison.Ordinal))
-        {
-            throw new FirebaseAccountException("Firebase project mismatch: the service account belongs to another project than TSR_FIREBASE_PROJECT_ID.");
-        }
-
+        CheckProject();
         var target = uid;
         if (string.IsNullOrEmpty(target) && !string.IsNullOrEmpty(email))
         {
@@ -84,6 +86,14 @@ internal sealed class GoogleFirebaseAccounts(IHttpClientFactory httpClients, Goo
         }
 
         await DeleteByUidAsync(target, ct);
+    }
+
+    private void CheckProject()
+    {
+        if (!string.Equals(account.ProjectId, expectedProjectId, StringComparison.Ordinal))
+        {
+            throw new FirebaseAccountException("Firebase project mismatch: the service account belongs to another project than TSR_FIREBASE_PROJECT_ID.");
+        }
     }
 
     // UNVERIFIED shape: POST {Toolkit}{project}/accounts:lookup {"email": ["a@b"]} -> {"users": [{"localId": "..."}]}; no match is {} (no "users"), or an error USER_NOT_FOUND.

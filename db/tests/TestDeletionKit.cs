@@ -156,6 +156,16 @@ internal sealed class FakeFirebase : IFirebaseAccounts
 
     public string? FailOnUid { get; set; }
 
+    public Dictionary<string, string> UidByEmail { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    public List<string> Lookups { get; } = [];
+
+    public Task<string?> FindUidByEmailAsync(string email, CancellationToken ct)
+    {
+        Lookups.Add(email);
+        return Task.FromResult(UidByEmail.GetValueOrDefault(email));
+    }
+
     public async Task DeleteAsync(string? uid, string? email, CancellationToken ct)
     {
         Calls.Add((uid, email));
