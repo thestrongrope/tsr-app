@@ -59,7 +59,7 @@ internal static class ClassAccessRevokeSlice
                 ? failure.ToResult()
                 : await ClassAccessStore.SavedAsync(db, permissions, classes, op, token, logger, ct);
         }
-        catch (DbException e)
+        catch (Exception e) when (e is DbException or DbUpdateException)
         {
             return ClassAccessStore.NothingChanged(logger, e);
         }

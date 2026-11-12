@@ -64,6 +64,9 @@ Class access (CA/CAM)
 11. A: the `ActiveClassesAsync` port returns at most 10000 classes (the classes domain's cap); a preview or view over more would be wrong. There are about a few hundred classes today.
 12. A: a lock timeout or any database error before the commit on the two class access writes is 500 "Nothing was changed"; on the permission writes it is the host's default 500.
 
+13. A: `db/tests/PublishedViewsTests.cs` lists the published views; `classes.v_class_levels` is not in that list yet (not edited in build-out mode). The API role reads it through the schema's default privileges.
+14. A: the engine's `Permissions.LiveRulesAsync` does not lower-case a stored condition `field`, but the rule views here do (the column is citext). A migrated row stored as `City` would show classes in the view that the engine does not grant. Not fixed (engine, not this lane); check the migrated data.
+
 ## Flags: anything that looks like an escalation or privacy hole (copied, not fixed)
 
 1. **A super admin can grant any grantable permission to themselves or to anyone, with no role hierarchy and no cap on how many.** Grantable is every unheld `:all` permission except three. That includes every other powerful `:all` permission (for example `donors:read:all`, `registrations:*:all`, report reads, `quiz:admin:all`). It is by design (super admin only), but one stolen or mis-assigned super admin session is the whole catalog.

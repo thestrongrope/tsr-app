@@ -2,6 +2,7 @@ using System.Data.Common;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Tsr.Access.Api.Domain;
 using Tsr.Shared.Api;
@@ -59,7 +60,7 @@ internal static class ClassAccessGrantSlice
                 ? failure.ToResult()
                 : await ClassAccessStore.SavedAsync(db, permissions, classes, op, memberToken, logger, ct);
         }
-        catch (DbException e)
+        catch (Exception e) when (e is DbException or DbUpdateException)
         {
             return ClassAccessStore.NothingChanged(logger, e);
         }
