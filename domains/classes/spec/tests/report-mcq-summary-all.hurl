@@ -22,7 +22,7 @@ HTTP 200
 Content-Type: text/csv;charset=UTF-8
 Content-Disposition: attachment; filename="MCQ_summary_2019-03-01_to_2019-03-31.csv"
 [Asserts]
-body == "\"Class Code\",Level,Teacher,Location,\"Student Name\",Attempted,\"Total MCQs\",Pending,Score,\"Max Score\",\"Score %\",\"R2 Topic A Score\",\"R2 Topic A Max\"\nR2-L-104,MIQDAD,\"R2 Member 921013\",\"R2 Hall\",\"R2 Member 921025\",1,1,0,2,2,100,2,2\nR2-L-104,MIQDAD,\"R2 Member 921013\",\"R2 Hall\",\"R2 Member 921029\",0,1,1,0,2,0,0,2\n"
+body == "\"Class Code\",Level,Teacher,Location,\"Student Name\",Attempted,\"Total MCQs\",Pending,Score,\"Max Score\",\"Score %\",\"R2 Topic A Score\",\"R2 Topic A Max\"\nR2-L-104,MIQDAD,\"R2 Member 921013\",\"R2 Hall\",\"R2 Member 921025\",1,1,0,23,40,57,23,40\nR2-L-104,MIQDAD,\"R2 Member 921013\",\"R2 Hall\",\"R2 Member 921029\",0,1,1,0,40,0,0,40\n"
 
 # 3. The gents classes of the coordinator: only the classes in reach, one line per live student; 98103 (SALMAN) and the closed 98105 never
 GET {{base_url}}/reports/mcq-summary/download-all?from=2019-03-01&to=2019-03-31

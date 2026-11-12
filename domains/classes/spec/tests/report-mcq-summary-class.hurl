@@ -70,6 +70,7 @@ jsonpath "$.students[6].correct" == 0
 jsonpath "$.students[6].percent" == null
 jsonpath "$.students[6].topics[0].correct" == null
 
+# (98104's quiz has 40 questions and 921025 answered 23 right: 23 of 40 is 57.49999999999999 in binary, 57 on both sides)
 # 3. A class with a quiz but only a removed student, a class with no quiz in the range, one of the other gender, one outside reach, the closed class, unknown, negative: the empty class, never 404
 GET {{base_url}}/reports/mcq-summary/98107?from=2019-03-01&to=2019-03-31
 Authorization: {{auth_r2_coord}}
@@ -99,10 +100,11 @@ Authorization: {{auth_r2_coord}}
 HTTP 200
 [Asserts]
 jsonpath "$.mcqs" == 1
-jsonpath "$.maxMarks" == 2
+jsonpath "$.maxMarks" == 40
 jsonpath "$.students" count == 2
 jsonpath "$.students[0].name" == "R2 Member 921025"
-jsonpath "$.students[0].percent" == 100
+jsonpath "$.students[0].correct" == 23
+jsonpath "$.students[0].percent" == 57
 jsonpath "$.students[1].name" == "R2 Member 921029"
 jsonpath "$.students[1].percent" == null
 

@@ -292,6 +292,24 @@ public sealed partial class TestReports2Tests
         Assert.That(refused.Status, Is.EqualTo(HttpStatusCode.Forbidden));
     }
 
+    [Test]
+    public async Task Leaderboard_lists_the_top_100_rows_with_the_total_of_all_and_the_download_holds_every_row()
+    {
+        await TestDatabase.ExecuteAsync(
+            "insert into identity.users (token, email, firebase_uid) select 930000 + n, 'bulk' || n || '@example.invalid', 'uid-bulk' || n from generate_series(1, 105) n; "
+            + "insert into membership.member_profiles (user_id, name, gender) select u.id, 'T2 Bulk ' || (u.token - 930000), '1' from identity.users u where u.token > 930000; "
+            + "insert into classes.class_students (class_id, token_no, joined_on, status) select 98101, token, date '2019-01-07', 'A' from identity.users where token > 930000; "
+            + "insert into classes.class_attendance (session_id, token, extra_student, present, recitation) select 1, token, 0, 1, 1000 + (token - 930000) from identity.users where token > 930000");
+        var top = await kit.SendAsync(Super, HttpMethod.Get, $"/reports/quran-leaderboard?{Range}");
+        Assert.That(top.Status, Is.EqualTo(HttpStatusCode.OK), top.Body);
+        Assert.That(top.Json!["students"]!.AsArray(), Has.Count.EqualTo(100));
+        Assert.That(top.Json["total"]!.GetValue<int>(), Is.EqualTo(105 + 3));
+        var file = await kit.DownloadAsync(Super, $"/reports/quran-leaderboard/download?format=xlsx&{Range}");
+        Assert.That(file.Status, Is.EqualTo(HttpStatusCode.OK));
+        using var book = file.Workbook();
+        Assert.That(book.Worksheets.First().RowsUsed().Count(r => r.Cell(2).GetString().StartsWith("T2 ", StringComparison.Ordinal)), Is.EqualTo(105 + 3), "every ranked row, no cut");
+    }
+
     // ---- the nudge ----
 
     private static string Nudge(int teacher, bool send) => $"{{\"teacher\":{teacher},{Months}{(send ? ",\"send\":true" : string.Empty)}}}";
