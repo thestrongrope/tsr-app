@@ -1,5 +1,6 @@
 using System.Text.Json;
 using NUnit.Framework;
+using Tsr.Shared.Api;
 
 namespace Tsr.Classes.Api.Domain;
 

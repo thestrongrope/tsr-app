@@ -4,7 +4,7 @@ Spot quizzes, standard MCQs, quiz competitions.
 
 ## Status
 
-**Tables and placeholder routes (2026-11-10).** No slices and no public interface yet: every operation of this domain is a 501 placeholder in `api/Planned.cs` (catalog: `docs/specs/initial-build/operations.csv`). Facts and decisions:
+**Tables and 9 built operations (batch A1, 2026-11-12): a member takes a quiz and reads scores.** Built: `GET /classes/{class_id}/mcq/quizzes`, `GET /mcq/open`, `GET /mcq/by-code/{code}`, `GET /mcq/quizzes/{quiz_id}`, `/questions`, `POST /mcq/quizzes/{quiz_id}/responses` (the one write), `GET /mcq/quizzes/{quiz_id}/my-score`, `GET /classes/{class_id}/my-scores`, `GET /me/children/{child_token}/classes/{class_id}/scores` (one folder each under `api/features/`: `class-quizzes`, `open-quizzes`, `quiz-by-code`, `quiz-detail`, `quiz-questions`, `quiz-submit`, `quiz-my-score`, `class-my-scores`, `child-scores`; contract `spec/tests/<slice>.hurl`, shapes in `spec/api.yaml`). Shared: `domain/QuizRules.cs` (scoring, the correct option, the by-code state machine; unit tested), `QuizAccess.cs` (visible quiz, attempt, enrolment, gender), `AnswerBody.cs`, `QuizResult.cs`, `ScoreRows.cs` (the per-response date rule), `Paging.cs`, `Refusals.cs`. Run the contract with `tools/assessment-contract.sh test|parity` (fixtures `db/synthetic/assessment-a1-fixtures.sql` and `tools/parity-php/assessment-a1-fixtures.sql`, tokens 902401 to 902499, classes 9621 to 9624, quizzes 962401 to 962499, reset on every run); db tests `db/tests/AssessmentA1Tests.cs`; notes (PHP facts, quirks, what each route exposes): `docs/specs/initial-build/assessment-a1-notes.md`. The other 34 operations (manage, copy, publish, offline, sheet, reports, admin quiz, standard MCQs) are 501 placeholders in `api/Planned.cs` (catalog: `docs/specs/initial-build/operations.csv`). Facts and decisions:
 `docs/specs/initial-build/schema-phase-design.md`, `schema-phase-tables.csv`, `schema-phase-notes.md`.
 
 | Part | State |
@@ -16,14 +16,21 @@ Spot quizzes, standard MCQs, quiz competitions.
 
 - Schema `assessment` (above). Names, keys and indexes follow PHP's. A class, level, language, topic or member is a plain integer (another domain's row);
   PHP declared no foreign key between these tables. `spot_quiz_questions.is_arabic` (a `bit(1)`) is `boolean`; the tinyint flags are `smallint`.
-- Dependencies: none (`AssessmentModule.Dependencies` is empty). Classes show quiz counts through a future assessment interface, never the tables.
-- Events: none published, none consumed.
+- Dependencies: `access` (`Permissions`; `AssessmentModule.Dependencies`). Other domains are read through their published views in SQL: `classes.v_enrolments` (enrolment), `classes.v_classes` (class code), `membership.v_members` (the member's gender), `membership.v_guardian_links` (a parent's link). No public interface.
+- Events (outbox, in the transaction of the change; no consumer):
+
+| Event | Payload | Written by |
+|---|---|---|
+| `assessment.quiz_answered` | quizId, classId, token (never the answers) | POST /mcq/quizzes/{quiz_id}/responses (none for a refusal or a lost race) |
+
+  Consumed: none. The answers are never in the key-less routes: the questions route never selects the answer column; only the caller's own answered quizzes show the correct text.
 
 ## Checks
 
 ```
 dotnet test domains/assessment/api/tests   # the model: the 7 tables in schema "assessment"
-dotnet test db/tests                       # the migrated database
+dotnet test db/tests                       # the migrated database and the A1 routes (AssessmentA1Tests)
+tools/assessment-contract.sh test          # Hurl on the test stack (parity: the same files on PHP)
 ```
 
 ## Published views (rule 2; migration `PublishedViews`, read-only to the API role)

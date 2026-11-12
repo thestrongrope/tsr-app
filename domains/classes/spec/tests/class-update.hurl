@@ -79,6 +79,14 @@ HTTP 422
 [Asserts]
 jsonpath "$.detail" == "startedOn must be a date as YYYY-MM-DD"
 
+# Digits of another script are not a date (and never a server error)
+PUT {{base_url}}/classes/9403
+Authorization: {{auth_wr_admin}}
+{"startedOn": "٢٠٢٥-٠٢-٠٣"}
+HTTP 422
+[Asserts]
+jsonpath "$.detail" == "startedOn must be a date as YYYY-MM-DD"
+
 PUT {{base_url}}/classes/9403
 Authorization: {{auth_wr_admin}}
 {"startedOn": 20250901}

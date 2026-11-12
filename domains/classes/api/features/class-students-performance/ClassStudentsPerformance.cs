@@ -31,7 +31,8 @@ internal static partial class ClassStudentsPerformanceSlice
 
     internal sealed record QuizFigure(int Token, string? Topic, long Correct, long Total, long Attempted);
 
-    [GeneratedRegex(@"^(\d{4})-(\d{2})-(\d{2})$", RegexOptions.CultureInvariant | RegexOptions.NonBacktracking)]
+    // [0-9], not \d: .NET's \d also matches other scripts' digits, which int.Parse then refuses.
+    [GeneratedRegex(@"^([0-9]{4})-([0-9]{2})-([0-9]{2})$", RegexOptions.CultureInvariant | RegexOptions.NonBacktracking)]
     private static partial Regex DateShape();
 
     public static IEndpointRouteBuilder MapClassStudentsPerformance(this IEndpointRouteBuilder routes)

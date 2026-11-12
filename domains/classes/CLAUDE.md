@@ -72,5 +72,5 @@ dotnet test db/tests                    # the migrated database: citext, no cros
 
 | View | Columns | Known readers |
 |---|---|---|
-| `v_classes` | id, code, name, class_level_id, gender, teacher, status, city, country, level_name (migration `ClassViewLevelName`), extra_students (migration `ClassViewExtraStudents`) | access (scopes), membership (waiting list, gender lock, the student card: level name, the placed-registrations file: extra students), assessment reports |
-| `v_enrolments` | id, class_id, token_no, status, removed_at, mcq_admin | access (mcq scope), membership (placed, gender lock), assessment reports |
+| `v_classes` | id, code, name, class_level_id, gender, teacher, status, city, country, level_name (migration `ClassViewLevelName`), extra_students (migration `ClassViewExtraStudents`) | access (scopes), membership (waiting list, gender lock, the student card: level name, the placed-registrations file: extra students), assessment (the class code of the open quizzes), assessment reports |
+| `v_enrolments` | id, class_id, token_no, status, removed_at, mcq_admin | access (mcq scope), membership (placed, gender lock), assessment (every quiz route: who is a current student), assessment reports |

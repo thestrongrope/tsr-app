@@ -44,7 +44,7 @@ HTTP 501
 jsonpath "$.detail" == "Not implemented"
 
 # assessment
-GET {{base_url}}/me/children/900009/classes/1/scores
+GET {{base_url}}/classes/900009/mcq/manage
 {{auth_header}}: {{auth_value}}
 HTTP 501
 [Asserts]

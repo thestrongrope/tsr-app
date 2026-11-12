@@ -35,7 +35,8 @@ internal static partial class ClassUpdateSlice
         List<int> Tags,
         IReadOnlyList<ScheduleInput.Slot> Slots);
 
-    [GeneratedRegex(@"^(\d{4})-(\d{2})-(\d{2})$", RegexOptions.CultureInvariant | RegexOptions.NonBacktracking)]
+    // [0-9], not \d: .NET's \d also matches other scripts' digits, which int.Parse then refuses.
+    [GeneratedRegex(@"^([0-9]{4})-([0-9]{2})-([0-9]{2})$", RegexOptions.CultureInvariant | RegexOptions.NonBacktracking)]
     private static partial Regex DateShape();
 
     public static IEndpointRouteBuilder MapClassUpdate(this IEndpointRouteBuilder routes)

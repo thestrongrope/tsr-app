@@ -1,0 +1,226 @@
+openapi: 3.1.0
+info:
+  title: TSR assessment
+  version: 0.1.0
+  description: |
+    The assessment domain's actions (batch A1: a member takes a quiz and reads scores). Behaviour: tests/ (run against any base URL).
+    Forward compatible: a store-live app keeps calling these, so add fields and routes freely but
+    never remove or change one without the release process. Every error body is {"detail": "..."}.
+    Every route signs the caller in with PHP's member-creating sign-in (api_authenticate(true)).
+servers:
+  - url: http://localhost:8088
+    description: Local dev stack (gateway)
+paths:
+  /mcq/quizzes/{quiz_id}:
+    get:
+      operationId: getQuiz
+      summary: One quiz the caller may see, with their own attempt
+      description: |
+        Permission quizzes:take (403), then the member's gender must be a number (400 "User gender not set; update profile first"), then the quiz must be published and of a class the caller is a current
+        student of (404 "Quiz not found"; a deactivated quiz is visible). No question and no answer. Slice: features/quiz-detail/QuizDetail.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: quiz_id, in: path, required: true, schema: {type: string}, description: "PHP (int) cast: 5abc is 5, abc is 0"}
+      responses:
+        "200":
+          description: The quiz
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuizDetail"
+        "400":
+          $ref: "#/components/responses/Problem"
+        "401":
+          $ref: "#/components/responses/Problem"
+        "403":
+          $ref: "#/components/responses/Problem"
+        "404":
+          $ref: "#/components/responses/Problem"
+  /mcq/quizzes/{quiz_id}/questions:
+    get:
+      operationId: listQuizQuestions
+      summary: A page of the quiz's questions with shuffled options
+      description: |
+        quizzes:take (403), gender (400), then 409 "Quiz already attempted. Cannot retake." when the caller's score is above 0 (a score of 0 does not block: PHP's asymmetry with submit),
+        404 "Quiz not found" unless visible (as getQuiz), 409 "This quiz is not currently available" when deactivated. page (min 1) and pageSize (1 to 100, default 20) read as PHP's (int).
+        Options: the non-blank options plus "I don't know", in random order. Never says which is correct. Slice: features/quiz-questions/QuizQuestions.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: quiz_id, in: path, required: true, schema: {type: string}}
+        - {name: page, in: query, schema: {type: string}}
+        - {name: pageSize, in: query, schema: {type: string}}
+      responses:
+        "200":
+          description: "{total, page, pageSize, items: [{id, text, isArabic, options}]}"
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+  /mcq/quizzes/{quiz_id}/my-score:
+    get:
+      operationId: getMyQuizScore
+      summary: The caller's own answers to a quiz and the result
+      description: |
+        quizzes:take (403), gender (400), 404 "Quiz not found" unless visible (as getQuiz), 404 "No attempt found" without a response of the caller. `selected` is always 0. percent is a float over the question count
+        (the integer 0 when the quiz has no questions). Slice: features/quiz-my-score/QuizMyScore.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: quiz_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: "{total, answered, correct, percent, responses: [{questionId, questionText, selected, selectedText, correctText, isCorrect}]}"
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /mcq/quizzes/{quiz_id}/responses:
+    post:
+      operationId: submitQuizAnswers
+      summary: Submit the caller's answers; the server scores them
+      description: |
+        Body {responses: [{questionId, selectedText, option?}]}, one per question. Order of checks: quizzes:take (403), gender (400), already answered (409 "Already attempted"), visible (404 "Quiz not found"),
+        deactivated (409 "This quiz is not currently available"), no questions (400), invalid JSON (422), empty responses (400), missing or extra ids (400 with detail {missing: [...], extra: [...]}), answer text over 1000 characters (400).
+        Scoring compares the selected text with the right option, trimmed and case-insensitively. Two simultaneous submissions: one 200, the rest 409 "You have already submitted this quiz". Event assessment.quiz_answered {quizId, classId, token}.
+        Slice: features/quiz-submit/QuizSubmit.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: quiz_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: "{total, answered, correct, percent, responses: [{questionId, questionText, selected, selectedText, correctText, isCorrect}]}"
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /mcq/by-code/{code}:
+    get:
+      operationId: resolveQuizCode
+      summary: What opening an MCQ link does for the caller
+      description: |
+        quizzes:take (403); no gender check. 200 {state, quizId}: state is not_found, not_eligible, not_released, attempted, open or closed (see the slice header); quizId only for open and attempted.
+        Slice: features/quiz-by-code/QuizByCode.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: code, in: path, required: true, schema: {type: string}, description: "1 to 32 ASCII letters and digits, else not_found"}
+      responses:
+        "200":
+          description: "{state, quizId}"
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+  /mcq/open:
+    get:
+      operationId: listOpenQuizzes
+      summary: The quizzes the caller may attempt now, across their classes
+      description: |
+        quizzes:take (403); no gender check. Published, not deactivated, caller a current student of the class, no response of the caller; newest first; at most 20. 200 {items: [{id, code, name, topic, classCode}]}.
+        Slice: features/open-quizzes/OpenQuizzes.cs.
+      security:
+        - memberToken: []
+      responses:
+        "200":
+          description: "{items: [...]}"
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}/mcq/quizzes:
+    get:
+      operationId: listClassQuizzes
+      summary: A class's published quizzes with the caller's own attempt
+      description: |
+        quizzes:take on the class (403 for anyone who is not a current student of an active class), gender (400), enrolment (404 "Class not found or not enrolled"). page (min 1), pageSize (1 to 100, default 20).
+        200 {total, page, pageSize, hasNext, items: [{id, code, name, topic, classId, publishedAt, questionCount, attempted, score, total, percent}]}; score, total, percent null before an attempt.
+        Slice: features/class-quizzes/ClassQuizzes.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+        - {name: page, in: query, schema: {type: string}}
+        - {name: pageSize, in: query, schema: {type: string}}
+      responses:
+        "200":
+          description: The page
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}/my-scores:
+    get:
+      operationId: listMyClassScores
+      summary: The quizzes of a class the caller answered, with their score
+      description: |
+        quiz-scores:read (403), gender (400), a current student of the class (404 "Class not found or not enrolled"). start_date and end_date bound each response's own time, read as MariaDB reads a date
+        (an unreadable start bounds nothing, an unreadable end lists nothing). 200 a bare array [{quizId, quizName, topic, attemptedAt, score, total, percent}], newest attempt first.
+        Slice: features/class-my-scores/ClassMyScores.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+        - {name: start_date, in: query, schema: {type: string}}
+        - {name: end_date, in: query, schema: {type: string}}
+      responses:
+        "200":
+          description: The scores
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /me/children/{child_token}/classes/{class_id}/scores:
+    get:
+      operationId: listChildClassScores
+      summary: A linked child's quiz scores in a class
+      description: |
+        children-performance:read (403); no gender check; 404 "Child or class not found" unless the caller has an active guardian link to the child and the child has any enrolment row in the class (removed too).
+        start_date and end_date as for my-scores. 200 a bare array [{quiz_id, quiz_name, score, total_questions, percentage (one decimal), attempted_on (Y-m-d H:i:s)}], newest attempt first.
+        Slice: features/child-scores/ChildScores.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: child_token, in: path, required: true, schema: {type: string}}
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+        - {name: start_date, in: query, schema: {type: string}}
+        - {name: end_date, in: query, schema: {type: string}}
+      responses:
+        "200":
+          description: The scores
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+components:
+  securitySchemes:
+    memberToken:
+      type: http
+      scheme: bearer
+      bearerFormat: Firebase ID token
+  responses:
+    Problem:
+      description: |
+        An error. The body is always {"detail": "..."}
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [detail]
+            properties:
+              detail:
+                type: string
+  schemas:
+    QuizDetail:
+      type: object
+      required: [id, code, name, classId, questionCount, attempted]
+      properties:
+        id: {type: integer}
+        code: {type: string}
+        name: {type: string}
+        topic: {type: [string, "null"]}
+        classId: {type: integer}
+        publishedAt: {type: [string, "null"], description: "Y-m-dTH:i:s, no zone"}
+        questionCount: {type: integer}
+        attempted: {type: boolean}
+        score: {type: [integer, "null"], description: "the caller's correct answers; null before any answer"}

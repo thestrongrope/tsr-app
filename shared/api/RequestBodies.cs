@@ -1,13 +1,12 @@
 using Microsoft.AspNetCore.Http;
-using Tsr.Shared.Api;
 
-namespace Tsr.Classes.Api.Domain;
+namespace Tsr.Shared.Api;
 
 /// <summary>
 /// PHP's <c>api_body()</c> for the write slices: the JSON object of the request (an empty body is an empty object; anything else that is not an object is 422 "Invalid JSON body"). A body over a megabyte is
 /// refused with 413 (PHP has no limit of its own; the web server's applies).
 /// </summary>
-internal static class RequestBodies
+public static class RequestBodies
 {
     public const int MaxBytes = 1024 * 1024;
 

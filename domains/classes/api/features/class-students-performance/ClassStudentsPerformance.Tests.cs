@@ -8,6 +8,7 @@ internal sealed class ClassStudentsPerformanceTests
     [TestCase("2025-9-1", "2025-12-31", "from and to must be dates as YYYY-MM-DD")]
     [TestCase("2025-02-30", "2025-12-31", "from and to must be dates as YYYY-MM-DD")]
     [TestCase("2025-01-01", "today", "from and to must be dates as YYYY-MM-DD")]
+    [TestCase("٢٠٢٥-٠١-٠١", "2025-12-31", "from and to must be dates as YYYY-MM-DD", Description = "digits of another script are not a date, and never an exception")]
     [TestCase("2025-12-31", "2025-01-01", "from must not be after to")]
     [TestCase("2024-01-01", "2025-01-02", "The range can cover at most a year")]
     public void A_bad_range_is_refused_with_PHPs_message(string from, string to, string message) =>
