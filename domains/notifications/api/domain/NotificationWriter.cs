@@ -38,7 +38,8 @@ internal static class NotificationWriter
         }
 
         var now = clock.GetUtcNow();
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        // Inside the caller's transaction when there is one (the scheduled worker writes its claim and the notification as one unit), else in its own.
+        await using var owned = db.Database.CurrentTransaction is null ? await db.Database.BeginTransactionAsync(ct) : null;
         var id = reuseSameCriteria ? await ExistingAsync(db, notification.CriteriaJson, ct) : null;
         id ??= await InsertAsync(db, notification, now, ct);
         var rows = tokens.Length == 0
@@ -51,14 +52,18 @@ internal static class NotificationWriter
                 """,
                 ct);
         await Outbox.WriteAsync(db, "notifications.sent", new Sent(id.Value, tokens.Length, source, notification.CreatedBy), clock, ct);
-        await transaction.CommitAsync(ct);
+        if (owned is not null)
+        {
+            await owned.CommitAsync(ct);
+        }
+
         return new NotificationWritten(id.Value, rows);
     }
 
     private static async Task<int?> ExistingAsync(NotificationsContext db, string criteria, CancellationToken ct)
     {
         var rows = await db.Database
-            .SqlQuery<int>($"""select notification_id as "Value" from notifications.notifications where target_audience_criteria = {criteria} order by notification_id desc limit 1""")
+            .SqlQuery<int>($"""select notification_id as "Value" from notifications.notifications where target_audience_criteria = {criteria}::citext order by notification_id desc limit 1""")
             .ToListAsync(ct);
         return rows.Count == 0 ? null : rows[0];
     }
