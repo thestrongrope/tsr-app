@@ -13,6 +13,7 @@ Found while porting (12 Nov 2026 on). Nothing here is proven or fixed yet; each 
 | 5 | notifications whatsapp | PHP forwards the notifier's own error text to the caller, including its 500s (copied). | lane whatsapp |
 | 6 | classes MCQ summary CSV | Student names go to every `reports:read` holder (as PHP). | lane mcq-reports |
 | 7 | identity deletion | Database role grants for the cross-schema deletes and updates of a completion are unchecked. | lane identity |
+| 8 | assessment `domain/QuizEligibility.cs` (quiz competition admin) | The winners feasibility check tries every subset of the started quiz days (2^n, capped at 20 days: about a million subsets, each building a set) and runs on every `GET /admin/quiz`. Only `quiz:admin` holders can reach it. Check how PHP does it; fix: a bipartite matching in place of the subset search, or a lower cap, and compute once per download, not per read. | automated commit review |
 
 ## Design points to confirm
 
