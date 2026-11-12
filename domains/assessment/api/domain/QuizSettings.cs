@@ -10,7 +10,7 @@ namespace Tsr.Assessment.Api.Domain;
 /// </summary>
 internal sealed class QuizSettings(JsonObject values)
 {
-    /// <summary>Most episodes a quiz may have: the sheets are read once per episode and the cross-day check is exponential in the started ones.</summary>
+    /// <summary>Most episodes a quiz may have: the sheets are read once per episode.</summary>
     public const int MaxEpisodes = 30;
 
     public JsonObject Values { get; } = values;
