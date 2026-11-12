@@ -14,7 +14,7 @@ quirks included (facts: `docs/specs/initial-build/phase-2-permissions-recon.md`,
 | Class access rule matching (`RuleMatcher`) | built, unit tested; has no classes to match until `classes` exists |
 | Port `IClassScopes` (default `NoClasses`) | built; `classes` supplies the real one (`ClassFacts` also carries code and name, for the class access screens) |
 | Routes `GET /me/permissions`, `GET /me/permissions/{permission}`, `GET /user/permissions` | built; Hurl contract proven identical on PHP |
-| Grant routes (`permissions:manage`): member search, member view, grant, revoke; class access routes (`class-access:manage`): member search, member view, options, preview, grant a rule, revoke a rule | built (slices `admin-permission-*`, `class-access-*`); no Hurl or database test yet; notes `docs/specs/initial-build/lane-access-notes.md` |
+| Grant routes (`permissions:manage`): member search, member view, grant, revoke; class access routes (`class-access:manage`): member search, member view, options, preview, grant a rule, revoke a rule | built and proven (slices `admin-permission-*`, `class-access-*`); Hurl `spec/tests/admin-permission-*.hurl`, `class-access-*.hurl` through `tools/contract-grants.sh test\|parity`, database tests `db/tests/TestGrantsTests.cs`; notes `docs/specs/initial-build/lane-access-notes.md`, `test-grants-notes.md` |
 
 ## Owns
 

@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Tsr.Shared.Api;
 
@@ -20,6 +21,12 @@ internal static partial class AdminMembers
 
     [GeneratedRegex("^[0-9]+$", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 200)]
     private static partial Regex Digits();
+
+    /// <summary>PHP's <c>$_GET['q']</c>: the LAST q of the query string (ASP.NET would join two with a comma); empty when there is none.</summary>
+    public static string LastQuery(IQueryCollection query) => query.TryGetValue("q", out var values) && values.Count > 0 ? values[^1] ?? string.Empty : string.Empty;
+
+    /// <summary>True when q was sent as a list (<c>q[]=x</c> or <c>q[a]=x</c>), which PHP reads as an array, not text.</summary>
+    public static bool QueryIsList(IQueryCollection query) => query.Keys.Any(key => key.StartsWith("q[", StringComparison.Ordinal));
 
     /// <summary>PHP's <c>(int)$token</c> of a path segment: 0 when it is not a number or does not fit a token, which is never found.</summary>
     public static int TokenOf(string raw)

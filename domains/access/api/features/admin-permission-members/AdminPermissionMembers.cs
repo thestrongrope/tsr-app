@@ -28,7 +28,7 @@ internal static class AdminPermissionMembersSlice
             return refusal;
         }
 
-        string q = context.Request.Query["q"].ToString();
+        string q = AdminMembers.LastQuery(context.Request.Query);
         if (q.Contains('\0', StringComparison.Ordinal))
         {
             return Problem.Detail(StatusCodes.Status422UnprocessableEntity, "q must be text");
