@@ -21,7 +21,7 @@ cd "$ROOT"
 . tools/parity-lock.sh
 
 FIXTURES="domains/access/spec/tests/fixtures.vars"
-FILES=(domains/access/spec/tests/*.hurl)
+FILES=(domains/access/spec/tests/me-permission.hurl domains/access/spec/tests/me-permissions.hurl domains/access/spec/tests/user-permissions.hurl)
 
 parity() { docker compose -p tsr-parity -f tools/parity-php/compose.parity.yml --env-file tools/parity-php/parity.env "$@"; }
 php_sql() { parity exec -T db sh -c 'mariadb -uroot -p"$MARIADB_ROOT_PASSWORD" tsr_synth -N -B'; }
