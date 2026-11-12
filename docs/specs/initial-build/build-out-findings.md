@@ -15,7 +15,10 @@ Found while porting (12 Nov 2026 on). Nothing here is proven or fixed yet; each 
 | 7 | identity deletion | Database role grants for the cross-schema deletes and updates of a completion are unchecked. | lane identity |
 | 8 | assessment `domain/QuizEligibility.cs` (quiz competition admin) | The winners feasibility check tries every subset of the started quiz days (2^n, capped at 20 days: about a million subsets, each building a set) and runs on every `GET /admin/quiz`. Only `quiz:admin` holders can reach it. Check how PHP does it; fix: a bipartite matching in place of the subset search, or a lower cap, and compute once per download, not per read. | automated commit review |
 | 9 | notifications `features/device-register/DeviceRegister.cs` | Registering a device deletes any OTHER member's row with the same `device_id`. A signed-in member who knows or guesses another member's device id can remove that member's push registration (they stop receiving pushes; nothing is exposed). Likely PHP's behaviour for a phone that changes hands: check PHP; consider a rate limit and an audit row, or keying on the push token the device itself holds. | automated commit review |
-
+| 10 | access permission grants | A super admin can grant themselves any `:all` permission (as PHP). | lane access |
+| 11 | access class-access rules | A gender admin can manage rules on other admins of their own gender; level conditions are not limited by city (as PHP). | lane access |
+| 12 | platform push queue | Dedupe keys use SHA-256 where PHP uses SHA-1 (the analyzer rejects SHA-1): keys PHP already queued will not match during a cut-over. | lane sheets |
+| 13 | assessment quiz competition | PHP's `force_quiz_mode` setting is not ported; timestamps use a fixed +05:30; limits PHP lacks were added (30 episodes, 20 ids per list, a winner-count cap). | lane sheets |
 ## Design points to confirm
 
 | # | Point | Source |
