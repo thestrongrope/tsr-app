@@ -612,6 +612,74 @@ paths:
         "404": {$ref: "#/components/responses/Problem"}
         "409": {$ref: "#/components/responses/Problem"}
         "422": {$ref: "#/components/responses/Problem"}
+  /mcq/manage/{quiz_id}/scores:
+    get:
+      operationId: listManagedQuizScores
+      summary: Every student who answered the quiz, with their correct count
+      description: |
+        As the get (404, 404, 403 "You do not have permission to manage MCQs for this class"). 200 {quiz: {id, name, topic, classCode}, total, items: [{name, submitted, correct, outof}]}, newest first, at most 5000.
+        Grouped by the student's name as PHP does (two students with one name are one row); outof is the number of responses. Slice: features/manage-scores/ManageScores.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: quiz_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: See the description
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /mcq/manage/{quiz_id}/offline:
+    get:
+      operationId: getOfflineEntry
+      summary: The questions (correct option marked) and the class's students, for entering paper answers
+      description: |
+        As the get (404, 404, 403). THE ANSWER KEY IS ON THIS WIRE. 200 {quiz: {id, name, topic, classCode, className}, questions: [{id, question, options: [{text, isCorrect}]}], students: [{token, name, isOffline, submitted}]}.
+        isOffline: the email ends in @thestrongrope.com. submitted: a row in spot_quiz_submissions (written only by the offline entry). Slice: features/manage-offline/ManageOffline.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: quiz_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: See the description
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+    post:
+      operationId: saveOfflineAnswers
+      summary: Record the answers students gave on paper, all or none
+      description: |
+        Body {students: [{token, correct: [questionId]}]}. As the get (404, 404, 403), then 422 (invalid JSON, "students is required", "each student needs a token and a correct list", more than 500 students or 5000 ids),
+        400 "Malformed response payload.", 403 "Student N is not enrolled in this class.", 400 "Question N does not belong to this quiz.", then 409 {detail, conflicts: [token]} when a student already has a submission (nothing written; no conflicts key when the unique index on the responses refused it).
+        200 {saved}. One transaction. Event assessment.offline_answers_recorded {quizId, classId, token, count}. Slice: features/manage-offline-save/ManageOfflineSave.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: quiz_id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [students]
+              properties:
+                students:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      token: {type: integer}
+                      correct: {type: array, items: {type: integer}}
+      responses:
+        "200":
+          description: "{saved}"
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
 components:
   securitySchemes:
     memberToken:

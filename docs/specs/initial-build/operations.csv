@@ -74,9 +74,9 @@ POST,/classes/{class_id}/mcq/standard/{mcq_id}/copy,assessment,create,built
 GET,/mcq/copy/classes,assessment,create,built
 GET,/mcq/copy/classes/{class_id}/topics,assessment,create,built
 GET,/mcq/copy/classes/{class_id}/quizzes,assessment,create,built
-GET,/mcq/manage/{quiz_id}/scores,assessment,create,planned
-GET,/mcq/manage/{quiz_id}/offline,assessment,create,planned
-POST,/mcq/manage/{quiz_id}/offline,assessment,create,planned
+GET,/mcq/manage/{quiz_id}/scores,assessment,create,built
+GET,/mcq/manage/{quiz_id}/offline,assessment,create,built
+POST,/mcq/manage/{quiz_id}/offline,assessment,create,built
 GET,/mcq/manage/{quiz_id}/sheet,assessment,create,planned
 GET,/mcq/manage/{quiz_id},assessment,create,built
 PUT,/mcq/manage/{quiz_id},assessment,create,built

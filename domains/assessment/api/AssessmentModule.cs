@@ -19,7 +19,10 @@ using Tsr.Assessment.Api.Features.ManageCopy;
 using Tsr.Assessment.Api.Features.ManageCreate;
 using Tsr.Assessment.Api.Features.ManageDeactivate;
 using Tsr.Assessment.Api.Features.ManageList;
+using Tsr.Assessment.Api.Features.ManageOffline;
+using Tsr.Assessment.Api.Features.ManageOfflineSave;
 using Tsr.Assessment.Api.Features.ManageQuiz;
+using Tsr.Assessment.Api.Features.ManageScores;
 using Tsr.Assessment.Api.Features.ManageStandard;
 using Tsr.Assessment.Api.Features.ManageStandardCopy;
 using Tsr.Assessment.Api.Features.ManageTopics;
@@ -98,6 +101,9 @@ public static class AssessmentModule
         routes.MapManageCreate();
         routes.MapManageStandardCopy();
         routes.MapManageCopy();
+        routes.MapManageScores();
+        routes.MapManageOffline();
+        routes.MapManageOfflineSave();
         routes.MapPlannedRoutes();
         return routes;
     }

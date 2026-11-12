@@ -12,9 +12,6 @@ internal static class Planned
     public static IEndpointRouteBuilder MapPlannedRoutes(this IEndpointRouteBuilder routes)
     {
         routes.MapPlanned(
-            ("GET", "/mcq/manage/{quiz_id}/scores"),
-            ("GET", "/mcq/manage/{quiz_id}/offline"),
-            ("POST", "/mcq/manage/{quiz_id}/offline"),
             ("GET", "/mcq/manage/{quiz_id}/sheet"),
             ("POST", "/mcq/manage/{quiz_id}/publish"));
         return routes;
