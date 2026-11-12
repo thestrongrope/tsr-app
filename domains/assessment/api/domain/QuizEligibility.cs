@@ -236,31 +236,90 @@ internal static class QuizEligibility
         passDays[at] = (token, passDays[at].Count + 1);
     }
 
+    /// <summary>Largest number of started episodes for which the failing subset is named by PHP's own subset search (2^12 subsets); above it the set is the one the matching found.</summary>
+    private const int NamedBySubsetSearch = 12;
+
     /// <summary>
-    /// Hall's condition over every non-empty subset of the started episodes (those with submissions): the union of their candidates must cover the winners they need, or the draw cannot finish with one prize per person.
-    /// More than 20 started episodes are refused (2^n subsets); settings allow 30 episodes at most.
+    /// PHP's Hall check: for every non-empty subset of the started episodes (those with submissions) the union of their candidates must cover the winners they need, or the draw cannot finish with one prize per person.
+    /// Decided by a matching (each episode needs <c>Needed</c> distinct candidates, a candidate serves one episode), which gives PHP's verdict without trying 2^n subsets. Only a failure is named:
+    /// with up to <see cref="NamedBySubsetSearch"/> started episodes by PHP's own search (its first failing subset in mask order, so the text is PHP's), above that by the episodes the matching could not serve.
     /// </summary>
     private static (bool Feasible, string Reason) CrossDay(Dictionary<int, DayResult> byDay, int total, int minPercent)
     {
         var started = Enumerable.Range(1, total).Where(d => byDay[d].Funnel.Submissions > 0).ToList();
-        if (started.Count > 20)
+        var violators = HallViolators(started, byDay);
+        if (violators is null)
         {
-            return (false, "Too many episodes have started to check the winners are unique across days.");
+            return (true, string.Empty);
         }
 
+        var subset = started.Count <= NamedBySubsetSearch ? FirstFailingSubset(started, byDay) ?? violators : violators;
+        var union = subset.SelectMany(d => byDay[d].Candidates).ToHashSet();
+        var demand = subset.Sum(d => (long)byDay[d].Needed);
+        return (false, $"Days {string.Join(", ", subset)} collectively need {demand} winners but only {union.Count} unique candidates exist across these days at min_score_percent={minPercent}."
+            + " Within-cycle uniqueness will prevent winner generation from completing. To relax, update min_score_percent in the Technical sheet and re-run.");
+    }
+
+    /// <summary>PHP's loop: the first subset (in mask order) whose candidates do not cover its demand.</summary>
+    private static List<int>? FirstFailingSubset(List<int> started, Dictionary<int, DayResult> byDay)
+    {
         for (var mask = 1; mask < 1 << started.Count; mask++)
         {
             var subset = started.Where((_, i) => (mask & (1 << i)) != 0).ToList();
             var union = subset.SelectMany(d => byDay[d].Candidates).ToHashSet();
-            var demand = subset.Sum(d => byDay[d].Needed);
-            if (union.Count < demand)
+            if (union.Count < subset.Sum(d => (long)byDay[d].Needed))
             {
-                return (false, $"Days {string.Join(", ", subset)} collectively need {demand} winners but only {union.Count} unique candidates exist across these days at min_score_percent={minPercent}."
-                    + " Within-cycle uniqueness will prevent winner generation from completing. To relax, update min_score_percent in the Technical sheet and re-run.");
+                return subset;
             }
         }
 
-        return (true, string.Empty);
+        return null;
+    }
+
+    /// <summary>Null when every started episode can get its winners from distinct candidates; else episodes that together need more than their candidates can give (a Hall violator).</summary>
+    private static List<int>? HallViolators(List<int> started, Dictionary<int, DayResult> byDay)
+    {
+        var owner = new Dictionary<int, int>();
+        foreach (var day in started)
+        {
+            var need = Math.Max(0, byDay[day].Needed);
+            if (need > byDay[day].Candidates.Count)
+            {
+                return [day];
+            }
+
+            for (var unit = 0; unit < need; unit++)
+            {
+                var visitedDays = new HashSet<int>();
+                if (!Assign(day, byDay, owner, new HashSet<int>(), visitedDays))
+                {
+                    return [.. visitedDays.Order()];
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>One augmenting path: give <paramref name="day"/> one more candidate, moving other episodes to their other candidates where needed. Depth is at most the number of episodes.</summary>
+    private static bool Assign(int day, Dictionary<int, DayResult> byDay, Dictionary<int, int> owner, HashSet<int> visitedTokens, HashSet<int> visitedDays)
+    {
+        visitedDays.Add(day);
+        foreach (var token in byDay[day].Candidates)
+        {
+            if (!visitedTokens.Add(token))
+            {
+                continue;
+            }
+
+            if (!owner.TryGetValue(token, out var holder) || Assign(holder, byDay, owner, visitedTokens, visitedDays))
+            {
+                owner[token] = day;
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static int TokenOf(Submission s) => (int)Math.Clamp(PhpValue.IntOfText(s.Token), int.MinValue, int.MaxValue);
