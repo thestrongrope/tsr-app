@@ -11,7 +11,7 @@ internal sealed record TeacherFact(string Name, int Gender, bool Active, bool Te
 
 /// <summary>
 /// The fresh reads that follow the index (PHP SearchSourceModel and EntityAccessModel): the index is only a list of pointers, so
-/// every hit is checked again against the database. Published views only: <c>classes.v_classes</c>, <c>classes.v_enrolments</c>
+/// every hit is checked again against the database. Published views only: <c>classes.v_classes</c>, <c>classes.v_enrolments</c>, <c>classes.v_guides</c>
 /// and <c>membership.v_members</c>. Fake in unit tests.
 /// </summary>
 internal interface ISearchFacts
@@ -24,6 +24,9 @@ internal interface ISearchFacts
 
     /// <summary>The active classes of these levels, by id.</summary>
     Task<IReadOnlyList<ClassFact>> ActiveClassesOfLevelsAsync(IReadOnlyCollection<long> levelIds, CancellationToken ct);
+
+    /// <summary>The name of each level whose guide counts now (PHP SearchSourceModel guideRow: a non-empty guide in language 1, for a level that has a public page); a level without one is absent.</summary>
+    Task<IReadOnlyDictionary<long, string>> GuideLevelsAsync(IReadOnlyCollection<long> levelIds, CancellationToken ct);
 
     /// <summary>The member's current (not removed) active classes, by code, for each token.</summary>
     Task<IReadOnlyDictionary<long, IReadOnlyList<ClassFact>>> CurrentClassesAsync(IReadOnlyCollection<long> tokens, CancellationToken ct);
@@ -38,6 +41,9 @@ internal interface ISearchFacts
 internal sealed class SearchFacts(DbSettings settings) : ISearchFacts
 {
     private const int TimeoutSeconds = 15;
+
+    // PHP GuidesModel::SLUGS: only these levels have a public guide page, and a guide counts only with one.
+    private static readonly HashSet<long> GuideLevelsWithPage = [2, 3, 4, 5];
 
     private const string ClassColumns = "id::int, code, coalesce(level_name, '') as level_name, coalesce(gender, 0)::int as gender, coalesce(class_level_id, 0)::int as level_id";
 
@@ -121,6 +127,29 @@ internal sealed class SearchFacts(DbSettings settings) : ISearchFacts
         }
 
         return teachers;
+    }
+
+    public async Task<IReadOnlyDictionary<long, string>> GuideLevelsAsync(IReadOnlyCollection<long> levelIds, CancellationToken ct)
+    {
+        var levels = new Dictionary<long, string>();
+        var withPage = levelIds.Where(id => GuideLevelsWithPage.Contains(id)).ToArray();
+        if (withPage.Length == 0)
+        {
+            return levels;
+        }
+
+        await using var connection = await OpenAsync(ct);
+        await using var command = new NpgsqlCommand(
+            "select level_id::bigint, level_name from classes.v_guides where language_id = 1 and has_text and level_id = any(@ids) order by level_id",
+            connection);
+        command.Parameters.AddWithValue("ids", withPage);
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            levels[reader.GetInt64(0)] = reader.GetString(1);
+        }
+
+        return levels;
     }
 
     public async Task<IReadOnlyDictionary<long, string>> MemberNamesAsync(IReadOnlyCollection<long> tokens, CancellationToken ct)

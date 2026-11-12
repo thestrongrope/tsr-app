@@ -8,7 +8,7 @@ public sealed class PublishedViewsTests
     public static readonly string[] Views =
     [
         "identity.v_users", "membership.v_members", "membership.v_registrations", "membership.v_guardian_links",
-        "classes.v_classes", "classes.v_enrolments", "classes.v_class_schedules", "classes.v_class_levels", "classes.v_teachers", "assessment.v_quiz_results", "assessment.v_quizzes", "assessment.v_standard_mcqs", "assessment.v_class_mcq_copies", "content.v_quran", "platform.v_genders",
+        "classes.v_classes", "classes.v_enrolments", "classes.v_class_schedules", "classes.v_class_levels", "classes.v_teachers", "classes.v_guides","assessment.v_quiz_results", "assessment.v_quizzes", "assessment.v_standard_mcqs", "assessment.v_class_mcq_copies", "content.v_quran", "platform.v_genders",
     ];
 
     [TestCaseSource(nameof(Views))]
@@ -44,6 +44,23 @@ public sealed class PublishedViewsTests
         Assert.That(row["correct"], Is.EqualTo("1"));
         Assert.That(row["max_marks"], Is.EqualTo("3"));
         Assert.That(row["answered_at"], Is.EqualTo("2025-09-07 10:00"), "the first response");
+    }
+
+    [Test]
+    public async Task The_guide_re_check_counts_only_a_non_blank_language_one_guide_of_a_level_with_a_page()
+    {
+        await TestDatabase.ExecuteAsync("""
+            delete from classes.guides where level_id in (2, 3, 4, 6);
+            insert into classes.class_levels (id, code, name, sort_order) values (2, 'AZ', 'ABUZAR', 2), (3, 'MK', 'MIQDAD', 3), (4, 'AM', 'AMMAR', 4), (6, 'NP', 'NOPAGE', 6)
+                on conflict (id) do update set name = excluded.name;
+            insert into classes.guides (level_id, language_id, guide, created_by)
+            values (2, 1, 'A real guide', 1), (3, 1, '   ', 1), (4, 2, 'Only another language', 1), (6, 1, 'No public page', 1);
+            """);
+        var facts = new Tsr.Search.Api.Domain.SearchFacts(new Tsr.Shared.Api.DbSettings(TestDatabase.AppConnection));
+
+        var levels = await facts.GuideLevelsAsync([2, 3, 4, 6, 99], CancellationToken.None);
+
+        Assert.That(levels, Is.EqualTo(new Dictionary<long, string> { [2] = "ABUZAR" }));
     }
 
     [TestCaseSource(nameof(Views))]
