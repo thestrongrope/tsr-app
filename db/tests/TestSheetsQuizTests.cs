@@ -93,9 +93,9 @@ public sealed partial class TestSheetsTests
 
     // ---------------------------------------------------------------- refresh
 
-    private static void SetSettingsSheet(FakeSheets fake, string mode)
+    private static void SetSettingsSheet(FakeSheets fake, string mode, string title = "Test Quiz")
     {
-        fake.Set(SettingsSheet, "Technical!A1:B", ["mode", mode], ["total_quizzes", "2"], ["quiz_type", "MEGA"], ["quiz_title", "Test Quiz"], ["quiz_series", "S1"], ["quiz_registration", "1 Dec"], ["excluded", "a", "b"]);
+        fake.Set(SettingsSheet, "Technical!A1:B", ["mode", mode], ["total_quizzes", "2"], ["quiz_type", "MEGA"], ["quiz_title", title], ["quiz_series", "S1"], ["quiz_registration", "1 Dec"], ["excluded", "a", "b"]);
         fake.Set(SettingsSheet, "Functional!A1:D", ["episodes", "start", "stop"], ["1", "10 Dec", "11 Dec"], ["2", "12 Dec", "13 Dec"], ["quiz_stop", "20 Dec"]);
     }
 
@@ -191,6 +191,11 @@ public sealed partial class TestSheetsTests
         var stillLive = await Post(Admin, "/admin/quiz/settings/refresh");
         Assert.That(stillLive.Status, Is.EqualTo(HttpStatusCode.OK));
         Assert.That(await CountAsync("platform.outbound_messages"), Is.EqualTo(3), "live to live announces nothing");
+
+        SetSettingsSheet(sheets, "live", "Another Quiz");
+        await Post(Admin, "/admin/quiz/settings/refresh");
+        Assert.That(await CountAsync("notifications.notifications"), Is.EqualTo(1), "a live quiz whose title changed is still not announced (only not live to live is)");
+        Assert.That(await CountAsync("platform.outbound_messages"), Is.EqualTo(3));
     }
 
     [Test]
@@ -502,6 +507,37 @@ public sealed partial class TestSheetsTests
         Assert.That(noStudentWinner.Detail, Is.EqualTo("No TSR student Mega winner has been drawn yet, so there is nothing to publish."));
     }
 
+    [Test]
+    public async Task The_limits_PHP_lacks_are_refused_with_a_message_and_a_today_override_that_is_not_a_date_is_ignored()
+    {
+        await SeedQuizWorldAsync();
+        var many = MegaSettings();
+        many["total_quizzes"] = "31";
+        await PutDocAsync("settings", many);
+        var download = await DownloadAsync();
+        var overview = await kit.SendAsync(Admin, HttpMethod.Get, "/admin/quiz");
+        Assert.That((download.Status, download.Detail), Is.EqualTo((HttpStatusCode.Conflict, "The quiz settings need between 1 and 30 episodes.")));
+        Assert.That(overview.Status, Is.EqualTo(HttpStatusCode.OK), "the overview never fails on it");
+        Assert.That(sheets.Reads, Is.Empty);
+
+        var garbage = MegaSettings();
+        garbage["today_override"] = "not a date";
+        await PutDocAsync("settings", garbage);
+        Assert.That((await DownloadAsync()).Status, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That((await DocAsync("timestamps"))!["last_run"]!.GetValue<string>(), Is.EqualTo("2026-12-02T12:00:00+05:30"), "PHP would fail with a 500");
+
+        foreach (var counts in Of("5000,5001", "-1,2"))
+        {
+            var bad = MegaSettings();
+            bad["daily_winner_counts"] = counts;
+            await PutDocAsync("settings", bad);
+            var draw = await Post(Admin, "/admin/quiz/winners/generate", """{"kind":"daily"}""");
+            Assert.That((draw.Status, draw.Detail), Is.EqualTo((HttpStatusCode.Conflict, "The winner counts in the quiz settings are not usable.")), counts);
+        }
+
+        Assert.That(await DocAsync("winners"), Is.Null);
+    }
+
     // ---------------------------------------------------------------- reset
 
     [Test]
@@ -592,7 +628,7 @@ public sealed partial class TestSheetsTests
 
         var first = DownloadAsync();
         await sheets.ReadStarted.Task.WaitAsync(TimeSpan.FromSeconds(30));
-        var second = await DownloadAsync();
+        var second = await DownloadAsync().WaitAsync(TimeSpan.FromSeconds(20));
         release.SetResult();
         var firstReply = await first;
 

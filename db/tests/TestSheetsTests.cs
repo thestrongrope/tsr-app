@@ -336,7 +336,7 @@ public sealed partial class TestSheetsTests
 
         var first = Post(McqEditor, "/standard-mcqs/update", UpdateBody("1", "1"));
         await sheets.ReadStarted.Task.WaitAsync(TimeSpan.FromSeconds(30));
-        var second = await Post(McqEditor, "/standard-mcqs/update", UpdateBody("1", "1"));
+        var second = await Post(McqEditor, "/standard-mcqs/update", UpdateBody("1", "1")).WaitAsync(TimeSpan.FromSeconds(20));
         release.SetResult();
         var firstReply = await first;
 
