@@ -15,5 +15,6 @@
   <ItemGroup>
     <!-- Slices and value objects are internal; this domain's own unit tests may see them. -->
     <InternalsVisibleTo Include="Tsr.Search.Api.Tests" />
+    <InternalsVisibleTo Include="Tsr.Db.Tests" />
   </ItemGroup>
 </Project>

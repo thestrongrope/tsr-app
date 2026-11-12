@@ -38,12 +38,83 @@ internal sealed class SearchEngineTests
         public Task<IReadOnlyDictionary<long, IReadOnlyList<ClassFact>>> CurrentClassesAsync(IReadOnlyCollection<long> tokens, CancellationToken ct) =>
             Task.FromResult<IReadOnlyDictionary<long, IReadOnlyList<ClassFact>>>(Enrolled.Where(p => tokens.Contains(p.Key)).ToDictionary());
 
+        public Dictionary<long, TeacherFact> Teachers { get; } = [];
+
+        public Task<IReadOnlyDictionary<long, TeacherFact>> TeachersAsync(IReadOnlyCollection<long> tokens, CancellationToken ct) =>
+            Task.FromResult<IReadOnlyDictionary<long, TeacherFact>>(Teachers.Where(p => tokens.Contains(p.Key)).ToDictionary());
+
         public Task<IReadOnlyDictionary<long, string>> MemberNamesAsync(IReadOnlyCollection<long> tokens, CancellationToken ct) =>
             Task.FromResult<IReadOnlyDictionary<long, string>>(Members.Where(p => tokens.Contains(p.Key)).ToDictionary());
     }
 
     private static SearchAccess AccessOf(bool all = false, int? gender = null, int[]? ids = null) =>
         new(new Reach(all, gender, ids ?? [], null, null, new SearchReach(all, gender, ids ?? [], null)), new SearchReach(false, null, [], null), []);
+
+    private static SearchAccess TeacherAccess(bool all = false, int[]? genders = null, bool gentsWhoTeach = false) =>
+        new(AccessOf().Classes, new SearchReach(all, all ? null : 1, [], null), genders ?? [], gentsWhoTeach);
+
+    private static async Task<IReadOnlyList<long>> TeacherIdsAsync(SearchAccess access, FakeFacts facts, params long[] hits)
+    {
+        var index = new FakeIndex(_ => [.. hits.Select(h => new SearchHit(h, "x"))]);
+        var answer = await new SearchEngine(index, facts).SearchAsync(access, "ab", ["teacher"], CancellationToken.None);
+        return [.. answer.Groups.Single().Results.Select(r => r.Id)];
+    }
+
+    // Finding 14: PHP re-reads the teacher (still an active teacher) and runs canView on the fresh gender; the port only checked the member exists.
+    [Test]
+    public async Task A_stale_teacher_hit_of_another_gender_is_dropped_by_the_recheck()
+    {
+        var facts = new FakeFacts();
+        facts.Teachers[1] = new TeacherFact("Was gents", 2, true, true);
+        facts.Teachers[2] = new TeacherFact("Gents", 1, true, true);
+        Assert.That(await TeacherIdsAsync(TeacherAccess(genders: [1]), facts, 1, 2), Is.EqualTo(new long[] { 2 }));
+    }
+
+    [Test]
+    public async Task A_former_teacher_is_dropped_even_for_a_caller_who_may_see_every_teacher()
+    {
+        var facts = new FakeFacts();
+        facts.Teachers[1] = new TeacherFact("Former", 1, false, true);
+        facts.Teachers[2] = new TeacherFact("Current", 1, true, true);
+        Assert.That(await TeacherIdsAsync(TeacherAccess(all: true), facts, 1, 2), Is.EqualTo(new long[] { 2 }));
+    }
+
+    [Test]
+    public async Task A_member_with_no_gender_is_shown_only_to_a_caller_who_may_see_every_teacher()
+    {
+        var facts = new FakeFacts();
+        facts.Teachers[1] = new TeacherFact("No gender", 0, true, true);
+        Assert.That(await TeacherIdsAsync(TeacherAccess(genders: [1, 2]), facts, 1), Is.Empty);
+        Assert.That(await TeacherIdsAsync(TeacherAccess(all: true), facts, 1), Is.EqualTo(new long[] { 1 }));
+    }
+
+    [Test]
+    public async Task A_caller_who_may_look_up_gents_only_through_the_teacher_gender_rule_sees_gents_who_teach_and_no_other_gents()
+    {
+        var facts = new FakeFacts();
+        facts.Teachers[1] = new TeacherFact("Teaches", 1, true, true);
+        facts.Teachers[2] = new TeacherFact("Does not teach", 1, true, false);
+        facts.Teachers[3] = new TeacherFact("Lady", 2, true, true);
+        Assert.That(await TeacherIdsAsync(TeacherAccess(gentsWhoTeach: true), facts, 1, 2, 3), Is.EqualTo(new long[] { 1 }));
+    }
+
+    [Test]
+    public async Task A_caller_who_may_look_up_gents_by_gender_sees_gents_who_do_not_teach_a_class()
+    {
+        var facts = new FakeFacts();
+        facts.Teachers[2] = new TeacherFact("Does not teach", 1, true, false);
+        Assert.That(await TeacherIdsAsync(TeacherAccess(genders: [1]), facts, 2), Is.EqualTo(new long[] { 2 }));
+    }
+
+    [Test]
+    public async Task A_teacher_who_left_the_member_table_is_dropped_and_the_title_is_the_fresh_name()
+    {
+        var facts = new FakeFacts();
+        facts.Teachers[2] = new TeacherFact("Fresh name", 1, true, true);
+        var index = new FakeIndex(_ => [new SearchHit(1, "gone"), new SearchHit(2, "Old name")]);
+        var answer = await new SearchEngine(index, facts).SearchAsync(TeacherAccess(all: true), "ab", ["teacher"], CancellationToken.None);
+        Assert.That(answer.Groups.Single().Results, Is.EqualTo(new[] { new SearchResult(2, "Fresh name", "Teacher") }));
+    }
 
     [Test]
     public async Task A_kind_the_index_cannot_answer_is_unavailable_not_empty()

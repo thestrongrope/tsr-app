@@ -6,7 +6,7 @@ namespace Tsr.Search.Api.Domain;
 /// What the caller may find, worked out by the slice from <c>access</c>: the reach of <c>classes:read</c> (classes, guides, students,
 /// subscribers) and of <c>teachers:lookup</c>, and the genders of teacher the caller may look up (PHP TeachersModel::canView).
 /// </summary>
-internal sealed record SearchAccess(Reach Classes, SearchReach Teachers, IReadOnlyList<int> TeacherGenders);
+internal sealed record SearchAccess(Reach Classes, SearchReach Teachers, IReadOnlyList<int> TeacherGenders, bool GentsWhoTeach = false);
 
 /// <summary>How to ask the index for one kind: <see cref="Scope"/> null means the caller may look the kind up but no document can qualify, so there is nothing to ask.</summary>
 internal sealed record KindPlan(SearchScope? Scope);
@@ -101,21 +101,6 @@ internal static class SearchPlans
         return new KindPlan(SearchScope.Limited(clauses));
     }
 
-    // PHP filters teachers only after the query (canView on every hit); here the genders canView would accept are in the query, so no other teacher is read.
-    private static KindPlan? TeacherPlan(SearchAccess access)
-    {
-        if (IsEmpty(access.Teachers))
-        {
-            return null;
-        }
-
-        if (access.Teachers.All)
-        {
-            return new KindPlan(SearchScope.Everything);
-        }
-
-        return access.TeacherGenders.Count == 0
-            ? new KindPlan(null)
-            : new KindPlan(SearchScope.Limited([new TermsClause("gender", access.TeacherGenders)]));
-    }
+    // As PHP: no filter in the query (every active teacher can match), then the re-check applies canView to the FRESH gender, so a stale index can neither hide nor expose a teacher.
+    private static KindPlan? TeacherPlan(SearchAccess access) => IsEmpty(access.Teachers) ? null : new KindPlan(SearchScope.Everything);
 }

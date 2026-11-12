@@ -64,7 +64,7 @@ internal sealed class SearchEngine(ISearchIndex index, ISearchFacts facts)
         return kind switch
         {
             SearchPlans.ClassKind => await CheckClassesAsync(access, hits, ids, ct),
-            SearchPlans.TeacherKind => await CheckTeachersAsync(hits, ids, ct),
+            SearchPlans.TeacherKind => await CheckTeachersAsync(access, hits, ids, ct),
             SearchPlans.GuideKind => await CheckGuidesAsync(access, hits, ids, ct),
             SearchPlans.StudentKind => await CheckStudentsAsync(access, hits, ids, ct),
             SearchPlans.SubscriberKind => await CheckSubscribersAsync(access, hits, ids, ct),
@@ -82,14 +82,30 @@ internal sealed class SearchEngine(ISearchIndex index, ISearchFacts facts)
             .ToList();
     }
 
-    // The member must still exist; whether they are still an active teacher is not readable through a published view (see the notes).
-    private async Task<IReadOnlyList<SearchResult>> CheckTeachersAsync(IReadOnlyList<SearchHit> hits, List<long> ids, CancellationToken ct)
+    // PHP re-reads the teacher (searchsource teacherRow: an active teacher) and asks TeachersModel::canView about the fresh gender, so a stale index can hide a hit, never expose one.
+    private async Task<IReadOnlyList<SearchResult>> CheckTeachersAsync(SearchAccess access, IReadOnlyList<SearchHit> hits, List<long> ids, CancellationToken ct)
     {
-        var names = await facts.MemberNamesAsync(ids, ct);
+        var teachers = await facts.TeachersAsync(ids, ct);
         return hits
-            .Where(h => names.ContainsKey(h.Id))
-            .Select(h => new SearchResult(h.Id, Title(names[h.Id]), "Teacher"))
+            .Where(h => teachers.TryGetValue(h.Id, out var teacher) && teacher.Active && MayView(access, teacher))
+            .Select(h => new SearchResult(h.Id, Title(teachers[h.Id].Name), "Teacher"))
             .ToList();
+    }
+
+    // canView: every teacher for the "all" scope; else a member with a gender, by gender, or (gents only) by the teacher-gender rule, which also needs the member to teach.
+    private static bool MayView(SearchAccess access, TeacherFact teacher)
+    {
+        if (access.Teachers.All)
+        {
+            return true;
+        }
+
+        if (teacher.Gender is not (1 or 2))
+        {
+            return false;
+        }
+
+        return access.TeacherGenders.Contains(teacher.Gender) || (teacher.Gender == 1 && access.GentsWhoTeach && teacher.Teaches);
     }
 
     // A guide is read through a class of its level: it is kept when the caller reaches one, and that class is what the result opens.

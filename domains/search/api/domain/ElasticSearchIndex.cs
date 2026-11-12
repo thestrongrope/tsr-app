@@ -60,7 +60,8 @@ internal sealed class ElasticSearchIndex : ISearchIndex
             throw new SearchUnavailableException("Elasticsearch could not be reached: " + exception.GetType().Name);
         }
 
-        if (!response.IsValidResponse)
+        // Any answer that is not a success is "down", a 404 (the index is missing) included: PHP raises on every status of 300 or more, and an empty list would read as "nothing found".
+        if (!response.IsValidResponse || !response.ApiCallDetails.HasSuccessfulStatusCode)
         {
             throw new SearchUnavailableException("Elasticsearch answered " + response.ApiCallDetails.HttpStatusCode);
         }

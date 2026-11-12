@@ -71,6 +71,39 @@ internal sealed class MembershipTestKit : IDisposable
         return new Reply(response.StatusCode, text);
     }
 
+    /// <summary>A request as nobody (no credentials): 401 expected.</summary>
+    public async Task<Reply> SendUnsignedAsync(HttpMethod method, string path, string? json = null)
+    {
+        var raw = await SendRawAsync(null, method, path, json);
+        return new Reply(raw.Status, raw.Body);
+    }
+
+    /// <summary>A request as one member (null: nobody) that also returns the Cache-Control header.</summary>
+    public async Task<RawReply> SendRawAsync(int? token, HttpMethod method, string path, string? json = null)
+    {
+        using var client = _factory.CreateClient();
+        using var request = new HttpRequestMessage(method, path);
+        if (token is null)
+        {
+            request.Headers.Add(TestApi.Outcome, "missing");
+        }
+        else
+        {
+            foreach (var (name, value) in TestApi.SignedInAs("uid-" + token, EmailOf(token.Value)))
+            {
+                request.Headers.Add(name, value);
+            }
+        }
+
+        if (json is not null)
+        {
+            request.Content = new StringContent(json, Encoding.UTF8, new MediaTypeHeaderValue("application/json"));
+        }
+
+        using var response = await client.SendAsync(request);
+        return new RawReply(response.StatusCode, await response.Content.ReadAsStringAsync(), response.Headers.CacheControl?.ToString());
+    }
+
     /// <summary>A download as one caller (or, with <paramref name="signedIn"/> false, as nobody): the status, the headers that matter and the raw bytes.</summary>
     public async Task<Download> DownloadAsync(int token, string path, bool signedIn = true)
     {
@@ -111,6 +144,8 @@ internal sealed class MembershipTestKit : IDisposable
             return [.. book.Worksheets.SelectMany(sheet => sheet.CellsUsed()).Select(cell => cell.GetString())];
         }
     }
+
+    internal sealed record RawReply(HttpStatusCode Status, string Body, string? CacheControl);
 
     /// <summary>A status and the body text; <see cref="Json"/> parses it.</summary>
     internal sealed record Reply(HttpStatusCode Status, string Body)
