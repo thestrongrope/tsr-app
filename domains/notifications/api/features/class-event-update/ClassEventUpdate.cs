@@ -71,7 +71,10 @@ internal static class ClassEventUpdateSlice
             return Problem.Detail(StatusCodes.Status422UnprocessableEntity, CalendarEventInput.ZoneError);
         }
 
-        await UpdateAsync(db, clock, row, values.Value!, caller.Token, ct);
+        if (!await UpdateAsync(db, clock, row, values.Value!, caller.Token, ct))
+        {
+            return ClassEvents.NotFound();
+        }
         var changed = await ClassEvents.FindAsync(db, classId, id, ct);
         if (changed is null)
         {
@@ -88,18 +91,25 @@ internal static class ClassEventUpdateSlice
         return CalendarEventInput.Parse(name => body.Has(name) ? body.Get(name) : stored.GetProperty(name));
     }
 
-    private static async Task UpdateAsync(NotificationsContext db, TimeProvider clock, ClassEventRow row, CalendarEventValues values, int token, CancellationToken ct)
+    // False when the event was deleted since it was read: nothing is written, and no event says it was updated.
+    private static async Task<bool> UpdateAsync(NotificationsContext db, TimeProvider clock, ClassEventRow row, CalendarEventValues values, int token, CancellationToken ct)
     {
         var now = clock.GetUtcNow();
         await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        await db.Database.ExecuteSqlAsync(
+        var changed = await db.Database.ExecuteSqlAsync(
             $"""
             update notifications.class_scheduled_events
             set message = {values.Message}, description = {values.Description}, action_link = {values.ActionLink}, weekdays = {values.Weekdays}, send_time = {values.SendTime}, updated_at = {now}
-            where id = {row.Id} and class_id = {row.ClassId}
+            where id = {row.Id} and class_id = {row.ClassId} and status = 'active'
             """,
             ct);
+        if (changed == 0)
+        {
+            return false;
+        }
+
         await Outbox.WriteAsync(db, "notifications.class_event_updated", new ClassEventUpdated(row.Id, row.ClassId, token), clock, ct);
         await transaction.CommitAsync(ct);
+        return true;
     }
 }

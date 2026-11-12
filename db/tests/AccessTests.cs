@@ -270,11 +270,12 @@ public sealed class AccessTests
         Assert.That(reply.Body, Does.Contain("\"revision\""));
     }
 
-    [Test]
-    public async Task Me_permissions_is_503_with_no_ETag_when_the_permissions_cannot_be_loaded_even_for_a_matching_tag()
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task Me_permissions_is_503_with_no_ETag_when_the_permissions_cannot_be_loaded_even_for_a_matching_tag(bool wrapped)
     {
         await using var down = factory.WithWebHostBuilder(builder =>
-            builder.ConfigureTestServices(services => services.AddScoped<IClassScopes>(_ => new UnreadableClasses(900101))));
+            builder.ConfigureTestServices(services => services.AddScoped<IClassScopes>(_ => new UnreadableClasses(900101, wrapped))));
 
         var reply = await PermissionsAsync(down, "*");
 
@@ -412,10 +413,13 @@ public sealed class AccessTests
 }
 
 /// <summary>The classes port with unreadable storage for one member: every question about that member fails as a database does.</summary>
-internal sealed class UnreadableClasses(int token) : IClassScopes
+internal sealed class UnreadableClasses(int token, bool wrapped = false) : IClassScopes
 {
+    // wrapped: the PostgreSQL provider reports a transient failure (a lost connection, a command timeout) as an InvalidOperationException around the database exception.
     public Task<ClassMemberships> MembershipsAsync(int ofToken, CancellationToken ct) =>
-        ofToken == token ? throw new StorageDown() : Task.FromResult(new ClassMemberships([], [], []));
+        ofToken != token ? Task.FromResult(new ClassMemberships([], [], []))
+        : wrapped ? throw new InvalidOperationException("An exception has been raised that is likely due to a transient failure.", new StorageDown())
+        : throw new StorageDown();
 
     public Task<ClassFacts?> ActiveClassAsync(int classId, CancellationToken ct) => Task.FromResult<ClassFacts?>(null);
 

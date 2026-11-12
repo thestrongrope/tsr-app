@@ -11,7 +11,7 @@ Push, WhatsApp reminders, devices, scheduled class notifications and the notifie
 |---|---|
 | Schema `notifications`, 8 tables: `notifications`, `user_notifications`, `user_devices`, `notifier_reminders`, `notifier_runs`, `notifier_sent_messages`, `class_scheduled_notifications`, `class_scheduled_notification_runs` | built; migration `Initial` |
 | 2 more tables: `class_scheduled_events`, `member_event_settings` (PHP's two 2026_11_10 migrations) | built; migration `CalendarEvents` |
-| The calendar: `GET /me/calendar`, `PUT /me/calendar/settings`, `GET` and `POST /classes/{id}/scheduled-events`, `PATCH` and `DELETE .../{event_id}` | built (12 Nov 2026); db tests `db/tests/TestCalendarTests.cs`; Hurl `spec/tests/calendar-*.hurl` and `tools/contract-calendar.sh` are written from the PHP code and NOT yet run on either side |
+| The calendar: `GET /me/calendar`, `PUT /me/calendar/settings`, `GET` and `POST /classes/{id}/scheduled-events`, `PATCH` and `DELETE .../{event_id}` | built (12 Nov 2026); db tests `db/tests/TestCalendarTests.cs`; Hurl `spec/tests/calendar-*.hurl` and `tools/contract-calendar.sh` pass on PHP and on the new API (12 Nov 2026) |
 | The Node notifier | keeps its own MariaDB connection until this domain is filled (design decision 6) |
 | `ON UPDATE CURRENT_TIMESTAMP` of `user_devices.last_accessed_at` and `notifier_reminders.updated_at`, `class_scheduled_notifications.updated_at` | not ported: the handler that updates the row sets it |
 

@@ -63,7 +63,8 @@ public sealed class Permissions
         {
             return await ResolveAsync(caller, ct);
         }
-        catch (DbException e)
+        // The PostgreSQL provider reports a transient failure (a lost connection, a command timeout) as an InvalidOperationException around the database exception.
+        catch (Exception e) when (e is DbException or InvalidOperationException { InnerException: DbException })
         {
             throw new PermissionsUnavailableException("Permissions storage is unreadable", e);
         }

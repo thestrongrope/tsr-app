@@ -169,11 +169,12 @@ public sealed class PermissionsRevisionHeaderTests
         Assert.That(revoke.Revision, Is.EqualTo(before));
     }
 
-    [Test]
-    public async Task Unreadable_permissions_leave_the_header_out_and_do_not_fail_a_route_that_checks_none()
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task Unreadable_permissions_leave_the_header_out_and_do_not_fail_a_route_that_checks_none(bool wrapped)
     {
         await using var down = factory.WithWebHostBuilder(builder =>
-            builder.ConfigureTestServices(services => services.AddScoped<IClassScopes>(_ => new UnreadableClasses(900701))));
+            builder.ConfigureTestServices(services => services.AddScoped<IClassScopes>(_ => new UnreadableClasses(900701, wrapped))));
 
         var works = await SendAsync(HttpMethod.Post, "/auth/link", Member, api: down);
         var unavailable = await SendAsync(HttpMethod.Get, "/me/permissions", Member, api: down);
