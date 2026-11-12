@@ -47,6 +47,7 @@ public static class MembershipModule
     {
         services.AddDomainContext<MembershipContext>(MembershipContext.SchemaName);
         services.AddScoped<Tsr.Identity.Api.IProfileSink, ProfileSink>();
+        services.AddScoped<Tsr.Identity.Api.IMemberErasure, MemberErasure>();
         services.TryAddScoped<IClassEnrolments, NoEnrolments>();
         services.AddScoped(provider => new MemberNames(provider.GetRequiredService<MembershipContext>()));
         services.TryAddSingleton<MemberRateLimit>();

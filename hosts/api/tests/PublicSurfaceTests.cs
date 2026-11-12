@@ -13,7 +13,8 @@ public sealed class PublicSurfaceTests
     private static readonly Dictionary<string, string[]> Allowed = new()
     {
         // identity: the module; UserDirectory with the record it returns (UserRef); IProfileSink, the one port it declares (membership supplies it); IdentityCommands (published commands: the email change).
-        ["identity"] = ["IdentityModule", "UserDirectory", "UserRef", "IProfileSink", "IdentityCommands"],
+        // Also IMemberErasure, the second port (membership supplies it: account deletion anonymises its tables).
+        ["identity"] = ["IdentityModule", "UserDirectory", "UserRef", "IProfileSink", "IMemberErasure", "IdentityCommands"],
         // access: the module; Permissions (the interface every domain calls) and the types in its signatures
         // (AccessTarget, Reach, SearchReach, UserAccess, AccessScopes); IClassScopes, the one port classes will supply, with the
         // two records it returns (ClassMemberships, ClassFacts). Nothing else.
@@ -30,7 +31,8 @@ public sealed class PublicSurfaceTests
         // Tables and placeholder routes only so far: the module class and nothing else.
         ["classes"] = ["ClassesModule"],
         ["assessment"] = ["AssessmentModule"],
-        ["notifications"] = ["NotificationsModule"],
+        // NotificationsErasure: the published erasure command (account deletion deletes a member's devices).
+        ["notifications"] = ["NotificationsModule", "NotificationsErasure"],
         ["search"] = ["SearchModule"],
     };
 

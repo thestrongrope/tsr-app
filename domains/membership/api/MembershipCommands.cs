@@ -104,5 +104,41 @@ public static class MembershipCommands
 
     private const int MaxGenderLength = 200;
 
+    /// <summary>
+    /// PHP <c>AccountDeletionModel::anonymisationMap</c> (the profile columns, which moved out of <c>users</c>) and <c>registrationAnonymisationMap</c>, for the member of
+    /// <paramref name="token"/>. Profile of every user row of the token: name "Deleted member"; first and last name, picture, gender, age range, country, state, city, zip null;
+    /// mobile empty; language 0; sendupdates N; unsubscribe Y. Every <c>class_registrations</c> row of the token: the three locations, birth year, profession, Islamic study years,
+    /// interests (and other), education block (education, field of study and other, professional courses and other, occupation type, field of work, years of experience, role level),
+    /// LinkedIn URL and the status reason are null; status, class and dates are kept. Run inside the caller's transaction.
+    /// </summary>
+    public static async Task EraseMemberAsync(DbContext db, int token, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(token);
+        if (db.Database.CurrentTransaction is null)
+        {
+            throw new InvalidOperationException("A member is erased inside the transaction of the deletion it belongs to.");
+        }
+
+        await db.Database.ExecuteSqlAsync(
+            $"""
+            update membership.member_profiles
+            set name = 'Deleted member', first_name = null, last_name = null, picture = null, gender = null, age_range = null,
+                mobile = '', country = null, state = null, city = null, zip = null, language = 0, sendupdates = 'N', unsubscribe = 'Y'
+            where user_id in (select id from identity.v_users where token = {token})
+            """,
+            ct);
+        await db.Database.ExecuteSqlAsync(
+            $"""
+            update membership.class_registrations
+            set residence_location = null, work_location = null, preferred_location = null, birth_year = null, profession = null,
+                islamic_study_years = null, interests = null, other_interests = null, education = null, field_of_study = null,
+                field_of_study_other = null, professional_courses = null, professional_courses_other = null, occupation_type = null,
+                field_of_work = null, years_experience = null, role_level = null, linkedin_url = null, status_reason = null
+            where token = {token}
+            """,
+            ct);
+    }
+
     private sealed record MemberCreated(int Token);
 }

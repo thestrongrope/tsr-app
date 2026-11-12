@@ -214,7 +214,7 @@ internal sealed partial class FirebaseVerifier(
     }
 
     [GeneratedRegex(@"^Bearer\s+(.+)$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 200)]
-    private static partial Regex BearerHeader();
+    internal static partial Regex BearerHeader();
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Firebase token refused: {Reason}")]
     private partial void LogRefused(string reason);

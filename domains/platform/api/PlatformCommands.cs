@@ -54,6 +54,45 @@ public static partial class PlatformCommands
         }
     }
 
+    private const int MaxRedactedRecipients = 1000;
+
+    /// <summary>
+    /// PHP <c>AccountDeletionModel::complete</c>: <c>delete from feedback where user_id = :user_id</c>. Feedback is free text that may name the member. Run inside the caller's transaction.
+    /// </summary>
+    public static async Task EraseFeedbackAsync(DbContext db, int userId, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        RequireTransaction(db);
+        await db.Database.ExecuteSqlAsync($"delete from platform.feedback where user_id = {userId}", ct);
+    }
+
+    /// <summary>
+    /// PHP <c>redactQueuedMessages</c>: <c>update outbound_messages set recipient = '[deleted]' where recipient in (...)</c>. The queue has no member key, so a member's rows are found by their
+    /// recipient values (mobile number, device ids); the rows stay, with the recipient redacted. At most 1000 recipients (more throws). Run inside the caller's transaction.
+    /// </summary>
+    public static async Task RedactRecipientsAsync(DbContext db, IReadOnlyCollection<string> recipients, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(recipients);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(recipients.Count, MaxRedactedRecipients);
+        RequireTransaction(db);
+        if (recipients.Count == 0)
+        {
+            return;
+        }
+
+        var values = recipients.ToArray();
+        await db.Database.ExecuteSqlAsync($"update platform.outbound_messages set recipient = '[deleted]' where recipient = any({values})", ct);
+    }
+
+    private static void RequireTransaction(DbContext db)
+    {
+        if (db.Database.CurrentTransaction is null)
+        {
+            throw new InvalidOperationException("An erasure is written inside the transaction of the deletion it belongs to.");
+        }
+    }
+
     [LoggerMessage(Level = LogLevel.Warning, Message = "The admin access log row could not be written")]
     private static partial void LogAuditFailed(ILogger logger, Exception exception);
 
