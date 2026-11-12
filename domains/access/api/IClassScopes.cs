@@ -21,8 +21,8 @@ public interface IClassScopes
 /// <summary>Active class ids for one member (PHP: classes.teacher, class_students.mcq_admin, class_students.status).</summary>
 public sealed record ClassMemberships(IReadOnlyList<int> Taught, IReadOnlyList<int> McqFlagged, IReadOnlyList<int> Enrolled);
 
-/// <summary>The facts about one active class that access decides from. Gender is 1 (gents) or 2 (ladies).</summary>
-public sealed record ClassFacts(int Id, int Gender, string? City, string? Country, int? LevelId, IReadOnlyList<string> Tags);
+/// <summary>The facts about one active class that access decides from. Gender is 1 (gents) or 2 (ladies). Code and Name are what the class access screens list; the decision rules ignore them.</summary>
+public sealed record ClassFacts(int Id, int Gender, string? City, string? Country, int? LevelId, IReadOnlyList<string> Tags, string Code = "", string Name = "");
 
 /// <summary>The default port: no classes exist yet (domains/access/CLAUDE.md). <c>classes</c> replaces it.</summary>
 internal sealed class NoClasses : IClassScopes

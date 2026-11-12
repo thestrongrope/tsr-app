@@ -200,6 +200,127 @@ paths:
         "404": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
         "422": { $ref: "#/components/responses/Problem" }
+  /admin/class-access/members:
+    get:
+      operationId: searchClassAccessMembers
+      summary: Members by name or token, of the genders the operator manages (at most 20)
+      description: Needs class-access:manage (super admin: both genders; gender admin: their own). `q` under two characters finds nobody; at most 100 characters are used.
+      security:
+        - memberToken: []
+      parameters:
+        - { name: q, in: query, required: false, schema: { type: string } }
+      responses:
+        "200":
+          description: The matches, by name then token; contact details are never sent
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [members]
+                properties:
+                  members:
+                    type: array
+                    items:
+                      type: object
+                      required: [token, name, gender]
+                      properties:
+                        token: { type: integer }
+                        name: { type: string }
+                        gender: { type: integer, description: "1 gents, 2 ladies" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /admin/class-access/members/{token}:
+    get:
+      operationId: getClassAccessMember
+      summary: A member's live class access rules, each with the classes it reaches
+      description: |
+        Needs class-access:manage. 404 unknown member; 403 when the member's gender is not one the operator manages (also when none is recorded).
+        Only rules whose gender the operator manages are listed, but `version` covers every live rule.
+      security:
+        - memberToken: []
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { $ref: "#/components/responses/ClassAccessMember" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /admin/class-access/options:
+    get:
+      operationId: getClassAccessOptions
+      summary: What a rule can be built from
+      description: Needs class-access:manage. Genders the operator manages; all levels; the cities, countries and tags of the active classes of those genders (sorted, at most 500 each).
+      security:
+        - memberToken: []
+      responses:
+        "200":
+          description: The options
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [genders, levels, cities, countries, tags]
+                properties:
+                  genders:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, name]
+                      properties:
+                        id: { type: integer }
+                        name: { type: string }
+                  levels:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, code, name]
+                      properties:
+                        id: { type: integer }
+                        code: { type: string }
+                        name: { type: string }
+                  cities: { type: array, items: { type: string } }
+                  countries: { type: array, items: { type: string } }
+                  tags: { type: array, items: { type: string } }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+  /admin/class-access/preview:
+    post:
+      operationId: previewClassAccess
+      summary: The active classes a draft rule would reach (writes nothing)
+      description: |
+        Needs class-access:manage. `gender` 1 or 2, or left out for either (needs both genders). Conditions are IN only; each city, country and tag must be one the operator is offered;
+        a level must exist. At most 200 classes are listed; `classCount` and `previewHash` cover all of them.
+      security:
+        - memberToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ClassAccessDraft" }
+      responses:
+        "200":
+          description: The classes, how many, and the hash a grant must echo back
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [classes, classCount, previewHash]
+                properties:
+                  classes:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, code, name]
+                      properties:
+                        id: { type: integer }
+                        code: { type: string }
+                        name: { type: string }
+                  classCount: { type: integer }
+                  previewHash: { type: string }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
 components:
   securitySchemes:
     memberToken:
@@ -248,7 +369,70 @@ components:
               grantable:
                 type: array
                 items: { $ref: "#/components/schemas/PermissionInfo" }
+    ClassAccessMember:
+      description: The member, the version to echo on a write, what the role already reaches, and the live rules the operator manages
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ClassAccessView" }
   schemas:
+    ClassAccessDraft:
+      type: object
+      required: [conditions]
+      properties:
+        gender: { type: [integer, "null"], description: "1 or 2; left out for either" }
+        conditions:
+          type: array
+          items:
+            type: object
+            required: [field, value]
+            properties:
+              field: { type: string, enum: [city, country, level, tag] }
+              negate: { type: boolean, description: "Only false can be added" }
+              value: { type: [string, integer], description: "A level id for level, text otherwise" }
+    ClassAccessView:
+      type: object
+      required: [member, version, fromRole, rules]
+      properties:
+        member:
+          type: object
+          required: [token, name, gender]
+          properties:
+            token: { type: integer }
+            name: { type: string }
+            gender: { type: integer }
+        version: { type: string }
+        fromRole: { type: [string, "null"] }
+        rules:
+          type: array
+          items:
+            type: object
+            required: [id, gender, note, createdAt, conditions, classCount, classes]
+            properties:
+              id: { type: integer }
+              gender: { type: [integer, "null"] }
+              note: { type: string }
+              createdAt: { type: string }
+              conditions:
+                type: array
+                items:
+                  type: object
+                  required: [field, negate, value]
+                  properties:
+                    field: { type: string }
+                    negate: { type: boolean }
+                    value: { type: [string, integer, "null"] }
+              classCount: { type: integer }
+              classes:
+                type: array
+                items:
+                  type: object
+                  required: [id, code, name, ruleId, rule]
+                  properties:
+                    id: { type: integer }
+                    code: { type: string }
+                    name: { type: string }
+                    ruleId: { type: integer }
+                    rule: { type: string }
     PermissionInfo:
       type: object
       required: [name, description, reach]

@@ -156,10 +156,10 @@ GET,/admin/permissions/members,access,create,built
 GET,/admin/permissions/members/{token},access,create,built
 POST,/admin/permissions/members/{token}/grants,access,create,built
 POST,/admin/permissions/grants/{id}/revoke,access,create,built
-GET,/admin/class-access/members,access,member,planned
-GET,/admin/class-access/members/{token},access,member,planned
-GET,/admin/class-access/options,access,member,planned
-POST,/admin/class-access/preview,access,member,planned
+GET,/admin/class-access/members,access,create,built
+GET,/admin/class-access/members/{token},access,create,built
+GET,/admin/class-access/options,access,create,built
+POST,/admin/class-access/preview,access,create,built
 POST,/admin/class-access/members/{token}/rules,access,member,planned
 POST,/admin/class-access/rules/{id}/revoke,access,member,planned
 GET,/admin/members/{token},classes,create,built
