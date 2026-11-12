@@ -9,7 +9,7 @@ Spot quizzes, standard MCQs, quiz competitions.
 
 | Part | State |
 |---|---|
-| Schema `assessment`, 7 tables: `spot_quizzes`, `spot_quiz_questions`, `spot_quiz_submissions`, `spot_quiz_responses`, `standard_mcqs`, `standard_mcq_questions`, `quiz_campaigns` | built; migration `Initial` |
+| Schema `assessment`, 8 tables: `spot_quizzes`, `spot_quiz_questions`, `spot_quiz_submissions`, `spot_quiz_responses`, `standard_mcqs`, `standard_mcq_questions`, `quiz_campaigns` (migration `Initial`), `quiz_state` (migration `QuizState`) | built |
 | PHP's trigger on `spot_quizzes` (a random unique `code` on insert, any supplied value ignored) | not ported: the slice that creates a quiz will do it |
 
 ## Owns
@@ -38,7 +38,7 @@ Spot quizzes, standard MCQs, quiz competitions.
 ## Checks
 
 ```
-dotnet test domains/assessment/api/tests   # the model: the 7 tables in schema "assessment"
+dotnet test domains/assessment/api/tests   # the model: the 8 tables in schema "assessment"
 dotnet test db/tests                       # the migrated database and the A1 routes (AssessmentA1Tests)
 tools/assessment-contract.sh test          # Hurl on the test stack (parity: the same files on PHP)
 ```

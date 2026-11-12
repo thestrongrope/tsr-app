@@ -4,7 +4,7 @@ Push, WhatsApp reminders, devices, scheduled class notifications and the notifie
 
 ## Status
 
-**Tables and placeholder routes (2026-11-10).** No slices and no public interface yet: every operation of this domain is a 501 placeholder in `api/Planned.cs` (catalog: `docs/specs/initial-build/operations.csv`). Facts and decisions:
+**Tables and placeholder routes (2026-11-10).** No slices; the one public interface is `NotificationsCommands` (below): every operation of this domain is a 501 placeholder in `api/Planned.cs` (catalog: `docs/specs/initial-build/operations.csv`). Facts and decisions:
 `docs/specs/initial-build/schema-phase-design.md`, `schema-phase-tables.csv`, `schema-phase-notes.md`.
 
 | Part | State |

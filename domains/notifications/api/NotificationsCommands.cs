@@ -74,11 +74,12 @@ public static class NotificationsCommands
     private static async Task<int> CreateNotificationAsync(DbContext db, Announcement a, int devices, bool allRegistered, CancellationToken ct)
     {
         var criteria = allRegistered ? """{"type":"REGISTERED_MEMBERS"}""" : """{"type":"MEMBERS"}""";
-        return await db.Database.SqlQuery<int>($"""
+        var ids = await db.Database.SqlQuery<int>($"""
             insert into notifications.notifications (title, body, target_audience_criteria, created_by, device_count, success_count, failure_count, action_link)
             values ({a.Title}, {a.Body}, {criteria}, {SystemSender}, {devices}, {devices}, 0, {a.ActionLink})
             returning notification_id as "Value"
-            """).SingleAsync(ct);
+            """).ToListAsync(ct);
+        return ids.Single();
     }
 
     /// <summary>One inbox row per audience token (registered members: those with a device, the demo cohort left out); the unique index drops a repeat.</summary>

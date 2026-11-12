@@ -85,12 +85,24 @@ internal static class QuizAdmin
         var days = ParticipantsOf(await QuizStateStore.LoadObjectAsync(db, QuizStateStore.Participants, ct), settings.TotalQuizzes);
         var users = await UsersAsync(db, days, settings, ct);
         var feasibility = QuizEligibility.Compute(days, users, settings);
+        var transaction = db.Database.CurrentTransaction;
+        if (transaction is not null)
+        {
+            await transaction.CreateSavepointAsync("quiz_students", ct);
+        }
+
         try
         {
-            return QuizEligibility.WithStudents(feasibility, await StudentsAsync(db, ct));
+            var students = await StudentsAsync(db, ct);
+            return QuizEligibility.WithStudents(feasibility, students);
         }
         catch (System.Data.Common.DbException)
         {
+            if (transaction is not null)
+            {
+                await transaction.RollbackToSavepointAsync("quiz_students", ct);
+            }
+
             return QuizEligibility.WithoutStudents(feasibility);
         }
     }
