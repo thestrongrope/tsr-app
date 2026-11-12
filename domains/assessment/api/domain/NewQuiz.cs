@@ -27,7 +27,7 @@ internal static class NewQuiz
         {
             var code = QuizCode.Generate();
             var taken = await db.Database
-                .SqlQuery<bool>($"""select exists (select 1 from assessment.spot_quizzes where code = {code}) as "Value" """)
+                .SqlQuery<bool>($"""select exists (select 1 from assessment.spot_quizzes where code = {code}::citext) as "Value" """)
                 .SingleAsync(ct);
             if (taken)
             {
