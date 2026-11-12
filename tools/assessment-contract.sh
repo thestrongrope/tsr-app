@@ -26,7 +26,11 @@ if [ "${1:-}" = "--prepare" ]; then
   shift
 fi
 
-FILES=(domains/assessment/spec/tests/*.hurl)
+FILES=()
+for f in domains/assessment/spec/tests/*.hurl; do
+  # The quizwrites lane's files read their own variables (tools/contract-quizwrites.sh).
+  grep -q 'auth_quizwrites_' "$f" || FILES+=("$f")
+done
 
 # alias=email: the fixture members the files sign in as (Hurl variable auth_qz_<alias>); tokens are in db/synthetic/assessment-a1-fixtures.sql.
 MEMBERS=(

@@ -92,7 +92,7 @@ internal static class ManageCopySlice
         var source = sources[0];
         var duplicate = await db.Database
             .SqlQuery<bool>($"""
-                select exists (select 1 from assessment.spot_quizzes where class_id = {targetClassId} and name = {source.Name} and topic = {source.Topic}) as "Value"
+                select exists (select 1 from assessment.spot_quizzes where class_id = {targetClassId} and name = {source.Name}::citext and topic = {source.Topic}::citext) as "Value"
                 """)
             .SingleAsync(ct);
         if (duplicate)
