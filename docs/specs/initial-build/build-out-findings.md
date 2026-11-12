@@ -19,6 +19,7 @@ Found while porting (12 Nov 2026 on). Nothing here is proven or fixed yet; each 
 | 11 | access class-access rules | A gender admin can manage rules on other admins of their own gender; level conditions are not limited by city (as PHP). | lane access |
 | 12 | platform push queue | Dedupe keys use SHA-256 where PHP uses SHA-1 (the analyzer rejects SHA-1): keys PHP already queued will not match during a cut-over. | lane sheets |
 | 13 | assessment quiz competition | PHP's `force_quiz_mode` setting is not ported; timestamps use a fixed +05:30; limits PHP lacks were added (30 episodes, 20 ids per list, a winner-count cap). | lane sheets |
+
 ## Design points to confirm
 
 | # | Point | Source |
