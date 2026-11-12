@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json.Nodes;
+using Microsoft.Extensions.DependencyInjection;
 using NUnit.Framework;
 
 namespace Tsr.Db.Tests;
@@ -126,6 +127,76 @@ public sealed class TestGrantsTests
 
         await kit.SendAsync(Super, HttpMethod.Post, $"/admin/permissions/grants/{id}/revoke", """{"reason": "Over"}""");
         Assert.That((await kit.SendAsync(Plain, HttpMethod.Get, "/admin/donors")).Status, Is.EqualTo(HttpStatusCode.Forbidden), "a revoked grant stops working at once");
+    }
+
+    // --- the revision of GET /me/permissions: changes with the answer, and only then ---
+
+    [Test]
+    public async Task The_revision_changes_with_a_grant_and_returns_with_its_revoke()
+    {
+        var before = await RevisionAsync(Plain);
+        Assert.That(await RevisionAsync(Plain), Is.EqualTo(before), "the same answer, asked twice");
+
+        var granted = await kit.SendAsync(Super, HttpMethod.Post, $"/admin/permissions/members/{Plain}/grants", """{"permission": "donors:read:all", "reason": "Needs the list"}""");
+        var id = granted.Json!["granted"]![0]!["id"]!.GetValue<int>();
+        var held = await RevisionAsync(Plain);
+        Assert.That(held, Is.Not.EqualTo(before), "a grant");
+        Assert.That(await RevisionAsync(Other), Is.EqualTo(before), "another member with the same answer as before is not touched");
+
+        await kit.SendAsync(Super, HttpMethod.Post, $"/admin/permissions/grants/{id}/revoke", """{"reason": "Over"}""");
+        Assert.That(await RevisionAsync(Plain), Is.EqualTo(before), "revoking returns to the same state, though a revoked row remains");
+    }
+
+    [Test]
+    public async Task The_revision_changes_with_the_role()
+    {
+        var before = await RevisionAsync(Plain);
+
+        await TestDatabase.ExecuteAsync($"insert into access.user_roles (user_id, roleid) values ({await UserIdAsync(Plain)}, 7)");
+        var finance = await RevisionAsync(Plain);
+        Assert.That(finance, Is.Not.EqualTo(before), "role 7 adds donors:read:all");
+
+        await TestDatabase.ExecuteAsync($"update access.user_roles set roleid = 3 where user_id = {await UserIdAsync(Plain)}");
+        Assert.That(await RevisionAsync(Plain), Is.Not.EqualTo(finance).And.Not.EqualTo(before), "role 3");
+
+        await TestDatabase.ExecuteAsync($"update access.user_roles set roleid = 6 where user_id = {await UserIdAsync(Plain)}");
+        Assert.That(await RevisionAsync(Plain), Is.EqualTo(before), "role 6 holds nothing, so the answer is a plain member's again");
+    }
+
+    [Test]
+    public async Task The_revision_changes_with_a_class_access_rule_that_reaches_a_class_and_not_with_one_that_reaches_none()
+    {
+        var before = await RevisionAsync(Subject);
+
+        var nowhere = await TestDatabase.ScalarAsync<int>(
+            $"insert into access.class_access_rules (token, gender, note, reason) values ({Subject}, 1, 'Nowhere', 'Fixture') returning id", TestDatabase.OwnerConnection);
+        await TestDatabase.ExecuteAsync($"insert into access.class_access_rule_conditions (rule_id, field, negate, value) values ({nowhere}, 'city', false, 'GRnowhere')");
+        Assert.That(await RevisionAsync(Subject), Is.EqualTo(before), "a rule no class matches leaves the answer as it was");
+
+        var rule = await AddRuleAsync(Subject, 1, "Ville");
+        var assigned = await RevisionAsync(Subject);
+        Assert.That(assigned, Is.Not.EqualTo(before), "two assigned classes");
+
+        await TestDatabase.ExecuteAsync("update classes.classes set status = 'I' where id = 98502");
+        Assert.That(await RevisionAsync(Subject), Is.Not.EqualTo(assigned).And.Not.EqualTo(before), "one assigned class fewer");
+
+        await TestDatabase.ExecuteAsync($"update access.class_access_rules set revoked_at = now() where id = {rule}");
+        Assert.That(await RevisionAsync(Subject), Is.EqualTo(before), "the rule revoked");
+    }
+
+    [Test]
+    public async Task The_grant_routes_are_503_when_the_members_permissions_cannot_be_loaded()
+    {
+        using var down = new MembershipTestKit(services => services.AddScoped<Tsr.Access.Api.IClassScopes>(_ => new UnreadableClasses(Plain)));
+
+        var view = await down.SendAsync(Super, HttpMethod.Get, $"/admin/permissions/members/{Plain}");
+        var grant = await down.SendAsync(Super, HttpMethod.Post, $"/admin/permissions/members/{Plain}/grants", """{"permission": "donors:read:all", "reason": "Needs the list"}""");
+
+        Assert.That(view.Status, Is.EqualTo(HttpStatusCode.ServiceUnavailable), view.Body);
+        Assert.That(view.Body, Is.EqualTo("""{"detail":"Permissions could not be loaded. Try again."}"""));
+        Assert.That(grant.Status, Is.EqualTo(HttpStatusCode.ServiceUnavailable), grant.Body);
+        Assert.That(grant.Body, Is.EqualTo("""{"detail":"Permissions could not be loaded. Try again."}"""));
+        Assert.That(await CountAsync("access.user_permissions"), Is.EqualTo(0));
     }
 
     [Test]
@@ -432,6 +503,13 @@ public sealed class TestGrantsTests
         Assert.That(view.Status, Is.EqualTo(HttpStatusCode.OK), view.Body);
         Assert.That(preview.Status, Is.EqualTo(HttpStatusCode.OK), preview.Body);
         return (view.Json!["version"]!.GetValue<string>(), preview.Json!["previewHash"]!.GetValue<string>());
+    }
+
+    private async Task<string> RevisionAsync(int token)
+    {
+        var reply = await kit.SendAsync(token, HttpMethod.Get, "/me/permissions");
+        Assert.That(reply.Status, Is.EqualTo(HttpStatusCode.OK), reply.Body);
+        return reply.Json!["revision"]!.GetValue<string>();
     }
 
     private static async Task<int> AddRuleAsync(int token, int? gender, string note)

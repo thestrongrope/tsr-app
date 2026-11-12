@@ -14,19 +14,33 @@ paths:
   /me/permissions:
     get:
       operationId: getMePermissions
-      summary: Everything the caller may do, and what their scopes resolve to
+      summary: Everything the caller may do, what their scopes resolve to, the two navigation facts and the revision
+      description: |
+        The answer's `revision` is also its ETag. A client that saved an answer asks again with `If-None-Match` and gets
+        304 with no body while nothing changed. The revision changes when, and only when, the permissions, the scopes,
+        the navigation or the version change; `issued_at` is not part of it. Its value equals PHP's for the same answer.
       security:
         - memberToken: []
+      parameters:
+        - name: If-None-Match
+          in: header
+          required: false
+          schema: { type: string }
+          description: 'One or more tags separated by commas, each strong ("x") or weak (W/"x"), or *. Weak comparison.'
       responses:
         "200":
-          description: Permission names in catalog order (ordinal), and the scopes
+          description: Permission names in catalog order (ordinal), the scopes, navigation and revision
+          headers:
+            ETag: { schema: { type: string }, description: 'The revision in double quotes, e.g. "0123456789abcdef"' }
+            Cache-Control: { schema: { type: string, const: "private, no-cache" } }
+            Vary: { schema: { type: string }, description: Names Authorization }
           content:
             application/json:
               schema:
                 type: object
-                required: [version, issued_at, permissions, scopes]
+                required: [version, issued_at, permissions, scopes, navigation, revision]
                 properties:
-                  version: { type: integer, const: 4 }
+                  version: { type: integer, const: 5 }
                   issued_at: { type: string, description: "UTC, microseconds, +00:00 offset" }
                   permissions: { type: array, items: { type: string } }
                   scopes:
@@ -39,8 +53,18 @@ paths:
                       own: { type: array, items: { type: integer } }
                       taught: { type: array, items: { type: integer } }
                       enrolled: { type: array, items: { type: integer } }
+                  navigation:
+                    type: object
+                    required: [classes, manage]
+                    properties:
+                      classes: { type: boolean, description: "A class attended, taught, owned or assigned, or classes:read for a gender or every class" }
+                      manage: { type: boolean, description: "Holds a permission that has a module in the admin dashboard" }
+                  revision: { type: string, pattern: "^[0-9a-f]{16}$", description: "Fingerprint of version, permissions, scopes and navigation" }
+        "304":
+          description: If-None-Match names the current tag; no body, the same ETag, Cache-Control and Vary
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/PermissionsUnavailable" }
   /me/permissions/{permission}:
     get:
       operationId: getMePermission
@@ -147,6 +171,7 @@ paths:
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/PermissionsUnavailable" }
   /admin/permissions/members/{token}/grants:
     post:
       operationId: grantPermission
@@ -176,6 +201,7 @@ paths:
         "404": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
         "422": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/PermissionsUnavailable" }
   /admin/permissions/grants/{id}/revoke:
     post:
       operationId: revokePermissionGrant
@@ -201,6 +227,7 @@ paths:
         "404": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
         "422": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/PermissionsUnavailable" }
   /admin/class-access/members:
     get:
       operationId: searchClassAccessMembers
@@ -395,6 +422,15 @@ components:
   responses:
     Problem:
       description: "{\"detail\": \"...\"}; 403 may add deletion_status"
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [detail]
+            properties:
+              detail: { type: string }
+    PermissionsUnavailable:
+      description: 'The member''s permissions could not be loaded: {"detail": "Permissions could not be loaded. Try again."}. Never an empty answer; no ETag.'
       content:
         application/json:
           schema:

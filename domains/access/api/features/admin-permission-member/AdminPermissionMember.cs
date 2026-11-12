@@ -13,7 +13,7 @@ internal static class AdminPermissionMemberSlice
 {
     public static IEndpointRouteBuilder MapAdminPermissionMember(this IEndpointRouteBuilder routes)
     {
-        routes.MapGet("/admin/permissions/members/{token}", HandleAsync).RequireMember(createsMember: true);
+        routes.MapGet("/admin/permissions/members/{token}", HandleAsync).RequireMember(createsMember: true).AnswersUnavailable();
         return routes;
     }
 

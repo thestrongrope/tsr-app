@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using NUnit.Framework;
 using Tsr.Access.Api;
@@ -197,7 +198,8 @@ public sealed class AccessTests
         var root = body.RootElement;
 
         Assert.That(reply.StatusCode, Is.EqualTo(HttpStatusCode.OK));
-        Assert.That(root.GetProperty("version").GetInt32(), Is.EqualTo(4));
+        Assert.That(root.EnumerateObject().Select(p => p.Name), Is.EqualTo(Expect("version", "issued_at", "permissions", "scopes", "navigation", "revision")));
+        Assert.That(root.GetProperty("version").GetInt32(), Is.EqualTo(5));
         Assert.That(root.GetProperty("issued_at").GetString(), Does.Match(@"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{6}\+00:00$"));
         Assert.That(root.GetProperty("permissions").GetArrayLength(), Is.EqualTo(21));
         var scopes = root.GetProperty("scopes");
@@ -206,6 +208,95 @@ public sealed class AccessTests
         {
             Assert.That(scopes.GetProperty(key).GetArrayLength(), Is.EqualTo(0), key);
         }
+
+        Assert.That(root.GetProperty("navigation").GetRawText(), Is.EqualTo("""{"classes":false,"manage":false}"""));
+        Assert.That(root.GetProperty("revision").GetString(), Does.Match("^[0-9a-f]{16}$"));
+    }
+
+    [TestCase("uid-member", "member@example.invalid", false, false)]
+    [TestCase("uid-admin", "admin@example.invalid", true, true)]
+    [TestCase("uid-gents", "gents@example.invalid", true, true)]
+    [TestCase("uid-granted", "granted@example.invalid", false, true)]
+    public async Task Me_permissions_says_which_tabs_the_member_has(string uid, string email, bool classes, bool manage)
+    {
+        var reply = await GetAsync("/me/permissions", TestApi.SignedInAs(uid, email));
+        using var body = JsonDocument.Parse(await reply.Content.ReadAsStringAsync());
+        var navigation = body.RootElement.GetProperty("navigation");
+
+        Assert.That(navigation.GetProperty("classes").GetBoolean(), Is.EqualTo(classes));
+        Assert.That(navigation.GetProperty("manage").GetBoolean(), Is.EqualTo(manage));
+    }
+
+    [Test]
+    public async Task Me_permissions_carries_its_revision_as_the_ETag_and_is_private_to_the_member()
+    {
+        var reply = await PermissionsAsync(factory, null);
+        using var body = JsonDocument.Parse(reply.Body);
+
+        Assert.That(reply.Status, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That(reply.ETag, Is.EqualTo("\"" + body.RootElement.GetProperty("revision").GetString() + "\""));
+        Assert.That(reply.CacheControl, Is.EqualTo("private, no-cache"));
+        Assert.That(reply.Vary, Is.EqualTo("Authorization"));
+    }
+
+    [TestCase("{0}")]
+    [TestCase("W/{0}")]
+    [TestCase("\"stale\", {0}")]
+    [TestCase("*")]
+    public async Task Me_permissions_is_304_with_no_body_when_If_None_Match_names_the_tag(string sent)
+    {
+        var first = await PermissionsAsync(factory, null);
+
+        var reply = await PermissionsAsync(factory, sent.Replace("{0}", first.ETag, StringComparison.Ordinal));
+
+        Assert.That(reply.Status, Is.EqualTo(HttpStatusCode.NotModified));
+        Assert.That(reply.Body, Is.Empty);
+        Assert.That(reply.ETag, Is.EqualTo(first.ETag));
+        Assert.That(reply.CacheControl, Is.EqualTo("private, no-cache"));
+        Assert.That(reply.Vary, Is.EqualTo("Authorization"));
+    }
+
+    [TestCase("\"fedcba9876543210\"")]
+    [TestCase("\"\"")]
+    [TestCase("unquoted")]
+    public async Task Me_permissions_is_the_full_answer_when_If_None_Match_names_another_tag(string sent)
+    {
+        var first = await PermissionsAsync(factory, null);
+
+        var reply = await PermissionsAsync(factory, sent == "unquoted" ? first.ETag!.Trim('"') : sent);
+
+        Assert.That(reply.Status, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That(reply.ETag, Is.EqualTo(first.ETag));
+        Assert.That(reply.Body, Does.Contain("\"revision\""));
+    }
+
+    [Test]
+    public async Task Me_permissions_is_503_with_no_ETag_when_the_permissions_cannot_be_loaded_even_for_a_matching_tag()
+    {
+        await using var down = factory.WithWebHostBuilder(builder =>
+            builder.ConfigureTestServices(services => services.AddScoped<IClassScopes>(_ => new UnreadableClasses(900101))));
+
+        var reply = await PermissionsAsync(down, "*");
+
+        Assert.That(reply.Status, Is.EqualTo(HttpStatusCode.ServiceUnavailable));
+        Assert.That(reply.Body, Is.EqualTo("""{"detail":"Permissions could not be loaded. Try again."}"""));
+        Assert.That(reply.ETag, Is.Null);
+    }
+
+    // PHP's json_encode and .NET's writer escape other characters differently, and the revision is a hash of that JSON.
+    [Test]
+    public async Task Catalog_names_are_plain_so_the_revision_equals_PHPs()
+    {
+        Assert.That(await CountAsync("access.permissions where name !~ '^[a-z0-9:-]+$'"), Is.EqualTo(0));
+    }
+
+    [Test]
+    public async Task Every_admin_module_permission_is_an_action_of_the_catalog()
+    {
+        var names = await TestDatabase.ScalarAsync<string>("select string_agg(name, ',') from access.permissions", TestDatabase.OwnerConnection);
+        var actions = names.Split(',').Select(name => name[..name.LastIndexOf(':')]).ToHashSet(StringComparer.Ordinal);
+
+        Assert.That(Tsr.Access.Api.Domain.PermissionsSnapshot.AdminModulePermissions.Select(p => p.Action), Is.SubsetOf(actions));
     }
 
     [Test]
@@ -294,4 +385,41 @@ public sealed class AccessTests
 
         return await client.SendAsync(request);
     }
+
+    private sealed record PermissionsReply(HttpStatusCode Status, string Body, string? ETag, string? CacheControl, string? Vary);
+
+    // GET /me/permissions as the plain member, with the headers as the server sent them (not re-formatted by HttpClient).
+    private static async Task<PermissionsReply> PermissionsAsync(WebApplicationFactory<Program> api, string? ifNoneMatch)
+    {
+        using var client = api.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/me/permissions");
+        foreach (var (name, value) in TestApi.SignedInAs("uid-member", "member@example.invalid"))
+        {
+            request.Headers.Add(name, value);
+        }
+
+        if (ifNoneMatch is not null)
+        {
+            Assert.That(request.Headers.TryAddWithoutValidation("If-None-Match", ifNoneMatch), Is.True);
+        }
+
+        using var response = await client.SendAsync(request);
+        return new PermissionsReply(response.StatusCode, await response.Content.ReadAsStringAsync(), Raw(response, "ETag"), Raw(response, "Cache-Control"), Raw(response, "Vary"));
+    }
+
+    private static string? Raw(HttpResponseMessage response, string header) =>
+        response.Headers.NonValidated.TryGetValues(header, out var values) ? values.ToString() : null;
+}
+
+/// <summary>The classes port with unreadable storage for one member: every question about that member fails as a database does.</summary>
+internal sealed class UnreadableClasses(int token) : IClassScopes
+{
+    public Task<ClassMemberships> MembershipsAsync(int ofToken, CancellationToken ct) =>
+        ofToken == token ? throw new StorageDown() : Task.FromResult(new ClassMemberships([], [], []));
+
+    public Task<ClassFacts?> ActiveClassAsync(int classId, CancellationToken ct) => Task.FromResult<ClassFacts?>(null);
+
+    public Task<IReadOnlyList<ClassFacts>> ActiveClassesAsync(CancellationToken ct) => Task.FromResult<IReadOnlyList<ClassFacts>>([]);
+
+    private sealed class StorageDown() : System.Data.Common.DbException("storage is down");
 }
