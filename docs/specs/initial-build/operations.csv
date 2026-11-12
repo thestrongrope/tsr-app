@@ -27,8 +27,8 @@ GET,/me/children/{child_token}/classes,classes,create,built
 GET,/me/children/{child_token}/classes/{class_id}/attendance,classes,create,built
 GET,/me/children/{child_token}/classes/{class_id}/performance,classes,create,built
 GET,/me/children/{child_token}/classes/{class_id}/scores,assessment,create,built
-POST,/devices,notifications,create,planned
-DELETE,/devices,notifications,create,planned
+POST,/devices,notifications,create,built
+DELETE,/devices,notifications,create,built
 POST,/feedback,platform,member,built
 GET,/class-levels,classes,create,built
 GET,/classes,classes,create,built
@@ -48,9 +48,9 @@ GET,/me/guides/{slug},classes,member,planned
 GET,/classes/{class_id}/my-attendance,classes,create,built
 GET,/classes/{class_id}/my-performance,classes,create,built
 POST,/classes/{class_id}/notifications,notifications,create,planned
-POST,/classes/{class_id}/notifications/scheduled,notifications,create,planned
-GET,/classes/{class_id}/notifications/scheduled,notifications,create,planned
-DELETE,/classes/{class_id}/notifications/scheduled/{scheduled_id},notifications,create,planned
+POST,/classes/{class_id}/notifications/scheduled,notifications,create,built
+GET,/classes/{class_id}/notifications/scheduled,notifications,create,built
+DELETE,/classes/{class_id}/notifications/scheduled/{scheduled_id},notifications,create,built
 GET,/holy-quran,content,create,planned
 GET,/classes/{class_id}/conduction,classes,create,built
 GET,/classes/{class_id}/conduction/new,classes,create,built
@@ -208,7 +208,7 @@ POST,/notifications/send,notifications,member,planned
 GET,/notifications/history,notifications,member,planned
 POST,/notifications/cleanup-invalid-tokens,notifications,member,planned
 GET,/notifications/stats,notifications,member,planned
-GET,/user/notifications,notifications,create,planned
-GET,/user/notifications/unread-count,notifications,create,planned
-POST,/user/notifications/read-all,notifications,create,planned
-POST,/user/notifications/{notification_id}/read,notifications,create,planned
+GET,/user/notifications,notifications,create,built
+GET,/user/notifications/unread-count,notifications,create,built
+POST,/user/notifications/read-all,notifications,create,built
+POST,/user/notifications/{notification_id}/read,notifications,create,built

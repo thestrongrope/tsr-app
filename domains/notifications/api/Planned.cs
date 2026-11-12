@@ -12,12 +12,7 @@ internal static class Planned
     public static IEndpointRouteBuilder MapPlannedRoutes(this IEndpointRouteBuilder routes)
     {
         routes.MapPlanned(
-            ("POST", "/devices"),
-            ("DELETE", "/devices"),
             ("POST", "/classes/{class_id}/notifications"),
-            ("POST", "/classes/{class_id}/notifications/scheduled"),
-            ("GET", "/classes/{class_id}/notifications/scheduled"),
-            ("DELETE", "/classes/{class_id}/notifications/scheduled/{scheduled_id}"),
             ("POST", "/reports/pending/nudge"),
             ("GET", "/admin/whatsapp/reminders"),
             ("PUT", "/admin/whatsapp/reminders/{reminder_id}"),
@@ -32,11 +27,7 @@ internal static class Planned
             ("POST", "/notifications/send"),
             ("GET", "/notifications/history"),
             ("POST", "/notifications/cleanup-invalid-tokens"),
-            ("GET", "/notifications/stats"),
-            ("GET", "/user/notifications"),
-            ("GET", "/user/notifications/unread-count"),
-            ("POST", "/user/notifications/read-all"),
-            ("POST", "/user/notifications/{notification_id}/read"));
+            ("GET", "/notifications/stats"));
         return routes;
     }
 }
