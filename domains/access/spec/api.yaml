@@ -6,7 +6,7 @@ info:
     The access domain's routes: what the signed-in member may do. Words: glossary.md. Behaviour: tests/
     (run against any base URL, on PHP and on the new API alike). Forward compatible: add fields freely, never remove
     or change one without the release process. Every error body is {"detail": "..."}.
-    All three routes need a sign-in and no permission (a member sees their own answer).
+    The three /me routes need a sign-in and no permission (a member sees their own answer); the /admin routes need permissions:manage or class-access:manage.
 servers:
   - url: http://localhost:8088
     description: Local dev stack (gateway)
@@ -321,6 +321,69 @@ paths:
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
         "422": { $ref: "#/components/responses/Problem" }
+  /admin/class-access/members/{token}/rules:
+    post:
+      operationId: grantClassAccess
+      summary: Give a member a class access rule
+      description: |
+        Needs class-access:manage. The operator cannot change their own access, and needs the rule's gender and the member's gender (a rule of either gender needs both: super admin only).
+        `version` is the one the member view gave; `previewHash` the one the preview gave. 409 with `code` member_changed (someone else changed the member), already_has_access,
+        or preview_changed (the body then lists the classes now reached, `classCount` and the new `previewHash`). 422: no reason, no condition, a Finance member, own access, a rule that reaches no class.
+        A member with no role becomes a class admin (role 5).
+      security:
+        - memberToken: []
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - { $ref: "#/components/schemas/ClassAccessDraft" }
+                - type: object
+                  required: [reason, version, previewHash]
+                  properties:
+                    reason: { type: string, maxLength: 300 }
+                    version: { type: string }
+                    previewHash: { type: string }
+      responses:
+        "200": { $ref: "#/components/responses/ClassAccessSaved" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
+  /admin/class-access/rules/{id}/revoke:
+    post:
+      operationId: revokeClassAccess
+      summary: Remove a class access rule (it stays, with who, when and why)
+      description: |
+        Needs class-access:manage, the rule's gender and the member's gender; never the operator's own access. 404 unknown rule, 409 already removed or `code` member_changed.
+        A class admin whose last live rule this was returns to no role.
+      security:
+        - memberToken: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason, version]
+              properties:
+                reason: { type: string, maxLength: 300 }
+                version: { type: string }
+      responses:
+        "200": { $ref: "#/components/responses/ClassAccessSaved" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
 components:
   securitySchemes:
     memberToken:
@@ -374,6 +437,17 @@ components:
       content:
         application/json:
           schema: { $ref: "#/components/schemas/ClassAccessView" }
+    ClassAccessSaved:
+      description: "`saved` is true, and the refreshed member view. When the view could not be read after the commit, member and version are null and rules empty: the app reloads."
+      content:
+        application/json:
+          schema:
+            allOf:
+              - type: object
+                required: [saved]
+                properties:
+                  saved: { type: boolean }
+              - { $ref: "#/components/schemas/ClassAccessView" }
   schemas:
     ClassAccessDraft:
       type: object

@@ -1,5 +1,7 @@
+using System.Data.Common;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Tsr.Shared.Api;
 
 namespace Tsr.Access.Api.Domain;
@@ -14,6 +16,9 @@ internal sealed record RuleBody(int Id, int? Gender, object Note, string Created
 
 internal sealed record ClassAccessView(ClassAccessMemberBody Member, string Version, string? FromRole, IReadOnlyList<RuleBody> Rules);
 
+/// <summary>The answer of a write: saved, and the refreshed view (null parts when it could not be read).</summary>
+internal sealed record SavedBody(bool Saved, ClassAccessMemberBody? Member, string? Version, string? FromRole, IReadOnlyList<RuleBody> Rules);
+
 /// <summary>A class as a preview or a refusal lists it.</summary>
 internal sealed record PreviewClass(int Id, string Code, object Name);
 
@@ -26,7 +31,7 @@ internal sealed record StoredRule(int Id, int? Gender, string Note, DateTimeOffs
 /// The reads the class access routes share (PHP ClassAccessModel): the member and their role, the live rules, the levels, and the member view that the
 /// read and both writes answer with. Classes come through the port <see cref="IClassScopes"/>; levels through classes' view.
 /// </summary>
-internal static class ClassAccessStore
+internal static partial class ClassAccessStore
 {
     public static async Task<int> RoleOfAsync(AccessContext db, int userId, CancellationToken ct) =>
         await db.UserRoles.AsNoTracking().Where(u => u.UserId == userId).Select(u => (int?)u.RoleId).FirstOrDefaultAsync(ct) ?? ClassAccessRules.RoleMember;
@@ -172,6 +177,43 @@ internal static class ClassAccessStore
             reached.Count,
             reached.Take(ClassAccessRules.MaxClasses).Select(c => new ClassBody(c.Id, c.Code, Cast.Text(c.Name), rule.Id, Cast.Text(rule.Note))).ToList());
     }
+
+    /// <summary>
+    /// The answer of a committed write: <c>{saved: true}</c> and the refreshed member view. When the view cannot be read (a refusal now, or a failure, logged by type only) the write is still saved:
+    /// the member and version are null and the app reloads (PHP api_class_access_write).
+    /// </summary>
+    public static async Task<IResult> SavedAsync(
+        AccessContext db, Permissions permissions, IClassScopes classes, ClassAccessOperator op, int token, ILogger logger, CancellationToken ct)
+    {
+        try
+        {
+            var view = await MemberViewAsync(db, permissions, classes, op, token, ct);
+            if (!view.Failed)
+            {
+                var v = view.Value!;
+                return Results.Json(new SavedBody(true, v.Member, v.Version, v.FromRole, v.Rules));
+            }
+        }
+        catch (Exception e) when (e is DbException or InvalidOperationException)
+        {
+            LogViewUnreadable(logger, e.GetType().Name);
+        }
+
+        return Results.Json(new SavedBody(true, null, null, null, []));
+    }
+
+    /// <summary>The answer when a write failed before it committed (PHP: "Nothing was changed"; the transaction rolled back).</summary>
+    public static IResult NothingChanged(ILogger logger, Exception error)
+    {
+        LogWriteFailed(logger, error.GetType().Name);
+        return Problem.Detail(StatusCodes.Status500InternalServerError, "Nothing was changed");
+    }
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "class_access.saved_view_unreadable error={Type}")]
+    private static partial void LogViewUnreadable(ILogger logger, string type);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "class_access.failed error={Type}")]
+    private static partial void LogWriteFailed(ILogger logger, string type);
 
     public static IReadOnlyList<PreviewClass> Listed(IReadOnlyList<ClassFacts> classes) =>
         classes.Take(ClassAccessRules.MaxClasses).Select(c => new PreviewClass(c.Id, c.Code, Cast.Text(c.Name))).ToList();

@@ -160,8 +160,8 @@ GET,/admin/class-access/members,access,create,built
 GET,/admin/class-access/members/{token},access,create,built
 GET,/admin/class-access/options,access,create,built
 POST,/admin/class-access/preview,access,create,built
-POST,/admin/class-access/members/{token}/rules,access,member,planned
-POST,/admin/class-access/rules/{id}/revoke,access,member,planned
+POST,/admin/class-access/members/{token}/rules,access,create,built
+POST,/admin/class-access/rules/{id}/revoke,access,create,built
 GET,/admin/members/{token},classes,create,built
 POST,/admin/members/{token}/enrolments,classes,create,built
 GET,/admin/deactivated-classes,classes,create,built

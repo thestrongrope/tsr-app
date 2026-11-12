@@ -10,18 +10,18 @@ quirks included (facts: `docs/specs/initial-build/phase-2-permissions-recon.md`,
 |---|---|
 | Interface `Permissions`: `CanAsync(caller, action, target)`, `ReachAsync(caller, action)` (managedReach, searchReach, genderLock, assignedOnlyIds in one `Reach`), `ForUserAsync(caller)`, `RoleIdAsync(caller)` (the role id for GET /me) | built; `api/Permissions.cs`, rules in `api/domain/AccessEngine.cs` |
 | Catalog (102 permissions, 7 roles, role grants), seeded from PHP | built; migration `CatalogFromPhp`; regenerate: `tools/access-catalog/export.sh` |
-| User roles (`access.user_roles`), named grants, class access rules (tables) | built; nothing writes grants or rules yet (PHP serves the admin routes) |
+| User roles (`access.user_roles`), named grants, class access rules (tables) | built; written only by the ten admin routes below |
 | Class access rule matching (`RuleMatcher`) | built, unit tested; has no classes to match until `classes` exists |
-| Port `IClassScopes` (default `NoClasses`) | built; `classes` supplies the real one in phase 3 |
+| Port `IClassScopes` (default `NoClasses`) | built; `classes` supplies the real one (`ClassFacts` also carries code and name, for the class access screens) |
 | Routes `GET /me/permissions`, `GET /me/permissions/{permission}`, `GET /user/permissions` | built; Hurl contract proven identical on PHP |
-| Grant and rule admin routes, `permissions:manage`, `class-access:manage` | not started; PHP serves them |
+| Grant routes (`permissions:manage`): member search, member view, grant, revoke; class access routes (`class-access:manage`): member search, member view, options, preview, grant a rule, revoke a rule | built (slices `admin-permission-*`, `class-access-*`); no Hurl or database test yet; notes `docs/specs/initial-build/lane-access-notes.md` |
 
 ## Owns
 
 - Schema `access`: `roles`, `permissions`, `role_permissions`, `user_permissions` (named grants), `user_roles` (one row per
   user whose role is not 0; `user_id` is a plain id, no foreign key to identity), `class_access_rules` and `class_access_rule_conditions`.
 - The three constant sets (`api/domain/PermissionSets.cs`: member 21, own 8, taught 2).
-- Dependencies: none (`AccessModule.Dependencies`). Every other domain lists `access`. The one thing flowing the
+- Dependencies: none (`AccessModule.Dependencies`); the admin routes read `membership.v_members`, `identity.v_users` and `classes.v_class_levels` in SQL only (published views), and classes through the port. Every other domain lists `access`. The one thing flowing the
   other way is the port `IClassScopes`, which `classes` implements: it is the only interface between domains that
   would otherwise form a cycle. Do not add another.
 
@@ -41,7 +41,7 @@ means deny" is not copied, a database error is a 500.
 Assigned scope passes a gender check for every gender the user has an assigned class in; a class target is refused
 when the class is inactive, even with scope `all`; the legacy `/user/permissions` lists the two derived roles but never
 grants their pages. Not in access: token 1001 is always an eligible teacher (`classes.php`, a classes rule) and
-`users.gender` holding `'1'` and `'Male'` (membership; access never reads it).
+`users.gender` holding `'1'` and `'Male'` (membership owns it; the admin routes read it from `membership.v_members` and map it with `AdminMembers.GenderOf`).
 
 ## Known open difference
 
@@ -57,6 +57,7 @@ also treats `Zürich` and `Zurich` as equal. Not built; settle it when `classes`
 | Decision rules, no database | `api/domain/AccessEngine.cs`, `RuleMatcher.cs`, `PermissionSets.cs`, `LegacyPermissions.cs` |
 | The classes port | `api/IClassScopes.cs` |
 | Tables, migrations | `api/AccessContext.cs`, `api/Migrations/` |
+| The grant and class access rules | `api/domain/GrantRules.cs`, `ClassAccessRules.cs` (no database), `ClassAccessStore.cs`, `ClassAccessOperator.cs`, `MemberLock.cs` |
 | Words, contract, behaviour | `spec/glossary.md`, `spec/api.yaml`, `spec/tests/*.hurl` |
 
 ## Checks
@@ -68,6 +69,23 @@ tools/access-contract.sh dev               # Hurl contract on the dev stack
 tools/access-contract.sh parity            # the same files on PHP (parity stack up, tools/parity-php/README.md)
 ```
 
+## Advisory locks
+
+| Lock | Use |
+|---|---|
+| class 6001 (`pg_advisory_xact_lock(6001, token)`, `MemberLock`) | every write to one member's named grants, role or class access rules; PHP's `UPDATE users SET roleid = roleid` row lock. No other code may use class 6001. |
+
+## Events
+
+| Event | Payload | Written by |
+|---|---|---|
+| `access.permission_granted` | grantId, token, permission, grantedBy | POST /admin/permissions/members/{token}/grants |
+| `access.permission_revoked` | grantId, token, permission, revokedBy | POST /admin/permissions/grants/{id}/revoke |
+| `access.class_access_rule_created` | ruleId, token, gender, grantedBy | POST /admin/class-access/members/{token}/rules |
+| `access.class_access_rule_revoked` | ruleId, token, revokedBy | POST /admin/class-access/rules/{id}/revoke |
+
+Consumed: none. A write drops the member's cached answers (`Permissions.Forget`) before it answers with their refreshed view; the class access version is not stored (the member's role id and a fingerprint of their live rule ids).
+
 ## Placeholders
 
-Operations of this domain not built yet are 501 placeholders in `api/Planned.cs` (after the sign-in check; they create nothing). Building one deletes its line there and flips its state in `docs/specs/initial-build/operations.csv`.
+None left: every operation of this domain is built.
