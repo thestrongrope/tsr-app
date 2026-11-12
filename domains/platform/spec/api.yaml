@@ -204,6 +204,57 @@ paths:
           $ref: "#/components/responses/Problem"
         "429":
           $ref: "#/components/responses/Problem"
+  /admin/access-log:
+    get:
+      operationId: getAdminAccessLog
+      summary: Who used the admin pages, which pages, and the latest accesses
+      description: |
+        Permission audit-log:read (403 "You do not have permission to do that"). Optional filters: token (digits only, else 422
+        "token must be a member number") and page (part of a page name). users and pages cover the last 30 days, busiest first;
+        recent is the latest 500 accesses whenever, newest first. Times read "YYYY-MM-DD HH:MM:SS" in UTC.
+        Slice: features/admin-access-log/AdminAccessLog.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: token, in: query, required: false, schema: {type: string}}
+        - {name: page, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: "{users: [{token, name, email, hits, activeDays, lastAccessed}], pages: [{page, hits, lastAccessed}], recent: [{id, accessedAt, token, name, email, role, method, page, ip}]}"
+          content:
+            application/json:
+              schema: {type: object}
+        "401":
+          $ref: "#/components/responses/Problem"
+        "403":
+          $ref: "#/components/responses/Problem"
+        "422":
+          $ref: "#/components/responses/Problem"
+  /admin/access-log/download:
+    get:
+      operationId: downloadAdminAccessLog
+      summary: The accesses of the last 30 days as a file
+      description: |
+        ?format=xlsx or pdf (422 "format must be xlsx or pdf", checked before the sign-in). Permission audit-log:read (403), the same
+        filters as GET /admin/access-log, 404 "No accesses match" when none. At most 50000 rows. Columns Time, Member, Name, Email,
+        Role, Method, Page, Address, Device, Referrer. Slice: features/admin-access-log-download/AdminAccessLogDownload.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: format, in: query, required: true, schema: {type: string, enum: [xlsx, pdf]}}
+        - {name: token, in: query, required: false, schema: {type: string}}
+        - {name: page, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: The file
+        "401":
+          $ref: "#/components/responses/Problem"
+        "403":
+          $ref: "#/components/responses/Problem"
+        "404":
+          $ref: "#/components/responses/Problem"
+        "422":
+          $ref: "#/components/responses/Problem"
 components:
   securitySchemes:
     memberToken:

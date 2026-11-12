@@ -19,7 +19,7 @@ example**: copy its layout when you build another domain (`domains/CLAUDE.md`).
 | `geo-cities` | `POST /geo/cities` | built; signed in, rate limited |
 | `lookups` table, public `Lookups` and `Geo` read interfaces | - | built (no route); `membership` uses them | 
 | `ReportExport` (public): xlsx and PDF report downloads for every domain | - | built (batch B5d); no route of its own; used by 9 classes and 3 membership download routes |
-| access log (`GET /admin/access-log` and its download) | - | not started; PHP still serves it (waits for the report generator: phase-3-platform-design.md) |
+| `admin-access-log`, `admin-access-log-download` | `GET /admin/access-log`, `.../download` | built; `audit-log:read`; shared query `api/domain/AccessLog.cs`; notes `docs/specs/initial-build/lane-small-notes.md` |
 
 ## What it owns
 
@@ -67,7 +67,7 @@ PHP's `ReportExportModel` and `api_send_report_download`, one public class (`api
 
 ## Dependencies
 
-`access` only (`PlatformModule.Dependencies`). Only feedback uses it. The app-version, release-notes and geo slices check no permission (PHP does not either: geo is open to any signed-in member), so they call nothing in `access`. Feedback uses it for `Permissions.CanAsync(caller, "feedback:create", AccessTarget.None, ct)` (an action has no scope). The caller comes from
+`access`, `membership`, `identity` (`PlatformModule.Dependencies`). `access`: feedback and the access log (`audit-log:read`). `membership` and `identity` are read through their views only, by the access log (`membership.v_members` for the name, `identity.v_users` for the email). The app-version, release-notes and geo slices check no permission (PHP does not either: geo is open to any signed-in member), so they call nothing in `access`. Feedback uses it for `Permissions.CanAsync(caller, "feedback:create", AccessTarget.None, ct)` (an action has no scope). The caller comes from
 `identity`'s middleware through `HttpContext.GetCaller()`; that is shared plumbing, not a
 dependency.
 
@@ -120,7 +120,7 @@ flutter analyze domains/platform/app && (cd domains/platform/app && flutter test
 
 ## Placeholders
 
-Operations of this domain not built yet are 501 placeholders in `api/Planned.cs` (after the sign-in check; they create nothing). Building one deletes its line there and flips its state in `docs/specs/initial-build/operations.csv`.
+None left: every platform operation is built (`api/Planned.cs` is gone).
 
 ## Published views (rule 2; migration `PublishedViews`, read-only to the API role)
 

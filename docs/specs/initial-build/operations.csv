@@ -186,8 +186,8 @@ POST,/admin/quiz/publish,assessment,create,planned
 POST,/admin/quiz/reset,assessment,create,planned
 GET,/admin/donors,membership,create,built
 GET,/admin/donors/download,membership,create,built
-GET,/admin/access-log,platform,create,planned
-GET,/admin/access-log/download,platform,create,planned
+GET,/admin/access-log,platform,create,built
+GET,/admin/access-log/download,platform,create,built
 GET,/admin/deletion-requests,identity,member,planned
 POST,/admin/deletion-requests,identity,member,planned
 POST,/admin/deletion-requests/{request_id}/hold,identity,member,planned

@@ -92,7 +92,7 @@ Every operation of this domain is built, so there is no `api/Planned.cs` any mor
 
 | View | Columns | Known readers |
 |---|---|---|
-| `v_members` | token, user_id, name, mobile, gender (raw text), city, state, country, zip | classes (teacher and student names, contact, gender), assessment (the caller's gender: api_require_identity), assessment reports |
+| `v_members` | token, user_id, name, mobile, gender (raw text), city, state, country, zip | classes (teacher and student names, contact, gender), assessment (the caller's gender: api_require_identity), assessment reports, platform (access log: names) |
 | `v_registrations` | id, token, for_classid, class_level, class_number, preferred_location, status, created_at | classes (waiting list, placement); columns to re-check in B4 |
 | `v_guardian_links` | id, parent_token, child_token, status | classes (children routes: active link), assessment (the child scores route) |
 
