@@ -6,61 +6,10 @@
 #   hurl --test --variable base_url=http://localhost:8088 --variables-file build/dev/token.vars \
 #        hosts/api/spec/planned-surface.hurl
 # Every contract file at once: see CLAUDE.md, Commands. Synthetic members only.
-
-# identity (member route)
-GET {{base_url}}/me/deletion-request
-{{auth_header}}: {{auth_value}}
-HTTP 501
-[Asserts]
-jsonpath "$.detail" == "Not implemented"
-
-# identity (public route: no token needed)
-POST {{base_url}}/auth/debug-token
-Content-Type: application/json
-{}
-HTTP 501
-[Asserts]
-jsonpath "$.detail" == "Not implemented"
-
-# access
-GET {{base_url}}/admin/permissions/members
-{{auth_header}}: {{auth_value}}
-HTTP 501
-[Asserts]
-jsonpath "$.detail" == "Not implemented"
-
-# platform
-GET {{base_url}}/admin/access-log
-{{auth_header}}: {{auth_value}}
-HTTP 501
-[Asserts]
-jsonpath "$.detail" == "Not implemented"
+# Since the build-out of 12 Nov 2026 the only placeholders left are the two /me/guides routes (classes); the other domains' checks went when their routes were built.
 
 # classes (a path with parameters: any non-slash segment)
 GET {{base_url}}/me/guides/a-slug
-{{auth_header}}: {{auth_value}}
-HTTP 501
-[Asserts]
-jsonpath "$.detail" == "Not implemented"
-
-# assessment
-GET {{base_url}}/mcq/manage/900009/scores
-{{auth_header}}: {{auth_value}}
-HTTP 501
-[Asserts]
-jsonpath "$.detail" == "Not implemented"
-
-# notifications
-POST {{base_url}}/devices
-{{auth_header}}: {{auth_value}}
-Content-Type: application/json
-{}
-HTTP 501
-[Asserts]
-jsonpath "$.detail" == "Not implemented"
-
-# content
-GET {{base_url}}/holy-quran
 {{auth_header}}: {{auth_value}}
 HTTP 501
 [Asserts]
@@ -87,15 +36,6 @@ Content-Type: application/json
 HTTP 405
 [Asserts]
 jsonpath "$.detail" == "Method Not Allowed"
-
-# A planned literal path under a class (a path with parameters answers 501 the same way)
-POST {{base_url}}/classes/1/mcq
-{{auth_header}}: {{auth_value}}
-Content-Type: application/json
-{}
-HTTP 501
-[Asserts]
-jsonpath "$.detail" == "Not implemented"
 
 # A path no route knows: the gateway's fallback answers (the API's own "Not Found" is tested in hosts/api/tests)
 GET {{base_url}}/no/such/path
