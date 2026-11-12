@@ -1,19 +1,20 @@
-# The API's whole route surface, spot-checked on the running stack: one placeholder route per domain, plus PHP's router
-# answers for a path or verb it does not know. A placeholder (state "planned" in docs/specs/initial-build/operations.csv)
-# signs the caller in and answers 501 {"detail": "Not implemented"}. When the slice behind one of these is built, point
-# its line at another planned route of the same domain. New API only: PHP has no 501.
+# The API's whole route surface, spot-checked on the running stack: PHP's router answers for a path or verb it does not know,
+# and the paths that were the last placeholders. No placeholder is left: every operation in docs/specs/initial-build/operations.csv
+# is "built" (a "planned" one would sign the caller in and answer 501 {"detail": "Not implemented"}; hosts/api/tests checks that
+# none is mapped). New API only: the 404 fallback and the 405 texts are the gateway's and the API's.
 # Cross-domain, so it lives here and not in a domain's spec/tests. Variables: base_url, auth_header, auth_value.
 #   hurl --test --variable base_url=http://localhost:8088 --variables-file build/dev/token.vars \
 #        hosts/api/spec/planned-surface.hurl
 # Every contract file at once: see CLAUDE.md, Commands. Synthetic members only.
-# Since the build-out of 12 Nov 2026 the only placeholders left are the two /me/guides routes (classes); the other domains' checks went when their routes were built.
 
-# classes (a path with parameters: any non-slash segment)
+# classes: the last placeholders (GET /me/guides and /me/guides/{slug}) are built; signed in, the path no longer answers 501
+# (403 for a member who neither studies nor teaches, 404 for an unknown slug: domains/classes/spec/tests/me-guide.hurl)
 GET {{base_url}}/me/guides/a-slug
 {{auth_header}}: {{auth_value}}
-HTTP 501
+HTTP *
 [Asserts]
-jsonpath "$.detail" == "Not implemented"
+status != 501
+jsonpath "$.detail" != "Not implemented"
 
 # search has no placeholder left (GET /search is built); its path still answers 401 without a sign-in
 GET {{base_url}}/search

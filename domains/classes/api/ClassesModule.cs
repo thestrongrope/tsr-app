@@ -55,6 +55,8 @@ using Tsr.Classes.Api.Features.GuideGet;
 using Tsr.Classes.Api.Features.GuideUpdate;
 using Tsr.Classes.Api.Features.GuidesList;
 using Tsr.Classes.Api.Features.JoinPreview;
+using Tsr.Classes.Api.Features.MeGuide;
+using Tsr.Classes.Api.Features.MeGuides;
 using Tsr.Classes.Api.Features.MyAttendance;
 using Tsr.Classes.Api.Features.MyPerformance;
 using Tsr.Classes.Api.Features.RegistrationClasses;
@@ -101,7 +103,7 @@ using Tsr.Shared.Api;
 namespace Tsr.Classes.Api;
 
 /// <summary>
-/// classes: classes, levels, enrolment, sessions, attendance, teachers, syllabus and guides. Tables, the read slices, and placeholder routes (Planned.cs) so far. It supplies access's <c>IClassScopes</c> (ClassScopes.cs) and will supply membership's <c>IClassEnrolments</c>.
+/// classes: classes, levels, enrolment, sessions, attendance, teachers, syllabus and guides. Tables and every route of PHP's classes surface, one slice folder each under features/. It supplies access's <c>IClassScopes</c> (ClassScopes.cs) and will supply membership's <c>IClassEnrolments</c>.
 /// </summary>
 public static class ClassesModule
 {
@@ -123,6 +125,8 @@ public static class ClassesModule
         routes.MapGuideGet();
         routes.MapGuideUpdate();
         routes.MapClassGuide();
+        routes.MapMeGuides();
+        routes.MapMeGuide();
         routes.MapSyllabusLevels();
         routes.MapSyllabusLevel();
         routes.MapClassSyllabusTopics();
@@ -212,7 +216,6 @@ public static class ClassesModule
         routes.MapReportClassSessionsAll();
         routes.MapReportClassSessionHistory();
         routes.MapReportClassSessionHistoryDownload();
-        routes.MapPlannedRoutes();
         return routes;
     }
 }
