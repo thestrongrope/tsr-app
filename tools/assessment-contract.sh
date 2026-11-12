@@ -82,6 +82,10 @@ case "$SIDE" in
     "$ROOT/tools/require-synthetic-stack.sh" "$TSR_TEST_PROJECT"
     test_sql < db/synthetic/assessment-a1-fixtures.sql
     test_sql < db/synthetic/assessment-a2-fixtures.sql
+    # Files named *-php-only.hurl pin what only PHP does (the new API is stricter by the owner's decision); they run on PHP only.
+    KEPT=()
+    for f in "${FILES[@]}"; do case "$f" in *-php-only.hurl) ;; *) KEPT+=("$f") ;; esac; done
+    FILES=("${KEPT[@]}")
     MINT="tools/dev-auth/mint-token.sh"
     BASE="$TSR_TEST_BASE_URL"
     VARS="$TSR_TEST_VARS_DIR/assessment.vars" ;;

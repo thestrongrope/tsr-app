@@ -38,6 +38,10 @@ case "$SIDE" in
     export TSR_EMULATOR_PORT="$TSR_TEST_EMULATOR_PORT"
     "$ROOT/tools/require-synthetic-stack.sh" "$TSR_TEST_PROJECT"
     test_sql < db/synthetic/grants-fixtures.sql
+    # Files named *-php-only.hurl pin what only PHP does (the new API is stricter by the owner's decision); they run on PHP only.
+    KEPT=()
+    for f in "${FILES[@]}"; do case "$f" in *-php-only.hurl) ;; *) KEPT+=("$f") ;; esac; done
+    FILES=("${KEPT[@]}")
     MINT="tools/dev-auth/mint-token.sh"
     BASE="$TSR_TEST_BASE_URL"
     VARS="$TSR_TEST_VARS_DIR/grants.vars" ;;
