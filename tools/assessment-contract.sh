@@ -28,8 +28,8 @@ fi
 
 FILES=()
 for f in domains/assessment/spec/tests/*.hurl; do
-  # The quizwrites lane's files read their own variables (tools/contract-quizwrites.sh).
-  grep -q 'auth_quizwrites_' "$f" || FILES+=("$f")
+  # A test lane's files read their own variables and run from that lane's script (tools/contract-<lane>.sh).
+  grep -qE 'auth_(deletion|edge|grants|notify|quizwrites|reports2|sheets)_' "$f" || FILES+=("$f")
 done
 
 # alias=email: the fixture members the files sign in as (Hurl variable auth_qz_<alias>); tokens are in db/synthetic/assessment-a1-fixtures.sql.

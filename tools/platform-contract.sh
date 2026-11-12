@@ -26,7 +26,11 @@ cd "$ROOT"
 . tools/parity-lock.sh
 
 FIXTURES="db/synthetic/geo-fixtures.sql"
-FILES=(domains/platform/spec/tests/*.hurl)
+FILES=()
+for f in domains/platform/spec/tests/*.hurl; do
+  # A test lane's files read their own variables and run from that lane's script (tools/contract-<lane>.sh).
+  grep -qE 'auth_(deletion|edge|grants|notify|quizwrites|reports2|sheets)_' "$f" || FILES+=("$f")
+done
 MEMBER="member.ladies@example.invalid"
 
 parity() { docker compose -p tsr-parity -f tools/parity-php/compose.parity.yml --env-file tools/parity-php/parity.env "$@"; }

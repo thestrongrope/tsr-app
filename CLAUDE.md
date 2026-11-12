@@ -50,7 +50,7 @@ one has its slice; a `planned` one is a placeholder in its domain's `api/Planned
 route will (never creating a member), then answers 501 `{"detail": "Not implemented"}`. **Building a slice replaces its
 placeholder:** delete its line in `Planned.cs`, flip its state in `operations.csv` to `built` (the tests in `hosts/api/tests`
 fail until both match; a gateway block per path already exists). Built today (12 Nov 2026): identity 10, access 13, platform 9,
-membership 24, classes 94, assessment 35, notifications 24, content 1, search 1 (211); 2 are planned (`/me/guides`, not in the PHP copy). **Of the 211, 136 are PROVEN against PHP (Hurl on both sides, database tests, review); the other 75 are PORTED only** (build-out mode, Asif, 12 Nov 2026: compiles with zero warnings and passes the structure tests; no contract tests yet). The lanes, their notes and the findings to settle in the test phase: `docs/specs/initial-build/build-out-lanes.md`, `lane-*-notes.md`, `build-out-findings.md`. The report downloads (xlsx or PDF) all go through platform's `ReportExport` (`domains/platform/CLAUDE.md`). Tables only, besides routes: `notifications`; `assessment` has 9 quiz routes (batch A1: a member takes a quiz and reads scores).
+membership 24, classes 94, assessment 35, notifications 24, content 1, search 1 (211); 2 are planned (`/me/guides`, not in the PHP copy). **All 211 have contract tests and database tests (test phase, 12 Nov 2026)**: 136 from the earlier batches, 75 from the build-out lanes proven afterwards by seven test lanes (`docs/specs/initial-build/test-*-notes.md`). Not verified against a real service (fakes at the boundary only): Google Sheets, Firebase account deletion, FCM push, the WhatsApp notifier, Elasticsearch. Open decisions and findings: `docs/specs/initial-build/build-out-findings.md`. The report downloads (xlsx or PDF) all go through platform's `ReportExport` (`domains/platform/CLAUDE.md`). Tables only, besides routes: `notifications`; `assessment` has 9 quiz routes (batch A1: a member takes a quiz and reads scores).
 `search` has routes only. Which owns what: `domains/CLAUDE.md`.
 
 ## Rules (the ones that must load without opening another file)
@@ -99,6 +99,8 @@ membership 24, classes 94, assessment 35, notifications 24, content 1, search 1 
 | Flutter: analyze, test | `flutter analyze hosts/app shared/app domains/platform/app`, then `flutter test` inside each |
 
 Never run `docker-compose.yml` (production) locally; this sample has only the dev file.
+
+The test lanes' routes have their own contract scripts, `tools/contract-<lane>.sh test|parity [--prepare]` (lanes: deletion, edge, grants, notify, quizwrites, reports2, sheets); each loads only its own fixtures and mints tokens into `build/test/<lane>.vars`. To run EVERY Hurl file on the test stack: run the identity, membership, classes and assessment prepares, then each lane's `test --prepare`, then the all-files command above with one `--variables-file` per file in `build/test/*.vars`, leaving out files named `*-php-only.hurl` (they pin what only PHP does). Measured on 12 Nov 2026: 232 files, 3119 requests on the new API; 699 database tests.
 
 Required settings (the API does not start without them): `TSR_DB`, `TSR_FIREBASE_PROJECT_ID`, and `TSR_GOTENBERG_URL` (the Gotenberg container that renders PDF report downloads; the compose file sets it; production must too).
 
