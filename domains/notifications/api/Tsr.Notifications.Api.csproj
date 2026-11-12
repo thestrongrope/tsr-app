@@ -3,6 +3,8 @@
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <ProjectReference Include="../../../shared/api/Tsr.Shared.Api.csproj" />
+    <ProjectReference Include="../../access/api/Tsr.Access.Api.csproj" />
+    <ProjectReference Include="../../platform/api/Tsr.Platform.Api.csproj" />
   </ItemGroup>
   <ItemGroup>
     <!-- Tests sit next to the code they test; tests/ compiles them. -->
