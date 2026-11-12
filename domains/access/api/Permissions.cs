@@ -52,6 +52,12 @@ public sealed class Permissions
         return ResolveAsync(caller, ct);
     }
 
+    /// <summary>
+    /// Drops what this request resolved for the user, so the next question reads the database again. A handler that
+    /// changes a user's grants, role or rules calls it before it answers with that user's view (PHP reads live rows every time).
+    /// </summary>
+    internal void Forget(int userId) => _resolved.Remove(userId);
+
     internal async Task<bool> IsKnownAsync(string action, CancellationToken ct) =>
         AccessEngine.IsKnown(await CatalogAsync(ct), action);
 

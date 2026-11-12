@@ -11,7 +11,7 @@ internal sealed class ClassScopes(ClassesContext db) : IClassScopes
 {
     private const int MaxClasses = 10000;
 
-    internal sealed record Fact(int Id, int Gender, string? City, string? Country, int? LevelId);
+    internal sealed record Fact(int Id, int Gender, string? City, string? Country, int? LevelId, string? Code, string? Name);
 
     internal sealed record TagRow(int ClassId, string Name);
 
@@ -51,7 +51,7 @@ internal sealed class ClassScopes(ClassesContext db) : IClassScopes
     {
         var rows = await db.Database
             .SqlQuery<Fact>($"""
-                select id as "Id", coalesce(gender, 0) as "Gender", city as "City", country as "Country", class_level_id as "LevelId"
+                select id as "Id", coalesce(gender, 0) as "Gender", city as "City", country as "Country", class_level_id as "LevelId", code as "Code", name as "Name"
                 from classes.classes where status = 'A' and ({classId}::int is null or id = {classId}) order by id limit {MaxClasses}
                 """)
             .ToListAsync(ct);
@@ -64,6 +64,6 @@ internal sealed class ClassScopes(ClassesContext db) : IClassScopes
                 """)
             .ToListAsync(ct);
         var byClass = tags.ToLookup(t => t.ClassId, t => t.Name);
-        return rows.Select(r => new ClassFacts(r.Id, r.Gender, r.City, r.Country, r.LevelId, byClass[r.Id].ToList())).ToList();
+        return rows.Select(r => new ClassFacts(r.Id, r.Gender, r.City, r.Country, r.LevelId, byClass[r.Id].ToList(), r.Code ?? string.Empty, r.Name ?? string.Empty)).ToList();
     }
 }
