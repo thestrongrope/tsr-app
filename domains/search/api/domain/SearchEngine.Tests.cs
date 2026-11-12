@@ -40,6 +40,11 @@ internal sealed class SearchEngineTests
 
         public Dictionary<long, TeacherFact> Teachers { get; } = [];
 
+        public Dictionary<long, string> Guides { get; } = [];
+
+        public Task<IReadOnlyDictionary<long, string>> GuideLevelsAsync(IReadOnlyCollection<long> levelIds, CancellationToken ct) =>
+            Task.FromResult<IReadOnlyDictionary<long, string>>(Guides.Where(p => levelIds.Contains(p.Key)).ToDictionary());
+
         public Task<IReadOnlyDictionary<long, TeacherFact>> TeachersAsync(IReadOnlyCollection<long> tokens, CancellationToken ct) =>
             Task.FromResult<IReadOnlyDictionary<long, TeacherFact>>(Teachers.Where(p => tokens.Contains(p.Key)).ToDictionary());
 
@@ -180,13 +185,24 @@ internal sealed class SearchEngineTests
     }
 
     [Test]
-    public async Task A_guide_opens_the_first_class_of_its_level_the_caller_reaches()
+    public async Task A_guide_opens_the_first_class_of_its_level_the_caller_reaches_and_is_titled_from_the_database()
     {
         var facts = new FakeFacts();
         facts.Classes.AddRange([new ClassFact(4, "A4", "", 1, 7), new ClassFact(5, "B5", "", 2, 7)]);
-        var index = new FakeIndex(_ => [new SearchHit(7, "Level seven guide")]);
+        facts.Guides[7] = "Level seven";
+        var index = new FakeIndex(_ => [new SearchHit(7, "Stale index title")]);
         var answer = await new SearchEngine(index, facts).SearchAsync(AccessOf(gender: 2), "ab", ["guide"], CancellationToken.None);
         Assert.That(answer.Groups.Single().Results, Is.EqualTo(new[] { new SearchResult(5, "Level seven guide", string.Empty) }));
+    }
+
+    [Test]
+    public async Task A_guide_hit_is_dropped_when_the_guide_no_longer_counts_in_the_database()
+    {
+        var facts = new FakeFacts();
+        facts.Classes.Add(new ClassFact(4, "A4", "", 1, 7));
+        var index = new FakeIndex(_ => [new SearchHit(7, "Level seven guide")]);
+        var answer = await new SearchEngine(index, facts).SearchAsync(AccessOf(all: true), "ab", ["guide"], CancellationToken.None);
+        Assert.That(answer.Groups.Single().Results, Is.Empty);
     }
 
     [Test]

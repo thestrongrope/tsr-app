@@ -84,4 +84,5 @@ dotnet test db/tests                    # the migrated database: citext, no cros
 | `v_class_levels` | id, code, name, sort_order (migration `ClassLevelsView`) | access (class access: the levels a rule can use, and the check that a level exists), notifications (history: audience words) |
 | `v_enrolments` | id, class_id, token_no, status, removed_at, mcq_admin | access (mcq scope), membership (placed, gender lock), assessment (every quiz route: who is a current student), assessment reports, notifications (class audience) |
 | `v_teachers` | token, status (migration `TeacherView`) | search (the teacher re-check: an active teacher, and whether a member teaches) |
+| `v_guides` | level_id, language_id, level_name, has_text (whether the guide is non-blank; the text is not published; migration `GuideView`) | search (the guide re-check: a counting guide and its level's name) |
 | `v_class_schedules` | id, class_id, day, hour, minute, timezone, deleted_at (deleted slots included; migration `ClassScheduleAndLevelViews`) | notifications (scheduled reminders, the slot list) |

@@ -7,6 +7,6 @@ the rules are in `api/domain/`: `SearchPlans` (reach to a filter in the query), 
 (`q`, `kinds`), `ElasticSearchIndex` (the one boundary, `ISearchIndex`), `SearchFacts` (the re-check reads, `ISearchFacts`).
 
 - Dependencies: `access` (`Permissions`; `SearchModule.Dependencies`). Other domains are read through their published views in SQL:
-  `membership.v_members` (name, the caller's gender), `classes.v_classes`, `classes.v_enrolments`, `classes.v_teachers` (the teacher re-check).
+  `membership.v_members` (name, the caller's gender), `classes.v_classes`, `classes.v_enrolments`, `classes.v_teachers` (the teacher re-check), `classes.v_guides` (the guide re-check: dropped when the guide is gone, titled from the database; only levels 2 to 5 have a page, as PHP's slugs).
 - **Missing: the worker that feeds the index** from outbox events. Until it exists the index is fed by PHP's `drain_search` and `reindex_search`.
 - Facts, flags, PHP references and the checklist for the test phase: `docs/specs/initial-build/lane-search-notes.md`.

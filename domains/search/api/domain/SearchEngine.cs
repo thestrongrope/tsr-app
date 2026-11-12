@@ -10,7 +10,7 @@ internal sealed record SearchAnswer(IReadOnlyList<SearchGroup> Groups, IReadOnly
 /// Searching private data for one caller (PHP SearchModel::search), for each kind asked for, in three steps: the caller's reach is a filter
 /// in the query (<see cref="SearchPlans"/>); every hit is checked again against the database through published views, so a stale index can
 /// hide a hit but not expose one; the counts come from the hits that passed, capped at <see cref="Cap"/>. A kind the index cannot answer is
-/// listed as unavailable, never as "nothing found". Titles come from the database, not the index (except a teacher's guide and level names).
+/// listed as unavailable, never as "nothing found". Titles come from the database, not the index.
 /// </summary>
 internal sealed class SearchEngine(ISearchIndex index, ISearchFacts facts)
 {
@@ -108,17 +108,24 @@ internal sealed class SearchEngine(ISearchIndex index, ISearchFacts facts)
         return access.TeacherGenders.Contains(teacher.Gender) || (teacher.Gender == 1 && access.GentsWhoTeach && teacher.Teaches);
     }
 
-    // A guide is read through a class of its level: it is kept when the caller reaches one, and that class is what the result opens.
+    // PHP re-reads the guide (guideRow): a hit for a guide that no longer counts is dropped, and the title is the database's level name.
+    // It is read through a class of its level: kept when the caller reaches one, and that class is what the result opens.
     private async Task<IReadOnlyList<SearchResult>> CheckGuidesAsync(SearchAccess access, IReadOnlyList<SearchHit> hits, List<long> ids, CancellationToken ct)
     {
-        var classes = await facts.ActiveClassesOfLevelsAsync(ids, ct);
+        var guides = await facts.GuideLevelsAsync(ids, ct);
+        var classes = await facts.ActiveClassesOfLevelsAsync([.. guides.Keys], ct);
         var results = new List<SearchResult>();
         foreach (var hit in hits)
         {
+            if (!guides.TryGetValue(hit.Id, out var level))
+            {
+                continue;
+            }
+
             var reached = classes.FirstOrDefault(c => c.LevelId == hit.Id && SearchPlans.Allows(access.Classes.Search, [c.Id], [c.Gender], 0));
             if (reached is not null)
             {
-                results.Add(new SearchResult(reached.Id, Title(hit.Name), string.Empty));
+                results.Add(new SearchResult(reached.Id, Title(level + " guide"), string.Empty));
             }
         }
 
