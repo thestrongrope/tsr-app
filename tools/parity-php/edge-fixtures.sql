@@ -14,9 +14,11 @@ SELECT v.token, CONCAT('edge.', v.token, '@example.invalid'), 0, 'firebase', NOW
   UNION ALL SELECT 927009 UNION ALL SELECT 927012 UNION ALL SELECT 927100) v
 WHERE NOT EXISTS (SELECT 1 FROM users u WHERE u.token = v.token);
 
+-- Only this fixture's own members: a member another run created in this token range (a bulk add hands out the next token, which lands here) is left alone,
+-- or its mobile number stays behind under a fixture name and the bulk contract file finds it.
 UPDATE users SET email = CONCAT('edge.', token, '@example.invalid'), name = CONCAT('Edge Member ', token), gender = IF(token = 927009, NULL, '1'),
   roleid = CASE WHEN token = 927002 THEN 3 WHEN token IN (927004, 927005, 927006, 927007, 927008, 927009, 927012) THEN 1 ELSE 0 END
-WHERE token BETWEEN 927000 AND 927999;
+WHERE token IN (927002, 927003, 927004, 927005, 927006, 927007, 927008, 927009, 927012, 927100);
 
 INSERT INTO admin_access_log (accessed_at, user_id, token, roleid, page, method, ip, user_agent, referer)
 SELECT NOW() - INTERVAL 1 HOUR, u.id, 927100, 1, '/edge/alpha', 'GET', '192.0.2.1', 'Edge UA', 'https://example.invalid/r' FROM users u WHERE u.token = 927100 LIMIT 1;
