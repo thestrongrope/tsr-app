@@ -1711,6 +1711,55 @@ paths:
         "403": {$ref: "#/components/responses/Problem"}
         "422": {$ref: "#/components/responses/Problem"}
         "503": {$ref: "#/components/responses/Problem"}
+  /reports/quran-leaderboard:
+    get:
+      operationId: getQuranLeaderboard
+      summary: The recitation leaderboard, top 100
+      description: |
+        Permission quran-leaderboard:read for the gender (its own gender lock; 403). from and to are days YYYY-MM-DD (default the year to today; from after to or a bad day is 422;
+        more than five years is 422 "The range can cover at most five years"); level is a level name (422 "Unknown level"); minimum is a whole number from 0 (else 1).
+        Ranks are global (every attendance mark of the range, all genders and levels, ranked first); a member in two active classes is listed twice. total counts every ranked row.
+        Slice: features/report-quran-leaderboard/ReportQuranLeaderboard.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: gender, in: query, required: false, schema: {type: string}}
+        - {name: from, in: query, required: false, schema: {type: string}}
+        - {name: to, in: query, required: false, schema: {type: string}}
+        - {name: level, in: query, required: false, schema: {type: string}}
+        - {name: minimum, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: "{gender, from, to, levels[], total, students[{rank, name, token, class, recitation}]}"
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /reports/quran-leaderboard/download:
+    get:
+      operationId: downloadQuranLeaderboard
+      summary: Every ranked row of the recitation leaderboard as a file
+      description: |
+        format must be xlsx or pdf (422, before the sign-in), then the same checks and rows as GET /reports/quran-leaderboard without the top-100 cut (at most 50000). Columns Rank, Name, Token, Class, Recitation.
+        Named Quran-leaderboard-Gents-YYYY-MM-DD-to-YYYY-MM-DD. A PDF that cannot be rendered is 503. Slice: features/report-quran-leaderboard-download/ReportQuranLeaderboardDownload.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: format, in: query, required: true, schema: {type: string, enum: [xlsx, pdf]}}
+        - {name: gender, in: query, required: false, schema: {type: string}}
+        - {name: from, in: query, required: false, schema: {type: string}}
+        - {name: to, in: query, required: false, schema: {type: string}}
+        - {name: level, in: query, required: false, schema: {type: string}}
+        - {name: minimum, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: The file
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
   /reports/students/download:
     get:
       operationId: reportStudentsDownload

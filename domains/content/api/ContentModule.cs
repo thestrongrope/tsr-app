@@ -23,7 +23,6 @@ public static class ContentModule
     {
         routes.MapListPublishedArticles();
         routes.MapHolyQuran();
-        routes.MapPlannedRoutes();
         return routes;
     }
 }
