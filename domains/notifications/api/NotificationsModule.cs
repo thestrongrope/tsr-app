@@ -35,7 +35,7 @@ public static class NotificationsModule
     }
 
     /// <summary>The background workers this domain owns, by the name written in <c>TSR_WORKERS</c>. Adding a worker: add its name here and one line in <see cref="AddNotificationsWorkers"/>.</summary>
-    public static readonly IReadOnlyList<string> WorkerNames = [PushDrainWorker.WorkerName];
+    public static readonly IReadOnlyList<string> WorkerNames = [PushDrainWorker.WorkerName, ClassScheduleWorker.WorkerName];
 
     /// <summary>Registers the workers named in <paramref name="enabled"/> (the host has already refused unknown names). Called only in the run mode <c>--workers</c>.</summary>
     public static IServiceCollection AddNotificationsWorkers(this IServiceCollection services, IReadOnlySet<string> enabled)
@@ -44,6 +44,11 @@ public static class NotificationsModule
         if (enabled.Contains(PushDrainWorker.WorkerName))
         {
             services.AddHostedService<PushDrainWorker>();
+        }
+
+        if (enabled.Contains(ClassScheduleWorker.WorkerName))
+        {
+            services.AddHostedService<ClassScheduleWorker>();
         }
 
         return services;
