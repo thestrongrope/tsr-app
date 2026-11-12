@@ -19,6 +19,10 @@ Found while porting (12 Nov 2026 on). Nothing here is proven or fixed yet; each 
 | 11 | access class-access rules | A gender admin can manage rules on other admins of their own gender; level conditions are not limited by city (as PHP). | lane access |
 | 12 | platform push queue | Dedupe keys use SHA-256 where PHP uses SHA-1 (the analyzer rejects SHA-1): keys PHP already queued will not match during a cut-over. | lane sheets |
 | 13 | assessment quiz competition | PHP's `force_quiz_mode` setting is not ported; timestamps use a fixed +05:30; limits PHP lacks were added (30 episodes, 20 ids per list, a winner-count cap). | lane sheets |
+| 14 | search `features/search/Search.cs`, `domain/SearchEngine.cs` | Teacher results: a caller who may look up teachers of one gender only through the teacher-gender target is treated like one who may see every member of that gender; and the database re-check of teacher hits only confirms the member still exists, not their current gender or that they still teach, so a stale index can expose a hit it should hide. No published view carries teacher status. Check PHP's re-check; fix: a classes view for active teachers and a gender re-check. | automated commit review, lane search |
+| 15 | assessment quiz code | `spot_quizzes.code` has no unique index, in PHP or here; the generator checks "not exists" and retries, racy exactly as PHP's trigger. Decide on a unique index (existing data may hold duplicates). | batch A2, main thread |
+| 16 | assessment edit a quiz | Editing a published, answered quiz deletes and re-inserts its questions: students' answers are orphaned and their scores change (as PHP; pinned by a db test and Hurl). | batch A2 |
+| 17 | notifications device and broadcast | Knowing a push token is enough to move a device to another member; the cleanup route pushes a visible "System Check" to every device; a member with a non-numeric gender gets inbox rows for pushes they never received (all as PHP). | lane notify-core |
 
 ## Design points to confirm
 
@@ -29,3 +33,6 @@ Found while porting (12 Nov 2026 on). Nothing here is proven or fixed yet; each 
 | 3 | The quran leaderboard (2 routes) is built in classes, by the reasoning of the MCQ reports decision. | main thread assumption |
 | 4 | Google clients (Firebase accounts, FCM, Sheets) are each written by a different lane: merge them onto one service-account token provider in `shared/api`. | main thread |
 | 5 | Required or new settings: `TSR_NOTIFIER_URL` (no default; without it every WhatsApp route is 502), `TSR_GOOGLE_SERVICE_ACCOUNT_B64` (optional; without it Firebase deletion, push and Sheets are inert). | lanes |
+| 6 | The pending nudge (1 route) is built in classes and its push is queued, not sent: `sent:true` means recorded and queued; a 12-month cap on its range was added. | lane nudge |
+| 7 | Missing workers, none of them an API route: the push-queue drain, the scheduled class-notification sender, the search-index feeder, the WhatsApp reminder runner. | lanes |
+| 8 | Two lanes each made a `v_class_levels` view; the later copy was removed from its (never applied) migration at merge. | main thread |
