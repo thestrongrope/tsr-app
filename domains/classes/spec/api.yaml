@@ -1840,6 +1840,178 @@ paths:
         "401": {$ref: "#/components/responses/Problem"}
         "403": {$ref: "#/components/responses/Problem"}
         "422": {$ref: "#/components/responses/Problem"}
+  /reports/mcq-summary:
+    get:
+      operationId: reportMcqSummary
+      summary: Per class, how many MCQs were published in a range and how many students are listed
+      description: |
+        reports:read for the gender (403); from and to are days YYYY-MM-DD (default the 30 days to today; from after to, a bad day or more than 366 days is 422). Answers {gender, from, to, levels, classes[{classId, class, level, teacher (null when none), mcqs, students}]}: only classes that published an MCQ in the range (midnight of from to midnight of to), in class order. Slice: features/report-mcq-summary/ReportMcqSummary.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: gender, in: query, required: false, schema: {type: string}}
+        - {name: from, in: query, required: false, schema: {type: string}}
+        - {name: to, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /reports/mcq-summary/download-all:
+    get:
+      operationId: reportMcqSummaryAll
+      summary: The MCQ summary of every class as one CSV file
+      description: |
+        Same guard, gender and dates as GET /reports/mcq-summary. A row per student of every class in the report, or only of the classIds asked for (?classIds=1,2; a class outside the caller's reach adds nothing), a Score and a Max column for each topic. 404 when no student is left. Named MCQ_summary_YYYY-MM-DD_to_YYYY-MM-DD.csv. Slice: features/report-mcq-summary-all/ReportMcqSummaryAll.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: gender, in: query, required: false, schema: {type: string}}
+        - {name: from, in: query, required: false, schema: {type: string}}
+        - {name: to, in: query, required: false, schema: {type: string}}
+        - {name: classIds, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: The CSV file (attachment)
+          content:
+            text/csv:
+              schema: {type: string}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /reports/mcq-summary/{class_id}:
+    get:
+      operationId: reportMcqSummaryClass
+      summary: One class's students with their MCQ results
+      description: |
+        Same guard, gender and dates as the list. Answers {mcqs, maxMarks, students[{name, attempted, pending, correct, percent (null when nothing attempted), topics[{topic, max, correct (null when none)}]}]}, best score first. A class with no MCQ in the range, one out of reach and one of the other gender answer with no students. A class_id that is 0 or not a number narrows nothing: the answer is the first class of the whole report. Slice: features/report-mcq-summary-class/ReportMcqSummaryClass.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+        - {name: gender, in: query, required: false, schema: {type: string}}
+        - {name: from, in: query, required: false, schema: {type: string}}
+        - {name: to, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /reports/mcq-summary/{class_id}/download:
+    get:
+      operationId: reportMcqSummaryClassDownload
+      summary: One class's MCQ summary as an xlsx or PDF file
+      description: |
+        format must be xlsx or pdf (422, checked before the sign-in), then reports:read for the gender (403), then the dates (422). The class's students (Name, Attempted, Pending, Score, a column per topic), all cells text as the screen shows them. Named MCQ-summary-<class_id>-YYYY-MM-DD-to-YYYY-MM-DD. A PDF that cannot be rendered is 503. Slice: features/report-mcq-summary-class-download/ReportMcqSummaryClassDownload.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+        - {name: format, in: query, required: true, schema: {type: string, enum: [xlsx, pdf]}}
+        - {name: gender, in: query, required: false, schema: {type: string}}
+        - {name: from, in: query, required: false, schema: {type: string}}
+        - {name: to, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: The file (attachment)
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: {type: string, format: binary}
+            application/pdf:
+              schema: {type: string, format: binary}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
+  /reports/mcq-adherence:
+    get:
+      operationId: reportMcqAdherence
+      summary: Per class, how many of its standard MCQs were conducted
+      description: |
+        reports:read for the gender (403). Answers {gender, levels, classes[{classId, class, level, teacher (null when none), expected, conducted, pending, skipped, adherencePercent (float, one decimal)}]}: only classes with standard MCQs, worst adherence first. Slice: features/report-mcq-adherence/ReportMcqAdherence.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: gender, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+  /reports/mcq-adherence/download-all:
+    get:
+      operationId: reportMcqAdherenceAll
+      summary: The MCQ adherence of every class as one CSV file
+      description: |
+        Same guard and gender as the list. A row per standard MCQ of every class in the report, or only of the classIds asked for (?classIds=1,2). 404 when none is left. Named MCQ_adherence.csv. Slice: features/report-mcq-adherence-all/ReportMcqAdherenceAll.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: gender, in: query, required: false, schema: {type: string}}
+        - {name: classIds, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: The CSV file (attachment)
+          content:
+            text/csv:
+              schema: {type: string}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /reports/mcq-adherence/{class_id}:
+    get:
+      operationId: reportMcqAdherenceClass
+      summary: One class's standard MCQs and whether each was conducted
+      description: |
+        Same guard and gender as the list. Answers {expected, conducted, pending, skipped, adherencePercent, mcqs[{topic, subject, lesson, name, status conducted|pending|skipped}]}. A class out of reach or with no standard MCQs answers with zeros and no MCQs. A class_id that is 0 or not a number narrows nothing: the answer is the first (worst) class of the whole report. Slice: features/report-mcq-adherence-class/ReportMcqAdherenceClass.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+        - {name: gender, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+  /reports/mcq-adherence/{class_id}/download:
+    get:
+      operationId: reportMcqAdherenceClassDownload
+      summary: One class's MCQ adherence as an xlsx or PDF file
+      description: |
+        format must be xlsx or pdf (422, checked before the sign-in), then reports:read for the gender (403). The class's standard MCQs (Topic, Subject, Lesson, Name, Status as a word). Named MCQ-adherence-<class_id>. A PDF that cannot be rendered is 503. Slice: features/report-mcq-adherence-class-download/ReportMcqAdherenceClassDownload.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+        - {name: format, in: query, required: true, schema: {type: string, enum: [xlsx, pdf]}}
+        - {name: gender, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: The file (attachment)
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: {type: string, format: binary}
+            application/pdf:
+              schema: {type: string, format: binary}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
 components:
   securitySchemes:
     memberToken:

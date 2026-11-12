@@ -5,7 +5,7 @@ namespace Tsr.Classes.Api.Domain;
 [TestFixture]
 internal sealed class PendingRulesTests
 {
-    private static PendingRules.ClassRow Row(int id, int teacher, string name, string level = "MIQDAD") => new(id, "C-" + id, level, teacher, name);
+    private static PendingRules.ClassRow Row(int id, int teacher, string name, string level = "MIQDAD") => new(id, "C-" + id, level, teacher, name, string.Empty);
 
     private static readonly Dictionary<int, PendingRules.Mcq> NoMcq = [];
 

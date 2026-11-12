@@ -3,7 +3,7 @@ namespace Tsr.Classes.Api.Domain;
 /// <summary>PHP <c>MisModel::pendingByTeacher</c> and <c>api_reports_pending_in_level</c>: the classes with something pending, grouped under their teacher and ordered, and the narrowing to one level.</summary>
 internal static class PendingRules
 {
-    internal sealed record ClassRow(int Id, string Code, string Level, int Teacher, string TeacherName);
+    internal sealed record ClassRow(int Id, string Code, string Level, int Teacher, string TeacherName, string Location);
 
     internal sealed record Mcq(int Expected, int Conducted, int Pending);
 

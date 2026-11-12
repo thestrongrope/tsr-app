@@ -1,6 +1,5 @@
 using System.Globalization;
 using Microsoft.AspNetCore.Http;
-using Microsoft.EntityFrameworkCore;
 using Tsr.Access.Api;
 using Tsr.Shared.Api;
 
@@ -18,8 +17,6 @@ namespace Tsr.Classes.Api.Domain;
 internal static class PendingReport
 {
     internal sealed record Loaded(int Gender, string From, string To, IReadOnlyList<string> Levels, IReadOnlyList<PendingRules.PendingTeacher> Teachers);
-
-    private sealed record McqRow(int ClassId, int Expected, int Conducted, int Pending);
 
     public static async Task<(Loaded? Report, IResult? Refusal)> OpenAsync(HttpContext context, ClassesContext db, Permissions permissions, Caller caller, DateOnly today, CancellationToken ct)
     {
@@ -39,10 +36,10 @@ internal static class PendingReport
         }
 
         var ids = await ReportScope.KeepAssignedAsync(await scope!.ClassIdsAsync(db, 0, ct), permissions, caller, ct);
-        var classes = await ClassesAsync(db, ids, ct);
+        var classes = await ReportClasses.ForIdsAsync(db, ids, ct);
         var summary = await SummaryRows.ForMonthsAsync(db, ids, from, to, today, ct);
         var notFilled = summary.ToDictionary(r => r.Id, r => r.Expected - r.Submitted);
-        var mcqs = (await McqsAsync(db, ids, ct)).ToDictionary(r => r.ClassId, r => new PendingRules.Mcq(r.Expected, r.Conducted, r.Pending));
+        var mcqs = (await McqAdherence.FiguresAsync(db, ids, ct)).ToDictionary(r => r.ClassId, r => new PendingRules.Mcq(r.Expected, r.Conducted, r.Pending));
 
         var teachers = PendingRules.Group(classes, notFilled, mcqs);
         var levels = teachers.SelectMany(t => t.Classes).Select(c => c.Level).Distinct().ToList();
@@ -51,32 +48,4 @@ internal static class PendingReport
     }
 
     private static string Month(DateOnly day) => day.ToString("MM-yyyy", CultureInfo.InvariantCulture);
-
-    // PHP getAll: the level must exist (inner join), the teacher's name may be missing; order gender, level order, id.
-    private static async Task<List<PendingRules.ClassRow>> ClassesAsync(ClassesContext db, int[] ids, CancellationToken ct) =>
-        await db.Database
-            .SqlQuery<PendingRules.ClassRow>($"""
-                select c.id as "Id", c.code::text as "Code", cl.name::text as "Level", c.teacher as "Teacher", coalesce(u.name::text, '') as "TeacherName"
-                from classes.classes c
-                join classes.class_levels cl on cl.id = c.class_level_id
-                left join membership.v_members u on u.token = c.teacher
-                where c.id = any({ids})
-                order by c.gender, cl.sort_order, c.id
-                """)
-            .ToListAsync(ct);
-
-    // PHP getClassMcqAdherence for every class at once: a row per standard MCQ of the class's level and language, the class's latest live copy of it (if any) beside it.
-    private static async Task<List<McqRow>> McqsAsync(ClassesContext db, int[] ids, CancellationToken ct) =>
-        await db.Database
-            .SqlQuery<McqRow>($"""
-                select c.id as "ClassId", count(*)::int as "Expected",
-                       (count(*) filter (where k.quiz_id is not null and k.published_at is not null))::int as "Conducted",
-                       (count(*) filter (where k.quiz_id is not null and k.published_at is null))::int as "Pending"
-                from classes.classes c
-                join assessment.v_standard_mcqs m on m.level_id = c.class_level_id and m.language_id = coalesce(c.language_id, 1)
-                left join assessment.v_class_mcq_copies k on k.class_id = c.id and k.mcq_code = m.code
-                where c.id = any({ids})
-                group by c.id
-                """)
-            .ToListAsync(ct);
 }
