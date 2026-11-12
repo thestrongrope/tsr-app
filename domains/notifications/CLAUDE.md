@@ -4,7 +4,7 @@ Push, WhatsApp reminders, devices, scheduled class notifications and the notifie
 
 ## Status
 
-**Tables, the notify-core and WhatsApp slices (below) and published commands (12 Nov 2026, build-out: ported, not yet proven against PHP).** The public interfaces are `NotificationsCommands` (announce to members) and `NotificationsErasure` (account deletion). Catalog: `docs/specs/initial-build/operations.csv`; notes: `docs/specs/initial-build/lane-notify-core-notes.md`, `lane-whatsapp-notes.md`, `lane-sheets-notes.md`.
+**Tables, the notify-core and WhatsApp slices (below) and published commands (12 Nov 2026; the notify-core routes are proven by the test lane: `docs/specs/initial-build/test-notify-notes.md`, Hurl `spec/tests/notify-*.hurl`, `tools/contract-notify.sh`).** The public interfaces are `NotificationsCommands` (announce to members) and `NotificationsErasure` (account deletion). Catalog: `docs/specs/initial-build/operations.csv`; notes: `docs/specs/initial-build/lane-notify-core-notes.md`, `lane-whatsapp-notes.md`, `lane-sheets-notes.md`.
 `docs/specs/initial-build/schema-phase-design.md`, `schema-phase-tables.csv`, `schema-phase-notes.md`.
 
 | Part | State |

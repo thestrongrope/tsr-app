@@ -282,6 +282,22 @@ public sealed class TestNotifyTests
         Assert.That(await InboxOfAsync(all.Json!["notification_id"]!.GetValue<int>()), Is.EqualTo((long[])[T1, T2]), "the member query does not need a device: teacher 926122 gets a row and no push");
     }
 
+    [Test]
+    public async Task The_history_repeats_a_notification_whose_sender_token_is_shared_as_PHP_does_and_the_admin_audit_row_is_written_for_the_super_administrator_only()
+    {
+        await TestDatabase.ExecuteAsync(
+            $"insert into identity.users (token, email, firebase_uid) values ({A}, 'twin{A}@example.invalid', 'uid-twin-{A}'); "
+            + $"insert into notifications.notifications (notification_id, title, body, target_audience_criteria, created_by) values (77, 'Nt Shared', 'b', '{{\"type\":\"ALL_USERS\",\"value\":null}}', {A})");
+
+        var refused = await kit.SendAsync(A, HttpMethod.Get, "/notifications/history");
+        Assert.That(refused.Status, Is.EqualTo(HttpStatusCode.Forbidden));
+        Assert.That(await CountAsync("platform.admin_access_log"), Is.Zero, "no audit row for a refused caller");
+
+        var reply = await kit.SendAsync(Super, HttpMethod.Get, "/notifications/history");
+        Assert.That(reply.Json!["notifications"]!.AsArray().Count(n => n!["notification_id"]!.GetValue<int>() == 77), Is.EqualTo(2), "one row per account sharing the token (PHP's join; finding 7)");
+        Assert.That(await CountAsync("platform.admin_access_log"), Is.EqualTo(1));
+    }
+
     // ---- POST /notifications/cleanup-invalid-tokens ---------------------------------------------------------------------------------------------------------------------------------------------------
 
     [Test]
