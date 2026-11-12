@@ -49,8 +49,8 @@ Today's PHP API stays in tsr-account until routes move here. Domains planned: `i
 one has its slice; a `planned` one is a placeholder in its domain's `api/Planned.cs` that signs the caller in as the real
 route will (never creating a member), then answers 501 `{"detail": "Not implemented"}`. **Building a slice replaces its
 placeholder:** delete its line in `Planned.cs`, flip its state in `operations.csv` to `built` (the tests in `hosts/api/tests`
-fail until both match; a gateway block per path already exists). Built today: identity 1, access 3, platform 7,
-membership 24, classes 83, assessment 18 (136); the rest are planned (77). The report downloads (xlsx or PDF) all go through platform's `ReportExport` (`domains/platform/CLAUDE.md`). Tables only, besides routes: `notifications`; `assessment` has 9 quiz routes (batch A1: a member takes a quiz and reads scores).
+fail until both match; a gateway block per path already exists). Built today (12 Nov 2026): identity 10, access 13, platform 9,
+membership 24, classes 94, assessment 35, notifications 24, content 1, search 1 (211); 2 are planned (`/me/guides`, not in the PHP copy). **Of the 211, 136 are PROVEN against PHP (Hurl on both sides, database tests, review); the other 75 are PORTED only** (build-out mode, Asif, 12 Nov 2026: compiles with zero warnings and passes the structure tests; no contract tests yet). The lanes, their notes and the findings to settle in the test phase: `docs/specs/initial-build/build-out-lanes.md`, `lane-*-notes.md`, `build-out-findings.md`. The report downloads (xlsx or PDF) all go through platform's `ReportExport` (`domains/platform/CLAUDE.md`). Tables only, besides routes: `notifications`; `assessment` has 9 quiz routes (batch A1: a member takes a quiz and reads scores).
 `search` has routes only. Which owns what: `domains/CLAUDE.md`.
 
 ## Rules (the ones that must load without opening another file)
