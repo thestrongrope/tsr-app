@@ -73,7 +73,23 @@ public sealed partial class ReportExport
             return new Attachment(ReportXlsx.Build(title, sections), XlsxType, SafeName(filenameBase) + ".xlsx");
         }
 
-        var pdf = await _renderer.RenderAsync(ReportHtml.Build(title, sections), ct);
+        return await PdfAsync(_renderer.RenderAsync(ReportHtml.Build(title, sections), ct), filenameBase);
+    }
+
+    /// <summary>
+    /// A finished page as an upright A4 PDF download (the printable sheets of other domains; PHP rendered them with Dompdf). <paramref name="html"/> is the caller's own page: it must encode every value it holds and refer to no outside resource.
+    /// A renderer that is down or slow is the same 503 as a report's. <paramref name="filenameBase"/> is the route's own text.
+    /// </summary>
+    public async Task<IResult> DownloadPageAsync(string html, string filenameBase, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(html);
+        ArgumentException.ThrowIfNullOrWhiteSpace(filenameBase);
+        return await PdfAsync(_renderer.RenderPortraitAsync(html, ct), filenameBase);
+    }
+
+    private async Task<IResult> PdfAsync(Task<Result<byte[]>> rendering, string filenameBase)
+    {
+        var pdf = await rendering;
         if (!pdf.IsSuccess)
         {
             LogPdfFailed(pdf.Error);

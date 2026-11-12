@@ -540,6 +540,78 @@ paths:
         "403": {$ref: "#/components/responses/Problem"}
         "404": {$ref: "#/components/responses/Problem"}
         "422": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}/mcq:
+    post:
+      operationId: createQuiz
+      summary: A new empty quiz (a draft) in the class
+      description: |
+        Caller (401), class found and active (404 "Class not found"), mcqs:manage on the class (403), body (422 "Invalid JSON body"), name then topic (trimmed, required: 422 "name is required", "topic is required"; over 300 characters or a NUL byte: 422).
+        restrictToClass is 0 only when sent and (int) of it is 0, else 1. 201 {id}. Event assessment.quiz_created {quizId, classId, token, source: new}. Slice: features/manage-create/ManageCreate.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: {type: string}
+                topic: {type: string}
+                restrictToClass: {type: integer}
+      responses:
+        "201":
+          description: "{id}"
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}/mcq/standard/{mcq_id}/copy:
+    post:
+      operationId: copyStandardMcq
+      summary: A new quiz in the class made from a standard MCQ
+      description: |
+        Caller (401), class active (404), mcqs:manage on the class (403), standard MCQ found (404 "Standard MCQ not found"). The quiz carries the standard's code as mcq_code and its questions with the answer as option1. A second copy into the same class is accepted.
+        201 {success, id}. One transaction. Event assessment.quiz_created {source: standard}. Slice: features/manage-standard-copy/ManageStandardCopy.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+        - {name: mcq_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "201":
+          description: "{success, id}"
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /mcq/manage/{quiz_id}/copy:
+    post:
+      operationId: copyManagedQuiz
+      summary: Copy a quiz and its questions into another class
+      description: |
+        Quiz found and its class active (404), mcqs:copy on the source class (403 "You do not have permission to copy MCQs between these classes"), body (422), targetClassId above 0 (422 "targetClassId is required"), target active (404), mcqs:copy on the target (403),
+        a quiz of the target with the same name and topic (409 "A quiz with the same name & topic already exists in target class"). 201 {success, id}; the copy is a draft with a new code and no mcq_code. Event assessment.quiz_created {source: copy}. Slice: features/manage-copy/ManageCopy.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: quiz_id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [targetClassId]
+              properties:
+                targetClassId: {type: integer}
+      responses:
+        "201":
+          description: "{success, id}"
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
 components:
   securitySchemes:
     memberToken:

@@ -2,7 +2,6 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
-using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Assessment.Api.Domain;
 using Tsr.Shared.Api;
@@ -23,7 +22,6 @@ internal static class QuizSubmitSlice
 {
     private const int MaxQuestions = 5000;
     private const int MaxTextLength = 1000;
-    private const string UniqueIndex = "spot_quiz_responses_question_token";
 
     internal sealed record Answered(int QuizId, int ClassId, int Token);
 
@@ -155,13 +153,9 @@ internal static class QuizSubmitSlice
             await transaction.CommitAsync(ct);
             return true;
         }
-        catch (Exception e) when (IsDuplicateAnswer(e))
+        catch (Exception e) when (DuplicateAnswer.IsViolation(e))
         {
             return false;
         }
     }
-
-    private static bool IsDuplicateAnswer(Exception e) =>
-        e is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation, ConstraintName: UniqueIndex }
-        || e.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation, ConstraintName: UniqueIndex };
 }

@@ -15,10 +15,13 @@ using Tsr.Assessment.Api.Features.ClassQuizzes;
 using Tsr.Assessment.Api.Features.CopyClasses;
 using Tsr.Assessment.Api.Features.CopyQuizzes;
 using Tsr.Assessment.Api.Features.CopyTopics;
+using Tsr.Assessment.Api.Features.ManageCopy;
+using Tsr.Assessment.Api.Features.ManageCreate;
 using Tsr.Assessment.Api.Features.ManageDeactivate;
 using Tsr.Assessment.Api.Features.ManageList;
 using Tsr.Assessment.Api.Features.ManageQuiz;
 using Tsr.Assessment.Api.Features.ManageStandard;
+using Tsr.Assessment.Api.Features.ManageStandardCopy;
 using Tsr.Assessment.Api.Features.ManageTopics;
 using Tsr.Assessment.Api.Features.ManageUpdate;
 using Tsr.Assessment.Api.Features.OpenQuizzes;
@@ -92,6 +95,9 @@ public static class AssessmentModule
         routes.MapManageTopics();
         routes.MapManageQuiz();
         routes.MapManageUpdate();
+        routes.MapManageCreate();
+        routes.MapManageStandardCopy();
+        routes.MapManageCopy();
         routes.MapPlannedRoutes();
         return routes;
     }

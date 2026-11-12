@@ -67,10 +67,10 @@ POST,/mcq/quizzes/{quiz_id}/responses,assessment,create,built
 GET,/mcq/quizzes/{quiz_id}/my-score,assessment,create,built
 GET,/mcq/quizzes/{quiz_id},assessment,create,built
 GET,/classes/{class_id}/mcq/manage,assessment,create,built
-POST,/classes/{class_id}/mcq,assessment,create,planned
+POST,/classes/{class_id}/mcq,assessment,create,built
 GET,/classes/{class_id}/mcq/topics,assessment,create,built
 GET,/classes/{class_id}/mcq/standard,assessment,create,built
-POST,/classes/{class_id}/mcq/standard/{mcq_id}/copy,assessment,create,planned
+POST,/classes/{class_id}/mcq/standard/{mcq_id}/copy,assessment,create,built
 GET,/mcq/copy/classes,assessment,create,built
 GET,/mcq/copy/classes/{class_id}/topics,assessment,create,built
 GET,/mcq/copy/classes/{class_id}/quizzes,assessment,create,built
@@ -82,7 +82,7 @@ GET,/mcq/manage/{quiz_id},assessment,create,built
 PUT,/mcq/manage/{quiz_id},assessment,create,built
 POST,/mcq/manage/{quiz_id}/publish,assessment,create,planned
 POST,/mcq/manage/{quiz_id}/deactivate,assessment,create,built
-POST,/mcq/manage/{quiz_id}/copy,assessment,create,planned
+POST,/mcq/manage/{quiz_id}/copy,assessment,create,built
 GET,/classes/{class_id},classes,create,built
 PUT,/classes/{class_id},classes,create,built
 GET,/classes/{class_id}/manage,classes,create,built

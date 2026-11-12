@@ -12,14 +12,11 @@ internal static class Planned
     public static IEndpointRouteBuilder MapPlannedRoutes(this IEndpointRouteBuilder routes)
     {
         routes.MapPlanned(
-            ("POST", "/classes/{class_id}/mcq"),
-            ("POST", "/classes/{class_id}/mcq/standard/{mcq_id}/copy"),
             ("GET", "/mcq/manage/{quiz_id}/scores"),
             ("GET", "/mcq/manage/{quiz_id}/offline"),
             ("POST", "/mcq/manage/{quiz_id}/offline"),
             ("GET", "/mcq/manage/{quiz_id}/sheet"),
-            ("POST", "/mcq/manage/{quiz_id}/publish"),
-            ("POST", "/mcq/manage/{quiz_id}/copy"));
+            ("POST", "/mcq/manage/{quiz_id}/publish"));
         return routes;
     }
 }

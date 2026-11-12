@@ -31,8 +31,8 @@ public sealed class PublicSurfaceTests
         // Tables and placeholder routes only so far: the module class and nothing else.
         ["classes"] = ["ClassesModule"],
         ["assessment"] = ["AssessmentModule"],
-        // notifications: the module; NotificationsErasure (account deletion deletes a member's devices); NotificationsCommands (announce to members) with the record it takes (Announcement).
-        ["notifications"] = ["NotificationsModule", "NotificationsErasure", "NotificationsCommands", "Announcement"],
+        // notifications: the module; NotificationsErasure (account deletion deletes a member's devices); NotificationsCommands (announce to members) with the record it takes (Announcement) and the one it answers (AnnounceResult).
+        ["notifications"] = ["NotificationsModule", "NotificationsErasure", "NotificationsCommands", "Announcement", "AnnounceResult"],
         ["search"] = ["SearchModule"],
     };
 
