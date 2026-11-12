@@ -151,7 +151,7 @@ public sealed partial class SqlBoundaryTests
 
     private static IEnumerable<string> SourceFiles(string domain) => Sources(DomainApi(domain));
 
-    private static IEnumerable<string> Sources(string directory) =>
+    internal static IEnumerable<string> Sources(string directory) =>
         Directory.EnumerateFiles(directory, "*.cs", SearchOption.AllDirectories)
             .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
                 && !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal)

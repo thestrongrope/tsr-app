@@ -1,5 +1,8 @@
 using System.Net;
+using Microsoft.Extensions.DependencyInjection;
 using NUnit.Framework;
+using Tsr.Classes.Api;
+using Tsr.Classes.Api.Features.ClassCreate;
 
 namespace Tsr.Db.Tests;
 
@@ -335,5 +338,16 @@ public sealed class AdminB4aWritesTests
         Assert.That(all.Json!["deactivated"]!.AsArray(), Has.Count.EqualTo(1), "the super admin still sees the closed class");
         Assert.That(all.Json!["log"]!.AsArray(), Has.Count.EqualTo(1));
         Assert.That((await kit.SendAsync(Admin, HttpMethod.Get, "/admin/transfers/history")).Json!["total"]!.GetValue<int>(), Is.EqualTo(2));
+    }
+
+    [Test]
+    public async Task A_class_link_is_taken_when_an_existing_class_has_it_in_another_letter_case_CASE_C3()
+    {
+        using var factory = TestApi.Create();
+        using var scope = factory.Services.CreateScope();
+        var classes = scope.ServiceProvider.GetRequiredService<ClassesContext>();
+
+        Assert.That(await ClassCreateSlice.LinkTakenAsync(classes, "B4LINK1", CancellationToken.None), Is.True, "joining by link ignores letter case, so a link differing only by case is taken");
+        Assert.That(await ClassCreateSlice.LinkTakenAsync(classes, "b4link9", CancellationToken.None), Is.False);
     }
 }

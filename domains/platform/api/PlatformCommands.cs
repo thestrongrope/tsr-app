@@ -84,7 +84,7 @@ public static partial class PlatformCommands
         }
 
         var values = recipients.ToArray();
-        await db.Database.ExecuteSqlAsync($"update platform.outbound_messages set recipient = '[deleted]' where recipient = any({values})", ct);
+        await db.Database.ExecuteSqlAsync($"update platform.outbound_messages set recipient = '[deleted]' where recipient = any({values}::citext[])", ct);
     }
 
     private static void RequireTransaction(DbContext db)

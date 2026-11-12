@@ -25,7 +25,7 @@ internal static class QuizStateStore
     public static async Task<JsonNode?> LoadAsync(AssessmentContext db, string name, CancellationToken ct)
     {
         var text = await db.Database
-            .SqlQuery<string>($"""select document::text as "Value" from assessment.quiz_state where name = {name}""")
+            .SqlQuery<string>($"""select document::text as "Value" from assessment.quiz_state where name = {name}::citext""")
             .FirstOrDefaultAsync(ct);
         return text is null ? null : JsonNode.Parse(text);
     }
@@ -40,7 +40,7 @@ internal static class QuizStateStore
         await LoadAsync(db, QuizDay, ct) is JsonValue value && value.TryGetValue<long>(out var day) ? day : 0;
 
     public static async Task<bool> ExistsAsync(AssessmentContext db, string name, CancellationToken ct) =>
-        await db.Database.SqlQuery<int>($"""select 1 as "Value" from assessment.quiz_state where name = {name}""").AnyAsync(ct);
+        await db.Database.SqlQuery<int>($"""select 1 as "Value" from assessment.quiz_state where name = {name}::citext""").AnyAsync(ct);
 
     public static async Task SaveAsync(AssessmentContext db, string name, JsonNode document, TimeProvider clock, CancellationToken ct)
     {
@@ -57,6 +57,6 @@ internal static class QuizStateStore
     public static async Task DeleteAsync(AssessmentContext db, IReadOnlyList<string> names, CancellationToken ct)
     {
         var wanted = names.ToArray();
-        await db.Database.ExecuteSqlAsync($"delete from assessment.quiz_state where name = any({wanted})", ct);
+        await db.Database.ExecuteSqlAsync($"delete from assessment.quiz_state where name = any({wanted}::citext[])", ct);
     }
 }

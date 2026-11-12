@@ -2,7 +2,10 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using NUnit.Framework;
+using Tsr.Identity.Api;
 
 namespace Tsr.Db.Tests;
 
@@ -375,4 +378,17 @@ public sealed class SignInTests
     }
 
     private sealed record Reply(HttpStatusCode Status, JsonElement Body);
+
+    [Test]
+    public async Task An_EF_comparison_of_an_email_matches_a_row_that_differs_only_in_letter_case_LINQ_CHECK()
+    {
+        await TestDatabase.ExecuteAsync("insert into identity.users (token, email) values (924901, 'case.check@example.invalid') on conflict do nothing");
+        using var factory = TestApi.Create();
+        using var scope = factory.Services.CreateScope();
+        var identity = scope.ServiceProvider.GetRequiredService<IdentityContext>();
+
+        var found = await identity.Users.CountAsync(u => u.Email == "CASE.CHECK@EXAMPLE.INVALID");
+
+        Assert.That(found, Is.EqualTo(1), "EF sends the parameter as the column's type (citext)");
+    }
 }

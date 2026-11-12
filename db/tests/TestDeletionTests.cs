@@ -133,6 +133,24 @@ public sealed class TestDeletionTests
     }
 
     [Test]
+    public async Task A_queued_message_whose_recipient_differs_only_in_letter_case_is_redacted_and_a_similar_recipient_is_not_CASE_C1()
+    {
+        var requestId = await AddTargetWithRequestAsync();
+        await TestDatabase.ExecuteAsync(
+            """
+            insert into platform.outbound_messages (channel, recipient, payload, dedupe_key) values
+              ('push', 'DEVICE-924010-A', '[]', 'k-case-upper'),
+              ('push', 'device-924010-ab', '[]', 'k-case-lookalike')
+            """);
+
+        ReplyAssert.Expect(await api.CompleteAsync(TestDeletionKit.Admin, requestId), HttpStatusCode.OK);
+
+        Assert.That(await MembershipTestKit.CountAsync("platform.outbound_messages", "dedupe_key = 'k-case-upper' and recipient = '[deleted]'"), Is.EqualTo(1),
+            "MariaDB compares the recipient without regard to letter case, so the upper-case copy of the device id is redacted too");
+        Assert.That(await MembershipTestKit.CountAsync("platform.outbound_messages", "dedupe_key = 'k-case-lookalike' and recipient = 'device-924010-ab'"), Is.EqualTo(1), "a recipient that only looks similar is kept");
+    }
+
+    [Test]
     public async Task A_token_held_by_two_user_rows_has_both_anonymised_but_Firebase_is_asked_about_one_account_only_as_PHP_does_FINDING_1()
     {
         var requestId = await AddTargetWithRequestAsync();

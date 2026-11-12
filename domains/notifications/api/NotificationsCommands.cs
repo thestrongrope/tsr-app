@@ -137,7 +137,7 @@ public static class NotificationsCommands
     private static async Task<int?> FindNotificationAsync(DbContext db, Announcement a, CancellationToken ct) =>
         await db.Database.SqlQuery<int>($"""
             select notification_id as "Value" from notifications.notifications
-            where created_by = {a.Sender} and title = {a.Title} and body = {a.Body} and action_link = {a.ActionLink}
+            where created_by = {a.Sender} and title = {a.Title}::citext and body = {a.Body}::citext and action_link = {a.ActionLink}::citext
             order by notification_id desc limit 1
             """).Cast<int?>().FirstOrDefaultAsync(ct);
 
