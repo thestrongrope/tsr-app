@@ -56,16 +56,16 @@ internal static class DeviceRegisterSlice
     private static async Task SaveAsync(NotificationsContext db, TimeProvider clock, int member, string device, CancellationToken ct)
     {
         await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        await db.Database.ExecuteSqlAsync($"select pg_advisory_xact_lock(hashtextextended({device}, 0))", ct);
+        await db.Database.ExecuteSqlAsync($"select pg_advisory_xact_lock(hashtextextended(lower({device}), 0))", ct);
         var touched = await db.Database.ExecuteSqlAsync(
-            $"update notifications.user_devices set last_accessed_at = now() where token = {member} and device_id = {device}",
+            $"update notifications.user_devices set last_accessed_at = now() where token = {member} and device_id = {device}::citext",
             ct);
         if (touched == 0)
         {
             await db.Database.ExecuteSqlAsync($"insert into notifications.user_devices (token, device_id) values ({member}, {device})", ct);
         }
 
-        var moved = await db.Database.ExecuteSqlAsync($"delete from notifications.user_devices where device_id = {device} and token <> {member}", ct);
+        var moved = await db.Database.ExecuteSqlAsync($"delete from notifications.user_devices where device_id = {device}::citext and token <> {member}", ct);
         await Outbox.WriteAsync(db, "notifications.device_registered", new DeviceRegistered(member, moved), clock, ct);
         await transaction.CommitAsync(ct);
     }

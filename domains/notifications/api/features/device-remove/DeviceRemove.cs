@@ -53,7 +53,7 @@ internal static class DeviceRemoveSlice
     private static async Task<int> RemoveAsync(NotificationsContext db, TimeProvider clock, int member, string device, CancellationToken ct)
     {
         await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        var deleted = await db.Database.ExecuteSqlAsync($"delete from notifications.user_devices where token = {member} and device_id = {device}", ct);
+        var deleted = await db.Database.ExecuteSqlAsync($"delete from notifications.user_devices where token = {member} and device_id = {device}::citext", ct);
         if (deleted > 0)
         {
             await Outbox.WriteAsync(db, "notifications.device_removed", new DeviceRemoved(member), clock, ct);

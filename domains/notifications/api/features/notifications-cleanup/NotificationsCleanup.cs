@@ -99,7 +99,7 @@ internal static class NotificationsCleanupSlice
             var removed = 0;
             foreach (var chunk in invalid.Chunk(DeleteChunk))
             {
-                removed += await db.Database.ExecuteSqlAsync($"delete from notifications.user_devices where device_id = any({chunk})", ct);
+                removed += await db.Database.ExecuteSqlAsync($"delete from notifications.user_devices where device_id = any({chunk}::citext[])", ct);
             }
 
             if (removed > 0)
