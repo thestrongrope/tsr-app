@@ -4,7 +4,7 @@ Push, WhatsApp reminders, devices, scheduled class notifications and the notifie
 
 ## Status
 
-**Tables and placeholder routes (2026-11-10).** No slices; the one public interface is `NotificationsCommands` (below): every operation of this domain is a 501 placeholder in `api/Planned.cs` (catalog: `docs/specs/initial-build/operations.csv`). Facts and decisions:
+**Tables, the notify-core and WhatsApp slices (below) and published commands (12 Nov 2026, build-out: ported, not yet proven against PHP).** The public interfaces are `NotificationsCommands` (announce to members) and `NotificationsErasure` (account deletion). Catalog: `docs/specs/initial-build/operations.csv`; notes: `docs/specs/initial-build/lane-notify-core-notes.md`, `lane-whatsapp-notes.md`, `lane-sheets-notes.md`.
 `docs/specs/initial-build/schema-phase-design.md`, `schema-phase-tables.csv`, `schema-phase-notes.md`.
 
 | Part | State |
@@ -22,6 +22,21 @@ Push, WhatsApp reminders, devices, scheduled class notifications and the notifie
 - Dependencies: `access` (only because platform needs it to start), `platform` (`PlatformCommands.QueueMessagesAsync`, the push queue), `identity` (SQL read of `identity.v_users`: token and email, to leave the demo cohort out).
 - Published command (`NotificationsCommands.AnnounceAsync(db, Announcement, ct)`, on the caller's open transaction; nothing is sent, no worker exists): the inbox copy (found again by title, body and link among system notifications, else created with created_by 0 and fanned out) and one queued push per device, deduped by the caller's key. `Announcement(Title, Body, ActionLink, DataType, DedupeKey, Tokens)`: `Tokens` null is every registered member, else exactly those member tokens (a class lane passes the class's students). First caller: assessment's quiz settings refresh.
 - Events: none published, none consumed.
+- Dependencies: `access` (`Permissions`) and `platform` (`PlatformCommands.RecordAdminAccessAsync`); `NotificationsModule.Dependencies`. Read through published views only: `classes.v_classes`, `v_enrolments`, `v_class_schedules`, `v_class_levels`, `identity.v_users`, `membership.v_members`, `platform.v_genders`.
+- Push: `IPushSender` (`api/domain/IPushSender.cs`, internal), real implementation `FcmPushSender` (FCM HTTP v1, setting `TSR_GOOGLE_SERVICE_ACCOUNT_B64`, optional: without it the push routes answer 500 "Push notifications are not configured").
+- **Lane notify-core (12 Nov 2026):** devices (`device-register`, `device-remove`), the member inbox (`user-notifications*`, `user-notification-read`), announcements (`notifications-send`, `-history`, `-cleanup`, `-stats`) and class notifications (`class-notification-send`, `class-scheduled-create|list|delete`), all under `api/features/`, routes registered by `api/NotifyCoreRoutes.cs`. Shared: `domain/NotificationWriter.cs` (a notification and its inbox fan-out, one transaction, the `notifications.sent` event), `Audience.cs`, `PushBatch.cs`, `ScheduleInput.cs`, `ScheduleNextRun.cs`. Not built: the workers that send scheduled class notifications and drain the push queue. Notes: `docs/specs/initial-build/lane-notify-core-notes.md`.
+- Events (outbox, in the transaction of the change; no consumer yet; never a device token, title or body):
+
+| Event | Payload | Written by |
+|---|---|---|
+| `notifications.device_registered` | token, reassignedFrom (count) | POST /devices |
+| `notifications.device_removed` | token | DELETE /devices |
+| `notifications.sent` | notificationId, recipientCount, source (`announcement`, `class`), sentBy | POST /notifications/send, POST /classes/{id}/notifications |
+| `notifications.invalid_devices_removed` | count | POST /notifications/cleanup-invalid-tokens |
+| `notifications.class_schedule_created` | id, classId, kind, createdBy | POST .../notifications/scheduled |
+| `notifications.class_schedule_deleted` | id, classId, deletedBy | DELETE .../notifications/scheduled/{id} |
+
+  Consumed: none.
 
 ## Checks
 

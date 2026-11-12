@@ -3,13 +3,194 @@ info:
   title: TSR notifications
   version: 0.1.0
   description: |
-    The notifications domain's actions. Behaviour: tests/ (run against any base URL).
-    Forward compatible: a store-live app keeps calling these, so add fields and routes freely but
-    never remove or change one without the release process. Every error body is {"detail": "..."}.
+    The notifications domain's actions built so far (lane notify-core: devices, the member inbox, announcements, class notifications). Behaviour: tests/ (not written yet; the test phase).
+    Forward compatible: a store-live app keeps calling these, so add fields and routes freely but never remove or change one without the release process. Every error body is {"detail": "..."}.
+    Every operation here is `create`: PHP signs the caller in with the member-creating sign-in. Details of each rule: the slice's header comment and docs/specs/initial-build/lane-notify-core-notes.md.
 servers:
   - url: http://localhost:8088
     description: Local dev stack (gateway)
 paths:
+  /devices:
+    post:
+      operationId: registerDevice
+      summary: Register the caller's push address
+      description: |
+        Permission devices:manage. Body {fcmToken} (or fcm_token), trimmed, 1 to 500 characters. The caller's own row is updated or inserted; the same token held by any other member is deleted
+        (a device belongs to whoever registered it last). Slice: features/device-register/DeviceRegister.cs. Event notifications.device_registered.
+      security: [{memberToken: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, required: [fcmToken], properties: {fcmToken: {type: string}, fcm_token: {type: string}}}
+      responses:
+        "201": {description: "{ok: true}"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+    delete:
+      operationId: removeDevice
+      summary: Forget one of the caller's push addresses
+      description: |
+        Permission devices:manage. Same body. Only the caller's own row goes. Slice: features/device-remove/DeviceRemove.cs. Event notifications.device_removed (only when a row went).
+      security: [{memberToken: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, required: [fcmToken], properties: {fcmToken: {type: string}, fcm_token: {type: string}}}
+      responses:
+        "200": {description: "{ok: true, deleted: n}"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /user/notifications:
+    get:
+      operationId: listMyNotifications
+      summary: The caller's own inbox, newest first
+      description: |
+        Permission notifications:read. limit (default 20, at most 200 used) and offset (default 0) are whole numbers or 422 "Invalid limit" / "Invalid offset".
+        Items: {id (inbox row id), notification_id, title, body, actionLink, sentAt, isRead, readAt, classes: [{id, name}]}. Slice: features/user-notifications/UserNotifications.cs.
+      security: [{memberToken: []}]
+      responses:
+        "200": {description: "{notifications, total, unread_count, limit, offset}"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /user/notifications/unread-count:
+    get:
+      operationId: myUnreadCount
+      summary: How many inbox rows are unread
+      description: Permission notifications:read. Slice: features/user-notifications-unread-count/UserNotificationsUnreadCount.cs.
+      security: [{memberToken: []}]
+      responses:
+        "200": {description: "{unread_count}"}
+        "403": {$ref: "#/components/responses/Problem"}
+  /user/notifications/read-all:
+    post:
+      operationId: markAllMyNotificationsRead
+      summary: Mark every unread inbox row of the caller read
+      description: Permission notifications:read. Slice: features/user-notifications-read-all/UserNotificationsReadAll.cs.
+      security: [{memberToken: []}]
+      responses:
+        "200": {description: "{ok: true}"}
+        "403": {$ref: "#/components/responses/Problem"}
+  /user/notifications/{notification_id}/read:
+    post:
+      operationId: markMyNotificationRead
+      summary: Mark one inbox row read
+      description: |
+        Permission notifications:read. The id is the INBOX ROW id. Someone else's row, or none, changes nothing and still answers ok.
+        Slice: features/user-notification-read/UserNotificationRead.cs.
+      security: [{memberToken: []}]
+      parameters:
+        - {name: notification_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200": {description: "{ok: true}"}
+        "403": {$ref: "#/components/responses/Problem"}
+  /notifications/send:
+    post:
+      operationId: sendAnnouncement
+      summary: Push an announcement to an audience and record it
+      description: |
+        IRREVERSIBLE. Permission notifications:broadcast (403 "Only super administrators can send notifications"); writes an admin audit row.
+        Body {title (1 to 255 characters), body (1 to 2000), target: {type: ALL_USERS | CLASS_LEVEL | GENDER | TEACHERS, value: list}, action_link?}.
+        500 {"detail": "Push notifications are not configured"} when no FCM credential is set (nothing is sent or written). Slice: features/notifications-send/NotificationsSend.cs. Event notifications.sent.
+      security: [{memberToken: []}]
+      responses:
+        "200": {description: "{success, message, device_count, success_count, failure_count, notification_id}"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "500": {$ref: "#/components/responses/Problem"}
+  /notifications/history:
+    get:
+      operationId: notificationHistory
+      summary: What has been sent, newest first, with who it reached
+      description: |
+        Permission notifications:broadcast (403 "Only super administrators can view notification history"). limit (default 50, at most 200 used), offset.
+        Slice: features/notifications-history/NotificationsHistory.cs.
+      security: [{memberToken: []}]
+      responses:
+        "200": {description: "{notifications: [{notification_id, title, body, device_count, success_count, failure_count, sent_at, action_link, sender_name, sender_email, target_audience_criteria, audience_summary, audience_items, recipient_count}], limit, offset, count}"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /notifications/cleanup-invalid-tokens:
+    post:
+      operationId: cleanupInvalidDeviceTokens
+      summary: Push a "System Check" to every device and delete the tokens FCM rejects
+      description: |
+        VISIBLE TO EVERY USER. Permission notifications:broadcast (403 "Only super administrators can cleanup invalid tokens"). Slice: features/notifications-cleanup/NotificationsCleanup.cs.
+        Event notifications.invalid_devices_removed.
+      security: [{memberToken: []}]
+      responses:
+        "200": {description: "{success, message, tokens_before, tokens_after, tokens_removed, successful_sends, failed_sends} (tokens_after and the send counts are absent when there was no device)"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "500": {$ref: "#/components/responses/Problem"}
+  /notifications/stats:
+    get:
+      operationId: notificationStats
+      summary: Delivery totals
+      description: Permission notifications:broadcast (403 "Only super administrators can view notification statistics"). Slice: features/notifications-stats/NotificationsStats.cs.
+      security: [{memberToken: []}]
+      responses:
+        "200": {description: "{total_notifications, total_devices_targeted, total_successful, total_failed, last_sent_at} (the last four null on an empty table)"}
+        "403": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}/notifications:
+    post:
+      operationId: sendClassNotification
+      summary: Push to the devices of a class's active students and record it
+      description: |
+        IRREVERSIBLE. The class (404 "Class not found"), notifications:send on it (403 "You do not have permission to send notifications for this class"). Body {title, body, action_link?}
+        (trimmed; 255 and 2000 characters). 10 an hour per member (429 "Too many class notifications; try again later"). 500 when no FCM credential is set.
+        Slice: features/class-notification-send/ClassNotificationSend.cs. Event notifications.sent.
+      security: [{memberToken: []}]
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200": {description: "{success, message, device_count, student_count, success_count, failure_count, notification_id}"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "429": {$ref: "#/components/responses/Problem"}
+        "500": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}/notifications/scheduled:
+    post:
+      operationId: createScheduledClassNotification
+      summary: Schedule a notification for a class (sends nothing now)
+      description: |
+        Guards as the send. Body {title, body, action_link?, kind: ONCE | WEEKLY | REMINDER, timezone (IANA), send_at | weekdays + send_time | class_schedule_id + offset_minutes (+ repeat_weekly)}.
+        At most 20 active per class (422); 20 an hour per member (429 "Too many scheduled notifications created; try again later"). A worker fires them (not built).
+        Slice: features/class-scheduled-create/ClassScheduledCreate.cs. Event notifications.class_schedule_created.
+      security: [{memberToken: []}]
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "201": {description: "{success: true, item}"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "429": {$ref: "#/components/responses/Problem"}
+    get:
+      operationId: listScheduledClassNotifications
+      summary: A class's scheduled notifications and its schedule slots
+      description: Guards as the send. At most 500 items. Slice: features/class-scheduled-list/ClassScheduledList.cs.
+      security: [{memberToken: []}]
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200": {description: "{items, schedules: [{id, day, hour, minute, timezone}]}"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}/notifications/scheduled/{scheduled_id}:
+    delete:
+      operationId: deleteScheduledClassNotification
+      summary: Remove one scheduled notification of the class
+      description: Guards as the send, then 404 "Scheduled notification not found". Slice: features/class-scheduled-delete/ClassScheduledDelete.cs. Event notifications.class_schedule_deleted.
+      security: [{memberToken: []}]
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+        - {name: scheduled_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200": {description: "{success: true}"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
   /admin/whatsapp/reminders:
     get:
       operationId: listWhatsappReminders
