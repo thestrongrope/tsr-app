@@ -94,7 +94,8 @@ public static partial class PlatformCommands
     /// <summary>
     /// PHP <c>queue_message</c> (functions.php:472, OutboundMessagesModel::enqueue): one <c>outbound_messages</c> row per non-blank recipient with status queued, on the caller's transaction. NOTHING is sent here: the push channel is
     /// drained by the notifications push-drain worker (run mode <c>--workers</c>). The dedupe key is PHP's <c>dedupeKeyFor</c>: the first 150 characters of <paramref name="dedupeKey"/>, a colon and the first 20 bytes of the SHA-256 of the recipient in hex (PHP used SHA-1: a deliberate difference, so a key PHP queued is not recognised); the unique (channel, dedupe_key) index makes a repeat a no-op.
-    /// Returns the rows queued. Needs an open transaction (it does not start one). The recipients are device ids: not logged.
+    /// Returns the rows queued. ONE statement that starts no transaction and needs none: inside the caller's open transaction it commits or rolls back with it (the announce command), without one it commits at once
+    /// (the class schedule worker queues first, then claims the occurrence in a transaction of its own). The recipients are device ids: not logged.
     /// </summary>
     public static async Task<int> QueueMessagesAsync(
         DbContext db, string channel, IReadOnlyList<string> recipients, string payloadJson, string? dedupeKey, int? createdBy, CancellationToken ct)
