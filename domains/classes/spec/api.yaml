@@ -1847,6 +1847,31 @@ paths:
         "401": {$ref: "#/components/responses/Problem"}
         "403": {$ref: "#/components/responses/Problem"}
         "422": {$ref: "#/components/responses/Problem"}
+  /reports/pending/nudge:
+    post:
+      operationId: reportPendingNudge
+      summary: A coordinator reminds a teacher of the pending class forms and MCQs
+      description: |
+        reports:read for the gender (403). Body {teacher (a JSON integer above 0, else 422 "teacher must be a member token"), send (only true sends), from, to (months MM-YYYY, default last month to this month, at most 12 months, else 422)}.
+        The teacher must be in the caller's own pending report, else 422 "Nothing is pending for this teacher" (also outside the caller's reach). Without send, answers {teacherToken, teacher, title, body, alreadyReminded, lastReminded, sent: false, deviceCount: 0}.
+        With send: 429 when the teacher was reminded in the last 24 hours, 429 over 30 reminders an hour per sender; else the reminder is recorded, put in the teacher's inbox and its pushes queued (nothing is sent here): 200 {sent: true, deviceCount (devices queued for), lastReminded, ...}. Slice: features/report-pending-nudge/ReportPendingNudge.cs.
+      security:
+        - memberToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "429": {$ref: "#/components/responses/Problem"}
   /reports/tsr:
     get:
       operationId: reportTsr

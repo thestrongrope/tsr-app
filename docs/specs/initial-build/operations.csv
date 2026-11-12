@@ -143,7 +143,7 @@ GET,/registrations/{registration_id}/classes,classes,create,built
 POST,/registrations/{registration_id}/place,classes,create,built
 POST,/registrations/{registration_id}/reject,membership,create,built
 GET,/reports/quran-leaderboard/download,classes,create,built
-POST,/reports/pending/nudge,notifications,create,planned
+POST,/reports/pending/nudge,classes,create,built
 GET,/syllabus/levels,classes,create,built
 GET,/syllabus/level/{level_id},classes,create,built
 GET,/admin/syllabus,classes,create,built

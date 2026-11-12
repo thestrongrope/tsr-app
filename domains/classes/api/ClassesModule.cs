@@ -80,6 +80,7 @@ using Tsr.Classes.Api.Features.ReportMcqSummaryClass;
 using Tsr.Classes.Api.Features.ReportMcqSummaryClassDownload;
 using Tsr.Classes.Api.Features.ReportPending;
 using Tsr.Classes.Api.Features.ReportPendingDownload;
+using Tsr.Classes.Api.Features.ReportPendingNudge;
 using Tsr.Classes.Api.Features.ReportQuranLeaderboard;
 using Tsr.Classes.Api.Features.ReportQuranLeaderboardDownload;
 using Tsr.Classes.Api.Features.ReportStudents;
@@ -105,7 +106,7 @@ namespace Tsr.Classes.Api;
 public static class ClassesModule
 {
     /// <summary>Other domain modules this one may use (domains/CLAUDE.md rule 7). access (permissions, and the port it supplies), platform (the admin audit command), membership (the accepted-registration command), identity (membership starts only with it registered; the email command); other domains are read through their v_* views.</summary>
-    public static readonly IReadOnlyList<string> Dependencies = ["access", "platform", "membership", "identity"];
+    public static readonly IReadOnlyList<string> Dependencies = ["access", "platform", "membership", "identity", "notifications"];
 
     public static IServiceCollection AddClasses(this IServiceCollection services)
     {
@@ -194,6 +195,7 @@ public static class ClassesModule
         routes.MapReportMcqAdherenceClassDownload();
         routes.MapReportPending();
         routes.MapReportPendingDownload();
+        routes.MapReportPendingNudge();
         routes.MapReportTsr();
         routes.MapReportTsrDownload();
         routes.MapReportQuranLeaderboard();

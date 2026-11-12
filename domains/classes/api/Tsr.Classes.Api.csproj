@@ -7,6 +7,7 @@
     <ProjectReference Include="../../platform/api/Tsr.Platform.Api.csproj" />
     <ProjectReference Include="../../membership/api/Tsr.Membership.Api.csproj" />
     <ProjectReference Include="../../identity/api/Tsr.Identity.Api.csproj" />
+    <ProjectReference Include="../../notifications/api/Tsr.Notifications.Api.csproj" />
   </ItemGroup>
   <ItemGroup>
     <!-- PhpFloat and RequestBodies moved to shared/api when assessment became their second user. -->

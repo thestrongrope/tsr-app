@@ -37,7 +37,6 @@ public static class NotificationsModule
     {
         routes.MapWhatsApp();
         routes.MapNotifyCore();
-        routes.MapPlannedRoutes();
         return routes;
     }
 }
