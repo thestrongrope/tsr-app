@@ -66,14 +66,7 @@ HTTP 501
 [Asserts]
 jsonpath "$.detail" == "Not implemented"
 
-# search
-GET {{base_url}}/search
-{{auth_header}}: {{auth_value}}
-HTTP 501
-[Asserts]
-jsonpath "$.detail" == "Not implemented"
-
-# A placeholder asks for sign-in first, exactly as the real route will
+# search has no placeholder left (GET /search is built); its path still answers 401 without a sign-in
 GET {{base_url}}/search
 HTTP 401
 [Asserts]
