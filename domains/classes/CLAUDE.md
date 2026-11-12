@@ -20,7 +20,7 @@ Classes, levels, tags, schedules, sessions, attendance, enrolment, teachers, syl
   integers; the one foreign key (`syllabus` to `class_levels`) stays inside the schema. A session's day (`conducted_on`) and the class dates are `date`.
 - `classes.city` and `classes.country` (the columns access rules match) use the ICU collation `public.geo_ci_ai` (case and accent insensitive, as MariaDB's
   was), declared by platform's migration. Every other text column is `citext` with a length CHECK.
-- Dependencies: `access` (`Permissions` and the port `IClassScopes` it supplies), `platform` (`PlatformCommands.RecordAdminAccessAsync`, the admin audit row; `ReportExport`, the xlsx and PDF downloads), `membership` (`MembershipCommands.RecordAcceptedRegistrationAsync`, `ChangeContactAsync`, `CreateProfileAsync`), `identity` (`IdentityCommands.ChangeEmailAsync`, `CreateMemberAsync`); all `ClassesModule.Dependencies`. Other domains are read through their published `v_*` views in SQL (`membership.v_members`, `v_guardian_links`, `platform.v_genders`, `assessment.v_quiz_results`, `assessment.v_quizzes`, `assessment.v_standard_mcqs`, `assessment.v_class_mcq_copies`, `content.v_quran` for the surah list of the conduction screens). Register it after platform (`Program.cs`): its migration uses platform's collation.
+- Dependencies: `access` (`Permissions` and the port `IClassScopes` it supplies), `platform` (`PlatformCommands.RecordAdminAccessAsync`, the admin audit row; `ReportExport`, the xlsx and PDF downloads), `membership` (`MembershipCommands.RecordAcceptedRegistrationAsync`, `ChangeContactAsync`, `CreateProfileAsync`), `identity` (`IdentityCommands.ChangeEmailAsync`, `CreateMemberAsync`), `notifications` (`NotificationsCommands.LastNudgeAsync`, `AnnounceAsync`: the nudge); all `ClassesModule.Dependencies`. Other domains are read through their published `v_*` views in SQL (`membership.v_members`, `v_guardian_links`, `platform.v_genders`, `assessment.v_quiz_results`, `assessment.v_quizzes`, `assessment.v_standard_mcqs`, `assessment.v_class_mcq_copies`, `content.v_quran` for the surah list of the conduction screens). Register it after platform (`Program.cs`): its migration uses platform's collation.
 - Events (outbox, written in the transaction of the change; no consumer yet):
 
 | Event | Payload | Written by |
@@ -42,6 +42,7 @@ Classes, levels, tags, schedules, sessions, attendance, enrolment, teachers, syl
 | `classes.syllabus_item_created` | syllabusId, levelId, createdBy | POST /admin/syllabus |
 | `classes.syllabus_item_updated` | syllabusId, changedBy | PUT /admin/syllabus/{id} |
 | `classes.syllabus_item_deleted` | syllabusId, deletedBy | DELETE /admin/syllabus/{id} |
+| `classes.teacher_nudged` | teacherToken, senderToken, classIds | POST /reports/pending/nudge (with send true) |
 | `classes.teacher_training_changed` | token, salman, abuzar, miqdad, ammar, bilal, changedBy, batchId | POST /admin/teachers/training, POST /admin/teachers/import (one per teacher) |
 
   Consumed: none. PHP's push, WhatsApp and search-outbox touches on enrolment changes are not sent (conduction sends nothing in PHP either): the outbox row is the hand-off. The admin audit row PHP writes for privileged callers (manage, update, create, bulk add) is platform's published command, called through `ClassGuards.LogAdminAccessAsync` right after the permission check.
@@ -56,6 +57,13 @@ Classes, levels, tags, schedules, sessions, attendance, enrolment, teachers, syl
 | `MembershipCommands.CreateProfileAsync` | membership | bulk add |
 | `IdentityCommands.CreateMemberAsync` | identity | bulk add |
 | `IdentityCommands.ChangeEmailAsync` | identity | edit a student |
+
+## Advisory locks (`pg_advisory_xact_lock(class, key)`)
+
+| Class | Key | Used by |
+|---|---|---|
+| 7200001 | member token | POST /admin/members/{token}/enrolments |
+| 7300001 | teacher token | POST /reports/pending/nudge (the 24-hour rule is checked again under it) |
 
 ## Public routes (no sign-in), and why
 

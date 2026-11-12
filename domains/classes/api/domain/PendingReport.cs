@@ -35,7 +35,14 @@ internal static class PendingReport
             return (null, Problem.Detail(StatusCodes.Status422UnprocessableEntity, invalid));
         }
 
-        var ids = await ReportScope.KeepAssignedAsync(await scope!.ClassIdsAsync(db, 0, ct), permissions, caller, ct);
+        return (await LoadAsync(scope!, from, to, ReportScope.LevelOf(context), db, permissions, caller, today, ct), null);
+    }
+
+    /// <summary>The report for a scope already opened and months already checked (the nudge takes its months from its body); a level of "" narrows nothing.</summary>
+    public static async Task<Loaded> LoadAsync(ReportScope scope, string from, string to, string level, ClassesContext db, Permissions permissions, Caller caller, DateOnly today, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(scope);
+        var ids = await ReportScope.KeepAssignedAsync(await scope.ClassIdsAsync(db, 0, ct), permissions, caller, ct);
         var classes = await ReportClasses.ForIdsAsync(db, ids, ct);
         var summary = await SummaryRows.ForMonthsAsync(db, ids, from, to, today, ct);
         var notFilled = summary.ToDictionary(r => r.Id, r => r.Expected - r.Submitted);
@@ -43,9 +50,8 @@ internal static class PendingReport
 
         var teachers = PendingRules.Group(classes, notFilled, mcqs);
         var levels = teachers.SelectMany(t => t.Classes).Select(c => c.Level).Distinct().ToList();
-        var level = ReportScope.LevelOf(context);
-        return (new Loaded(scope.Gender, from, to, levels, level.Length == 0 ? teachers : PendingRules.InLevel(teachers, level)), null);
+        return new Loaded(scope.Gender, from, to, levels, level.Length == 0 ? teachers : PendingRules.InLevel(teachers, level));
     }
 
-    private static string Month(DateOnly day) => day.ToString("MM-yyyy", CultureInfo.InvariantCulture);
+    internal static string Month(DateOnly day) => day.ToString("MM-yyyy", CultureInfo.InvariantCulture);
 }

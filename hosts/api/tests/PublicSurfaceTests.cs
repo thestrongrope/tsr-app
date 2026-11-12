@@ -32,7 +32,7 @@ public sealed class PublicSurfaceTests
         ["classes"] = ["ClassesModule"],
         ["assessment"] = ["AssessmentModule"],
         // notifications: the module; NotificationsErasure (account deletion deletes a member's devices); NotificationsCommands (announce to members) with the record it takes (Announcement).
-        ["notifications"] = ["NotificationsModule", "NotificationsErasure", "NotificationsCommands", "Announcement"],
+        ["notifications"] = ["NotificationsModule", "NotificationsErasure", "NotificationsCommands", "Announcement", "AnnouncementExtras"],
         ["search"] = ["SearchModule"],
     };
 

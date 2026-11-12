@@ -9,7 +9,13 @@ namespace Tsr.Notifications.Api;
 /// otherwise exactly those member tokens (that have a device). <paramref name="DataType"/> is the <c>type</c> in the push data (for example <c>quiz_announcement</c>); <paramref name="DedupeKey"/>
 /// makes a repeat of the same announcement a no-op (one push per device and key); <paramref name="ActionLink"/> is the in-app route the notification opens.
 /// </summary>
-public sealed record Announcement(string Title, string Body, string ActionLink, string DataType, string DedupeKey, IReadOnlyList<int>? Tokens = null);
+public sealed record Announcement(string Title, string Body, string? ActionLink, string DataType, string DedupeKey, IReadOnlyList<int>? Tokens = null, AnnouncementExtras? Extras = null);
+
+/// <summary>
+/// For a notification a member sends (the class coordinators' reminder, PHP PendingNudgeModel::record): the audience criteria JSON it is recorded with, its sender, the extra push data values (FCM data values are strings),
+/// and whether a demo member's devices are left out. With these set a NEW notification is always recorded (the system-notification lookup is not used).
+/// </summary>
+public sealed record AnnouncementExtras(string CriteriaJson, int CreatedBy, IReadOnlyDictionary<string, string> Data, bool SkipDemoDevices);
 
 /// <summary>
 /// The commands notifications publishes to other domains (domains/CLAUDE.md rule 3): public static methods that write notifications' tables (and, through platform's published command, the push queue)
@@ -36,7 +42,13 @@ public static class NotificationsCommands
 
         var tokens = announcement.Tokens?.Where(t => t > 0).Distinct().ToArray();
         var devices = await DevicesAsync(db, tokens, ct);
-        var notificationId = await FindSystemNotificationAsync(db, announcement, ct);
+        var extras = announcement.Extras;
+        if (extras is not null && tokens is not null && extras.SkipDemoDevices)
+        {
+            devices = await DevicesAsync(db, await WithoutDemoAsync(db, tokens, ct), ct);
+        }
+
+        var notificationId = extras is null ? await FindSystemNotificationAsync(db, announcement, ct) : null;
         if (notificationId is null)
         {
             notificationId = await CreateNotificationAsync(db, announcement, devices.Count, tokens is null, ct);
@@ -47,10 +59,44 @@ public static class NotificationsCommands
         {
             title = announcement.Title,
             body = announcement.Body,
-            data = new { type = announcement.DataType, action_link = announcement.ActionLink, title = announcement.Title, body = announcement.Body },
+            data = PushData(announcement),
         });
         return await PlatformCommands.QueueMessagesAsync(db, "push", devices, payload, announcement.DedupeKey, SystemSender, ct);
     }
+
+    /// <summary>
+    /// The newest notification of the class coordinators' reminder (criteria type <c>CC_NUDGE</c>) to this teacher sent within the last <paramref name="windowHours"/> hours, or null. PHP PendingNudgeModel::lastReminded.
+    /// Read on the caller's connection, so inside its transaction it sees what that transaction wrote.
+    /// </summary>
+    public static async Task<DateTimeOffset?> LastNudgeAsync(DbContext db, int teacher, int windowHours, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        var rows = await db.Database.SqlQuery<DateTimeOffset>($"""
+            select max(sent_at) as "Value" from notifications.notifications
+            where target_audience_criteria::text::jsonb ->> 'type' = 'CC_NUDGE'
+              and target_audience_criteria::text::jsonb ->> 'teacher' = {teacher.ToString(System.Globalization.CultureInfo.InvariantCulture)}
+              and sent_at > now() - make_interval(hours => {windowHours})
+            having max(sent_at) is not null
+            """).ToListAsync(ct);
+        return rows.Count == 0 ? null : rows[0];
+    }
+
+    private static Dictionary<string, object?> PushData(Announcement a)
+    {
+        var data = new Dictionary<string, object?> { ["type"] = a.DataType, ["action_link"] = a.ActionLink, ["title"] = a.Title, ["body"] = a.Body };
+        foreach (var (key, value) in a.Extras?.Data ?? new Dictionary<string, string>())
+        {
+            data[key] = value;
+        }
+
+        return data;
+    }
+
+    private static async Task<int[]> WithoutDemoAsync(DbContext db, int[] tokens, CancellationToken ct) =>
+        [.. await db.Database.SqlQuery<int>($"""
+            select t as "Value" from unnest({tokens}) as t
+            where t not in (select token from identity.v_users where email like {DemoEmails})
+            """).ToListAsync(ct)];
 
     private static async Task<List<string>> DevicesAsync(DbContext db, int[]? tokens, CancellationToken ct) =>
         tokens is null
@@ -73,10 +119,11 @@ public static class NotificationsCommands
 
     private static async Task<int> CreateNotificationAsync(DbContext db, Announcement a, int devices, bool allRegistered, CancellationToken ct)
     {
-        var criteria = allRegistered ? """{"type":"REGISTERED_MEMBERS"}""" : """{"type":"MEMBERS"}""";
+        var criteria = a.Extras?.CriteriaJson ?? (allRegistered ? """{"type":"REGISTERED_MEMBERS"}""" : """{"type":"MEMBERS"}""");
+        var sender = a.Extras?.CreatedBy ?? SystemSender;
         var ids = await db.Database.SqlQuery<int>($"""
             insert into notifications.notifications (title, body, target_audience_criteria, created_by, device_count, success_count, failure_count, action_link)
-            values ({a.Title}, {a.Body}, {criteria}, {SystemSender}, {devices}, {devices}, 0, {a.ActionLink})
+            values ({a.Title}, {a.Body}, {criteria}, {sender}, {devices}, {devices}, 0, {a.ActionLink})
             returning notification_id as "Value"
             """).ToListAsync(ct);
         return ids.Single();
