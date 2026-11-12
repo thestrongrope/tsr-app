@@ -10,7 +10,7 @@ namespace Tsr.Notifications.Api;
 /// declares (user_notifications to notifications, notifier_sent_messages to notifier_runs) stay inside the schema.
 /// Wall-clock columns, which are not instants: <c>class_scheduled_notifications.send_at</c> is a <c>timestamp without time zone</c>, and
 /// <c>send_time</c> here and in <c>notifier_reminders</c> is a <c>time</c>; both are read in the row's own <c>tz</c> or <c>timezone</c>.
-/// Every other <c>datetime</c> or <c>timestamp</c> is <c>timestamptz</c>, read as UTC.
+/// <c>class_scheduled_events.send_time</c> is a <c>time</c> too, read in the event's <c>tz</c>. Every other <c>datetime</c> or <c>timestamp</c> is <c>timestamptz</c>, read as UTC.
 /// </summary>
 internal sealed class NotificationsContext(DbContextOptions<NotificationsContext> options) : TsrDbContext(options, SchemaName)
 {
@@ -34,11 +34,16 @@ internal sealed class NotificationsContext(DbContextOptions<NotificationsContext
 
     public DbSet<ClassScheduledNotificationRun> ClassScheduledNotificationRuns => Set<ClassScheduledNotificationRun>();
 
+    public DbSet<ClassScheduledEvent> ClassScheduledEvents => Set<ClassScheduledEvent>();
+
+    public DbSet<MemberEventSetting> MemberEventSettings => Set<MemberEventSetting>();
+
     protected override void Configure(ModelBuilder modelBuilder)
     {
         ConfigureNotifications(modelBuilder);
         ConfigureNotifier(modelBuilder);
         ConfigureScheduled(modelBuilder);
+        ConfigureCalendar(modelBuilder);
     }
 
     private static void ConfigureNotifications(ModelBuilder modelBuilder)
@@ -164,6 +169,32 @@ internal sealed class NotificationsContext(DbContextOptions<NotificationsContext
             run.HasIndex(r => r.ScheduledId).HasDatabaseName("idx_scheduled_id");
             run.HasIndex(r => r.RunAt).HasDatabaseName("idx_run_at");
             run.HasIndex(r => new { r.ClassId, r.RunAt }).HasDatabaseName("idx_class_run_at");
+        });
+    }
+
+    // PHP's two tables keep their names, keys and indexes; created_at and updated_at have no default there either (the slice sets them).
+    private static void ConfigureCalendar(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ClassScheduledEvent>(item =>
+        {
+            item.Property(i => i.Message).HasMaxLength(500);
+            item.Property(i => i.Description).HasMaxLength(65535);
+            item.Property(i => i.ActionLink).HasMaxLength(500);
+            item.Property(i => i.Weekdays).HasMaxLength(20);
+            item.Property(i => i.Tz).HasMaxLength(64);
+            item.Property(i => i.Status).HasMaxLength(7).HasDefaultValue("active");
+            item.HasIndex(i => new { i.ClassId, i.Status }).HasDatabaseName("idx_class_status");
+            item.ToTable(t => t.HasCheckConstraint("ck_class_scheduled_events_status", CheckSql.In("status", "active", "deleted")));
+        });
+
+        modelBuilder.Entity<MemberEventSetting>(setting =>
+        {
+            setting.Property(s => s.EventKey).HasMaxLength(64);
+            setting.Property(s => s.Muted).HasDefaultValue((short)0);
+            setting.Property(s => s.DeletedForMe).HasDefaultValue((short)0);
+            setting.Property(s => s.DeviceKey).HasMaxLength(64);
+            setting.HasIndex(s => new { s.UserId, s.EventKey }).IsUnique().HasDatabaseName("uq_member_event");
+            setting.HasIndex(s => new { s.UserId, s.ClassId }).HasDatabaseName("idx_member_class");
         });
     }
 }

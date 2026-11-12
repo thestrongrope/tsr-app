@@ -10,8 +10,10 @@ public sealed class NotificationsContextTests
 {
     private static readonly string[] Expected =
     [
+        "class_scheduled_events",
         "class_scheduled_notification_runs",
         "class_scheduled_notifications",
+        "member_event_settings",
         "notifications",
         "notifier_reminders",
         "notifier_runs",

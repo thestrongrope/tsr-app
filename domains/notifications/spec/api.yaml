@@ -193,6 +193,120 @@ paths:
         "200": {description: "{success: true}"}
         "403": {$ref: "#/components/responses/Problem"}
         "404": {$ref: "#/components/responses/Problem"}
+  /me/calendar:
+    get:
+      operationId: getMyCalendar
+      summary: The member's calendar as a student, with their alert settings
+      description: |
+        The live events and timetable slots of every live class the caller is currently enrolled in (enrolment active, not removed), minus the items they deleted for themselves, and all
+        their settings (tombstones included). Teaching or administering a class puts nothing here; nothing is editable here (editable_by_me and takeover are false).
+        Answers {server_time "Y-m-dTH:i:sZ", freshness: {max_hours: 12, target_hours: 6}, classes: [{class_id, code, name, events: [event], slots: [slot]}], settings: {<event_key>: setting}}
+        (settings is an object even when empty). event: {key "event:<id>", id, kind "event", class_id, message, description|null, action_link|null, weekdays [1..7, 1 = Monday], send_time
+        "HH:MM" (wall clock in timezone), timezone (IANA), created_by_user_id, editable_by_me, takeover}. slot: {key "slot:<id>", kind "slot", class_id, message "Class timetable",
+        description null, action_link "/classes/<id>/dashboard", weekdays [day], send_time, timezone|null, editable_by_me false, takeover false}. setting: {offset_minutes|null, muted,
+        deleted, updated_at, server_updated_at (both "Y-m-dTH:i:s.vZ"), device_key}. Limits: 200 classes, 500 events and 500 slots a class, 10000 settings (beyond: 500).
+        Slice: features/calendar-get/CalendarGet.cs.
+      security: [{memberToken: []}]
+      responses:
+        "200": {description: "{server_time, freshness, classes, settings}", content: {application/json: {schema: {type: object}}}}
+        "401": {$ref: "#/components/responses/Problem"}
+  /me/calendar/settings:
+    put:
+      operationId: syncMyCalendarSettings
+      summary: Sync the member's alert settings from one phone
+      description: |
+        Body {device_key (16 to 64 of a-z A-Z 0-9 _ -), changes: [{event_key "event:<id>" | "slot:<id>", offset_minutes? (null or one of 0, -5, -15, -30, -60, -1440, -2880), muted (boolean),
+        deleted (boolean), client_updated_at "Y-m-dTH:i:s[.mmm]Z"}]} with at most 200 changes. 422, in order: "Invalid JSON body"; "device_key must be a random installation identifier
+        (16-64 characters)"; "A batch must contain at most 200 changes"; then per change "Each change must be an object", "event_key must be a string", "Invalid event_key",
+        "Choose a supported alert offset", "muted and deleted must be booleans", "client_updated_at must be an ISO UTC timestamp", "Invalid client_updated_at". One 422 refuses the whole batch.
+        A change for an item that is gone, or of a class the caller is not a current student of, is skipped and its key listed in `rejected` (no further check of it).
+        Sync rule: a change is stored unless the stored setting is newer by client time, or equally new (same millisecond) from a device_key that is not smaller (byte order); a client time
+        more than 5 minutes ahead of the server is replaced by the server's and `clock_skew` is true; `deleted` true is a tombstone that a later change cannot clear.
+        Answers {settings: {<event_key>: setting as stored now}, rejected: [event_key], clock_skew, server_time "Y-m-dTH:i:s.vZ"}.
+        Slice: features/calendar-settings-sync/CalendarSettingsSync.cs. Event notifications.event_settings_synced (only when a row was written).
+      security: [{memberToken: []}]
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        "200": {description: "{settings, rejected, clock_skew, server_time}", content: {application/json: {schema: {type: object}}}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}/scheduled-events:
+    get:
+      operationId: listClassScheduledEvents
+      summary: A class's scheduled events and timetable slots, for who manages them
+      description: |
+        notifications:send on the class (403 "You cannot manage events for this class"; the class is not looked up, so an unknown class is this 403). Answers {events: [event], slots: [slot]}
+        (shapes as GET /me/calendar), live ones only, by id. editable_by_me: the caller owns the event, or its owner can no longer send for the class (then takeover is true).
+        Slice: features/class-events-list/ClassEventsList.cs.
+      security: [{memberToken: []}]
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200": {description: "{events, slots}", content: {application/json: {schema: {type: object}}}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+    post:
+      operationId: createClassScheduledEvent
+      summary: Put a weekly event on a class's calendar
+      description: |
+        Guard as the list, then the body. Body {message (1 to 500 characters, trimmed), description? (at most 2000), action_link? (https or an in-app path; a pasted article or video link is
+        rewritten), weekdays (one to seven integers 1 to 7), send_time "HH:MM", timezone (IANA; Asia/Calcutta is stored as Asia/Kolkata)}. 422, in order: "Invalid JSON body"; "Message is
+        required and must be at most 500 characters"; "Description must be at most 2000 characters"; "Time must be HH:MM"; the action_link texts of the class notification; "Choose between
+        one and seven weekdays"; "Weekdays must be integers from 1 (Monday) to 7"; "A valid IANA time zone from this phone is required"; "This class already has 500 scheduled events".
+        Answers 201 {item: event}. Slice: features/class-event-create/ClassEventCreate.cs. Event notifications.class_event_created.
+      security: [{memberToken: []}]
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        "201": {description: "{item}", content: {application/json: {schema: {type: object}}}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}/scheduled-events/{event_id}:
+    patch:
+      operationId: updateClassScheduledEvent
+      summary: Change an event of a class
+      description: |
+        Guard as the list (403), the body (422 "Invalid JSON body"), the live event of this class (404 "Scheduled event not found"), the owner rule (403 "Only the owner can change this event
+        while they retain access"), then the fields as on create (422). Body: any of message, description, action_link, weekdays, send_time; a field left out keeps its value, a field sent as
+        null is checked as null (description and action_link are cleared). The zone is the creator's and does not change; a take-over does not change the owner.
+        Answers {item: event}. Slice: features/class-event-update/ClassEventUpdate.cs. Event notifications.class_event_updated.
+      security: [{memberToken: []}]
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+        - {name: event_id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        "200": {description: "{item}", content: {application/json: {schema: {type: object}}}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+    delete:
+      operationId: deleteClassScheduledEvent
+      summary: Remove an event of a class (the row is kept, marked deleted)
+      description: |
+        Guard as the list (403), the live event of this class (404 "Scheduled event not found"), the owner rule (403 "Only the owner can delete this event while they retain access").
+        Answers {success: true}. Slice: features/class-event-delete/ClassEventDelete.cs. Event notifications.class_event_deleted.
+      security: [{memberToken: []}]
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+        - {name: event_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200": {description: "{success: true}"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
   /admin/whatsapp/reminders:
     get:
       operationId: listWhatsappReminders

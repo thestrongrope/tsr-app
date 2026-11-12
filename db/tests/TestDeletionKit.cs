@@ -41,7 +41,7 @@ internal sealed class TestDeletionKit : IDisposable
         """
         truncate identity.users, identity.account_deletion_requests, access.user_roles, membership.member_profiles,
           membership.class_registrations, membership.class_registrations_languages, membership.student_interests,
-          membership.user_guardians, notifications.user_devices, platform.feedback, platform.outbound_messages, platform.outbox restart identity cascade
+          membership.user_guardians, notifications.user_devices, notifications.member_event_settings, platform.feedback, platform.outbound_messages, platform.outbox restart identity cascade
         """);
 
     /// <summary>A request id never used before in this run: the completion rate limit is keyed on it and lives as long as the API does.</summary>

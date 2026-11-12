@@ -49,7 +49,8 @@ internal static class ClassMessage
         return text.Length == 0 || PhpText.CodePointCount(text) > maxChars || text.Contains('\0', StringComparison.Ordinal) ? null : text;
     }
 
-    private static Result<string?> Link(JsonElement value, bool rewriteLink)
+    /// <summary>The link rule alone (a calendar event has a link and no title): absent, null or empty is no link.</summary>
+    public static Result<string?> Link(JsonElement value, bool rewriteLink)
     {
         if (value.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null || (value.ValueKind == JsonValueKind.String && value.GetString() == string.Empty))
         {

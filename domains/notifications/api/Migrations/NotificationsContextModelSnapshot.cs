@@ -24,6 +24,102 @@ namespace Tsr.Notifications.Api.Migrations
             NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "citext");
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Tsr.Notifications.Api.ClassScheduledEvent", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ActionLink")
+                        .HasMaxLength(500)
+                        .HasColumnType("citext")
+                        .HasColumnName("action_link");
+
+                    b.Property<int>("ClassId")
+                        .HasColumnType("integer")
+                        .HasColumnName("class_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<int>("CreatedBy")
+                        .HasColumnType("integer")
+                        .HasColumnName("created_by");
+
+                    b.Property<int>("CreatedByUserId")
+                        .HasColumnType("integer")
+                        .HasColumnName("created_by_user_id");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(65535)
+                        .HasColumnType("citext")
+                        .HasColumnName("description");
+
+                    b.Property<string>("Message")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("citext")
+                        .HasColumnName("message");
+
+                    b.Property<TimeOnly>("SendTime")
+                        .HasColumnType("time without time zone")
+                        .HasColumnName("send_time");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(7)
+                        .HasColumnType("citext")
+                        .HasDefaultValue("active")
+                        .HasColumnName("status");
+
+                    b.Property<string>("Tz")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("citext")
+                        .HasColumnName("tz");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("Weekdays")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("citext")
+                        .HasColumnName("weekdays");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClassId", "Status")
+                        .HasDatabaseName("idx_class_status");
+
+                    b.ToTable("class_scheduled_events", "notifications", t =>
+                        {
+                            t.HasCheckConstraint("ck_class_scheduled_events_action_link_length", "char_length(\"action_link\") <= 500");
+
+                            t.HasCheckConstraint("ck_class_scheduled_events_description_length", "char_length(\"description\") <= 65535");
+
+                            t.HasCheckConstraint("ck_class_scheduled_events_message_length", "char_length(\"message\") <= 500");
+
+                            t.HasCheckConstraint("ck_class_scheduled_events_status", "status in ('active', 'deleted')");
+
+                            t.HasCheckConstraint("ck_class_scheduled_events_status_length", "char_length(\"status\") <= 7");
+
+                            t.HasCheckConstraint("ck_class_scheduled_events_tz_length", "char_length(\"tz\") <= 64");
+
+                            t.HasCheckConstraint("ck_class_scheduled_events_weekdays_length", "char_length(\"weekdays\") <= 20");
+                        });
+                });
+
             modelBuilder.Entity("Tsr.Notifications.Api.ClassScheduledNotification", b =>
                 {
                     b.Property<int>("Id")
@@ -232,6 +328,76 @@ namespace Tsr.Notifications.Api.Migrations
                     b.ToTable("class_scheduled_notification_runs", "notifications", t =>
                         {
                             t.HasCheckConstraint("ck_class_scheduled_notification_runs_skipped_reason_length", "char_length(\"skipped_reason\") <= 100");
+                        });
+                });
+
+            modelBuilder.Entity("Tsr.Notifications.Api.MemberEventSetting", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("ClassId")
+                        .HasColumnType("integer")
+                        .HasColumnName("class_id");
+
+                    b.Property<DateTimeOffset>("ClientUpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("client_updated_at");
+
+                    b.Property<short>("DeletedForMe")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("smallint")
+                        .HasDefaultValue((short)0)
+                        .HasColumnName("deleted_for_me");
+
+                    b.Property<string>("DeviceKey")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("citext")
+                        .HasColumnName("device_key");
+
+                    b.Property<string>("EventKey")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("citext")
+                        .HasColumnName("event_key");
+
+                    b.Property<short>("Muted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("smallint")
+                        .HasDefaultValue((short)0)
+                        .HasColumnName("muted");
+
+                    b.Property<int?>("OffsetMinutes")
+                        .HasColumnType("integer")
+                        .HasColumnName("offset_minutes");
+
+                    b.Property<DateTimeOffset>("ServerUpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("server_updated_at");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("integer")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "ClassId")
+                        .HasDatabaseName("idx_member_class");
+
+                    b.HasIndex("UserId", "EventKey")
+                        .IsUnique()
+                        .HasDatabaseName("uq_member_event");
+
+                    b.ToTable("member_event_settings", "notifications", t =>
+                        {
+                            t.HasCheckConstraint("ck_member_event_settings_device_key_length", "char_length(\"device_key\") <= 64");
+
+                            t.HasCheckConstraint("ck_member_event_settings_event_key_length", "char_length(\"event_key\") <= 64");
                         });
                 });
 
