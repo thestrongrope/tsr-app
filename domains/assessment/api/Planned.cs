@@ -28,16 +28,7 @@ internal static class Planned
             ("PUT", "/mcq/manage/{quiz_id}"),
             ("POST", "/mcq/manage/{quiz_id}/publish"),
             ("POST", "/mcq/manage/{quiz_id}/deactivate"),
-            ("POST", "/mcq/manage/{quiz_id}/copy"),
-            ("GET", "/admin/quiz"),
-            ("POST", "/admin/quiz/settings/refresh"),
-            ("POST", "/admin/quiz/download"),
-            ("POST", "/admin/quiz/winners/generate"),
-            ("POST", "/admin/quiz/winners/regenerate"),
-            ("POST", "/admin/quiz/publish"),
-            ("POST", "/admin/quiz/reset"),
-            ("GET", "/standard-mcqs/sources"),
-            ("POST", "/standard-mcqs/update"));
+            ("POST", "/mcq/manage/{quiz_id}/copy"));
         return routes;
     }
 }

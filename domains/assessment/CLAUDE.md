@@ -9,7 +9,7 @@ Spot quizzes, standard MCQs, quiz competitions.
 
 | Part | State |
 |---|---|
-| Schema `assessment`, 7 tables: `spot_quizzes`, `spot_quiz_questions`, `spot_quiz_submissions`, `spot_quiz_responses`, `standard_mcqs`, `standard_mcq_questions`, `quiz_campaigns` | built; migration `Initial` |
+| Schema `assessment`, 8 tables: `spot_quizzes`, `spot_quiz_questions`, `spot_quiz_submissions`, `spot_quiz_responses`, `standard_mcqs`, `standard_mcq_questions`, `quiz_campaigns` (migration `Initial`), `quiz_state` (migration `QuizState`) | built |
 | PHP's trigger on `spot_quizzes` (a random unique `code` on insert, any supplied value ignored) | not ported: the slice that creates a quiz will do it |
 
 ## Owns
@@ -25,10 +25,20 @@ Spot quizzes, standard MCQs, quiz competitions.
 
   Consumed: none. The answers are never in the key-less routes: the questions route never selects the answer column; only the caller's own answered quizzes show the correct text.
 
+## Google Sheets, quiz state, locks, settings (lane sheets, build-out)
+
+- `domain/ISheets.cs` is the one boundary to Google Sheets (read a range, write a range); `GoogleSheets.cs` calls the REST API over HTTP with a service-account JWT (no SDK). Optional settings (the API starts without them; a sheet route then answers 502 or "could not be read"): `TSR_GOOGLE_SERVICE_ACCOUNT_B64` (base64 service-account JSON, never logged) and `TSR_QUIZ_SETTINGS_SHEET_ID` (PHP `QUIZ_SETTINGS_GOOGLE_SHEET_ID`).
+- Built: `GET /standard-mcqs/sources`, `POST /standard-mcqs/update` (slices `standard-mcq-sources`, `standard-mcq-update`; saved level is the chosen id + 1, as PHP) and the quiz admin: `GET /admin/quiz`, `POST /admin/quiz/settings/refresh`, `/download`, `/winners/generate`, `/winners/regenerate`, `/publish`, `/reset` (slices `admin-quiz*`; shared rules in `domain/Quiz*.cs`: `QuizSettings`, `QuizEligibility`, `QuizDraw` with the `IQuizRandom` seam, `QuizDrawFlow`, `QuizOverview`, `QuizAdmin`, `QuizStateStore`).
+- Table `quiz_state(name pk, document jsonb, updated_at)` (migration `QuizState`) replaces PHP's JSON files: documents `settings`, `participants`, `quiz_day`, `timestamps`, `scoreboard`, `winners`, `winners_replaced` (append only; the archive). Reset clears five (scoreboard, quiz_day, timestamps, winners, participants). Member data (names, tokens, cities) lives only in these documents and the responses; never in logs or events.
+- Advisory locks (transaction-level, single bigint key, `domain/AssessmentLocks.cs`; membership's 3001 is the two-key form): 5001 standard MCQ update, 5002 quiz admin (PHP `quiz_admin`). No other code may use 5001 to 5099.
+- Events: `assessment.standard_mcqs_updated` {languageId, levelId, quizzes} (one per updated pair); `assessment.quiz_state_changed` {action: settings_refresh|download|generate|regenerate|publish|reset}.
+- Dependencies added: `notifications` (`NotificationsCommands.AnnounceAsync`, written by the settings refresh when a quiz goes live). Reads through views: `membership.v_members` (name, city, country), `classes.v_enrolments` and `classes.v_classes` (enrolled students).
+- Notes for the test phase: `docs/specs/initial-build/lane-sheets-notes.md`.
+
 ## Checks
 
 ```
-dotnet test domains/assessment/api/tests   # the model: the 7 tables in schema "assessment"
+dotnet test domains/assessment/api/tests   # the model: the 8 tables in schema "assessment"
 dotnet test db/tests                       # the migrated database and the A1 routes (AssessmentA1Tests)
 tools/assessment-contract.sh test          # Hurl on the test stack (parity: the same files on PHP)
 ```

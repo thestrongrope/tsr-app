@@ -17,6 +17,7 @@ public sealed class AssessmentContextTests
         "standard_mcq_questions",
         "standard_mcqs",
         "quiz_campaigns",
+        "quiz_state",
     ];
 
     [Test]

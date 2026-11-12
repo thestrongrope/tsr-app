@@ -1,5 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- notifications: push, WhatsApp, devices, scheduled notifications, notifier. Tables only so far; lists no other domain. -->
+  <!-- notifications: push, WhatsApp, devices, scheduled notifications, notifier. NotificationsCommands (published); uses platform's queue command and reads identity's v_users. -->
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <ProjectReference Include="../../../shared/api/Tsr.Shared.Api.csproj" />
