@@ -13,6 +13,8 @@ public sealed class TestDeletionTests
 {
     private FakeFirebase firebase = null!;
     private TestDeletionKit api = null!;
+    private static readonly string[] BothUids = ["uid-924010", "uid-second"];
+
     private int adminId;
 
     [SetUp]
@@ -169,7 +171,7 @@ public sealed class TestDeletionTests
     }
 
     [Test]
-    public async Task A_token_held_by_two_user_rows_has_both_anonymised_but_Firebase_is_asked_about_one_account_only_as_PHP_does_FINDING_1()
+    public async Task A_token_held_by_two_user_rows_has_both_anonymised_and_both_Firebase_accounts_deleted()
     {
         var requestId = await AddTargetWithRequestAsync();
         await TestDatabase.ExecuteAsync($"insert into identity.users (token, email, firebase_uid) values ({TestDeletionKit.Target}, 'second-924010@example.invalid', 'uid-second')");
@@ -177,9 +179,69 @@ public sealed class TestDeletionTests
         ReplyAssert.Expect(await api.CompleteAsync(TestDeletionKit.Admin, requestId), HttpStatusCode.OK);
 
         Assert.That(await MembershipTestKit.CountAsync("identity.users", "token = 924010 and email = 'deleted-924010@deleted.invalid' and firebase_uid is null"), Is.EqualTo(2), "every row anonymised");
-        Assert.That(firebase.Calls, Has.Count.EqualTo(1));
-        Assert.That(firebase.Calls[0].Uid, Is.EqualTo("uid-924010"), "the lowest id row; PHP takes an arbitrary row (limit 1)");
-        Assert.That(firebase.Calls.Select(c => c.Uid), Does.Not.Contain("uid-second"), "the second row's Firebase account is never deleted: it still signs in (PHP does the same)");
+        Assert.That(firebase.Calls.Select(c => c.Uid), Is.EqualTo(BothUids), "every row's account, in id order");
+    }
+
+    [Test]
+    public async Task A_row_with_no_stored_uid_among_several_is_looked_up_by_its_own_email_beside_the_others_uids()
+    {
+        var requestId = await AddTargetWithRequestAsync();
+        await TestDatabase.ExecuteAsync($"insert into identity.users (token, email) values ({TestDeletionKit.Target}, 'noid-924010@example.invalid')");
+
+        ReplyAssert.Expect(await api.CompleteAsync(TestDeletionKit.Admin, requestId), HttpStatusCode.OK);
+
+        Assert.That(firebase.Calls, Is.EqualTo(new[] { ((string?)"uid-924010", (string?)"m924010@example.invalid"), (null, "noid-924010@example.invalid") }));
+    }
+
+    [Test]
+    public async Task A_Firebase_failure_on_the_second_row_is_409_writes_nothing_and_a_retry_then_completes()
+    {
+        var requestId = await AddTargetWithRequestAsync();
+        await TestDatabase.ExecuteAsync($"insert into identity.users (token, email, firebase_uid) values ({TestDeletionKit.Target}, 'second-924010@example.invalid', 'uid-second')");
+        var before = await TestDeletionKit.WholeDatabaseAsync();
+        firebase.FailOnUid = "uid-second";
+
+        var reply = await api.CompleteAsync(TestDeletionKit.Admin, requestId);
+
+        ReplyAssert.Expect(reply, HttpStatusCode.Conflict, "Firebase could not be reached (HttpRequestException).");
+        Assert.That(await TestDeletionKit.WholeDatabaseAsync(), Is.EqualTo(before));
+        Assert.That(firebase.Calls.Select(c => c.Uid), Is.EqualTo(BothUids), "the first account was already deleted in this attempt");
+
+        api.Dispose();
+        var retryFirebase = new FakeFirebase();
+        api = new TestDeletionKit(retryFirebase);
+        ReplyAssert.Expect(await api.CompleteAsync(TestDeletionKit.Admin, requestId), HttpStatusCode.OK);
+        Assert.That(retryFirebase.Calls.Select(c => c.Uid), Is.EqualTo(BothUids), "a retry asks about both again; an account Firebase no longer knows counts as done");
+    }
+
+    [Test]
+    public async Task A_token_held_by_more_than_20_user_rows_is_refused_409_before_any_Firebase_call_and_nothing_is_written()
+    {
+        var requestId = await AddTargetWithRequestAsync();
+        await TestDatabase.ExecuteAsync(
+            $"insert into identity.users (token, email, firebase_uid) select {TestDeletionKit.Target}, 'many-' || g || '@example.invalid', 'uid-many-' || g from generate_series(1, 20) g");
+        var before = await TestDeletionKit.WholeDatabaseAsync();
+
+        var reply = await api.CompleteAsync(TestDeletionKit.Admin, requestId);
+
+        ReplyAssert.Expect(reply, HttpStatusCode.Conflict, $"Deletion request {requestId} names token 924010, which has more than 20 user rows; at most 20 can be completed here. Remove the extra rows first.");
+        Assert.That(firebase.Calls, Is.Empty);
+        Assert.That(await TestDeletionKit.WholeDatabaseAsync(), Is.EqualTo(before));
+    }
+
+    [Test]
+    public async Task A_token_held_by_two_user_rows_has_the_feedback_of_both_erased()
+    {
+        var requestId = await AddTargetWithRequestAsync();
+        await TestDatabase.ExecuteAsync(
+            $"""
+            with u as (insert into identity.users (token, email, firebase_uid) values ({TestDeletionKit.Target}, 'second-924010@example.invalid', 'uid-second') returning id)
+            insert into platform.feedback (user_id, client_id, message) select id, 'c-second', 'feedback of the second row' from u
+            """);
+
+        ReplyAssert.Expect(await api.CompleteAsync(TestDeletionKit.Admin, requestId), HttpStatusCode.OK);
+
+        Assert.That(await MembershipTestKit.CountAsync("platform.feedback", "message like 'feedback of%924010' or message = 'feedback of the second row'"), Is.EqualTo(0));
     }
 
     [Test]
