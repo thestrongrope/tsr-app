@@ -1,11 +1,16 @@
 namespace Tsr.Notifications.Api.Domain;
 
-/// <summary>What happened to one push: it was accepted, the device token is dead (FCM says unregistered or not a token), or it failed for any other reason.</summary>
+/// <summary>
+/// What happened to one push: it was accepted, the device token is dead (FCM says unregistered or not a token), the token belongs to another Firebase sender (retrying cannot help; the token is NOT dead, the
+/// cleanup route must not delete it), the service itself could not be used (transport failure, token exchange refused, our credentials rejected: nothing about this message), or it failed for any other reason.
+/// </summary>
 internal enum PushResult
 {
     Sent,
     TokenInvalid,
     Failed,
+    Unavailable,
+    SenderMismatch,
 }
 
 /// <summary>A push as FCM shows it: title, body and string data. Data values are strings because FCM refuses any other kind.</summary>

@@ -157,7 +157,7 @@ public sealed class FcmPushSenderRequestTests
     {
         var handler = new StubHandler((request, body) => request.RequestUri!.Host == "oauth2.googleapis.com" ? Exchange(request, body) : Json(HttpStatusCode.Unauthorized, """{"error":{"status":"UNAUTHENTICATED"}}"""));
         var fcm = Build(handler);
-        Assert.That(await fcm.SendAsync(Message, Device, CancellationToken.None), Is.EqualTo(PushResult.Failed));
+        Assert.That(await fcm.SendAsync(Message, Device, CancellationToken.None), Is.EqualTo(PushResult.Unavailable));
         await fcm.SendAsync(Message, Device, CancellationToken.None);
         Assert.That(handler.Calls.Count(c => c.Request.RequestUri!.Host == "oauth2.googleapis.com"), Is.EqualTo(2));
     }
@@ -167,8 +167,8 @@ public sealed class FcmPushSenderRequestTests
     {
         var handler = new StubHandler((_, _) => Json(HttpStatusCode.BadRequest, """{"error":"invalid_grant"}"""));
         var fcm = Build(handler);
-        Assert.That(await fcm.SendAsync(Message, Device, CancellationToken.None), Is.EqualTo(PushResult.Failed));
-        Assert.That(await fcm.SendAsync(Message, Device, CancellationToken.None), Is.EqualTo(PushResult.Failed));
+        Assert.That(await fcm.SendAsync(Message, Device, CancellationToken.None), Is.EqualTo(PushResult.Unavailable));
+        Assert.That(await fcm.SendAsync(Message, Device, CancellationToken.None), Is.EqualTo(PushResult.Unavailable));
         Assert.That(handler.Calls, Has.Count.EqualTo(1), "one exchange, no send");
         clock.Advance(TimeSpan.FromSeconds(61));
         await fcm.SendAsync(Message, Device, CancellationToken.None);
@@ -176,7 +176,7 @@ public sealed class FcmPushSenderRequestTests
     }
 
     [Test]
-    public async Task A_dead_token_is_reported_dead_and_a_bad_payload_or_a_network_error_is_only_a_failure()
+    public async Task A_dead_token_is_dead_a_bad_payload_is_a_failure_and_a_network_error_is_unavailable()
     {
         var reply = Json(HttpStatusCode.NotFound, """{"error":{"status":"NOT_FOUND","details":[{"errorCode":"UNREGISTERED"}]}}""");
         var handler = new StubHandler((request, body) => request.RequestUri!.Host == "oauth2.googleapis.com" ? Exchange(request, body) : reply);
@@ -187,7 +187,7 @@ public sealed class FcmPushSenderRequestTests
         Assert.That(await fcm.SendAsync(Message, Device, CancellationToken.None), Is.EqualTo(PushResult.Failed));
 
         var broken = new StubHandler((request, body) => request.RequestUri!.Host == "oauth2.googleapis.com" ? Exchange(request, body) : throw new HttpRequestException("stub network down"));
-        Assert.That(await Build(broken).SendAsync(Message, Device, CancellationToken.None), Is.EqualTo(PushResult.Failed));
+        Assert.That(await Build(broken).SendAsync(Message, Device, CancellationToken.None), Is.EqualTo(PushResult.Unavailable));
     }
 
     [Test]

@@ -92,8 +92,8 @@ public static partial class PlatformCommands
     }
 
     /// <summary>
-    /// PHP <c>queue_message</c> (functions.php:472, OutboundMessagesModel::enqueue): one <c>outbound_messages</c> row per non-blank recipient with status queued, on the caller's transaction. NOTHING is sent: no worker reads
-    /// the queue yet. The dedupe key is PHP's <c>dedupeKeyFor</c>: the first 150 characters of <paramref name="dedupeKey"/>, a colon and the first 20 bytes of the SHA-256 of the recipient in hex (PHP used SHA-1: a deliberate difference, so a key PHP queued is not recognised); the unique (channel, dedupe_key) index makes a repeat a no-op.
+    /// PHP <c>queue_message</c> (functions.php:472, OutboundMessagesModel::enqueue): one <c>outbound_messages</c> row per non-blank recipient with status queued, on the caller's transaction. NOTHING is sent here: the push channel is
+    /// drained by the notifications push-drain worker (run mode <c>--workers</c>). The dedupe key is PHP's <c>dedupeKeyFor</c>: the first 150 characters of <paramref name="dedupeKey"/>, a colon and the first 20 bytes of the SHA-256 of the recipient in hex (PHP used SHA-1: a deliberate difference, so a key PHP queued is not recognised); the unique (channel, dedupe_key) index makes a repeat a no-op.
     /// Returns the rows queued. Needs an open transaction (it does not start one). The recipients are device ids: not logged.
     /// </summary>
     public static async Task<int> QueueMessagesAsync(

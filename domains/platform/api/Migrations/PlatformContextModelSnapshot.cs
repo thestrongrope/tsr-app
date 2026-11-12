@@ -445,6 +445,10 @@ namespace Tsr.Platform.Api.Migrations
                         .HasColumnType("citext")
                         .HasColumnName("channel");
 
+                    b.Property<DateTimeOffset?>("ClaimedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("claimed_at");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("timestamp with time zone")

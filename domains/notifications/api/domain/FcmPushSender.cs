@@ -77,7 +77,7 @@ internal sealed partial class FcmPushSender : IPushSender, IDisposable
         var access = await AccessTokenAsync(ct);
         if (access is null)
         {
-            return PushResult.Failed;
+            return PushResult.Unavailable;
         }
 
         using var request = new HttpRequestMessage(HttpMethod.Post, $"https://fcm.googleapis.com/v1/projects/{Uri.EscapeDataString(_project!)}/messages:send")
@@ -98,7 +98,7 @@ internal sealed partial class FcmPushSender : IPushSender, IDisposable
         catch (Exception e) when (e is HttpRequestException or TaskCanceledException && !ct.IsCancellationRequested)
         {
             LogRequestFailed(_log, e.GetType().Name);
-            return PushResult.Failed;
+            return PushResult.Unavailable;
         }
     }
 
@@ -128,8 +128,9 @@ internal sealed partial class FcmPushSender : IPushSender, IDisposable
         return JsonSerializer.Serialize(payload);
     }
 
-    // UNREGISTERED (404) is a dead token. INVALID_ARGUMENT (400) is a dead token only when its message names the registration token: it can also mean a bad payload, and one
-    // payload mistake must never make the cleanup delete every device. Everything else (401, 403 sender mismatch, 429, 5xx) is a failure that leaves the token alone.
+    // A 401, or a PERMISSION_DENIED / UNAUTHENTICATED that is not a sender mismatch, is about our credentials, not the message: Unavailable (PHP's drain_push_is_channel_error). A sender mismatch is
+    // PERMISSION_DENIED too, so it is checked first: it is the device's problem and the queue must go on. UNREGISTERED (404) is a dead token. INVALID_ARGUMENT (400) is a dead token only when its message names the registration token: it can also mean a bad payload, and one
+    // payload mistake must never make the cleanup delete every device. Everything else (404 without UNREGISTERED, 429, 5xx) is a failure that leaves the token alone.
     internal static PushResult Classify(HttpStatusCode status, string body)
     {
         var detail = ReadError(body);
@@ -138,14 +139,28 @@ internal sealed partial class FcmPushSender : IPushSender, IDisposable
             return PushResult.TokenInvalid;
         }
 
-        var namesToken = detail.Message.Contains("registration token", StringComparison.OrdinalIgnoreCase);
-        if ((detail.ErrorCode == "INVALID_ARGUMENT" || detail.Status == "INVALID_ARGUMENT" || status == HttpStatusCode.BadRequest) && namesToken)
+        if (IsSenderMismatch(detail))
         {
-            return PushResult.TokenInvalid;
+            return PushResult.SenderMismatch;
         }
 
-        return PushResult.Failed;
+        if (IsCredentialRefusal(status, detail))
+        {
+            return PushResult.Unavailable;
+        }
+
+        return NamesBadToken(status, detail) ? PushResult.TokenInvalid : PushResult.Failed;
     }
+
+    private static bool IsSenderMismatch(ErrorDetail detail) =>
+        detail.ErrorCode == "SENDER_ID_MISMATCH" || detail.Message.Contains("SenderId mismatch", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsCredentialRefusal(HttpStatusCode status, ErrorDetail detail) =>
+        status == HttpStatusCode.Unauthorized || detail.Status is "UNAUTHENTICATED" or "PERMISSION_DENIED";
+
+    private static bool NamesBadToken(HttpStatusCode status, ErrorDetail detail) =>
+        detail.Message.Contains("registration token", StringComparison.OrdinalIgnoreCase)
+        && (detail.ErrorCode == "INVALID_ARGUMENT" || detail.Status == "INVALID_ARGUMENT" || status == HttpStatusCode.BadRequest);
 
     private async Task<PushResult> ClassifyAsync(HttpResponseMessage response, CancellationToken ct)
     {
@@ -156,7 +171,7 @@ internal sealed partial class FcmPushSender : IPushSender, IDisposable
         }
 
         var result = Classify(response.StatusCode, text);
-        if (result == PushResult.Failed)
+        if (result is PushResult.Failed or PushResult.Unavailable)
         {
             LogRefused(_log, (int)response.StatusCode);
         }

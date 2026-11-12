@@ -140,4 +140,7 @@ internal sealed class OutboundMessage
     public DateTimeOffset? SentAt { get; set; }
 
     public string? Error { get; set; }
+
+    /// <summary>When a worker last claimed the row (status <c>sending</c>); a claim older than ten minutes is taken over by the next worker (PlatformCommands.ClaimMessagesAsync).</summary>
+    public DateTimeOffset? ClaimedAt { get; set; }
 }

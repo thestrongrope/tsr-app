@@ -23,10 +23,20 @@ public sealed class FcmPushSenderTests
             FcmPushSender.Classify(HttpStatusCode.BadRequest, """{"error":{"status":"INVALID_ARGUMENT","message":"Invalid value at message.data"}}"""),
             Is.EqualTo(PushResult.Failed));
 
-    [TestCase(HttpStatusCode.Forbidden, """{"error":{"status":"PERMISSION_DENIED","details":[{"errorCode":"SENDER_ID_MISMATCH"}]}}""")]
     [TestCase(HttpStatusCode.NotFound, """{"error":{"status":"NOT_FOUND","message":"Requested entity was not found."}}""")]
     [TestCase(HttpStatusCode.TooManyRequests, """{"error":{"status":"RESOURCE_EXHAUSTED"}}""")]
     [TestCase(HttpStatusCode.BadGateway, "not json")]
     public void Any_other_refusal_is_a_failure_that_keeps_the_token(HttpStatusCode status, string body) =>
         Assert.That(FcmPushSender.Classify(status, body), Is.EqualTo(PushResult.Failed));
+
+    [Test]
+    public void A_sender_mismatch_is_its_own_outcome_not_a_credential_problem() =>
+        Assert.That(
+            FcmPushSender.Classify(HttpStatusCode.Forbidden, """{"error":{"status":"PERMISSION_DENIED","details":[{"errorCode":"SENDER_ID_MISMATCH"}]}}"""),
+            Is.EqualTo(PushResult.SenderMismatch));
+
+    [TestCase(HttpStatusCode.Unauthorized, """{"error":{"status":"UNAUTHENTICATED"}}""")]
+    [TestCase(HttpStatusCode.Forbidden, """{"error":{"status":"PERMISSION_DENIED","message":"The caller does not have permission"}}""")]
+    public void A_refusal_about_our_credentials_is_the_service_being_unavailable(HttpStatusCode status, string body) =>
+        Assert.That(FcmPushSender.Classify(status, body), Is.EqualTo(PushResult.Unavailable));
 }
