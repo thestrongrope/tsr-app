@@ -197,7 +197,7 @@ GET,/standard-mcqs/sources,assessment,create,built
 POST,/standard-mcqs/update,assessment,create,built
 GET,/admin/teachers,classes,create,built
 GET,/teachers/{token},classes,create,built
-GET,/search,search,create,planned
+GET,/search,search,create,built
 GET,/students/{token},membership,create,built
 GET,/subscribers/{token},membership,create,built
 POST,/admin/teachers/training,classes,create,built

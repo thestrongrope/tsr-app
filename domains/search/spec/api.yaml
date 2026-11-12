@@ -1,0 +1,99 @@
+openapi: 3.1.0
+info:
+  title: TSR search
+  version: 0.1.0
+  description: |
+    The search domain's one action. Forward compatible: a store-live app keeps calling it, so add fields freely but never remove or
+    change one without the release process. Every error body is {"detail": "..."}.
+servers:
+  - url: http://localhost:8088
+    description: Local dev stack (gateway)
+paths:
+  /search:
+    get:
+      operationId: search
+      summary: Search classes, teachers, guides, students and subscribers within the caller's reach
+      description: |
+        A first sign-in creates the member's row (PHP's api_authenticate(true)). Guards in order: sign-in (401), the stored gender is
+        numeric (400 "User gender not set; update profile first"), permission classes:read (403), then q and kinds (422).
+        Each kind the caller has a way in to comes back as a group of up to 50 results, `capped` when the limit was reached; a kind
+        with no way in has no group. A kind the index cannot answer (Elasticsearch down or not configured) is listed in `unavailable`,
+        never as an empty group. Results are limited to the caller's reach inside the index query and checked again against the database.
+        Slice: features/search/Search.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: The words to look for (every word must match a name prefix). Trimmed; 2 to 100 characters; no NUL.
+          schema: {type: string}
+        - name: kinds
+          in: query
+          required: false
+          description: A comma list of class, teacher, guide, student, subscriber; all when omitted. Answered in the order given.
+          schema: {type: string}
+      responses:
+        "200":
+          description: The groups and the kinds that could not be searched
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [groups, unavailable]
+                properties:
+                  groups:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Group"
+                  unavailable:
+                    type: array
+                    items: {type: string}
+        "400":
+          $ref: "#/components/responses/Problem"
+        "401":
+          $ref: "#/components/responses/Problem"
+        "403":
+          $ref: "#/components/responses/Problem"
+        "422":
+          $ref: "#/components/responses/Problem"
+components:
+  securitySchemes:
+    memberToken:
+      type: http
+      scheme: bearer
+      bearerFormat: Firebase ID token
+  responses:
+    Problem:
+      description: |
+        An error. The body is always {"detail": "..."}
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [detail]
+            properties:
+              detail:
+                type: string
+  schemas:
+    Group:
+      type: object
+      required: [kind, count, capped, results]
+      properties:
+        kind: {type: string, enum: [class, teacher, guide, student, subscriber]}
+        count: {type: integer}
+        capped: {type: boolean}
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/Result"
+    Result:
+      type: object
+      description: |
+        id is the class id (class, guide: the class of the guide's level the caller reaches) or the member's token (teacher, student, subscriber).
+        title is "(unnamed)" when empty; subtitle is the level (class), "Teacher", the student's reached class codes, or empty.
+      required: [id, title, subtitle]
+      properties:
+        id: {type: integer}
+        title: {type: string}
+        subtitle: {type: string}

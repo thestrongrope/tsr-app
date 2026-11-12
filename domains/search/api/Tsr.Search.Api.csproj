@@ -1,7 +1,19 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- search: the read model behind GET /search. Routes only so far, no tables; lists no other domain. -->
+  <!-- search: the read model behind GET /search. No tables; lists access as a dependency and reads other domains' published views. -->
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <ProjectReference Include="../../../shared/api/Tsr.Shared.Api.csproj" />
+    <ProjectReference Include="../../access/api/Tsr.Access.Api.csproj" />
+    <!-- The official Elasticsearch client (decided in docs/specs/dotnet-stack.md, row Search). Not AOT-ready: the API host is a JIT host. -->
+    <PackageReference Include="Elastic.Clients.Elasticsearch" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Tests sit next to the code they test; tests/ compiles them. -->
+    <Compile Remove="**/*.Tests.cs" />
+    <Compile Remove="tests/**" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Slices and value objects are internal; this domain's own unit tests may see them. -->
+    <InternalsVisibleTo Include="Tsr.Search.Api.Tests" />
   </ItemGroup>
 </Project>
