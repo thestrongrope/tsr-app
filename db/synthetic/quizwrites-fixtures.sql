@@ -11,7 +11,7 @@
  *   98201 (gents, active): 9720001 scores (published, 3 questions, answered by 922003, 922012, the twins and a token without a user row)   9720002 offline GET (published; orders: none, '3,1,2', a blank option)
  *        9720003 offline save   9720004 offline save, phone-answered   9720005 sheet (markup and Arabic)   9720006 sheet with no questions   9720007 publish target   9720009 copy source (a copy of QW-S1)   9720011 copy source (duplicate in 98202)
  *   98202 (gents, active): 9720008 publish target (twice)   9720010 same name and topic as 9720011 (topic in another case)   98203 (gents, teacher 922004)   98204 (gents, CLOSED): 9720012   98205 (LADIES, teacher 922004): 9720013
- *   standard MCQs (level 3, language 7): QW-S1 (2 questions), QW-S2 (1 question)
+ *   standard MCQs (level 99, language 99, so no real class lists them and another lane's standard lists stay as they were): QW-S1 (2 questions), QW-S2 (1 question)
  */
 INSERT INTO identity.users (token, email)
 SELECT v.token, CASE WHEN v.token = 922011 THEN '922011@thestrongrope.com' ELSE 'qw.' || v.token || '@example.invalid' END FROM (VALUES
@@ -66,8 +66,8 @@ INSERT INTO classes.class_students (id, class_id, token_no, joined_on, mcq_admin
   (9720313, 98203, 922017, DATE '2025-01-06', 1, NULL, NULL, NULL, 'A');
 
 INSERT INTO assessment.standard_mcqs (id, code, language_id, level_id, topic, subject, lesson, name, sort_order, created_by, deleted_at) VALUES
-  (9720101, 'QW-S1', 7, 3, 'Qw Topic Beta', 'Qw Subject Two', 'Qw lesson 1', 'Qw standard one', 1, 900315, NULL),
-  (9720102, 'QW-S2', 7, 3, 'Qw Topic Alpha', 'Qw Subject One', 'Qw lesson 2', 'Qw standard two', 2, 900315, NULL);
+  (9720101, 'QW-S1', 99, 99, 'Qw Topic Beta', 'Qw Subject Two', 'Qw lesson 1', 'Qw standard one', 1, 900315, NULL),
+  (9720102, 'QW-S2', 99, 99, 'Qw Topic Alpha', 'Qw Subject One', 'Qw lesson 2', 'Qw standard two', 2, 900315, NULL);
 
 INSERT INTO assessment.standard_mcq_questions (id, mcq_code, question, answer, option1, option2, option3, sort_order, created_by) VALUES
   (9720111, 'QW-S1', 'S1 q1', 'Right1', 'Wrong1a', 'Wrong1b', NULL, 1, 900315),

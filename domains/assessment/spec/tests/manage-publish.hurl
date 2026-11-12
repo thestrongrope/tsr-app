@@ -106,7 +106,7 @@ HTTP 200
 jsonpath "$.publishedAt" matches /^[0-9]{4}-/
 jsonpath "$.questions" count == 2
 
-# 5. A class admin student publishes too (a quiz whose topic is empty), and publishing again is allowed and answers the same
+# 5. The class admin of 98201 cannot publish a quiz of 98202; the teacher and a super admin can (a quiz with no topic), and publishing again is allowed and answers the same
 POST {{base_url}}/mcq/manage/9720008/publish
 Authorization: {{auth_quizwrites_admin}}
 Content-Type: application/json

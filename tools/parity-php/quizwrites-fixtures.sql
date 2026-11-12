@@ -49,8 +49,8 @@ INSERT INTO class_students (id, class_id, token_no, joined_on, mcq_admin, remove
   (9720313, 98203, 922017, '2025-01-06', 1, NULL, NULL, NULL, 'A');
 
 INSERT INTO standard_mcqs (id, code, language_id, level_id, topic, subject, lesson, name, sort_order, created_by, deleted_at) VALUES
-  (9720101, 'QW-S1', 7, 3, 'Qw Topic Beta', 'Qw Subject Two', 'Qw lesson 1', 'Qw standard one', 1, 900315, NULL),
-  (9720102, 'QW-S2', 7, 3, 'Qw Topic Alpha', 'Qw Subject One', 'Qw lesson 2', 'Qw standard two', 2, 900315, NULL);
+  (9720101, 'QW-S1', 99, 99, 'Qw Topic Beta', 'Qw Subject Two', 'Qw lesson 1', 'Qw standard one', 1, 900315, NULL),
+  (9720102, 'QW-S2', 99, 99, 'Qw Topic Alpha', 'Qw Subject One', 'Qw lesson 2', 'Qw standard two', 2, 900315, NULL);
 
 INSERT INTO standard_mcq_questions (id, mcq_code, question, answer, option1, option2, option3, sort_order, created_by) VALUES
   (9720111, 'QW-S1', 'S1 q1', 'Right1', 'Wrong1a', 'Wrong1b', NULL, 1, 900315),
