@@ -43,8 +43,8 @@ GET,/classes/{class_id}/guide,classes,create,built
 GET,/guides,classes,create,built
 GET,/guides/{level_id},classes,create,built
 PUT,/guides/{level_id},classes,create,built
-GET,/me/guides,classes,member,planned
-GET,/me/guides/{slug},classes,member,planned
+GET,/me/guides,classes,create,built
+GET,/me/guides/{slug},classes,create,built
 GET,/classes/{class_id}/my-attendance,classes,create,built
 GET,/classes/{class_id}/my-performance,classes,create,built
 POST,/classes/{class_id}/notifications,notifications,create,built

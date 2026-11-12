@@ -109,6 +109,62 @@ paths:
         "404": {$ref: "#/components/responses/Problem"}
         "413": {$ref: "#/components/responses/Problem"}
         "422": {$ref: "#/components/responses/Problem"}
+  /me/guides:
+    get:
+      operationId: listReaderGuides
+      summary: The guides a student or teacher can open, by slug
+      description: |
+        Permission syllabus:read (403 "You do not have permission to do that"), then the caller must be a student (an active enrolment in an
+        active class) or a teacher (teaches an active class), else 403 "Guides are for students and teachers". The levels that have a guide
+        page (2 to 5) in level order, slug and name only, whether or not the guide has text. Slice: features/me-guides/MeGuides.cs.
+      security:
+        - memberToken: []
+      responses:
+        "200":
+          description: "{guides: [{slug, name}]}"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [guides]
+                properties:
+                  guides:
+                    type: array
+                    items:
+                      type: object
+                      required: [slug, name]
+                      properties:
+                        slug: {type: string, enum: [abuzar, miqdad, ammar, bilal]}
+                        name: {type: string}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+  /me/guides/{slug}:
+    get:
+      operationId: getReaderGuide
+      summary: One level's English guide, by the slug of its guide link
+      description: |
+        The guards of GET /me/guides (403), then the lookup: a slug that names no level (the match is exact, case included), a level with no
+        English guide or a blank one is 404 "Guide not found". guide is the stored text, untrimmed. share_url is the public guide page
+        (TSR_PUBLIC_WEB_BASE plus /guide.php?guide=<slug>), null when the setting is not set. Slice: features/me-guide/MeGuide.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: slug, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: "{guide, share_url: string or null, level_name}"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [guide, share_url, level_name]
+                properties:
+                  guide: {type: string}
+                  share_url: {type: [string, "null"]}
+                  level_name: {type: string}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
   /classes:
     get:
       operationId: listMyClasses

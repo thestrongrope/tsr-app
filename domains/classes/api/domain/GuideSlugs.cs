@@ -11,4 +11,14 @@ internal static class GuideSlugs
         5 => "bilal",
         _ => null,
     };
+
+    /// <summary>PHP's <c>levelForSlug</c>: the level a slug names. The match is exact (a strict <c>array_search</c>): another case or a stray character names nothing.</summary>
+    public static int? LevelFor(string slug) => slug switch
+    {
+        "abuzar" => 2,
+        "miqdad" => 3,
+        "ammar" => 4,
+        "bilal" => 5,
+        _ => null,
+    };
 }
