@@ -154,6 +154,8 @@ internal sealed class FakeFirebase : IFirebaseAccounts
 
     public string? FailWith { get; set; }
 
+    public string? FailOnUid { get; set; }
+
     public async Task DeleteAsync(string? uid, string? email, CancellationToken ct)
     {
         Calls.Add((uid, email));
@@ -162,9 +164,9 @@ internal sealed class FakeFirebase : IFirebaseAccounts
             await Inside();
         }
 
-        if (FailWith is not null)
+        if (FailWith is not null || (FailOnUid is not null && uid == FailOnUid))
         {
-            throw new FirebaseAccountException(FailWith);
+            throw new FirebaseAccountException(FailWith ?? "Firebase could not be reached (HttpRequestException).");
         }
     }
 }
