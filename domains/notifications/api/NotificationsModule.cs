@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Tsr.Notifications.Api.Domain;
+using Tsr.Notifications.Api.Workers;
 using Tsr.Shared.Api;
 
 namespace Tsr.Notifications.Api;
@@ -30,6 +31,21 @@ public static class NotificationsModule
         // One request to FCM or Google's token endpoint may take 10 seconds at most.
         services.AddHttpClient(FcmPushSender.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(10));
         services.TryAddSingleton<IPushSender, FcmPushSender>();
+        return services;
+    }
+
+    /// <summary>The background workers this domain owns, by the name written in <c>TSR_WORKERS</c>. Adding a worker: add its name here and one line in <see cref="AddNotificationsWorkers"/>.</summary>
+    public static readonly IReadOnlyList<string> WorkerNames = [PushDrainWorker.WorkerName];
+
+    /// <summary>Registers the workers named in <paramref name="enabled"/> (the host has already refused unknown names). Called only in the run mode <c>--workers</c>.</summary>
+    public static IServiceCollection AddNotificationsWorkers(this IServiceCollection services, IReadOnlySet<string> enabled)
+    {
+        ArgumentNullException.ThrowIfNull(enabled);
+        if (enabled.Contains(PushDrainWorker.WorkerName))
+        {
+            services.AddHostedService<PushDrainWorker>();
+        }
+
         return services;
     }
 

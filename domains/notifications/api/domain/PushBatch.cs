@@ -32,11 +32,17 @@ internal static class PushBatch
     public static string SentAt(DateTimeOffset now) =>
         now.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture) + ".000000";
 
+    /// <summary>The message as every push is sent: PHP's <c>click_action</c> added to the string data (the Flutter client keys its tap handler off it). Changes <paramref name="data"/>.</summary>
+    public static PushMessage Message(string title, string body, Dictionary<string, string> data)
+    {
+        data["click_action"] = ClickAction;
+        return new PushMessage(title, body, data);
+    }
+
     public static async Task<PushReport> SendAsync(IPushSender sender, string title, string body, Dictionary<string, string> data, IEnumerable<string> deviceTokens, CancellationToken ct)
     {
         var tokens = deviceTokens.Select(PhpText.Trim).Where(t => t.Length > 0).Distinct(StringComparer.Ordinal).ToList();
-        data["click_action"] = ClickAction;
-        var message = new PushMessage(title, body, data);
+        var message = Message(title, body, data);
         var invalid = new System.Collections.Concurrent.ConcurrentBag<string>();
         var success = 0;
         var failure = 0;

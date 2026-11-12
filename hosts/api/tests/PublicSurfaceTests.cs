@@ -23,8 +23,8 @@ public sealed class PublicSurfaceTests
             "AccessModule", "Permissions", "AccessTarget", "Reach", "SearchReach", "UserAccess", "AccessScopes",
             "IClassScopes", "ClassMemberships", "ClassFacts",
         ],
-        // platform: the module; Lookups and Geo (read interfaces) with the two records Geo returns (GeoCountryInfo, GeoPlace); PlatformCommands (published commands: the admin audit row); ReportExport (xlsx and PDF downloads) with the types in its signatures (ReportFormat, ReportSection).
-        ["platform"] = ["PlatformModule", "Lookups", "Geo", "GeoCountryInfo", "GeoPlace", "PlatformCommands", "ReportExport", "ReportFormat", "ReportSection"],
+        // platform: the module; Lookups and Geo (read interfaces) with the two records Geo returns (GeoCountryInfo, GeoPlace); PlatformCommands (published commands: the admin audit row, the delivery queue's claim and result commands) with the record the claim returns (ClaimedMessage); ReportExport (xlsx and PDF downloads) with the types in its signatures (ReportFormat, ReportSection).
+        ["platform"] = ["PlatformModule", "Lookups", "Geo", "GeoCountryInfo", "GeoPlace", "PlatformCommands", "ClaimedMessage", "ReportExport", "ReportFormat", "ReportSection"],
         // membership: the module; MemberNames (read interface); IClassEnrolments, the one port classes will supply; MembershipCommands (published commands).
         ["membership"] = ["MembershipModule", "MemberNames", "IClassEnrolments", "MembershipCommands"],
         ["content"] = ["ContentModule"],
