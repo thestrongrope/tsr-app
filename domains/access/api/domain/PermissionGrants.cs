@@ -64,7 +64,7 @@ internal static class PermissionGrants
 
         permissions.Forget(member.UserId);
         var caller = new Caller(member.UserId, member.Token);
-        var held = (await permissions.ForUserAsync(caller, ct)).Permissions;
+        var held = (await permissions.ForUserOrUnavailableAsync(caller, ct)).Permissions;
         var roleId = await permissions.RoleIdAsync(caller, ct);
 
         var catalog = await CatalogAsync(db, ct);
@@ -83,7 +83,7 @@ internal static class PermissionGrants
         AccessContext db, Permissions permissions, MemberRow member, CancellationToken ct)
     {
         permissions.Forget(member.UserId);
-        var held = (await permissions.ForUserAsync(new Caller(member.UserId, member.Token), ct)).Permissions;
+        var held = (await permissions.ForUserOrUnavailableAsync(new Caller(member.UserId, member.Token), ct)).Permissions;
         var catalog = await CatalogAsync(db, ct);
         return (GrantRules.Grantable(catalog, held), held);
     }

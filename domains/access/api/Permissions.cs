@@ -1,3 +1,4 @@
+using System.Data.Common;
 using Microsoft.EntityFrameworkCore;
 using Tsr.Access.Api.Domain;
 using Tsr.Shared.Api;
@@ -50,6 +51,22 @@ public sealed class Permissions
     {
         ArgumentNullException.ThrowIfNull(caller);
         return ResolveAsync(caller, ct);
+    }
+
+    /// <summary>
+    /// As <see cref="ForUserAsync"/>, for the routes that show a member what they may do: a database failure is
+    /// <see cref="PermissionsUnavailableException"/> (PHP forUser), which those routes answer with 503 instead of an empty answer.
+    /// </summary>
+    internal async Task<UserAccess> ForUserOrUnavailableAsync(Caller caller, CancellationToken ct)
+    {
+        try
+        {
+            return await ResolveAsync(caller, ct);
+        }
+        catch (DbException e)
+        {
+            throw new PermissionsUnavailableException("Permissions storage is unreadable", e);
+        }
     }
 
     /// <summary>

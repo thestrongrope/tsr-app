@@ -20,7 +20,7 @@ internal static class AdminPermissionRevokeSlice
 
     public static IEndpointRouteBuilder MapAdminPermissionRevoke(this IEndpointRouteBuilder routes)
     {
-        routes.MapPost("/admin/permissions/grants/{id}/revoke", HandleAsync).RequireMember(createsMember: true);
+        routes.MapPost("/admin/permissions/grants/{id}/revoke", HandleAsync).RequireMember(createsMember: true).AnswersUnavailable();
         return routes;
     }
 

@@ -13,7 +13,7 @@ quirks included (facts: `docs/specs/initial-build/phase-2-permissions-recon.md`,
 | User roles (`access.user_roles`), named grants, class access rules (tables) | built; written only by the ten admin routes below |
 | Class access rule matching (`RuleMatcher`) | built, unit tested; has no classes to match until `classes` exists |
 | Port `IClassScopes` (default `NoClasses`) | built; `classes` supplies the real one (`ClassFacts` also carries code and name, for the class access screens) |
-| Routes `GET /me/permissions`, `GET /me/permissions/{permission}`, `GET /user/permissions` | built; Hurl contract proven identical on PHP |
+| Routes `GET /me/permissions`, `GET /me/permissions/{permission}`, `GET /user/permissions` | built; Hurl contract proven identical on PHP for version 4. `GET /me/permissions` is now PHP's version 5 (`navigation`, `revision`, ETag and 304, 503 when unreadable): database tested, its Hurl file rewritten from PHP's code and not yet run on either side |
 | Grant routes (`permissions:manage`): member search, member view, grant, revoke; class access routes (`class-access:manage`): member search, member view, options, preview, grant a rule, revoke a rule | built and proven (slices `admin-permission-*`, `class-access-*`); Hurl `spec/tests/admin-permission-*.hurl`, `class-access-*.hurl` through `tools/contract-grants.sh test\|parity`, database tests `db/tests/TestGrantsTests.cs`; notes `docs/specs/initial-build/lane-access-notes.md`, `test-grants-notes.md` |
 
 ## Owns
@@ -34,7 +34,17 @@ the profile gender), `assigned` (class access rules), `own`, `taught`, `enrolled
 allows. Class target: the class must be active, then any scope matching. Gender target: `all` both, `gender` the
 admin's, `assigned` any gender of an assigned class, others none. Teacher gender: widened (ladies in the set gives
 both). A guest (token 0) holds nothing. An unknown action throws (a bug in the caller); PHP's "storage unreadable
-means deny" is not copied, a database error is a 500.
+means deny" is not copied, a database error is a 500. The exception: the routes that show a member what they hold
+(`GET /me/permissions`, the named-grant member view, grant and revoke) answer 503 `Permissions could not be loaded. Try again.`
+as PHP does (`Permissions.ForUserOrUnavailableAsync`, the route filter `AnswersUnavailable`).
+
+## The answer of GET /me/permissions (version 5)
+
+`navigation` (`classes`, `manage`) and `revision` are pure rules in `api/domain/PermissionsSnapshot.cs`. The revision is PHP's
+value for the same answer (sha256 of the key-sorted compact JSON of navigation, permissions, scopes and version, first 16 hex;
+`issued_at` is not in it), so it changes exactly when the answer does. It is sent as the ETag with `Cache-Control: private, no-cache`
+and `Vary: Authorization`; `If-None-Match` naming it is 304. Not built: PHP's `X-Permissions-Revision` header on every signed-in
+response (all domains; it belongs in the host or shared plumbing, not here).
 
 ## Quirks kept on purpose (each has a test named Quirk)
 
@@ -60,7 +70,7 @@ also treats `Zürich` and `Zurich` as equal. Not built; settle it when `classes`
 | Need | File |
 |---|---|
 | The interface and loader | `api/Permissions.cs`, `api/AccessTypes.cs` |
-| Decision rules, no database | `api/domain/AccessEngine.cs`, `RuleMatcher.cs`, `PermissionSets.cs`, `LegacyPermissions.cs` |
+| Decision rules, no database | `api/domain/AccessEngine.cs`, `RuleMatcher.cs`, `PermissionSets.cs`, `LegacyPermissions.cs`, `PermissionsSnapshot.cs` (navigation, revision) |
 | The classes port | `api/IClassScopes.cs` |
 | Tables, migrations | `api/AccessContext.cs`, `api/Migrations/` |
 | The grant and class access rules | `api/domain/GrantRules.cs`, `ClassAccessRules.cs` (no database), `ClassAccessStore.cs`, `ClassAccessOperator.cs`, `MemberLock.cs` |

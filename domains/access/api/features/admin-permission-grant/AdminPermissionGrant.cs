@@ -20,7 +20,7 @@ internal static class AdminPermissionGrantSlice
 
     public static IEndpointRouteBuilder MapAdminPermissionGrant(this IEndpointRouteBuilder routes)
     {
-        routes.MapPost("/admin/permissions/members/{token}/grants", HandleAsync).RequireMember(createsMember: true);
+        routes.MapPost("/admin/permissions/members/{token}/grants", HandleAsync).RequireMember(createsMember: true).AnswersUnavailable();
         return routes;
     }
 
