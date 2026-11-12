@@ -57,6 +57,7 @@ if (workerMode)
 app.UseRouterErrors();
 app.UseRouting();
 app.UseIdentity();
+app.UsePermissionsRevision();
 app.MapIdentity();
 app.MapAccess();
 app.MapPlatform();

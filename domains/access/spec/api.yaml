@@ -7,6 +7,9 @@ info:
     (run against any base URL, on PHP and on the new API alike). Forward compatible: add fields freely, never remove
     or change one without the release process. Every error body is {"detail": "..."}.
     The three /me routes need a sign-in and no permission (a member sees their own answer); the /admin routes need permissions:manage or class-access:manage.
+    Every response of a request whose sign-in passed, on these routes and on every other domain's, carries the header
+    X-Permissions-Revision (components.headers.PermissionsRevision): success, 304, a download and the route's own refusals alike.
+    A request refused at sign-in (401, and the 403 and 404 of the sign-in itself) and a route without sign-in carry none.
 servers:
   - url: http://localhost:8088
     description: Local dev stack (gateway)
@@ -32,6 +35,7 @@ paths:
           description: Permission names in catalog order (ordinal), the scopes, navigation and revision
           headers:
             ETag: { schema: { type: string }, description: 'The revision in double quotes, e.g. "0123456789abcdef"' }
+            X-Permissions-Revision: { $ref: "#/components/headers/PermissionsRevision" }
             Cache-Control: { schema: { type: string, const: "private, no-cache" } }
             Vary: { schema: { type: string }, description: Names Authorization }
           content:
@@ -414,6 +418,12 @@ paths:
         "422": { $ref: "#/components/responses/Problem" }
         "500": { $ref: "#/components/responses/Problem" }
 components:
+  headers:
+    PermissionsRevision:
+      description: |
+        The signed-in member's permissions revision (the `revision` of GET /me/permissions) as it was before the route ran.
+        Left out when the permissions could not be loaded.
+      schema: { type: string, pattern: "^[0-9a-f]{16}$" }
   securitySchemes:
     memberToken:
       type: http

@@ -13,7 +13,7 @@ quirks included (facts: `docs/specs/initial-build/phase-2-permissions-recon.md`,
 | User roles (`access.user_roles`), named grants, class access rules (tables) | built; written only by the ten admin routes below |
 | Class access rule matching (`RuleMatcher`) | built, unit tested; has no classes to match until `classes` exists |
 | Port `IClassScopes` (default `NoClasses`) | built; `classes` supplies the real one (`ClassFacts` also carries code and name, for the class access screens) |
-| Routes `GET /me/permissions`, `GET /me/permissions/{permission}`, `GET /user/permissions` | built; Hurl contract proven identical on PHP for version 4. `GET /me/permissions` is now PHP's version 5 (`navigation`, `revision`, ETag and 304, 503 when unreadable): database tested, its Hurl file rewritten from PHP's code and not yet run on either side |
+| Routes `GET /me/permissions`, `GET /me/permissions/{permission}`, `GET /user/permissions` | built; Hurl contract proven identical on PHP for version 4. `GET /me/permissions` is now PHP's version 5 (`navigation`, `revision`, ETag and 304, 503 when unreadable): database tested, its Hurl file rewritten from PHP's code and not yet run on either side. The header `X-Permissions-Revision` on signed-in responses: built, database tested, Hurl cases not yet run |
 | Grant routes (`permissions:manage`): member search, member view, grant, revoke; class access routes (`class-access:manage`): member search, member view, options, preview, grant a rule, revoke a rule | built and proven (slices `admin-permission-*`, `class-access-*`); Hurl `spec/tests/admin-permission-*.hurl`, `class-access-*.hurl` through `tools/contract-grants.sh test\|parity`, database tests `db/tests/TestGrantsTests.cs`; notes `docs/specs/initial-build/lane-access-notes.md`, `test-grants-notes.md` |
 
 ## Owns
@@ -43,8 +43,23 @@ as PHP does (`Permissions.ForUserOrUnavailableAsync`, the route filter `AnswersU
 `navigation` (`classes`, `manage`) and `revision` are pure rules in `api/domain/PermissionsSnapshot.cs`. The revision is PHP's
 value for the same answer (sha256 of the key-sorted compact JSON of navigation, permissions, scopes and version, first 16 hex;
 `issued_at` is not in it), so it changes exactly when the answer does. It is sent as the ETag with `Cache-Control: private, no-cache`
-and `Vary: Authorization`; `If-None-Match` naming it is 304. Not built: PHP's `X-Permissions-Revision` header on every signed-in
-response (all domains; it belongs in the host or shared plumbing, not here).
+and `Vary: Authorization`; `If-None-Match` naming it is 304.
+
+## The header X-Permissions-Revision (every domain's signed-in responses)
+
+`api/PermissionsRevisionHeader.cs`, middleware the host adds with `app.UsePermissionsRevision()` right after `app.UseIdentity()`
+(the rule is here; the host has that one line). As PHP (`lib/auth.php` `api_authenticate`, `lib/permissions_snapshot.php`): it runs
+when the sign-in has passed and before the route, so the header is on every answer of such a request (200, 304, a download, and
+the route's own 403, 404, 409, 422, 503), for a member being deleted on the routes they may still call, and for the member a
+create route has just made. The value is the member's revision BEFORE the route runs: a request that changes the caller's own
+permissions still carries the old one, the next request the new one. No header: a request refused at sign-in (401, `User not found`,
+`Registration incomplete`, `Account deletion pending`, recently deleted, a `precheck:` refusal), a route without `RequireMember`
+(public reads, `/health`, `/auth/debug-token`), and permissions that cannot be loaded (logged as a warning; the request goes on).
+Cost: the request's one resolution (role, stored names, three class-fact reads through the port, live rules, catalog: 7 queries,
+9 for a member with class access rules; PHP: 7), paid on every signed-in request and kept by `Permissions`, so the route's own
+checks read nothing again; a route that checks no permission pays it only for the header, as in PHP. Because that resolution is
+kept, a route that changes what its caller holds and then asks `Permissions` about the caller must call `Permissions.Forget` first
+(the grant routes do). An unhandled error (500) has no header. Tests: `db/tests/PermissionsRevisionHeaderTests.cs`.
 
 ## Quirks kept on purpose (each has a test named Quirk)
 
@@ -70,6 +85,7 @@ also treats `Zürich` and `Zurich` as equal. Not built; settle it when `classes`
 | Need | File |
 |---|---|
 | The interface and loader | `api/Permissions.cs`, `api/AccessTypes.cs` |
+| The revision header on signed-in responses | `api/PermissionsRevisionHeader.cs`, `AccessModule.UsePermissionsRevision` |
 | Decision rules, no database | `api/domain/AccessEngine.cs`, `RuleMatcher.cs`, `PermissionSets.cs`, `LegacyPermissions.cs`, `PermissionsSnapshot.cs` (navigation, revision) |
 | The classes port | `api/IClassScopes.cs` |
 | Tables, migrations | `api/AccessContext.cs`, `api/Migrations/` |
