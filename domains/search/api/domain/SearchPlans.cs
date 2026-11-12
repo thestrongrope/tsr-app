@@ -6,7 +6,7 @@ namespace Tsr.Search.Api.Domain;
 /// What the caller may find, worked out by the slice from <c>access</c>: the reach of <c>classes:read</c> (classes, guides, students,
 /// subscribers) and of <c>teachers:lookup</c>, and the genders of teacher the caller may look up (PHP TeachersModel::canView).
 /// </summary>
-internal sealed record SearchAccess(Reach Classes, SearchReach Teachers, IReadOnlyList<int> TeacherGenders);
+internal sealed record SearchAccess(Reach Classes, SearchReach Teachers, IReadOnlyList<int> TeacherGenders, bool GentsWhoTeach = false);
 
 /// <summary>How to ask the index for one kind: <see cref="Scope"/> null means the caller may look the kind up but no document can qualify, so there is nothing to ask.</summary>
 internal sealed record KindPlan(SearchScope? Scope);
@@ -114,8 +114,9 @@ internal static class SearchPlans
             return new KindPlan(SearchScope.Everything);
         }
 
-        return access.TeacherGenders.Count == 0
+        var genders = access.GentsWhoTeach && !access.TeacherGenders.Contains(1) ? [.. access.TeacherGenders, 1] : access.TeacherGenders;
+        return genders.Count == 0
             ? new KindPlan(null)
-            : new KindPlan(SearchScope.Limited([new TermsClause("gender", access.TeacherGenders)]));
+            : new KindPlan(SearchScope.Limited([new TermsClause("gender", genders)]));
     }
 }

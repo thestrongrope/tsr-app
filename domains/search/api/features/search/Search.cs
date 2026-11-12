@@ -52,7 +52,7 @@ internal static class SearchSlice
         return Results.Json(new Body(answer.Groups, answer.Unavailable));
     }
 
-    // The teacher rule (PHP TeachersModel::canView) is a set of genders: the genders of teacher the caller may look up, and, for gents, a ladies-class manager.
+    // The teacher rule (PHP TeachersModel::canView): the genders the caller may look up outright, and whether gents who actually teach are visible through the teacher-gender rule (a ladies-class manager).
     private static async Task<SearchAccess> AccessOfAsync(Permissions permissions, Caller caller, IReadOnlyList<string> kinds, CancellationToken ct)
     {
         var classes = await permissions.ReachAsync(caller, "classes:read", ct);
@@ -63,8 +63,7 @@ internal static class SearchSlice
 
         var teachers = (await permissions.ReachAsync(caller, "teachers:lookup", ct)).Search;
         var genders = new List<int>();
-        if (await permissions.CanAsync(caller, "teachers:lookup", AccessTarget.ForGender(1), ct)
-            || await permissions.CanAsync(caller, "teachers:lookup", AccessTarget.ForTeacherGender(1), ct))
+        if (await permissions.CanAsync(caller, "teachers:lookup", AccessTarget.ForGender(1), ct))
         {
             genders.Add(1);
         }
@@ -74,6 +73,7 @@ internal static class SearchSlice
             genders.Add(2);
         }
 
-        return new SearchAccess(classes, teachers, genders);
+        var gentsWhoTeach = await permissions.CanAsync(caller, "teachers:lookup", AccessTarget.ForTeacherGender(1), ct);
+        return new SearchAccess(classes, teachers, genders, gentsWhoTeach);
     }
 }

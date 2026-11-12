@@ -6,6 +6,9 @@ namespace Tsr.Search.Api.Domain;
 /// <summary>An active class as the re-check reads it: its code, its level's name (empty without one) and its gender (0 when unknown).</summary>
 internal sealed record ClassFact(int Id, string Code, string LevelName, int Gender, int LevelId);
 
+/// <summary>A member who was found as a teacher, read fresh: the name, the stored gender (0 when it is not 1 or 2), whether they are an active teacher now, and whether they teach (a teachers row of any status, or a class they teach).</summary>
+internal sealed record TeacherFact(string Name, int Gender, bool Active, bool Teaches);
+
 /// <summary>
 /// The fresh reads that follow the index (PHP SearchSourceModel and EntityAccessModel): the index is only a list of pointers, so
 /// every hit is checked again against the database. Published views only: <c>classes.v_classes</c>, <c>classes.v_enrolments</c>
@@ -24,6 +27,9 @@ internal interface ISearchFacts
 
     /// <summary>The member's current (not removed) active classes, by code, for each token.</summary>
     Task<IReadOnlyDictionary<long, IReadOnlyList<ClassFact>>> CurrentClassesAsync(IReadOnlyCollection<long> tokens, CancellationToken ct);
+
+    /// <summary>Each token's teacher facts (PHP searchsource teacherRow and TeachersModel::canView); a token with no member is absent.</summary>
+    Task<IReadOnlyDictionary<long, TeacherFact>> TeachersAsync(IReadOnlyCollection<long> tokens, CancellationToken ct);
 
     /// <summary>The name of each token's member (the first row when several share a token); a token with no member is absent.</summary>
     Task<IReadOnlyDictionary<long, string>> MemberNamesAsync(IReadOnlyCollection<long> tokens, CancellationToken ct);
@@ -87,6 +93,34 @@ internal sealed class SearchFacts(DbSettings settings) : ISearchFacts
         }
 
         return byToken.ToDictionary(pair => pair.Key, pair => (IReadOnlyList<ClassFact>)pair.Value);
+    }
+
+    // The member row is the first of the token (as canView's "select gender from users where token"); a gender other than 1 or 2 reads 0.
+    public async Task<IReadOnlyDictionary<long, TeacherFact>> TeachersAsync(IReadOnlyCollection<long> tokens, CancellationToken ct)
+    {
+        var teachers = new Dictionary<long, TeacherFact>();
+        if (tokens.Count == 0)
+        {
+            return teachers;
+        }
+
+        await using var connection = await OpenAsync(ct);
+        await using var command = new NpgsqlCommand(
+            """
+            select m.token::bigint, coalesce(m.name, ''), case when m.gender in ('1', '2') then m.gender::int else 0 end,
+                   exists (select 1 from classes.v_teachers t where t.token = m.token and t.status = 'A'),
+                   exists (select 1 from classes.v_teachers t where t.token = m.token) or exists (select 1 from classes.v_classes c where c.teacher = m.token)
+            from (select distinct on (token) token, name, gender from membership.v_members where token = any(@ids) order by token, user_id) m
+            """,
+            connection);
+        command.Parameters.AddWithValue("ids", tokens.ToArray());
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            teachers[reader.GetInt64(0)] = new TeacherFact(reader.GetString(1), reader.GetInt32(2), reader.GetBoolean(3), reader.GetBoolean(4));
+        }
+
+        return teachers;
     }
 
     public async Task<IReadOnlyDictionary<long, string>> MemberNamesAsync(IReadOnlyCollection<long> tokens, CancellationToken ct)

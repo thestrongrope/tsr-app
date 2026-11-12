@@ -8,7 +8,7 @@ public sealed class PublishedViewsTests
     public static readonly string[] Views =
     [
         "identity.v_users", "membership.v_members", "membership.v_registrations", "membership.v_guardian_links",
-        "classes.v_classes", "classes.v_enrolments", "classes.v_class_schedules", "classes.v_class_levels", "assessment.v_quiz_results", "assessment.v_quizzes", "assessment.v_standard_mcqs", "assessment.v_class_mcq_copies", "content.v_quran", "platform.v_genders",
+        "classes.v_classes", "classes.v_enrolments", "classes.v_class_schedules", "classes.v_class_levels", "classes.v_teachers", "assessment.v_quiz_results", "assessment.v_quizzes", "assessment.v_standard_mcqs", "assessment.v_class_mcq_copies", "content.v_quran", "platform.v_genders",
     ];
 
     [TestCaseSource(nameof(Views))]
