@@ -55,19 +55,19 @@ internal sealed class SearchPlansTests
         Assert.That(SearchPlans.PlanFor("subscriber", Access(new SearchReach(true, null, [], null), all: true))!.Scope, Is.SameAs(SearchScope.Everything));
     }
 
-    [Test]
-    public void A_teacher_plan_asks_only_for_the_genders_the_caller_may_look_up()
+    // PHP sends no filter for teachers (searchRaw with an empty filter, then canView on every hit): a stale indexed gender cannot hide a teacher the caller may see now.
+    [TestCase(false, 2, null)]
+    [TestCase(false, null, 3)]
+    [TestCase(true, null, null)]
+    public void A_teacher_plan_asks_without_a_filter_whenever_the_caller_has_a_way_in(bool all, int? gender, int? classId)
     {
-        var plan = SearchPlans.PlanFor("teacher", Access(Nothing, teachers: new SearchReach(false, 2, [], null), teacherGenders: [2]))!;
-        Assert.That(Describe(plan.Scope!), Is.EqualTo("gender=2"));
+        var plan = SearchPlans.PlanFor("teacher", Access(Nothing, teachers: new SearchReach(all, gender, classId is { } id ? [id] : [], null)))!;
+        Assert.That(plan.Scope, Is.SameAs(SearchScope.Everything));
     }
 
     [Test]
-    public void A_teacher_plan_with_no_lookup_gender_asks_for_nothing_but_still_answers_an_empty_group()
-    {
-        var plan = SearchPlans.PlanFor("teacher", Access(Nothing, teachers: new SearchReach(false, null, [3], null)))!;
-        Assert.That(plan.Scope, Is.Null);
-    }
+    public void A_teacher_plan_without_a_way_in_is_no_group() =>
+        Assert.That(SearchPlans.PlanFor("teacher", Access(Nothing, teachers: new SearchReach(false, null, [], null))), Is.Null);
 
     [Test]
     public void A_limited_scope_needs_a_clause() =>

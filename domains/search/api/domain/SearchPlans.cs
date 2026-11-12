@@ -101,22 +101,6 @@ internal static class SearchPlans
         return new KindPlan(SearchScope.Limited(clauses));
     }
 
-    // PHP filters teachers only after the query (canView on every hit); here the genders canView would accept are in the query, so no other teacher is read.
-    private static KindPlan? TeacherPlan(SearchAccess access)
-    {
-        if (IsEmpty(access.Teachers))
-        {
-            return null;
-        }
-
-        if (access.Teachers.All)
-        {
-            return new KindPlan(SearchScope.Everything);
-        }
-
-        var genders = access.GentsWhoTeach && !access.TeacherGenders.Contains(1) ? [.. access.TeacherGenders, 1] : access.TeacherGenders;
-        return genders.Count == 0
-            ? new KindPlan(null)
-            : new KindPlan(SearchScope.Limited([new TermsClause("gender", genders)]));
-    }
+    // As PHP: no filter in the query (every active teacher can match), then the re-check applies canView to the FRESH gender, so a stale index can neither hide nor expose a teacher.
+    private static KindPlan? TeacherPlan(SearchAccess access) => IsEmpty(access.Teachers) ? null : new KindPlan(SearchScope.Everything);
 }

@@ -34,6 +34,7 @@ FILES=(
   domains/platform/spec/tests/admin-access-log.hurl
   domains/platform/spec/tests/admin-access-log-download.hurl
   domains/search/spec/tests/search.hurl
+  domains/search/spec/tests/search-new-api.hurl
 )
 
 # alias=email: the fixture members (Hurl variable auth_edge_<alias>); the tokens are in db/synthetic/edge-fixtures.sql.

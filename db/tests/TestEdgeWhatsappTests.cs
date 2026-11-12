@@ -97,7 +97,7 @@ public sealed class TestEdgeWhatsappTests
     {
         await MembershipTestKit.ResetAsync();
         await TestDatabase.ExecuteAsync("truncate platform.admin_access_log restart identity");
-        foreach (var token in new[] { Super, GentsAdmin, Plain, 927010, 927011, 927012, 927013, 927014 })
+        foreach (var token in new[] { Super, GentsAdmin, Plain, 927010, 927011, 927012, 927013, 927014, 927015 })
         {
             var id = await MembershipTestKit.AddMemberAsync(token, "Edge Member " + token, "1");
             var role = token == GentsAdmin ? 3 : (token == Plain ? 0 : 1);
@@ -304,7 +304,12 @@ public sealed class TestEdgeWhatsappTests
         Assert.That(nul.Status, Is.EqualTo(HttpStatusCode.UnprocessableEntity), nul.Body);
         Assert.That(longMessage.Status, Is.EqualTo(HttpStatusCode.UnprocessableEntity), longMessage.Body);
         Assert.That(fake.Calls, Has.Count.EqualTo(1));
-        Assert.That(string.Join('\n', logs.Lines), Does.Not.Contain("+91").And.Not.Contain("hello"));
+        fake.Answer = new NotifierAnswer(200, """{"run_id": 4, "status": "sent"}""");
+        var sent = await As(Super, "POST", "/admin/whatsapp/test", """{"mobile":"+9199887766","message":"DISTINCT-MESSAGE-TEXT"}""");
+        Assert.That(sent.Status, Is.EqualTo(HttpStatusCode.OK), sent.Body);
+        var captured = string.Join('\n', logs.Lines);
+        Assert.That(captured, Does.Contain("whatsapp.test_sent"), "positive control: this request's own log line is captured");
+        Assert.That(captured, Does.Not.Contain("99887766").And.Not.Contain("DISTINCT-MESSAGE-TEXT"));
     }
 
     [TestCase(400, """{"error":"mobile is required"}""", 400, "mobile is required")]
@@ -378,11 +383,15 @@ public sealed class TestEdgeWhatsappTests
         fake.Answer = new NotifierAnswer(200, $$"""{"qr":"SECRET-QR-VALUE","generated_seconds_ago":{{age}}}""");
 
         var reply = await As(Super, "GET", "/admin/whatsapp/link/qr");
+        fake.Answer = new NotifierAnswer(200, """{"run_id": 4}""");
+        await As(Super, "POST", "/admin/whatsapp/test", """{"mobile":"1","message":"m"}""");
 
         Assert.That(reply.Status, Is.EqualTo(HttpStatusCode.OK), reply.Body);
         Assert.That(reply.Json!["stale"]!.GetValue<bool>(), Is.EqualTo(stale));
         Assert.That(reply.Json["qr"] is null, Is.EqualTo(stale));
-        Assert.That(string.Join('\n', logs.Lines), Does.Not.Contain("SECRET-QR-VALUE"));
+        var captured = string.Join('\n', logs.Lines);
+        Assert.That(captured, Does.Contain("whatsapp.test_sent"), "positive control: the capture sees this host's log lines");
+        Assert.That(captured, Does.Not.Contain("SECRET-QR-VALUE"));
     }
 
     [Test]
@@ -423,7 +432,7 @@ public sealed class TestEdgeWhatsappTests
     }
 
     [Test]
-    public async Task The_link_read_limit_is_90_a_minute_shared_by_link_and_qr_and_a_refused_call_is_not_counted()
+    public async Task The_link_read_limit_is_90_a_minute_shared_by_link_and_qr()
     {
         fake.Answer = new NotifierAnswer(200, """{"connected":true}""");
         for (var i = 0; i < 45; i++)
@@ -459,6 +468,17 @@ public sealed class TestEdgeWhatsappTests
         Assert.That(rowsBefore, Is.EqualTo(6));
         Assert.That(rowsAfter, Is.EqualTo(6));
         Assert.That(fake.Calls, Has.Count.EqualTo(6));
+    }
+
+    [Test]
+    public async Task Ten_simultaneous_relinks_by_one_member_give_exactly_six_attempts_four_429s_and_six_audit_rows()
+    {
+        var replies = await Task.WhenAll(Enumerable.Range(0, 10).Select(_ => As(927015, "POST", "/admin/whatsapp/link/relink", "{}")));
+
+        Assert.That(replies.Count(r => r.Status == HttpStatusCode.OK), Is.EqualTo(6));
+        Assert.That(replies.Count(r => r.Status == HttpStatusCode.TooManyRequests), Is.EqualTo(4));
+        Assert.That(fake.Calls, Has.Count.EqualTo(6));
+        Assert.That(await MembershipTestKit.CountAsync("platform.admin_access_log", "token = 927015"), Is.EqualTo(6));
     }
 
     [TestCase("/admin/whatsapp/link/relink", "Re-link failed. The link is unchanged; please try again.")]

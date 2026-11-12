@@ -17,6 +17,8 @@ public sealed class TestEdgeSearchTests
     private const int LadiesAdmin = 927022;
     private const int Plain = 927023;
     private const int NoGender = 927024;
+    private const int Coordinator = 927025;
+    private const int TeacherLookupOnly = 927026;
 
     private sealed class FakeIndex : ISearchIndex
     {
@@ -44,11 +46,12 @@ public sealed class TestEdgeSearchTests
     public async Task SeedAsync()
     {
         await MembershipTestKit.ResetAsync();
-        await TestDatabase.ExecuteAsync("truncate classes.class_students, classes.class_schedules, classes.classes, classes.teachers restart identity cascade");
+        await TestDatabase.ExecuteAsync("truncate classes.class_students, classes.class_schedules, classes.classes, classes.teachers restart identity cascade; "
+            + "delete from access.class_access_rule_conditions where rule_id between 9770000 and 9779999; delete from access.class_access_rules where id between 9770000 and 9779999");
         foreach (var (token, gender, role) in new (int, string?, int)[]
         {
             (Super, "1", 1), (GentsAdmin, "1", 3), (LadiesAdmin, "2", 4), (Plain, "1", 0), (NoGender, null, 1),
-            (927030, "1", 0), (927031, "1", 0), (927032, "2", 0), (927033, null, 0), (927034, "1", 0),
+            (Coordinator, "1", 5), (TeacherLookupOnly, "2", 0), (927030, "1", 0), (927031, "1", 0), (927032, "2", 0), (927033, null, 0), (927034, "1", 0),
         })
         {
             var id = await MembershipTestKit.AddMemberAsync(token, "Edge Member " + token, gender);
@@ -63,6 +66,14 @@ public sealed class TestEdgeSearchTests
             await TestDatabase.ExecuteAsync($"insert into classes.teachers (token, salman, abuzar, miqdad, ammar, bilal, status, created_at) values ({token}, 0, 0, 0, 0, 0, '{status}', now())");
         }
 
+        await TestDatabase.ExecuteAsync(
+            "insert into access.user_permissions (user_id, permission) select id, 'teachers:lookup:assigned' from identity.users where token = " + TeacherLookupOnly
+            + "; insert into platform.genders (id, name) values (1, 'Male'), (2, 'Female') on conflict do nothing; "
+            + "insert into classes.class_levels (id, code, name, sort_order) values (3, 'MK', 'MIQDAD', 3) on conflict do nothing; "
+            + "insert into classes.classes (id, code, language_id, link, name, class_level_id, teacher, gender, format, city, status, created_by) values "
+            + "(98705, 'EDGE-LADIES', 1, 'edgelink5', 'Ladies', 3, 927030, 2, 'Offline', 'Ladyville', 'A', 927020); "
+            + $"insert into access.class_access_rules (id, token, gender, note, created_at) values (9770011, {TeacherLookupOnly}, 2, 'edge', now()); "
+            + "insert into access.class_access_rule_conditions (rule_id, field, negate, value) values (9770011, 'city', false, 'Ladyville')");
         index.Asked.Clear();
         index.Hits.Clear();
     }
@@ -96,14 +107,14 @@ public sealed class TestEdgeSearchTests
     }
 
     [Test]
-    public async Task The_teacher_filter_sent_to_the_index_follows_the_callers_reach()
+    public async Task Teachers_are_asked_for_without_a_filter_as_PHP_does_and_the_recheck_decides()
     {
         await SearchAsync(Super, "teacher");
         await SearchAsync(GentsAdmin, "teacher");
         await SearchAsync(LadiesAdmin, "teacher");
 
         Assert.That(index.Asked.Select(a => a.Kind), Is.All.EqualTo("teacher"));
-        Assert.That(index.Asked.Select(a => Filter(a.Scope)), Is.EqualTo(new List<string> { "everything", "gender in 1", "gender in 1,2" }));
+        Assert.That(index.Asked.Select(a => Filter(a.Scope)), Is.EqualTo(new List<string> { "everything", "everything", "everything" }));
         Assert.That(index.Asked.Select(a => a.Text), Is.All.EqualTo("edge"));
     }
 
@@ -130,6 +141,72 @@ public sealed class TestEdgeSearchTests
         Assert.That(students.Ids, Is.EqualTo(new List<long> { 927034 }), students.Body);
         Assert.That(superStudents.Ids, Is.EqualTo(new List<long> { 927034, 927032 }), superStudents.Body);
         Assert.That(Filter(index.Asked.First(a => a.Kind == "class").Scope), Does.Contain("class_genders in 1"));
+    }
+
+    [Test]
+    public async Task A_holder_of_only_a_teacher_lookup_grant_for_assigned_ladies_classes_sees_active_gents_and_ladies_teachers_and_no_stale_hit()
+    {
+        IndexReturns("teacher", 927030, 927031, 927032, 927033, 927034);
+
+        var holder = await SearchAsync(TeacherLookupOnly, "teacher");
+
+        Assert.That(holder.Ids, Is.EqualTo(new List<long> { 927030, 927032 }), holder.Body);
+        Assert.That(Filter(index.Asked.Single().Scope), Is.EqualTo("everything"));
+    }
+
+    // The filter PHP's toEs builds from a reach: should [term gender, terms classIds, term self], minimum_should_match 1; none for "all"; no query at all for no way in.
+    [Test]
+    public async Task The_class_student_and_guide_filters_follow_the_callers_reach_exactly()
+    {
+        await TestDatabase.ExecuteAsync(
+            "insert into platform.genders (id, name) values (1, 'Male'), (2, 'Female') on conflict do nothing; "
+            + "insert into classes.class_levels (id, code, name, sort_order) values (3, 'MK', 'MIQDAD', 3) on conflict do nothing; "
+            + "insert into classes.classes (id, code, language_id, link, name, class_level_id, teacher, gender, format, city, status, created_by) values "
+            + "(98701, 'EDGE-OPEN', 1, 'edgelink1', 'Open', 3, 927030, 1, 'Offline', 'Edgeville', 'A', 927020), "
+            + "(98704, 'EDGE-OTHER', 1, 'edgelink4', 'Other', 3, 927030, 1, 'Offline', 'Elsewhere', 'A', 927020); "
+            + $"insert into access.class_access_rules (id, token, gender, note, created_at) values (9770010, {Coordinator}, 1, 'edge', now()); "
+            + "insert into access.class_access_rule_conditions (rule_id, field, negate, value) values (9770010, 'city', false, 'Edgeville')");
+
+        var seen = new List<string>();
+        foreach (var (caller, kind) in new[]
+        {
+            (Super, "class"), (Super, "student"), (Super, "guide"), (Super, "subscriber"),
+            (GentsAdmin, "class"), (GentsAdmin, "student"), (GentsAdmin, "guide"), (GentsAdmin, "subscriber"),
+            (LadiesAdmin, "class"), (LadiesAdmin, "student"),
+            (Coordinator, "class"), (Coordinator, "student"), (Coordinator, "guide"), (Coordinator, "subscriber"),
+            (Plain, "class"), (Plain, "student"), (Plain, "guide"), (Plain, "subscriber"), (Plain, "teacher"),
+        })
+        {
+            index.Asked.Clear();
+            await SearchAsync(caller, kind);
+            seen.Add($"{caller} {kind}: " + (index.Asked.Count == 0 ? "no query" : Filter(index.Asked.Single().Scope)));
+        }
+
+        Assert.That(
+            seen,
+            Is.EqualTo(
+                new List<string>
+                {
+                    "927020 class: everything",
+                    "927020 student: everything",
+                    "927020 guide: everything",
+                    "927020 subscriber: everything",
+                    "927021 class: class_genders in 1",
+                    "927021 student: class_genders in 1",
+                    "927021 guide: everything",
+                    "927021 subscriber: no query",
+                    "927022 class: class_genders in 2",
+                    "927022 student: class_genders in 2",
+                    "927025 class: class_ids in 98701",
+                    "927025 student: class_ids in 98701",
+                    "927025 guide: everything",
+                    "927025 subscriber: no query",
+                    "927023 class: no query",
+                    "927023 student: no query",
+                    "927023 guide: no query",
+                    "927023 subscriber: no query",
+                    "927023 teacher: no query",
+                }));
     }
 
     [Test]
