@@ -49,13 +49,6 @@ public sealed class PlannedRoutesTests
         Assert.That(await MembershipTestKit.CountAsync("identity.users"), Is.EqualTo(1));
     }
 
-    [TestCase("GET", "/search")]
-    [TestCase("POST", "/notifications/send")]
-    public async Task A_planned_route_PHP_creates_a_member_on_does_not_create_one(string method, string path)
-    {
-        var reply = await kit.SendAsync(Token, new HttpMethod(method), path);
-
-        Assert.That((reply.Status, reply.Detail), Is.EqualTo((HttpStatusCode.NotFound, "User not found")));
-        Assert.That(await MembershipTestKit.CountAsync("identity.users"), Is.Zero);
-    }
+    // "A planned route PHP creates a member on does not create one" had two cases (GET /search, POST /notifications/send). Both routes are built
+    // since the build-out of 12 Nov 2026 and no planned route of that kind is left, so the test went with them.
 }

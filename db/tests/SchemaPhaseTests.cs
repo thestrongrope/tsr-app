@@ -15,7 +15,7 @@ public sealed class SchemaPhaseTests
 
     /// <summary>Tables that exist in PostgreSQL but never in PHP: platform's outbox, the articles, the profile split off <c>users</c>, the role tables.</summary>
     private static readonly string[] NotFromPhp =
-        ["platform.outbox", "content.articles", "membership.member_profiles", "access.roles", "access.user_roles"];
+        ["platform.outbox", "content.articles", "membership.member_profiles", "access.roles", "access.user_roles", "assessment.quiz_state"];
 
     private const string History = "__ef_migrations_history";
 
