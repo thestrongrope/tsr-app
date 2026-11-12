@@ -203,6 +203,10 @@ namespace Tsr.Assessment.Api.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasDatabaseName("spot_quizzes_code");
+
                     b.HasIndex("ClassId", "PublishedAt")
                         .HasDatabaseName("idx_sq_class_published");
 

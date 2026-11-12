@@ -49,7 +49,7 @@ public sealed class AssessmentA2Tests
     {
         await MembershipTestKit.ResetAsync();
         await TestDatabase.ExecuteAsync(
-            "truncate access.user_roles, access.class_access_rule_conditions, access.class_access_rules restart identity cascade; truncate platform.outbox, assessment.spot_quiz_responses, assessment.spot_quiz_questions, assessment.spot_quizzes, assessment.standard_mcq_questions, assessment.standard_mcqs, classes.class_students, classes.classes restart identity cascade");
+            "truncate access.user_roles, access.class_access_rule_conditions, access.class_access_rules restart identity cascade; truncate platform.outbox, assessment.spot_quiz_responses, assessment.spot_quiz_submissions, assessment.spot_quiz_questions, assessment.spot_quizzes, assessment.standard_mcq_questions, assessment.standard_mcqs, classes.class_students, classes.classes restart identity cascade");
         foreach (var token in new[] { Stranger, ClassAdmin, Student, OtherAdmin, RemovedAdmin, Teacher, OtherTeacher, SuperAdmin, GentsAdmin, LadiesAdmin, Coordinator, InactiveAdmin })
         {
             await MembershipTestKit.AddMemberAsync(token, "A2 Member " + token, "1");
@@ -260,20 +260,54 @@ public sealed class AssessmentA2Tests
         Assert.That(await MembershipTestKit.CountAsync("platform.outbox"), Is.Zero);
     }
 
+    private const string AnsweredRefusal = "This quiz has answers and can no longer be edited";
+
     [Test]
-    public async Task FLAGGED_an_edit_of_an_answered_quiz_leaves_the_answers_behind_and_changes_the_students_score()
+    public async Task An_edit_of_a_quiz_with_answers_is_refused_with_409_and_changes_nothing_and_writes_no_event()
     {
-        var before = await GetAsync(Student, "/mcq/quizzes/997102/my-score");
-        Assert.That(((int)before.Json!["total"]!, (int)before.Json["correct"]!), Is.EqualTo((2, 1)));
+        var edit = await kit.SendAsync(Teacher, HttpMethod.Put, "/mcq/manage/997102", TwoQuestions);
 
-        var edit = await kit.SendAsync(Teacher, HttpMethod.Put, "/mcq/manage/997102", "{\"name\": \"N\", \"topic\": \"T\", \"questions\": [{\"question\": \"a\", \"answer\": \"a\"}, {\"question\": \"b\", \"answer\": \"b\"}, {\"question\": \"c\", \"answer\": \"c\"}, {\"question\": \"d\", \"answer\": \"d\"}]}");
-        Assert.That(edit.Status, Is.EqualTo(HttpStatusCode.OK), edit.Body);
+        Assert.That((edit.Status, edit.Detail), Is.EqualTo((HttpStatusCode.Conflict, AnsweredRefusal)));
+        Assert.That(await MembershipTestKit.CountAsync("assessment.spot_quizzes", "id = 997102 and name = 'Published' and modified_at is null"), Is.EqualTo(1));
+        Assert.That(await MembershipTestKit.CountAsync("assessment.spot_quiz_questions", "id in (997203, 997204)"), Is.EqualTo(2));
+        Assert.That(await MembershipTestKit.CountAsync("assessment.spot_quiz_responses", "spot_quiz_id = 997102"), Is.EqualTo(2));
+        Assert.That(await MembershipTestKit.CountAsync("platform.outbox"), Is.Zero);
+        var score = await GetAsync(Student, "/mcq/quizzes/997102/my-score");
+        Assert.That(((int)score.Json!["total"]!, (int)score.Json["correct"]!), Is.EqualTo((2, 1)), "the score is what it was");
+    }
 
-        Assert.That(await MembershipTestKit.CountAsync("assessment.spot_quiz_responses", "spot_quiz_id = 997102"), Is.EqualTo(2), "the answers are kept (PHP too)");
-        Assert.That(await MembershipTestKit.CountAsync("assessment.spot_quiz_responses r", "r.spot_quiz_id = 997102 and not exists (select 1 from assessment.spot_quiz_questions q where q.id = r.spot_quiz_question_id)"), Is.EqualTo(2), "and now point at deleted questions");
-        var after = await GetAsync(Student, "/mcq/quizzes/997102/my-score");
-        Assert.That(((int)after.Json!["total"]!, (int)after.Json["correct"]!, (int)after.Json["answered"]!), Is.EqualTo((4, 1, 2)), "the same correct count over the new question count");
-        Assert.That(after.Json["responses"]![0]!["questionText"], Is.Null);
+    [Test]
+    public async Task An_edit_of_a_quiz_with_only_an_offline_submission_row_is_refused_with_409()
+    {
+        await TestDatabase.ExecuteAsync($"insert into assessment.spot_quiz_submissions (spot_quiz_id, token) values (997101, {Student})");
+
+        var edit = await kit.SendAsync(Teacher, HttpMethod.Put, "/mcq/manage/997101", TwoQuestions);
+
+        Assert.That((edit.Status, edit.Detail), Is.EqualTo((HttpStatusCode.Conflict, AnsweredRefusal)));
+        Assert.That(await MembershipTestKit.CountAsync("assessment.spot_quiz_questions", "id in (997201, 997202)"), Is.EqualTo(2));
+        Assert.That(await MembershipTestKit.CountAsync("platform.outbox"), Is.Zero);
+    }
+
+    [Test]
+    public async Task The_permission_check_comes_before_the_answered_refusal()
+    {
+        var edit = await kit.SendAsync(Student, HttpMethod.Put, "/mcq/manage/997102", TwoQuestions);
+
+        Assert.That((edit.Status, edit.Detail), Is.EqualTo((HttpStatusCode.Forbidden, NotAllowed)));
+    }
+
+    [Test]
+    public async Task A_student_submitting_while_the_teacher_edits_never_leaves_answers_behind_for_replaced_questions()
+    {
+        await TestDatabase.ExecuteAsync("update assessment.spot_quizzes set published_at = now() where id = 997101");
+        var answers = "{\"responses\": [{\"questionId\": 997201, \"selectedText\": \"SECRET-1\"}, {\"questionId\": 997202, \"selectedText\": \"SECRET-2\"}]}";
+
+        var submit = kit.SendAsync(Student, HttpMethod.Post, "/mcq/quizzes/997101/responses", answers);
+        var edit = kit.SendAsync(Teacher, HttpMethod.Put, "/mcq/manage/997101", TwoQuestions);
+        var replies = await Task.WhenAll(submit, edit);
+
+        Assert.That(await MembershipTestKit.CountAsync("assessment.spot_quiz_responses r", "r.spot_quiz_id = 997101 and not exists (select 1 from assessment.spot_quiz_questions q where q.id = r.spot_quiz_question_id)"), Is.Zero, "no answer points at a deleted question");
+        Assert.That(replies.Count(r => r.Status == HttpStatusCode.OK), Is.EqualTo(1), "exactly one of the two wins: " + replies[0].Body + replies[1].Body);
     }
 
     [Test]

@@ -59,6 +59,7 @@ internal sealed class AssessmentContext(DbContextOptions<AssessmentContext> opti
             quiz.Property(q => q.RestrictToClass).HasDefaultValue((short)1);
             quiz.Property(q => q.CreatedAt).HasDefaultValueSql(Now);
             quiz.HasIndex(q => new { q.ClassId, q.PublishedAt }).HasDatabaseName("idx_sq_class_published");
+            quiz.HasIndex(q => q.Code).IsUnique().HasDatabaseName("spot_quizzes_code");
         });
 
         modelBuilder.Entity<SpotQuizQuestion>(question =>

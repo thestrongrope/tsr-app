@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using System.Text.Json.Nodes;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using NUnit.Framework;
 using Tsr.Assessment.Api;
@@ -304,12 +305,48 @@ public sealed class TestQuizwritesTests
     }
 
     [Test]
-    public async Task FLAGGED_the_schema_has_no_unique_index_on_the_quiz_code_as_in_PHP()
+    public async Task The_schema_refuses_two_quizzes_with_one_code_in_any_letter_case()
     {
-        await TestDatabase.ExecuteAsync(
-            "insert into assessment.spot_quizzes (code, name, class_id, created_by) values ('SAMECODE', 'one', 98201, 1), ('SAMECODE', 'two', 98201, 1)");
+        await TestDatabase.ExecuteAsync("insert into assessment.spot_quizzes (code, name, class_id, created_by) values ('SAMECODE', 'one', 98201, 1)");
 
-        Assert.That(await Count("assessment.spot_quizzes", "code = 'samecode'"), Is.EqualTo(2), "nothing stops two quizzes with one code (and the lookup by code is case-insensitive); finding 15 is a decision for the owner");
+        await Assert.ThatAsync(
+            () => TestDatabase.ExecuteAsync("insert into assessment.spot_quizzes (code, name, class_id, created_by) values ('samecode', 'two', 98201, 1)"),
+            Throws.InstanceOf<Npgsql.PostgresException>().With.Property("SqlState").EqualTo("23505"));
+        Assert.That(await Count("assessment.spot_quizzes", "code = 'samecode'"), Is.EqualTo(1));
+    }
+
+    [Test]
+    public async Task A_code_drawn_twice_is_drawn_again_and_the_quiz_is_stored_with_a_free_code_in_the_same_transaction()
+    {
+        await TestDatabase.ExecuteAsync("insert into assessment.spot_quizzes (code, name, class_id, created_by) values ('TAKEN001', 'first', 98201, 1)");
+        using var factory = TestApi.Create();
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AssessmentContext>();
+        var draws = new Queue<string>(["TAKEN001", "taken001", "FREE0002"]);
+        await using var transaction = await db.Database.BeginTransactionAsync();
+
+        var id = await NewQuiz.InsertAsync(db, new NewQuiz.Fields(98201, "second", null, null, 1, 1), DateTimeOffset.UtcNow, CancellationToken.None, draws.Dequeue);
+        await transaction.CommitAsync();
+
+        Assert.That(await Count("assessment.spot_quizzes", $"id = {id} and code = 'FREE0002'"), Is.EqualTo(1));
+        Assert.That(await Count("assessment.spot_quizzes", "code = 'taken001'"), Is.EqualTo(1), "the first quiz is untouched");
+    }
+
+    [Test]
+    public async Task Twenty_taken_draws_end_in_an_error_and_the_transaction_stays_usable()
+    {
+        await TestDatabase.ExecuteAsync("insert into assessment.spot_quizzes (code, name, class_id, created_by) values ('TAKEN001', 'first', 98201, 1)");
+        using var factory = TestApi.Create();
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AssessmentContext>();
+        var attempts = 0;
+        await using var transaction = await db.Database.BeginTransactionAsync();
+
+        await Assert.ThatAsync(
+            () => NewQuiz.InsertAsync(db, new NewQuiz.Fields(98201, "second", null, null, 1, 1), DateTimeOffset.UtcNow, CancellationToken.None, () => { attempts++; return "TAKEN001"; }),
+            Throws.InvalidOperationException);
+        Assert.That(attempts, Is.EqualTo(NewQuiz.MaxAttempts));
+        Assert.That(await db.Database.SqlQueryRaw<int>("select 1 as \"Value\"").SingleAsync(), Is.EqualTo(1), "a failed draw does not abort the transaction");
     }
 
     // ---------------------------------------------------------------- copy from a standard MCQ and between classes

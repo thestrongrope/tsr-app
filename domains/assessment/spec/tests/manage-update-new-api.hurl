@@ -1,5 +1,5 @@
 # PUT /mcq/manage/{quiz_id}: cases PHP gets wrong or answers with a PHP warning printed into the body; the new API only (tools/assessment-contract.sh skips *-new-api.hurl on PHP).
-# Fixtures: db/synthetic/assessment-a2-fixtures.sql. Writes quiz 963425 only; 963405 only receives refused edits.
+# Fixtures: db/synthetic/assessment-a2-fixtures.sql. Writes quiz 963425 only; 963405 and 963422 (answered) only receive refused edits.
 
 # 1. A name or topic too long for its column, a NUL byte, are 422 (PHP: 500 "Failed to save quiz", or it stores the NUL); nothing changes
 PUT {{base_url}}/mcq/manage/963405
@@ -64,3 +64,42 @@ jsonpath "$.name" == "Array"
 jsonpath "$.topic" == "A2 topic second"
 jsonpath "$.questions[0].question" == "7"
 jsonpath "$.questions[0].answer" == "1"
+
+# 3. A quiz that students answered is not edited (owner's decision, 12 Nov 2026; PHP replaces the questions and orphans the answers: manage-update-php-only.hurl). 409, nothing changes. Quiz 963422 is answered by 902503.
+GET {{base_url}}/mcq/quizzes/963422/my-score
+Authorization: {{auth_qm_student}}
+HTTP 200
+[Asserts]
+jsonpath "$.total" == 2
+jsonpath "$.correct" == 2
+
+PUT {{base_url}}/mcq/manage/963422
+Authorization: {{auth_qm_teacher}}
+Content-Type: application/json
+{"name": "Edited after answers", "topic": "A2 topic second", "questions": [{"question": "New q1", "answer": "A1"}]}
+HTTP 409
+[Asserts]
+jsonpath "$.detail" == "This quiz has answers and can no longer be edited"
+
+GET {{base_url}}/mcq/quizzes/963422/my-score
+Authorization: {{auth_qm_student}}
+HTTP 200
+[Asserts]
+jsonpath "$.total" == 2
+jsonpath "$.correct" == 2
+jsonpath "$.percent" == 100.0
+
+GET {{base_url}}/mcq/manage/963422
+Authorization: {{auth_qm_teacher}}
+HTTP 200
+[Asserts]
+jsonpath "$.name" == "A2 Edit Published Answered"
+jsonpath "$.questions" count == 2
+jsonpath "$.questions[0].id" == 963515
+
+# The permission check comes first: a plain student gets 403, not 409
+PUT {{base_url}}/mcq/manage/963422
+Authorization: {{auth_qm_student}}
+Content-Type: application/json
+{"name": "Hacked", "topic": "T", "questions": []}
+HTTP 403
