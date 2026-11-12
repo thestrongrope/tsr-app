@@ -25,8 +25,54 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ListPublishedArticlesResponse"
+  /holy-quran:
+    get:
+      operationId: listHolyQuran
+      summary: The surahs with their verse counts, in order
+      description: |
+        Any signed-in member; no permission is checked (as PHP). A first sign-in creates the member's row
+        (PHP's api_authenticate(true)). A missing Arabic name reads "". Slice: features/holy-quran/HolyQuran.cs.
+      security:
+        - memberToken: []
+      responses:
+        "200":
+          description: The surahs
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 200
+                items:
+                  $ref: "#/components/schemas/Surah"
+        "401":
+          $ref: "#/components/responses/Problem"
 components:
+  securitySchemes:
+    memberToken:
+      type: http
+      scheme: bearer
+      bearerFormat: Firebase ID token
+  responses:
+    Problem:
+      description: |
+        An error. The body is always {"detail": "..."}
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [detail]
+            properties:
+              detail:
+                type: string
   schemas:
+    Surah:
+      type: object
+      required: [id, surah, arabic, verses]
+      properties:
+        id: {type: integer}
+        surah: {type: string}
+        arabic: {type: string}
+        verses: {type: integer}
     ListPublishedArticlesResponse:
       type: object
       required: [articles]

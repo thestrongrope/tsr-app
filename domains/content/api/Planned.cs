@@ -12,7 +12,6 @@ internal static class Planned
     public static IEndpointRouteBuilder MapPlannedRoutes(this IEndpointRouteBuilder routes)
     {
         routes.MapPlanned(
-            ("GET", "/holy-quran"),
             ("GET", "/reports/quran-leaderboard"),
             ("GET", "/reports/quran-leaderboard/download"));
         return routes;

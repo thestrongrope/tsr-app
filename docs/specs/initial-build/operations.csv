@@ -51,7 +51,7 @@ POST,/classes/{class_id}/notifications,notifications,create,planned
 POST,/classes/{class_id}/notifications/scheduled,notifications,create,planned
 GET,/classes/{class_id}/notifications/scheduled,notifications,create,planned
 DELETE,/classes/{class_id}/notifications/scheduled/{scheduled_id},notifications,create,planned
-GET,/holy-quran,content,create,planned
+GET,/holy-quran,content,create,built
 GET,/classes/{class_id}/conduction,classes,create,built
 GET,/classes/{class_id}/conduction/new,classes,create,built
 GET,/classes/{class_id}/conduction/check,classes,create,built
