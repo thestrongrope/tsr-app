@@ -14,6 +14,7 @@ Found while porting (12 Nov 2026 on). Nothing here is proven or fixed yet; each 
 | 6 | classes MCQ summary CSV | Student names go to every `reports:read` holder (as PHP). | lane mcq-reports |
 | 7 | identity deletion | Database role grants for the cross-schema deletes and updates of a completion are unchecked. | lane identity |
 | 8 | assessment `domain/QuizEligibility.cs` (quiz competition admin) | The winners feasibility check tries every subset of the started quiz days (2^n, capped at 20 days: about a million subsets, each building a set) and runs on every `GET /admin/quiz`. Only `quiz:admin` holders can reach it. Check how PHP does it; fix: a bipartite matching in place of the subset search, or a lower cap, and compute once per download, not per read. | automated commit review |
+| 9 | notifications `features/device-register/DeviceRegister.cs` | Registering a device deletes any OTHER member's row with the same `device_id`. A signed-in member who knows or guesses another member's device id can remove that member's push registration (they stop receiving pushes; nothing is exposed). Likely PHP's behaviour for a phone that changes hands: check PHP; consider a rate limit and an audit row, or keying on the push token the device itself holds. | automated commit review |
 
 ## Design points to confirm
 
