@@ -7,6 +7,7 @@ public sealed class DeletionGateTests
 {
     [TestCase("/health", "GET")]
     [TestCase("/auth/link", "POST")]
+    [TestCase("/auth/debug-token", "POST")]
     [TestCase("/me", "GET")]
     [TestCase("/me/deletion-request", "GET")]
     [TestCase("/me/deletion-request", "POST")]
