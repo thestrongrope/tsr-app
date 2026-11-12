@@ -7,8 +7,8 @@ namespace Tsr.Notifications.Api.Domain;
 internal sealed record Target(string Type, IReadOnlyList<JsonElement> Values);
 
 /// <summary>
-/// Who a notification reaches: PHP's <c>api_fcm_device_tokens</c> and <c>api_fcm_user_tokens</c> (api/mobile/lib/fcm.php) and <c>ClassNotificationsModel::audience</c>, ported with their
-/// disagreements (the device query and the member query of one target do not select the same people; see lane-notify-core-notes.md). Other domains are read through their published
+/// Who a notification reaches: PHP's <c>api_fcm_device_tokens</c> and <c>api_fcm_user_tokens</c> (api/mobile/lib/fcm.php) and <c>ClassNotificationsModel::audience</c>, ported; the device query and the
+/// member query of CLASS_LEVEL still disagree as in PHP (see lane-notify-core-notes.md), GENDER uses one definition for both. Other domains are read through their published
 /// views only: classes (<c>v_enrolments</c>, <c>v_classes</c>), identity (<c>v_users</c>) and membership (<c>v_members</c>). The demo cohort (email ending <c>@demo.invalid</c>) is left out
 /// of every device list, and out of every member list but a class's. Every list is cut at <see cref="MaxRecipients"/> plus one, so the caller can refuse an audience that is too large.
 /// </summary>
@@ -124,16 +124,22 @@ internal static class Audience
                 order by 1 limit {Fetch}
                 """).ToListAsync(ct);
 
-    // PHP reads only the FIRST value and needs it numeric and 1 or 2.
-    private static async Task<List<string>> GenderDevicesAsync(NotificationsContext db, IReadOnlyList<JsonElement> values, CancellationToken ct)
+    // ONE definition of "members of gender g" for both lists (owner decision, 12 Nov 2026; PHP's member query differed and wrote inbox rows for members the push never reached):
+    // the FIRST value, numeric and 1 or 2, matched against the member's gender. Anything else is nobody.
+    private static string? GenderCode(IReadOnlyList<JsonElement> values)
     {
         var first = values.Count > 0 ? IntList([values[0]]) : [];
-        if (first.Length == 0 || first[0] is not (1 or 2))
+        return first.Length == 1 && first[0] is (1 or 2) ? first[0].ToString(System.Globalization.CultureInfo.InvariantCulture) : null;
+    }
+
+    private static async Task<List<string>> GenderDevicesAsync(NotificationsContext db, IReadOnlyList<JsonElement> values, CancellationToken ct)
+    {
+        var gender = GenderCode(values);
+        if (gender is null)
         {
             return [];
         }
 
-        var gender = first[0].ToString(System.Globalization.CultureInfo.InvariantCulture);
         return await db.Database.SqlQuery<string>($"""
             select distinct ud.device_id as "Value"
             from notifications.user_devices ud
@@ -144,24 +150,20 @@ internal static class Audience
             """).ToListAsync(ct);
     }
 
-    // PHP maps the WORDS male and female to 1 and 2 and any other value to 0, and matches users.gender IN (...) as a number. MariaDB reads a text gender as the number it starts
-    // with, so 0 matches every gender text that does not start with a non-zero digit ('Male', ''). Ported as is (flagged in the notes): a numeric 1 or 2 from the app maps to 0 here.
+    // Members with a device to push to, whose gender is the same code as above; a member of that gender whose only devices are shared with a demo member is left out too, as in the push.
     private static async Task<List<int>> GenderMembersAsync(NotificationsContext db, IReadOnlyList<JsonElement> values, CancellationToken ct)
     {
-        var words = values.Select(v => PhpText.LowerAscii(PhpValue.Text(v))).ToList();
-        if (words.Count == 0)
+        var gender = GenderCode(values);
+        if (gender is null)
         {
             return [];
         }
 
-        var exact = words.Select(w => w switch { "male" => "1", "female" => "2", _ => null }).Where(g => g is not null).Cast<string>().Distinct().ToArray();
-        var zero = words.Any(w => w is not ("male" or "female"));
         return await db.Database.SqlQuery<int>($"""
             select distinct m.token as "Value"
             from membership.v_members m join notifications.user_devices ud on m.token = ud.token
-            where m.token > 0
-              and (m.gender = any({exact}) or ({zero} and coalesce(m.gender, '') !~ '^[ \t\r\n\f\v]*[+-]?[0-9]*[1-9]'))
-              and not exists (select 1 from identity.v_users du where du.token = m.token and du.email ilike '%@demo.invalid')
+            where m.token > 0 and m.gender = {gender} and ud.device_id <> ''
+              and not exists (select 1 from notifications.user_devices d2 join identity.v_users du on du.token = d2.token where d2.device_id = ud.device_id and du.email ilike '%@demo.invalid')
             order by 1 limit {Fetch}
             """).ToListAsync(ct);
     }

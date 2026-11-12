@@ -16,7 +16,7 @@ paths:
       summary: Register the caller's push address
       description: |
         Permission devices:manage. Body {fcmToken} (or fcm_token), trimmed, 1 to 500 characters. The caller's own row is updated or inserted; the same token held by any other member is deleted
-        (a device belongs to whoever registered it last). Slice: features/device-register/DeviceRegister.cs. Event notifications.device_registered.
+        (a device belongs to whoever registered it last). Limits (the owner's rule; PHP has none): at most 10 registrations an hour per member (429 "Too many device registrations. Please wait a while and try again.", counted after the 403 and 422), and at most 20 devices: a new device id beyond that deletes the member's least recently used rows so 20 remain, a device the caller already holds is never affected. Slice: features/device-register/DeviceRegister.cs. Event notifications.device_registered.
       security: [{memberToken: []}]
       requestBody:
         required: true
@@ -27,6 +27,7 @@ paths:
         "201": {description: "{ok: true}"}
         "403": {$ref: "#/components/responses/Problem"}
         "422": {$ref: "#/components/responses/Problem"}
+        "429": {$ref: "#/components/responses/Problem"}
     delete:
       operationId: removeDevice
       summary: Forget one of the caller's push addresses
@@ -92,6 +93,7 @@ paths:
       description: |
         IRREVERSIBLE. Permission notifications:broadcast (403 "Only super administrators can send notifications"); writes an admin audit row.
         Body {title (1 to 255 characters), body (1 to 2000), target: {type: ALL_USERS | CLASS_LEVEL | GENDER | TEACHERS, value: list}, action_link?}.
+        GENDER: value is a list whose first element is 1 or 2; the push and the inbox rows go to the same members (those with a device whose gender is that code); anything else reaches nobody. The gateway allows this route 130 s (the push batch has a 120 s deadline).
         500 {"detail": "Push notifications are not configured"} when no FCM credential is set (nothing is sent or written). Slice: features/notifications-send/NotificationsSend.cs. Event notifications.sent.
       security: [{memberToken: []}]
       responses:

@@ -128,6 +128,50 @@ public sealed class TestNotifyTests
         Assert.That(await CountAsync("notifications.user_devices", "lower(device_id) = 'dev-race'"), Is.EqualTo(1));
     }
 
+    private static async Task GiveCTwentyDevicesAsync()
+    {
+        await TestDatabase.ExecuteAsync(
+            "insert into notifications.user_devices (token, device_id, last_accessed_at) select " + C + ", 'dev-c' || n, now() - make_interval(hours => 100 - n) from generate_series(1, 20) n");
+    }
+
+    [Test]
+    public async Task A_new_device_at_the_cap_of_20_deletes_the_least_recently_used_so_that_20_remain()
+    {
+        await GiveCTwentyDevicesAsync();
+        var reply = await kit.SendAsync(C, HttpMethod.Post, "/devices", """{"fcmToken": "dev-c-new"}""");
+        Assert.That(reply.Status, Is.EqualTo(HttpStatusCode.Created));
+        Assert.That(await CountAsync("notifications.user_devices", $"token = {C}"), Is.EqualTo(20));
+        Assert.That(await CountAsync("notifications.user_devices", "device_id = 'dev-c1'"), Is.Zero, "the least recently used went");
+        Assert.That(await CountAsync("notifications.user_devices", "device_id = 'dev-c2'"), Is.EqualTo(1));
+        Assert.That(await CountAsync("notifications.user_devices", "device_id = 'dev-c-new'"), Is.EqualTo(1));
+    }
+
+    [Test]
+    public async Task Registering_a_device_the_member_already_holds_at_the_cap_deletes_nothing()
+    {
+        await GiveCTwentyDevicesAsync();
+        var reply = await kit.SendAsync(C, HttpMethod.Post, "/devices", """{"fcmToken": "DEV-C1"}""");
+        Assert.That(reply.Status, Is.EqualTo(HttpStatusCode.Created));
+        Assert.That(await CountAsync("notifications.user_devices", $"token = {C}"), Is.EqualTo(20));
+        Assert.That(await CountAsync("notifications.user_devices", "device_id = 'dev-c1'"), Is.EqualTo(1));
+    }
+
+    [Test]
+    public async Task The_eleventh_device_registration_in_an_hour_is_a_429_and_a_refused_one_does_not_count()
+    {
+        for (var i = 0; i < 10; i++)
+        {
+            var ok = await kit.SendAsync(C, HttpMethod.Post, "/devices", $$"""{"fcmToken": "dev-rl-{{i}}"}""");
+            Assert.That(ok.Status, Is.EqualTo(HttpStatusCode.Created), Id(i));
+        }
+
+        var limited = await kit.SendAsync(C, HttpMethod.Post, "/devices", """{"fcmToken": "dev-rl-x"}""");
+        Assert.That(limited.Status, Is.EqualTo((HttpStatusCode)429));
+        Assert.That(limited.Detail, Is.EqualTo("Too many device registrations. Please wait a while and try again."));
+        Assert.That(await CountAsync("notifications.user_devices", "device_id = 'dev-rl-x'"), Is.Zero);
+        Assert.That(await CountAsync("notifications.user_devices", $"token = {C}"), Is.EqualTo(10));
+    }
+
     [Test]
     public async Task A_member_removes_only_their_own_device_rows()
     {
@@ -274,12 +318,20 @@ public sealed class TestNotifyTests
     }
 
     [Test]
-    public async Task A_gender_audience_pushes_to_gender_one_but_writes_inbox_rows_for_non_numeric_genders_PHPs_split_pinned()
+    public async Task A_gender_audience_writes_inbox_rows_only_for_the_members_it_pushes_to()
     {
         var reply = await SendAnnouncementAsync("GENDER", 1);
         Assert.That(fake.Tokens, Is.EqualTo((string[])["dev-a1", "dev-a2", "dev-s1", "dev-s2", "dev-s3", "dev-t1", "dev-t3"]), "devices of members whose gender is 1 (B is 2, E is the word Male, the demo cohort is out)");
         var id = reply.Json!["notification_id"]!.GetValue<int>();
-        Assert.That(await InboxOfAsync(id), Is.EqualTo((long[])[E]), "the numeric 1 maps to 0 in the member query: only the non-numeric gender gets a row, and E was not pushed to (finding 17)");
+        Assert.That(await InboxOfAsync(id), Is.EqualTo((long[])[A, T1, T3, S1, S2, S3]), "one definition of gender 1 for both lists: the members with a device whose gender is 1; E (gender Male) is in neither");
+    }
+
+    [Test]
+    public async Task A_gender_audience_of_two_reaches_the_same_members_by_push_and_by_inbox()
+    {
+        var reply = await SendAnnouncementAsync("GENDER", 2);
+        Assert.That(fake.Tokens, Is.EqualTo((string[])["dev-b1"]));
+        Assert.That(await InboxOfAsync(reply.Json!["notification_id"]!.GetValue<int>()), Is.EqualTo((long[])[B]));
     }
 
     [Test]
