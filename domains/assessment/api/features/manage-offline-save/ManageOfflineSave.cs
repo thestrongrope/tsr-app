@@ -102,6 +102,11 @@ internal static class ManageOfflineSaveSlice
         await using var transaction = await db.Database.BeginTransactionAsync(ct);
         try
         {
+            if (!await QuizLock.ShareUnchangedAsync(db, quiz.Id, questions.Select(q => (long)q.Id).ToList(), ct))
+            {
+                return Problem.Detail(StatusCodes.Status409Conflict, "This quiz was edited while the answers were being entered. Reload it and enter them again");
+            }
+
             foreach (var student in students)
             {
                 var already = await db.Database

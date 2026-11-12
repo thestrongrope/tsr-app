@@ -103,7 +103,13 @@ internal static class QuizSubmitSlice
 
         var byId = answers.ToDictionary(a => a.QuestionId);
         var scored = questions.Select(q => Score(q, byId[q.Id])).ToList();
-        if (!await SaveAsync(db, clock, quizId, quiz.ClassId, caller.Token, scored, ct))
+        var saved = await SaveAsync(db, clock, quizId, quiz.ClassId, caller.Token, scored, ct);
+        if (saved == SaveOutcome.QuizChanged)
+        {
+            return Problem.Detail(StatusCodes.Status409Conflict, "This quiz was edited while you were answering it. Reload it and answer again");
+        }
+
+        if (saved == SaveOutcome.AlreadyAnswered)
         {
             return Problem.Detail(StatusCodes.Status409Conflict, "You have already submitted this quiz");
         }
@@ -130,14 +136,26 @@ internal static class QuizSubmitSlice
         return new Scored(question, correct ?? string.Empty, answer, QuizRules.Score(answer.SelectedText, correct));
     }
 
-    /// <summary>One transaction: the rows in question order, then the event. False when the unique index says the caller already answered (nothing is kept).</summary>
-    private static async Task<bool> SaveAsync(AssessmentContext db, TimeProvider clock, long quizId, int classId, int token, IReadOnlyList<Scored> scored, CancellationToken ct)
+    private enum SaveOutcome
+    {
+        Saved,
+        AlreadyAnswered,
+        QuizChanged,
+    }
+
+    /// <summary>One transaction: the quiz row locked for share (an edit of the quiz waits for it, and a quiz edited since the questions were read is refused: QuizChanged), the rows in question order, then the event. AlreadyAnswered when the unique index says the caller already answered (nothing is kept).</summary>
+    private static async Task<SaveOutcome> SaveAsync(AssessmentContext db, TimeProvider clock, long quizId, int classId, int token, IReadOnlyList<Scored> scored, CancellationToken ct)
     {
         var now = clock.GetUtcNow();
         var at = new DateTimeOffset(now.Year, now.Month, now.Day, now.Hour, now.Minute, now.Second, TimeSpan.Zero);
         await using var transaction = await db.Database.BeginTransactionAsync(ct);
         try
         {
+            if (!await QuizLock.ShareUnchangedAsync(db, quizId, scored.Select(s => (long)s.Question.Id).ToList(), ct))
+            {
+                return SaveOutcome.QuizChanged;
+            }
+
             foreach (var s in scored)
             {
                 var flag = s.IsCorrect ? 1 : 0;
@@ -151,11 +169,11 @@ internal static class QuizSubmitSlice
 
             await Outbox.WriteAsync(db, "assessment.quiz_answered", new Answered((int)quizId, classId, token), clock, ct);
             await transaction.CommitAsync(ct);
-            return true;
+            return SaveOutcome.Saved;
         }
         catch (Exception e) when (DuplicateAnswer.IsViolation(e))
         {
-            return false;
+            return SaveOutcome.AlreadyAnswered;
         }
     }
 }

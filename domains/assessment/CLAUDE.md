@@ -11,7 +11,7 @@ Spot quizzes, standard MCQs, quiz competitions.
 | Part | State |
 |---|---|
 | Schema `assessment`, 8 tables: `spot_quizzes`, `spot_quiz_questions`, `spot_quiz_submissions`, `spot_quiz_responses`, `standard_mcqs`, `standard_mcq_questions`, `quiz_campaigns` (migration `Initial`), `quiz_state` (migration `QuizState`) | built |
-| PHP's trigger on `spot_quizzes` (an 8 character base 36 `code` on insert, any supplied value ignored) | ported as PHP has it in `domain/QuizCode.cs` and `NewQuiz.cs`: cryptographic draw, `not exists` check in the insert's transaction, up to 20 draws. Racy exactly as PHP's; NO unique index (a decision for the test phase) |
+| PHP's trigger on `spot_quizzes` (an 8 character base 36 `code` on insert, any supplied value ignored) | `domain/QuizCode.cs` and `NewQuiz.cs`: cryptographic draw, then `insert ... on conflict (code) do nothing`; no row back means the code was taken, so draw again, up to 20 draws. Stricter than PHP (owner's decision, 12 Nov 2026): the UNIQUE index `spot_quizzes_code` (migration `QuizCodeUnique`; citext, so case does not matter) makes a duplicate code impossible, and the conflict clause never aborts the caller's transaction. Production had no duplicate and no empty code |
 
 ## Owns
 
@@ -23,13 +23,17 @@ Spot quizzes, standard MCQs, quiz competitions.
 | Event | Payload | Written by |
 |---|---|---|
 | `assessment.quiz_answered` | quizId, classId, token (never the answers) | POST /mcq/quizzes/{quiz_id}/responses (none for a refusal or a lost race) |
-| `assessment.quiz_updated` | quizId, classId, token (no text, no answers) | PUT /mcq/manage/{quiz_id} (every successful save; none for a refusal) |
+| `assessment.quiz_updated` | quizId, classId, token (no text, no answers) | PUT /mcq/manage/{quiz_id} (every successful save; none for a refusal, including a quiz that has answers) |
 | `assessment.quiz_deactivated` | quizId, classId, token, deactivated (true or false) | POST /mcq/manage/{quiz_id}/deactivate, only when the state changes (a repeat writes the row as PHP does but no event) |
 | `assessment.quiz_created` | quizId, classId (the class of the new quiz), token, source (new, standard or copy) | POST /classes/{class_id}/mcq, .../standard/{mcq_id}/copy, POST /mcq/manage/{quiz_id}/copy |
 | `assessment.offline_answers_recorded` | quizId, classId, token, count (students saved; no names, answers or scores) | POST /mcq/manage/{quiz_id}/offline (none for a refusal or a rolled back batch) |
 | `assessment.quiz_published` | quizId, classId, token | POST /mcq/manage/{quiz_id}/publish |
 
   Consumed: none. The answers are never in the key-less routes: the questions route never selects the answer column; only the caller's own answered quizzes show the correct text.
+
+## An answered quiz is not edited (owner's decision, 12 Nov 2026; PHP edits it and orphans the answers)
+
+`PUT /mcq/manage/{quiz_id}` answers 409 "This quiz has answers and can no longer be edited" when the quiz has a row in `spot_quiz_responses` or `spot_quiz_submissions`: after the permission check and the body rules, no write, no event. The check runs in the edit's transaction after `select ... for update` on the quiz row (`domain/QuizLock.cs`). Every answer writer (`quiz-submit`, `manage-offline-save`) takes that row `for share` first and refuses with 409 when the quiz's questions changed since it read them, so an edit and an answer never interleave. Contract: `manage-update-new-api.hurl` (new API) and `manage-update-php-only.hurl` (PHP's old behaviour; run on PHP only: `tools/assessment-contract.sh` does not yet skip `*-php-only.hurl` on the new API).
 
 ## Google Sheets, quiz state, locks, settings (lane sheets, build-out)
 

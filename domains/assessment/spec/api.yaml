@@ -367,7 +367,7 @@ paths:
       description: |
         As the get (404, 404, 403), then body (422 "Invalid JSON body") and the rules: name and topic required (trimmed), each row needs a question and an answer (422 "Question N needs both a question and an answer"; a row blank in both is skipped);
         a text over 300 (name, topic) or 1000 (question, option) characters, a NUL byte, or more than 500 rows is 422. `questions` missing deletes every question (PHP). restrictToClass is left alone when absent.
-        200 {id, questionCount}. FLAGGED PHP behaviour copied: editing a published quiz that students answered leaves their answers pointing at deleted questions (score measured against the new question count). Event assessment.quiz_updated.
+        200 {id, questionCount}. After the body rules: a quiz with at least one answer (online response or offline submission) is refused, 409 "This quiz has answers and can no longer be edited", with no write and no event (a deliberate difference from PHP, which replaced the questions and orphaned the answers; owner's decision, 12 Nov 2026). Event assessment.quiz_updated.
         Slice: features/manage-update/ManageUpdate.cs.
       security:
         - memberToken: []
@@ -423,6 +423,7 @@ paths:
         "401": {$ref: "#/components/responses/Problem"}
         "403": {$ref: "#/components/responses/Problem"}
         "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
         "422": {$ref: "#/components/responses/Problem"}
   /mcq/manage/{quiz_id}/deactivate:
     post:
