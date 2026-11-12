@@ -111,3 +111,54 @@ HTTP 503
 [Asserts]
 header "Cache-Control" == "no-store"
 jsonpath "$.detail" == "The reminder service cannot be reached right now. Trying again."
+
+# Invalid JSON in a body that is read: 422, nothing sent
+POST {{base_url}}/admin/whatsapp/reminders/5/run
+Authorization: {{auth_edge_wa_down}}
+Content-Type: application/json
+```
+{"dryRun": false
+```
+HTTP 422
+[Asserts]
+jsonpath "$.detail" matches /\S/
+
+POST {{base_url}}/admin/whatsapp/test
+Authorization: {{auth_edge_wa_down}}
+Content-Type: application/json
+```
+not json
+```
+HTTP 422
+
+# An id that is not a clean number cannot steer the call: it is read as PHP (int), so these all end at the unreachable notifier, never a 500
+GET {{base_url}}/admin/whatsapp/runs/99999999999999999999999999999999999999999999999999999999999999999999999999999999
+Authorization: {{auth_edge_wa_down}}
+HTTP 502
+[Asserts]
+jsonpath "$.detail" startsWith "notifier unreachable"
+
+GET {{base_url}}/admin/whatsapp/runs/12abc
+Authorization: {{auth_edge_wa_down}}
+HTTP 502
+
+GET {{base_url}}/admin/whatsapp/runs/1%3Fx%3Dy
+Authorization: {{auth_edge_wa_down}}
+HTTP 502
+
+GET {{base_url}}/admin/whatsapp/runs/1%00
+Authorization: {{auth_edge_wa_down}}
+HTTP *
+[Asserts]
+status < 500
+
+POST {{base_url}}/admin/whatsapp/reminders/99999999999999999999999999999999999999999999999999999999999999999999999999999999/run
+Authorization: {{auth_edge_wa_down}}
+Content-Type: application/json
+{}
+HTTP 502
+
+# The runs query: only digits reach the notifier; a long digit string and junk are dropped or passed, the call still ends at the unreachable notifier
+GET {{base_url}}/admin/whatsapp/runs?limit=99999999999999999999999&reminderId=7%26y
+Authorization: {{auth_edge_wa_down}}
+HTTP 502

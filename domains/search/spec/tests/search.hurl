@@ -118,3 +118,10 @@ HTTP 200
 [Asserts]
 jsonpath "$.groups" count == 0
 jsonpath "$.unavailable" count == 0
+
+# 10. A NUL at either end of q is trimmed, as PHP trim does: that text is "ab"
+GET {{base_url}}/search?q=ab%00
+Authorization: {{auth_edge_search}}
+HTTP 200
+[Asserts]
+jsonpath "$.unavailable" count == 5

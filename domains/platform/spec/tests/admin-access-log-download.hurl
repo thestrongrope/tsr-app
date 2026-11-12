@@ -1,6 +1,6 @@
 # GET /admin/access-log/download?format=xlsx|pdf contract: the window's accesses as a file. A bad or missing format is 422 BEFORE the sign-in; then 401, audit-log:read (403), the token filter (422), 404 "No accesses match".
-# The cells are compared with PHP's by tools/export-parity.sh (case "access-log" of tools/export-parity.cases) and read back in db/tests/TestEdgeAccessLogTests.cs; the PDF cases are in admin-access-log-download-new-api.hurl
-# (PHP's Dompdf runs out of memory on the parity database). Fixture rows: db/synthetic/edge-fixtures.sql. Runs against any implementation. Variables: base_url, auth_edge_download (super admin), auth_edge_gents, auth_edge_plain.
+# The cells are compared with PHP's by tools/export-parity.sh (cases "edge_download" of tools/export-parity.cases) and read back in db/tests/TestEdgeAccessLogTests.cs.
+# Fixture rows: db/synthetic/edge-fixtures.sql. Runs against any implementation. Variables: base_url, auth_edge_download (super admin), auth_edge_gents, auth_edge_plain.
 
 # 1. The format is checked first, even without sign-in
 GET {{base_url}}/admin/access-log/download
@@ -65,3 +65,20 @@ bytes count > 1000
 GET {{base_url}}/admin/access-log/download?format=xlsx&token=927101
 Authorization: {{auth_edge_download}}
 HTTP 200
+
+# 7. A PDF: the type and the attachment name (PHP renders the four rows with Dompdf, the new API with Gotenberg)
+GET {{base_url}}/admin/access-log/download?format=pdf&token=927100
+Authorization: {{auth_edge_download}}
+HTTP 200
+[Asserts]
+header "Content-Type" == "application/pdf"
+header "Content-Disposition" matches /^attachment; filename="TSR_Admin_Access_Log_[0-9]{8}_[0-9]{6}\.pdf"$/
+bytes startsWith hex,255044462d;
+
+GET {{base_url}}/admin/access-log/download?format=pdf&token=999999999
+Authorization: {{auth_edge_download}}
+HTTP 404
+
+GET {{base_url}}/admin/access-log/download?format=pdf
+Authorization: {{auth_edge_gents}}
+HTTP 403
