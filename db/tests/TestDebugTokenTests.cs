@@ -78,7 +78,7 @@ public sealed class TestDebugTokenTests
     }
 
     [Test]
-    public async Task Outside_Production_it_echoes_the_claims_of_the_callers_own_token()
+    public async Task Outside_Production_it_echoes_the_callers_own_email_uid_and_name_and_a_null_provider_as_PHP_does()
     {
         await using var factory = TestApi.Create();
 
@@ -90,7 +90,7 @@ public sealed class TestDebugTokenTests
         Assert.That(body.GetProperty("email").GetString(), Is.EqualTo("debug@example.invalid"));
         Assert.That(body.GetProperty("uid").GetString(), Is.EqualTo("uid-debug"));
         Assert.That(body.GetProperty("name").GetString(), Is.EqualTo("Synthetic Person"));
-        Assert.That(body.GetProperty("provider").GetString(), Is.EqualTo("google.com"));
+        Assert.That(body.GetProperty("provider").ValueKind, Is.EqualTo(JsonValueKind.Null), "PHP always answers null here: its verifier hands on no firebase claim, so sign_in_provider is never read (a PHP bug copied; the decision is in the lane notes)");
     }
 
     [Test]
