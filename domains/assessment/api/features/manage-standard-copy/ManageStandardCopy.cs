@@ -71,7 +71,7 @@ internal static class ManageStandardCopySlice
             $"""
             insert into assessment.spot_quiz_questions (spot_quiz_id, question, option1, option2, option3, option4, option5, answer, created_at)
             select {id}, question, answer, option1, option2, option3, null, 1, {at}
-            from assessment.standard_mcq_questions where mcq_code = {standard.Code} order by id
+            from assessment.standard_mcq_questions where mcq_code = {standard.Code}::citext order by id
             """,
             ct);
         await Outbox.WriteAsync(db, "assessment.quiz_created", new QuizCreated(id, target.Id, caller.Token, "standard"), clock, ct);

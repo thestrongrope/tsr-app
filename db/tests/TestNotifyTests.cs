@@ -476,6 +476,21 @@ public sealed class TestNotifyTests
     }
 
     [Test]
+    public async Task An_announcement_is_found_again_when_its_title_body_and_link_differ_only_in_letter_case_CASE_C2()
+    {
+        var first = new Announcement("Nt Case", "Nt case body", "/quiz/Case", "quiz_announcement", "nt-case-1");
+        var again = first with { Title = "NT CASE", Body = "NT CASE BODY", ActionLink = "/QUIZ/case", DedupeKey = "nt-case-2" };
+        var notifications = await InRolledBackTransactionAsync(async db =>
+        {
+            await NotificationsCommands.AnnounceCountedAsync(db, first, CancellationToken.None);
+            await NotificationsCommands.AnnounceCountedAsync(db, again, CancellationToken.None);
+            return await db.Database.SqlQuery<long>($"""select count(*) as "Value" from notifications.notifications where title = 'Nt Case'""").SingleAsync();
+        });
+
+        Assert.That(notifications, Is.EqualTo(1), "MariaDB compares title, body and link without regard to letter case, so the second call reuses the first notification");
+    }
+
+    [Test]
     public async Task A_members_announcement_keeps_its_sender_criteria_and_counts_from_the_queue_skips_demo_devices_and_always_makes_a_new_notification()
     {
         var announcement = new Announcement(

@@ -3,6 +3,8 @@ using System.Text;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.DependencyInjection;
 using NUnit.Framework;
+using Tsr.Assessment.Api;
+using Tsr.Assessment.Api.Domain;
 using Tsr.Platform.Api.Domain;
 using Tsr.Shared.Api;
 
@@ -333,6 +335,34 @@ public sealed class TestQuizwritesTests
         await PostAsync(Teacher, $"/mcq/manage/{secondId}/publish");
         Assert.That(await Count("assessment.v_class_mcq_copies", $"class_id = 98202 and quiz_id = {secondId} and published_at is not null"), Is.EqualTo(1));
         Assert.That(await Count("platform.outbox", "event_type = 'assessment.quiz_created' and payload ->> 'source' = 'standard'"), Is.EqualTo(2));
+    }
+
+    [Test]
+    public async Task A_quiz_state_document_is_found_and_deleted_by_its_name_in_another_letter_case_CASE_C5()
+    {
+        using var factory = TestApi.Create();
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AssessmentContext>();
+        await QuizStateStore.SaveAsync(db, "winners", new System.Text.Json.Nodes.JsonObject(), TimeProvider.System, CancellationToken.None);
+
+        Assert.That(await QuizStateStore.ExistsAsync(db, "WINNERS", CancellationToken.None), Is.True, "the name matches without regard to letter case");
+        Assert.That(await QuizStateStore.LoadAsync(db, "Winners", CancellationToken.None), Is.Not.Null);
+        await QuizStateStore.DeleteAsync(db, ["WINNERS"], CancellationToken.None);
+        Assert.That(await Count("assessment.quiz_state", "name = 'winners'"), Is.Zero);
+    }
+
+    [Test]
+    public async Task A_standard_copy_takes_the_questions_whose_code_differs_from_the_standards_only_in_letter_case_CASE_C6()
+    {
+        await TestDatabase.ExecuteAsync(
+            "insert into assessment.standard_mcqs (id, code, language_id, level_id, topic, subject, lesson, name, sort_order) values (9720103, 'DBS-3', 7, 3, 'T3', 'S3', 'L3', 'N3', 3); "
+            + "insert into assessment.standard_mcq_questions (id, mcq_code, question, answer, option1, option2) values (9720131, 'dbs-3', 'cq1', 'CASE-RIGHT', 'x', 'y')");
+
+        var reply = await PostAsync(ClassAdmin, "/classes/98201/mcq/standard/9720103/copy");
+
+        Assert.That(reply.Status, Is.EqualTo(HttpStatusCode.Created), reply.Body);
+        var id = (int)reply.Json!["id"]!;
+        Assert.That(await Count("assessment.spot_quiz_questions", $"spot_quiz_id = {id}"), Is.EqualTo(1), "MariaDB matches the code without regard to letter case, so the question is copied");
     }
 
     [Test]

@@ -246,8 +246,7 @@ internal static class ClassCreateSlice
                     span[i] = Base36[RandomNumberGenerator.GetInt32(Base36.Length)];
                 }
             });
-            var taken = await db.Database.SqlQuery<int>($"""select 1 as "Value" from classes.classes where link = {link} limit 1""").ToListAsync(ct);
-            if (taken.Count == 0)
+            if (!await LinkTakenAsync(db, link, ct))
             {
                 return link;
             }
@@ -255,4 +254,7 @@ internal static class ClassCreateSlice
 
         throw new InvalidOperationException("Could not draw an unused class link.");
     }
+
+    internal static async Task<bool> LinkTakenAsync(ClassesContext db, string link, CancellationToken ct) =>
+        (await db.Database.SqlQuery<int>($"""select 1 as "Value" from classes.classes where link = {link}::citext limit 1""").ToListAsync(ct)).Count > 0;
 }
