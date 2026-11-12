@@ -32,3 +32,14 @@ b5d_coord /reports/registrations/allocated/download?format=xlsx --filter B:9021 
 edge_download /admin/access-log/download?format=xlsx&token=927101 --filter B:9271 --ignore A
 edge_download /admin/access-log/download?format=xlsx&token=927100&page=alpha --filter B:9271 --ignore A
 edge_download /admin/access-log/download?format=xlsx&token=927100&page=gamma --filter B:9271 --ignore A
+# reports2 lane: the leaderboard's Recitation cell is TEXT in PHP (MariaDB SUM is a decimal string) and a NUMBER here, so those cases ignore column E and compare single rows (tied rows have no order in PHP); the summary of 98101 ignores column E (the Topic A figure, a PHP spelling quirk). (TSR_STACK lane vars: build/test-<n>/reports2.vars and build/parity-php/reports2.vars after tools/contract-reports2.sh test|parity --prepare). 2019 fixtures, a coordinator or the leaderboard administrators (global ranks in 2019 are ours alone).
+r2_coord /reports/mcq-summary/98101/download?format=xlsx&from=2019-03-01&to=2019-03-31 --filter A:R2 --ignore E
+r2_coord /reports/mcq-summary/0/download?format=xlsx&from=2019-03-01&to=2019-03-31
+r2_coord /reports/mcq-summary/98104/download?format=xlsx&from=2019-03-01&to=2019-03-31&gender=2
+r2_coord /reports/mcq-adherence/98101/download?format=xlsx
+r2_coord /reports/mcq-adherence/98106/download?format=xlsx
+r2_coord /reports/mcq-adherence/0/download?format=xlsx
+r2_coord /reports/mcq-adherence/98104/download?format=xlsx&gender=2
+r2_super /reports/quran-leaderboard/download?format=xlsx&from=2019-03-01&to=2019-03-31&level=ABUZAR --filter B:R2 --ignore E
+r2_super /reports/quran-leaderboard/download?format=xlsx&from=2019-03-01&to=2019-03-01 --filter B:R2 --ignore E
+r2_ladmin /reports/quran-leaderboard/download?format=xlsx&from=2019-03-01&to=2019-03-31&gender=2 --filter B:R2 --ignore E

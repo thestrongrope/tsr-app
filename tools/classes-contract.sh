@@ -32,7 +32,11 @@ if [ "${1:-}" = "--prepare" ]; then
   shift
 fi
 
-FILES=(domains/classes/spec/tests/*.hurl)
+FILES=()
+for f in domains/classes/spec/tests/*.hurl; do
+  # The MCQ report, leaderboard and nudge files belong to tools/contract-reports2.sh (their own fixtures and variables).
+  case "$f" in */report-mcq-*|*/report-quran-leaderboard*|*/report-pending-nudge*) ;; *) FILES+=("$f") ;; esac
+done
 
 # alias=email: the fixture members the files sign in as (Hurl variable auth_<alias>); tokens are in db/synthetic/classes-fixtures.sql.
 MEMBERS=(
