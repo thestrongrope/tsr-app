@@ -3,7 +3,7 @@ info:
   title: TSR assessment
   version: 0.1.0
   description: |
-    The assessment domain's actions (batch A1: a member takes a quiz and reads scores). Behaviour: tests/ (run against any base URL).
+    The assessment domain's actions (batch A1: a member takes a quiz and reads scores; batch A2: a teacher or class admin manages a class's quizzes and the copy pickers). Behaviour: tests/ (run against any base URL).
     Forward compatible: a store-live app keeps calling these, so add fields and routes freely but
     never remove or change one without the release process. Every error body is {"detail": "..."}.
     Every route signs the caller in with PHP's member-creating sign-in (api_authenticate(true)).
@@ -192,6 +192,192 @@ paths:
         "401": {$ref: "#/components/responses/Problem"}
         "403": {$ref: "#/components/responses/Problem"}
         "404": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}/mcq/manage:
+    get:
+      operationId: listManagedQuizzes
+      summary: A class's quizzes (drafts and deactivated too) for the member who manages them
+      description: |
+        Active class (404 "Class not found"), then mcqs:manage on the class (403 "You do not have permission to manage MCQs for this class": the class teacher, a current class admin student, a super admin). page (min 1), pageSize (1 to 50, default 20).
+        200 {total, page, pageSize, hasNext, items: [{id, code, name, topic, classId, createdAt, publishedAt, deactivatedAt, restrictToClass, questionCount, submittedCount, link}]}, newest first; link null until published.
+        Slice: features/manage-list/ManageList.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+        - {name: page, in: query, schema: {type: string}}
+        - {name: pageSize, in: query, schema: {type: string}}
+      responses:
+        "200":
+          description: The page
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}/mcq/topics:
+    get:
+      operationId: listManagedTopics
+      summary: The distinct topics a class's quizzes use
+      description: |
+        As the manage list (404 then 403 mcqs:manage). 200 a bare array of text, ordered, trimmed, blank ones left out. Slice: features/manage-topics/ManageTopics.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: The topics
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}/mcq/standard:
+    get:
+      operationId: listStandardMcqs
+      summary: The standard MCQs a class may copy, by topic then subject
+      description: |
+        As the manage list (404 then 403 mcqs:manage). Standard MCQs of the class's level and language with at least one question, in the order of their code.
+        200 {class: {code, languageId}, topics: [{topic, subjects: [{subject, quizzes: [{id, code, topic, subject, lesson, name, questionCount, copied}]}]}]}.
+        PHP quirks copied: copied is true for any quiz of the class made from it (a deactivated one too); questionCount is multiplied by the number of such quizzes; languageId is 1 for a class no standard MCQ fits. Slice: features/manage-standard/ManageStandard.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: The standard MCQs
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /mcq/manage/{quiz_id}:
+    get:
+      operationId: getManagedQuiz
+      summary: A quiz and all its questions WITH the answer, for editing
+      description: |
+        Quiz found (404 "Quiz not found"), its class active (404 "Class not found"), mcqs:manage on the class (403). THE ANSWER KEY IS ON THIS WIRE (the correct answer is `answer`; the other options option2 to option5), so it is reached only by the
+        class teacher, a current class admin student and a super admin. 200 {id, code, name, topic, classId, classCode, className, restrictToClass, publishedAt, deactivatedAt, link, questions: [{id, question, answer, option2..option5}]}.
+        Slice: features/manage-quiz/ManageQuiz.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: quiz_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: The quiz
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+    put:
+      operationId: updateManagedQuiz
+      summary: Save a quiz's name, topic and restriction and REPLACE its questions
+      description: |
+        As the get (404, 404, 403), then body (422 "Invalid JSON body") and the rules: name and topic required (trimmed), each row needs a question and an answer (422 "Question N needs both a question and an answer"; a row blank in both is skipped);
+        a text over 300 (name, topic) or 1000 (question, option) characters, a NUL byte, or more than 500 rows is 422. `questions` missing deletes every question (PHP). restrictToClass is left alone when absent.
+        200 {id, questionCount}. FLAGGED PHP behaviour copied: editing a published quiz that students answered leaves their answers pointing at deleted questions (score measured against the new question count). Event assessment.quiz_updated.
+        Slice: features/manage-update/ManageUpdate.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: quiz_id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: {type: string}
+                topic: {type: string}
+                restrictToClass: {type: integer}
+                questions:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      question: {type: string}
+                      answer: {type: string}
+                      option2: {type: string}
+                      option3: {type: string}
+                      option4: {type: string}
+                      option5: {type: string}
+      responses:
+        "200":
+          description: Saved
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /mcq/manage/{quiz_id}/deactivate:
+    post:
+      operationId: deactivateManagedQuiz
+      summary: Deactivate (default) or reactivate a quiz
+      description: |
+        As the get (404, 404, 403), then body (422 "Invalid JSON body"). `deactivate` is read as PHP's filter_var boolean: a missing or null value deactivates; anything but 1, true, on, yes reactivates.
+        200 {success, deactivated, deactivatedAt}. Event assessment.quiz_deactivated {quizId, classId, token, deactivated} only when the state changes. Slice: features/manage-deactivate/ManageDeactivate.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: quiz_id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                deactivate: {type: boolean}
+      responses:
+        "200":
+          description: Done
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /mcq/copy/classes:
+    get:
+      operationId: listCopyableClasses
+      summary: The classes the caller may copy quizzes from or to
+      description: |
+        mcqs:copy with no target (403 "You do not have permission to copy MCQs": not the class teacher or a class admin student). Active classes of each gender the caller may copy for (a coordinator: its assigned classes), ordered by gender, level order, id.
+        200 a bare array [{id, code, level, city, teacher}]. Slice: features/copy-classes/CopyClasses.cs.
+      security:
+        - memberToken: []
+      responses:
+        "200":
+          description: The classes
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+  /mcq/copy/classes/{class_id}/topics:
+    get:
+      operationId: listCopyTopics
+      summary: The topics of a class the caller may copy from
+      description: |
+        Active class (404), mcqs:copy on the class (403 "You do not have permission to copy MCQs from this class"). 200 a bare array of text as listManagedTopics. Slice: features/copy-topics/CopyTopics.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: The topics
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /mcq/copy/classes/{class_id}/quizzes:
+    get:
+      operationId: listCopyQuizzes
+      summary: The quizzes of a class and topic the caller may copy from
+      description: |
+        As the copy topics (404, 403), then topic (query, trimmed, 422 "topic is required"). The topic is matched with SQL LIKE ignoring case (% and _ are wildcards: PHP's quirk, copied). 200 a bare array [{id, name, createdAt}], newest first, at most 1000.
+        Slice: features/copy-quizzes/CopyQuizzes.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+        - {name: topic, in: query, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: The quizzes
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
 components:
   securitySchemes:
     memberToken:

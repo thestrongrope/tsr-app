@@ -31,6 +31,16 @@ public static partial class PhpValue
         _ => string.Empty,
     };
 
+    /// <summary>filter_var($value, FILTER_VALIDATE_BOOLEAN) cast to bool, after PHP's <c>?? default</c> (a missing or null value takes the default). Only 1, true, on and yes (any case, trimmed; a number only when it equals 1) are true.</summary>
+    public static bool Truthy(JsonElement value, bool whenMissing) => value.ValueKind switch
+    {
+        JsonValueKind.Undefined or JsonValueKind.Null => whenMissing,
+        JsonValueKind.True => true,
+        JsonValueKind.String => PhpText.LowerAscii(PhpText.Trim(value.GetString() ?? string.Empty)) is "1" or "true" or "on" or "yes",
+        JsonValueKind.Number => value.TryGetDouble(out var number) && number == 1.0,
+        _ => false,
+    };
+
     /// <summary>PHP <c>is_int()</c> of a decoded JSON value: a number written without a fraction or exponent that fits 64 bits (<c>1.0</c> and <c>1e2</c> decode to floats).</summary>
     public static bool IsInt(JsonElement value, out long number)
     {

@@ -4,7 +4,7 @@
 #   test    the new API on the synthetic TEST stack (http://localhost:8089; tools/test-stack.sh up); never run against the dev stack (real data)
 #   parity  the PHP API on the parity stack (http://127.0.0.1:18091, tools/parity-php/README.md; synthetic data only)
 #   --prepare  do the preparation below and stop
-# Preparation, so both sides answer from the same data and a file can be run again: loads the A1 fixtures (db/synthetic/assessment-a1-fixtures.sql for the new API,
+# Preparation, so both sides answer from the same data and a file can be run again: loads the A2 fixtures (the manage and copy files: members 902501 to 902513, classes 9631 to 9636, quizzes 963401 and up, standard MCQs A2S-*; header of db/synthetic/assessment-a2-fixtures.sql) after the A1 fixtures (db/synthetic/assessment-a1-fixtures.sql for the new API,
 # tools/parity-php/assessment-a1-fixtures.sql for PHP: the same members, classes 9621 to 9624, enrolments, quizzes 962401 to 962499, questions, responses and guardian links),
 # signs each fixture member in at that side's Auth emulator and writes build/<side>/assessment.vars (auth_qz_<alias>=Bearer ...). The fixtures are RESET on every run (the submit files write
 # answers; the reset deletes them), so a file can be run again. The read files change nothing, and no two files answer the same quiz as the same member (Hurl runs files in parallel).
@@ -49,6 +49,19 @@ MEMBERS=(
   "qz_submit7=qz.902427@example.invalid"
   "qz_submit8=qz.902428@example.invalid"
   "qz_submit9=qz.902429@example.invalid"
+  "qm_teacher=qm.902501@example.invalid"
+  "qm_admin=qm.902502@example.invalid"
+  "qm_student=qm.902503@example.invalid"
+  "qm_teacher2=qm.902504@example.invalid"
+  "qm_removed_admin=qm.902505@example.invalid"
+  "qm_other_admin=qm.902506@example.invalid"
+  "qm_super=qm.902507@example.invalid"
+  "qm_gents_admin=qm.902508@example.invalid"
+  "qm_coord=qm.902509@example.invalid"
+  "qm_ladies_admin=qm.902510@example.invalid"
+  "qm_nobody=qm.902511@example.invalid"
+  "qm_admin2=qm.902512@example.invalid"
+  "qm_inactive_admin=qm.902513@example.invalid"
 )
 
 parity() { docker compose -p tsr-parity -f tools/parity-php/compose.parity.yml --env-file tools/parity-php/parity.env "$@"; }
@@ -60,11 +73,13 @@ case "$SIDE" in
     export TSR_EMULATOR_PORT=19100
     "$ROOT/tools/require-synthetic-stack.sh" tsr-app-test
     test_sql < db/synthetic/assessment-a1-fixtures.sql
+    test_sql < db/synthetic/assessment-a2-fixtures.sql
     MINT="tools/dev-auth/mint-token.sh"
     BASE="http://localhost:8089"
     VARS="build/test/assessment.vars" ;;
   parity)
     php_sql < tools/parity-php/assessment-a1-fixtures.sql
+    php_sql < tools/parity-php/assessment-a2-fixtures.sql
     # Files named *-new-api.hurl hold cases PHP gets wrong (a PHP bug is not copied); they run on the new API only.
     KEPT=()
     for f in "${FILES[@]}"; do case "$f" in *-new-api.hurl) ;; *) KEPT+=("$f") ;; esac; done
