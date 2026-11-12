@@ -11,7 +11,7 @@ namespace Tsr.Identity.Api.Features.AdminDeletionComplete;
 
 // Slice: POST /admin/deletion-requests/{request_id}/complete (PHP route_admin_deletion_request_complete and AccountDeletionModel::complete). IRREVERSIBLE: deletes the member's Firebase
 // sign-in, then in ONE transaction redacts the recipient of queued messages (mobile and device ids), anonymises the member (membership's profile and class requests through IMemberErasure,
-// then identity's own users row), deletes the member's devices (notifications' command) and feedback (platform's command), and completes the request. Order as PHP: signed in (a create route),
+// then identity's own users row), deletes the member's devices and calendar settings (notifications' commands) and feedback (platform's command), and completes the request. Order as PHP: signed in (a create route),
 // deletion-requests:manage (403), the request (404), a request naming token 0 (409), the rate limit of 1 a minute per request (409; the key is held even when a refusal follows, so a retry waits),
 // then the model's refusals, each 409 with its text: not live, no confirmation recorded, a reviewer demo member, a token with no user row, a token with more than 20 user rows (before any Firebase call), Firebase failing (the database is then untouched).
 // A token can have several user rows: every row's Firebase account is deleted (a row's stored uid, which is unique; a row with none the uid Firebase returns for its own email, refused 409 when that email or uid belongs to another token), then every row is anonymised and its feedback erased.
@@ -240,6 +240,7 @@ internal static class AdminDeletionCompleteSlice
     {
         var recipients = members.Where(m => !string.IsNullOrEmpty(m.Mobile)).Select(m => m.Mobile!).Distinct().ToList();
         recipients.AddRange(await NotificationsErasure.EraseDevicesAsync(db, token, ct));
+        await NotificationsErasure.EraseEventSettingsAsync(db, token, ct);
         await PlatformCommands.RedactRecipientsAsync(db, recipients, ct);
         await memberErasure.EraseAsync(db, token, ct);
 

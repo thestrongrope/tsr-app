@@ -51,6 +51,12 @@ POST,/classes/{class_id}/notifications,notifications,create,built
 POST,/classes/{class_id}/notifications/scheduled,notifications,create,built
 GET,/classes/{class_id}/notifications/scheduled,notifications,create,built
 DELETE,/classes/{class_id}/notifications/scheduled/{scheduled_id},notifications,create,built
+GET,/me/calendar,notifications,create,built
+PUT,/me/calendar/settings,notifications,create,built
+GET,/classes/{class_id}/scheduled-events,notifications,create,built
+POST,/classes/{class_id}/scheduled-events,notifications,create,built
+PATCH,/classes/{class_id}/scheduled-events/{event_id},notifications,create,built
+DELETE,/classes/{class_id}/scheduled-events/{event_id},notifications,create,built
 GET,/holy-quran,content,create,built
 GET,/classes/{class_id}/conduction,classes,create,built
 GET,/classes/{class_id}/conduction/new,classes,create,built

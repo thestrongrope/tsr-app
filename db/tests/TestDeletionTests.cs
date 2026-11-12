@@ -104,6 +104,26 @@ public sealed class TestDeletionTests
     }
 
     [Test]
+    public async Task A_completion_deletes_the_members_calendar_settings_and_keeps_another_members()
+    {
+        var requestId = await AddTargetWithRequestAsync();
+        await TestDatabase.ExecuteAsync(
+            $"""
+            insert into notifications.member_event_settings (user_id, class_id, event_key, client_updated_at, server_updated_at, device_key)
+            select id, 98400, 'event:1', now(), now(), 'aaaaaaaaaaaaaaaa' from identity.users where token in ({TestDeletionKit.Target}, {TestDeletionKit.Admin});
+            """);
+
+        var reply = await api.CompleteAsync(TestDeletionKit.Admin, requestId);
+
+        ReplyAssert.Expect(reply, HttpStatusCode.OK);
+        Assert.That(await MembershipTestKit.CountAsync("notifications.member_event_settings"), Is.EqualTo(1));
+        Assert.That(
+            await MembershipTestKit.CountAsync("notifications.member_event_settings", $"user_id in (select id from identity.users where token = {TestDeletionKit.Admin})"),
+            Is.EqualTo(1),
+            "PHP deletes the rows of the deleted member only");
+    }
+
+    [Test]
     public async Task A_member_with_more_than_1000_devices_is_completed_and_a_queued_push_to_the_last_device_is_redacted_REVIEW_S1()
     {
         var requestId = await AddTargetWithRequestAsync();

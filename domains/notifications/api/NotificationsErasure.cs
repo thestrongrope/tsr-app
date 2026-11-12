@@ -25,4 +25,20 @@ public static class NotificationsErasure
             .ToListAsync(ct);
         return ids;
     }
+
+    /// <summary>
+    /// PHP <c>AccountDeletionModel::complete</c>: <c>delete from member_event_settings where user_id in (select id from users where token = :token)</c>. Deletes the member's calendar alert
+    /// settings and tombstones (they say which class events a person follows) and returns how many. Run inside the caller's transaction.
+    /// </summary>
+    public static async Task<int> EraseEventSettingsAsync(DbContext db, int token, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        if (db.Database.CurrentTransaction is null)
+        {
+            throw new InvalidOperationException("Calendar settings are erased inside the transaction of the deletion they belong to.");
+        }
+
+        return await db.Database.ExecuteSqlAsync(
+            $"delete from notifications.member_event_settings where user_id in (select id from identity.v_users where token = {token})", ct);
+    }
 }
