@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Tsr.Assessment.Api.Domain;
 using Tsr.Assessment.Api.Features.ChildScores;
 using Tsr.Assessment.Api.Features.ClassMyScores;
 using Tsr.Assessment.Api.Features.ClassQuizzes;
@@ -9,6 +11,8 @@ using Tsr.Assessment.Api.Features.QuizDetail;
 using Tsr.Assessment.Api.Features.QuizMyScore;
 using Tsr.Assessment.Api.Features.QuizQuestions;
 using Tsr.Assessment.Api.Features.QuizSubmit;
+using Tsr.Assessment.Api.Features.StandardMcqSources;
+using Tsr.Assessment.Api.Features.StandardMcqUpdate;
 using Tsr.Shared.Api;
 
 namespace Tsr.Assessment.Api;
@@ -24,6 +28,17 @@ public static class AssessmentModule
     public static IServiceCollection AddAssessment(this IServiceCollection services)
     {
         services.AddDomainContext<AssessmentContext>(AssessmentContext.SchemaName);
+        // Google Sheets: one client for the process (it caches the access token); the credential is an optional setting, so the API starts without it and a sheet route then answers 502 or "could not be read".
+        services.AddOptions<GoogleSheetsSettings>().Configure<IConfiguration>((settings, configuration) => settings.ServiceAccountB64 = configuration[GoogleSheetsSettings.Key]);
+        services.AddSingleton<ISheets>(provider => new GoogleSheets(
+            provider.GetRequiredService<IHttpClientFactory>().CreateClient("google-sheets"),
+            provider.GetRequiredService<Microsoft.Extensions.Options.IOptions<GoogleSheetsSettings>>(),
+            provider.GetRequiredService<TimeProvider>()));
+        services.AddHttpClient("google-sheets", client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(30);
+            client.MaxResponseContentBufferSize = 20_000_000;
+        });
         return services;
     }
 
@@ -38,6 +53,8 @@ public static class AssessmentModule
         routes.MapOpenQuizzes();
         routes.MapQuizByCode();
         routes.MapQuizSubmit();
+        routes.MapStandardMcqSources();
+        routes.MapStandardMcqUpdate();
         routes.MapPlannedRoutes();
         return routes;
     }

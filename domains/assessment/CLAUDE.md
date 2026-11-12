@@ -25,6 +25,14 @@ Spot quizzes, standard MCQs, quiz competitions.
 
   Consumed: none. The answers are never in the key-less routes: the questions route never selects the answer column; only the caller's own answered quizzes show the correct text.
 
+## Google Sheets, locks, settings (lane sheets, build-out)
+
+- `domain/ISheets.cs` is the one boundary to Google Sheets; `GoogleSheets.cs` calls the REST API over HTTP with a service-account JWT (no SDK). Optional setting `TSR_GOOGLE_SERVICE_ACCOUNT_B64` (base64 service-account JSON): without it the API starts and a sheet read fails with a `SheetsException`. Never log it.
+- Built: `GET /standard-mcqs/sources`, `POST /standard-mcqs/update` (slices `standard-mcq-sources`, `standard-mcq-update`; saved level is the chosen id + 1, as PHP).
+- Advisory locks (transaction-level, single bigint key, `domain/AssessmentLocks.cs`; membership's 3001 is the two-key form): 5001 standard MCQ update, 5002 quiz admin (PHP `quiz_admin`). No other code may use 5001 to 5099.
+- Event `assessment.standard_mcqs_updated` {languageId, levelId, quizzes}: one per updated language and level.
+- Notes for the test phase: `docs/specs/initial-build/lane-sheets-notes.md`.
+
 ## Checks
 
 ```

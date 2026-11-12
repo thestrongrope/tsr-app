@@ -43,9 +43,7 @@ internal static class Planned
             ("POST", "/admin/quiz/winners/generate"),
             ("POST", "/admin/quiz/winners/regenerate"),
             ("POST", "/admin/quiz/publish"),
-            ("POST", "/admin/quiz/reset"),
-            ("GET", "/standard-mcqs/sources"),
-            ("POST", "/standard-mcqs/update"));
+            ("POST", "/admin/quiz/reset"));
         return routes;
     }
 }

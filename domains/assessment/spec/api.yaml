@@ -192,6 +192,46 @@ paths:
         "401": {$ref: "#/components/responses/Problem"}
         "403": {$ref: "#/components/responses/Problem"}
         "404": {$ref: "#/components/responses/Problem"}
+  /standard-mcqs/sources:
+    get:
+      operationId: standardMcqSources
+      summary: The languages and levels the standard MCQs can be updated for
+      description: |
+        Permission standard-mcqs:update (403). Static lists; an id is the position plus one. Slice: features/standard-mcq-sources/StandardMcqSources.cs.
+      security:
+        - memberToken: []
+      responses:
+        "200":
+          description: "{languages: [{id, name}], levels: [{id, name}]}"
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+  /standard-mcqs/update:
+    post:
+      operationId: standardMcqUpdate
+      summary: Replace the standard MCQs of the chosen languages and levels from the source sheet
+      description: |
+        Permission standard-mcqs:update (403). Body {languages: [id], levels: [id]}: each a non-empty list of whole numbers from 1 (422 "Choose at least one in languages", "languages must be a list of ids"; at most 20 ids, 422 "Too many ids in languages").
+        409 "An update is already running. Try again in a minute." while another update runs. Answers {results: [{language_id, level_id, language, level, status: updated|failed, quizzes?, reason?}]}, one per pair;
+        a sheet that cannot be read changes nothing for any pair. Slice: features/standard-mcq-update/StandardMcqUpdate.cs.
+      security:
+        - memberToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [languages, levels]
+              properties:
+                languages: {type: array, items: {type: integer, minimum: 1}}
+                levels: {type: array, items: {type: integer, minimum: 1}}
+      responses:
+        "200":
+          description: The result of each pair
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
 components:
   securitySchemes:
     memberToken:
