@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Tsr.Access.Api;
+using Tsr.Platform.Api;
 
 namespace Tsr.Notifications.Api.Domain;
 
@@ -40,6 +41,21 @@ internal static class NotifyGuards
     /// <summary>The page PHP's model reads: limit at least 1 (and at most <see cref="MaxPage"/>, a cap PHP lacks), offset at least 0.</summary>
     public static (int Limit, int Offset) Page(long limit, long offset) =>
         ((int)Math.Clamp(limit, 1, MaxPage), (int)Math.Clamp(offset, 0, int.MaxValue));
+
+    /// <summary>
+    /// PHP's <c>api_require_notification_admin</c>: notifications:broadcast (super administrator) or 403 "Only super administrators can {what}", then the admin audit row
+    /// (platform's published command). Null when the caller passes.
+    /// </summary>
+    public static async Task<IResult?> AdminAsync(HttpContext context, NotificationsContext db, Permissions permissions, Caller caller, string what, CancellationToken ct)
+    {
+        if (!await permissions.CanAsync(caller, "notifications:broadcast", AccessTarget.None, ct))
+        {
+            return Problem.Detail(StatusCodes.Status403Forbidden, "Only super administrators can " + what);
+        }
+
+        await PlatformCommands.RecordAdminAccessAsync(db, context, caller.UserId, caller.Token, await permissions.RoleIdAsync(caller, ct), ct);
+        return null;
+    }
 
     /// <summary>PHP <c>api_find_class</c>: the active class whose gender, level and teacher rows all exist.</summary>
     public static async Task<bool> ClassExistsAsync(NotificationsContext db, int classId, CancellationToken ct)

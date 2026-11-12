@@ -47,7 +47,7 @@ GET,/me/guides,classes,member,planned
 GET,/me/guides/{slug},classes,member,planned
 GET,/classes/{class_id}/my-attendance,classes,create,built
 GET,/classes/{class_id}/my-performance,classes,create,built
-POST,/classes/{class_id}/notifications,notifications,create,planned
+POST,/classes/{class_id}/notifications,notifications,create,built
 POST,/classes/{class_id}/notifications/scheduled,notifications,create,built
 GET,/classes/{class_id}/notifications/scheduled,notifications,create,built
 DELETE,/classes/{class_id}/notifications/scheduled/{scheduled_id},notifications,create,built
@@ -204,10 +204,10 @@ POST,/admin/teachers/training,classes,create,built
 POST,/admin/teachers/import,classes,create,built
 PUT,/admin/syllabus/{syllabus_id},classes,create,built
 DELETE,/admin/syllabus/{syllabus_id},classes,create,built
-POST,/notifications/send,notifications,member,planned
-GET,/notifications/history,notifications,member,planned
-POST,/notifications/cleanup-invalid-tokens,notifications,member,planned
-GET,/notifications/stats,notifications,member,planned
+POST,/notifications/send,notifications,create,built
+GET,/notifications/history,notifications,create,built
+POST,/notifications/cleanup-invalid-tokens,notifications,create,built
+GET,/notifications/stats,notifications,create,built
 GET,/user/notifications,notifications,create,built
 GET,/user/notifications/unread-count,notifications,create,built
 POST,/user/notifications/read-all,notifications,create,built

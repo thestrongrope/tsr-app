@@ -12,7 +12,6 @@ internal static class Planned
     public static IEndpointRouteBuilder MapPlannedRoutes(this IEndpointRouteBuilder routes)
     {
         routes.MapPlanned(
-            ("POST", "/classes/{class_id}/notifications"),
             ("POST", "/reports/pending/nudge"),
             ("GET", "/admin/whatsapp/reminders"),
             ("PUT", "/admin/whatsapp/reminders/{reminder_id}"),
@@ -23,11 +22,7 @@ internal static class Planned
             ("GET", "/admin/whatsapp/link"),
             ("GET", "/admin/whatsapp/link/qr"),
             ("POST", "/admin/whatsapp/link/relink"),
-            ("POST", "/admin/whatsapp/link/logout"),
-            ("POST", "/notifications/send"),
-            ("GET", "/notifications/history"),
-            ("POST", "/notifications/cleanup-invalid-tokens"),
-            ("GET", "/notifications/stats"));
+            ("POST", "/admin/whatsapp/link/logout"));
         return routes;
     }
 }
