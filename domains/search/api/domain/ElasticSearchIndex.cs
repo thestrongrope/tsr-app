@@ -11,7 +11,7 @@ namespace Tsr.Search.Api.Domain;
 /// 5 second timeout, 2 second connect). The query is <c>bool</c>: must <c>match name {query, operator and}</c>; filter <c>terms kind</c>
 /// and, when the scope is limited, a <c>bool should [terms ...] minimum_should_match 1</c>.
 /// </summary>
-internal sealed class ElasticSearchIndex : ISearchIndex
+internal sealed partial class ElasticSearchIndex : ISearchIndex
 {
     public const string IndexName = "tsr-search";
 

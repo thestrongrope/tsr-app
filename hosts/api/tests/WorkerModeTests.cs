@@ -37,6 +37,18 @@ public sealed class WorkerModeTests
     }
 
     [Test]
+    public void The_search_feed_is_a_known_worker_and_is_registered_by_its_name()
+    {
+        var services = new ServiceCollection();
+
+        var enabled = WorkerMode.Register(services, workersMode: true, "search-feed");
+
+        Assert.That(WorkerMode.KnownNames, Does.Contain("search-feed"));
+        Assert.That(Workers(services), Is.EqualTo(1));
+        Assert.That(enabled, Is.EqualTo(["search-feed"]));
+    }
+
+    [Test]
     public void A_name_is_trimmed_and_a_repeated_one_is_registered_once()
     {
         var services = new ServiceCollection();

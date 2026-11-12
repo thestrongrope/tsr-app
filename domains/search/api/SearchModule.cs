@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Tsr.Search.Api.Domain;
 using Tsr.Search.Api.Features.Search;
+using Tsr.Search.Api.Workers;
 
 namespace Tsr.Search.Api;
 
@@ -29,8 +30,29 @@ public static class SearchModule
             var settings = provider.GetRequiredService<SearchSettings>();
             return settings.Url is null ? new UnconfiguredSearchIndex() : new ElasticSearchIndex(settings);
         });
+        services.AddSingleton<ISearchIndexWriter>(provider =>
+        {
+            var settings = provider.GetRequiredService<SearchSettings>();
+            return settings.Url is null ? new UnconfiguredSearchIndex() : new ElasticSearchIndex(settings);
+        });
         services.AddScoped<ISearchFacts, SearchFacts>();
         services.AddScoped<SearchEngine>();
+        return services;
+    }
+
+    /// <summary>The background workers this domain owns, by the name written in <c>TSR_WORKERS</c>.</summary>
+    public static readonly IReadOnlyList<string> WorkerNames = [SearchFeedWorker.WorkerName];
+
+    /// <summary>Registers the workers named in <paramref name="enabled"/> (the host has already refused unknown names). Called only in the run mode <c>--workers</c>.</summary>
+    public static IServiceCollection AddSearchWorkers(this IServiceCollection services, IReadOnlySet<string> enabled)
+    {
+        ArgumentNullException.ThrowIfNull(enabled);
+        if (enabled.Contains(SearchFeedWorker.WorkerName))
+        {
+            services.AddScoped<ISearchDocumentSource, SearchDocumentSource>();
+            services.AddHostedService<SearchFeedWorker>();
+        }
+
         return services;
     }
 
