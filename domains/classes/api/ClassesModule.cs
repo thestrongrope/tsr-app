@@ -80,6 +80,8 @@ using Tsr.Classes.Api.Features.ReportMcqSummaryClass;
 using Tsr.Classes.Api.Features.ReportMcqSummaryClassDownload;
 using Tsr.Classes.Api.Features.ReportPending;
 using Tsr.Classes.Api.Features.ReportPendingDownload;
+using Tsr.Classes.Api.Features.ReportQuranLeaderboard;
+using Tsr.Classes.Api.Features.ReportQuranLeaderboardDownload;
 using Tsr.Classes.Api.Features.ReportStudents;
 using Tsr.Classes.Api.Features.ReportStudentsDownload;
 using Tsr.Classes.Api.Features.ReportSummary;
@@ -194,6 +196,8 @@ public static class ClassesModule
         routes.MapReportPendingDownload();
         routes.MapReportTsr();
         routes.MapReportTsrDownload();
+        routes.MapReportQuranLeaderboard();
+        routes.MapReportQuranLeaderboardDownload();
         routes.MapReportStudents();
         routes.MapReportStudentsDownload();
         routes.MapReportThisWeek();

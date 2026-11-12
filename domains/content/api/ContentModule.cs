@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
+using Tsr.Content.Api.Features.HolyQuran;
 using Tsr.Content.Api.Features.ListPublishedArticles;
 using Tsr.Shared.Api;
 
@@ -21,7 +22,7 @@ public static class ContentModule
     public static IEndpointRouteBuilder MapContent(this IEndpointRouteBuilder routes)
     {
         routes.MapListPublishedArticles();
-        routes.MapPlannedRoutes();
+        routes.MapHolyQuran();
         return routes;
     }
 }

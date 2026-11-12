@@ -51,4 +51,4 @@ Operations of this domain not built yet are 501 placeholders in `api/Planned.cs`
 
 | View | Columns | Known readers |
 |---|---|---|
-| `v_users` | id, token, email, created_on, has_firebase_link | membership (`v_members`); email filters and token to id in classes reports |
+| `v_users` | id, token, email, created_on, has_firebase_link | membership (`v_members`); email filters and token to id in classes reports, platform (access log: email) |

@@ -30,8 +30,6 @@ internal static class StudentsReport
     private sealed record StudentRow(
         long Token, string? Name, string Level, string Class, int Sessions, long Present, int Quizzes, long Questions, int Responded, long Correct);
 
-    private sealed record RecitationRow(long Token, long Total);
-
     public static async Task<(Loaded? Report, IResult? Refusal)> OpenAsync(HttpContext context, ClassesContext db, Permissions permissions, Caller caller, DateOnly today, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -115,32 +113,10 @@ internal static class StudentsReport
             .ToListAsync(ct);
     }
 
-    // PHP getLeaderboardData(1000, 0, from, to, level 0, gender, minimum 0): rank every token's recitation of the range, then keep the enrolments (status 'A') in active classes of members of the gender, in the assigned classes when that is all the caller reaches, and cut at 1000 rows.
+    // PHP getLeaderboardData(1000, 0, from, to, level 0, gender, minimum 0): the shared leaderboard query (domain/QuranLeaderboard.cs) with no level, minimum 0 and the first 1000 rows.
     private static async Task<Dictionary<long, long>> RecitationAsync(ClassesContext db, int gender, IReadOnlyList<int>? assigned, DateRange range, CancellationToken ct)
     {
-        var from = range.FromDay;
-        var to = range.ToDay;
-        var genderText = gender.ToString(CultureInfo.InvariantCulture);
-        var limited = assigned is not null;
-        int[] assignedIds = assigned is null ? [] : [.. assigned];
-        var rows = await db.Database
-            .SqlQuery<RecitationRow>($"""
-                with ranked as (
-                    select ca.token, sum(ca.recitation) as total, rank() over (order by sum(ca.recitation) desc) as rnk
-                    from classes.class_attendance ca
-                    join classes.class_sessions s on s.id = ca.session_id
-                    where s.conducted_on between {from} and {to}
-                    group by ca.token)
-                select ra.token::bigint as "Token", ra.total::bigint as "Total"
-                from ranked ra
-                join classes.class_students cs on cs.token_no = ra.token
-                join classes.classes c on c.id = cs.class_id
-                join membership.v_members u on u.token = ra.token
-                where cs.status = 'A' and c.status = 'A' and u.gender = {genderText} and ({limited} = false or c.id = any({assignedIds})) and ra.total >= 0
-                order by ra.rnk, ra.token, c.id
-                limit {LeaderboardRows}
-                """)
-            .ToListAsync(ct);
+        var rows = await QuranLeaderboard.RankedAsync(db, gender, assigned, range, 0, 0, LeaderboardRows, ct);
         return rows.GroupBy(r => r.Token).ToDictionary(g => g.Key, g => g.Last().Total);
     }
 }

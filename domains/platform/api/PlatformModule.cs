@@ -3,6 +3,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Tsr.Platform.Api.Domain;
+using Tsr.Platform.Api.Features.AdminAccessLog;
+using Tsr.Platform.Api.Features.AdminAccessLogDownload;
 using Tsr.Platform.Api.Features.AppVersion;
 using Tsr.Platform.Api.Features.GeoCities;
 using Tsr.Platform.Api.Features.GeoCountries;
@@ -22,7 +24,7 @@ namespace Tsr.Platform.Api;
 public static class PlatformModule
 {
     /// <summary>Other domain modules this one may use (domains/CLAUDE.md rule 7).</summary>
-    public static readonly IReadOnlyList<string> Dependencies = ["access"];
+    public static readonly IReadOnlyList<string> Dependencies = ["access", "membership", "identity"];
 
     public static IServiceCollection AddPlatform(this IServiceCollection services)
     {
@@ -58,7 +60,8 @@ public static class PlatformModule
         routes.MapGeoCountries();
         routes.MapGeoPostal();
         routes.MapGeoCities();
-        routes.MapPlannedRoutes();
+        routes.MapAdminAccessLog();
+        routes.MapAdminAccessLogDownload();
         return routes;
     }
 }

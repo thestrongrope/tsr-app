@@ -51,7 +51,7 @@ POST,/classes/{class_id}/notifications,notifications,create,planned
 POST,/classes/{class_id}/notifications/scheduled,notifications,create,planned
 GET,/classes/{class_id}/notifications/scheduled,notifications,create,planned
 DELETE,/classes/{class_id}/notifications/scheduled/{scheduled_id},notifications,create,planned
-GET,/holy-quran,content,create,planned
+GET,/holy-quran,content,create,built
 GET,/classes/{class_id}/conduction,classes,create,built
 GET,/classes/{class_id}/conduction/new,classes,create,built
 GET,/classes/{class_id}/conduction/check,classes,create,built
@@ -133,7 +133,7 @@ GET,/reports/mcq-adherence/{class_id},classes,create,built
 GET,/reports/mcq-adherence/{class_id}/download,classes,create,built
 GET,/reports/active-teachers,classes,create,built
 GET,/reports/active-teachers/download,classes,create,built
-GET,/reports/quran-leaderboard,content,member,planned
+GET,/reports/quran-leaderboard,classes,create,built
 GET,/reports/this-week,classes,create,built
 GET,/reports/this-week/class/{class_id},classes,create,built
 GET,/reports/registrations,membership,create,built
@@ -142,7 +142,7 @@ GET,/reports/registrations/allocated/download,membership,create,built
 GET,/registrations/{registration_id}/classes,classes,create,built
 POST,/registrations/{registration_id}/place,classes,create,built
 POST,/registrations/{registration_id}/reject,membership,create,built
-GET,/reports/quran-leaderboard/download,content,member,planned
+GET,/reports/quran-leaderboard/download,classes,create,built
 POST,/reports/pending/nudge,notifications,create,planned
 GET,/syllabus/levels,classes,create,built
 GET,/syllabus/level/{level_id},classes,create,built
@@ -186,8 +186,8 @@ POST,/admin/quiz/publish,assessment,create,planned
 POST,/admin/quiz/reset,assessment,create,planned
 GET,/admin/donors,membership,create,built
 GET,/admin/donors/download,membership,create,built
-GET,/admin/access-log,platform,create,planned
-GET,/admin/access-log/download,platform,create,planned
+GET,/admin/access-log,platform,create,built
+GET,/admin/access-log/download,platform,create,built
 GET,/admin/deletion-requests,identity,member,planned
 POST,/admin/deletion-requests,identity,member,planned
 POST,/admin/deletion-requests/{request_id}/hold,identity,member,planned

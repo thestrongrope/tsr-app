@@ -4,11 +4,11 @@ Quran, recitation, articles, lectures, books. **Status: stub (2026-11-10).** Art
 with `site/` pages. Lectures, books, the Quran and the content pipelines are planned
 (`domains/CLAUDE.md`).
 
-Table `holy_quran` (the 114 surahs and verse counts, PHP's table, ported in the schema phase; its routes are 501 placeholders in `api/Planned.cs`) is in schema `content` beside `articles`.
+Table `holy_quran` (the 114 surahs and verse counts, PHP's table, ported in the schema phase; read by `GET /holy-quran`, `api/features/holy-quran/HolyQuran.cs`, a sign-in-only route) is in schema `content` beside `articles`.
 
 ## Dependencies
 
-None (`ContentModule.Dependencies` is empty). Its routes are public reads, so it calls no `access`.
+None (`ContentModule.Dependencies` is empty). `GET /articles` is a public read and `GET /holy-quran` needs only a sign-in, so it calls no `access`.
 
 ## Public reads (rule 4 of `domains/CLAUDE.md`)
 
@@ -34,10 +34,12 @@ None yet.
 
 ## Placeholders
 
-The operations not built yet (3: Quran and the like) are 501 placeholders in `api/Planned.cs`; building one deletes its line there and flips its state in `docs/specs/initial-build/operations.csv`.
+None left (`api/Planned.cs` is gone). The two recitation leaderboard routes the catalog first listed here are built in `classes`: they read class attendance (`domains/classes/CLAUDE.md`).
 
 ## Published views (rule 2; migration `PublishedViews`, read-only to the API role)
 
 | View | Columns | Known readers |
 |---|---|---|
 | `v_quran` | id, surah, arabic, verses | classes (conduction) |
+
+`GET /holy-quran` reads `content.holy_quran` itself (this domain's table); classes' conduction screens read the same rows through `v_quran`.
