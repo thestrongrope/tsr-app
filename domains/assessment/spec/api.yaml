@@ -680,6 +680,43 @@ paths:
         "404": {$ref: "#/components/responses/Problem"}
         "409": {$ref: "#/components/responses/Problem"}
         "422": {$ref: "#/components/responses/Problem"}
+  /mcq/manage/{quiz_id}/sheet:
+    get:
+      operationId: getQuizSheet
+      summary: The printable question sheet as a PDF (A4 portrait), no answer marked
+      description: |
+        As the get (404, 404, 403). Fixes and stores the option order of every question that has none, then 404 "This MCQ has no questions" or 200 application/pdf, attachment MCQ_<code>.pdf. 503 when the PDF renderer is down.
+        Slice: features/manage-sheet/ManageSheet.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: quiz_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: The PDF
+          content:
+            application/pdf: {}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
+  /mcq/manage/{quiz_id}/publish:
+    post:
+      operationId: publishManagedQuiz
+      summary: Publish the quiz and queue a push to the class's students
+      description: |
+        As the get (404, 404, 403). Fixes the option orders, sets published_at and published_by (also on a quiz already published: no check), writes assessment.quiz_published {quizId, classId, token}, then queues one push per device of the class's current students
+        (dedupe key quiz-<id>), writes a notification and its inbox rows (best effort). 200 {success, publishedAt, deviceCount, successCount, failureCount}. Slice: features/manage-publish/ManagePublish.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: quiz_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: See the description
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
 components:
   securitySchemes:
     memberToken:
