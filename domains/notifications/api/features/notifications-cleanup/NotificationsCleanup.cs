@@ -69,9 +69,10 @@ internal static class NotificationsCleanupSlice
         }
 
         var data = new Dictionary<string, string> { ["type"] = "system_check", ["silent"] = "true" };
-        var report = await PushBatch.SendAsync(sender, "System Check", "Verifying device connectivity", data, tokens, ct);
-        await RemoveAsync(db, clock, logger, report.Invalid, ct);
-        var after = (await Audience.DevicesAsync(db, everyone, ct)).Count;
+        // Not the request's token from here on: the push cannot be unsent, so a caller or gateway that goes away must not stop the dead tokens being removed (PHP runs on too). PushBatch keeps its own deadline.
+        var report = await PushBatch.SendAsync(sender, "System Check", "Verifying device connectivity", data, tokens, CancellationToken.None);
+        await RemoveAsync(db, clock, logger, report.Invalid, CancellationToken.None);
+        var after = (await Audience.DevicesAsync(db, everyone, CancellationToken.None)).Count;
         var removed = tokens.Count - after;
         return Results.Json(new Dictionary<string, object>
         {

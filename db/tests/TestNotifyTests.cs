@@ -178,6 +178,35 @@ public sealed class TestNotifyTests
     // ---- POST /notifications/send --------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
     [Test]
+    public async Task An_announcement_whose_caller_goes_away_during_the_push_still_reaches_every_device_and_is_recorded_as_PHP_REVIEW_S1()
+    {
+        using var callerLeaves = new CancellationTokenSource();
+        fake.Decide = _ =>
+        {
+            callerLeaves.Cancel();
+            return PushResult.Sent;
+        };
+
+        try
+        {
+            await kit.SendAsync(Super, HttpMethod.Post, "/notifications/send", """{"title":"Nt Title","body":"Nt body","target":{"type":"ALL_USERS"}}""", ct: callerLeaves.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            // The caller is gone; the server carries on.
+        }
+
+        for (var attempt = 0; attempt < 50 && await CountAsync("notifications.notifications") == 0; attempt++)
+        {
+            await Task.Delay(100);
+        }
+
+        Assert.That(await CountAsync("notifications.notifications"), Is.EqualTo(1), "a push that went out is recorded");
+        Assert.That(fake.Sent, Has.Count.EqualTo(9), "the push is not cut short");
+        Assert.That(await CountAsync("platform.outbox", "event_type = 'notifications.sent'"), Is.EqualTo(1));
+    }
+
+    [Test]
     public async Task An_announcement_to_everyone_pushes_to_every_device_but_the_demo_cohorts_and_records_the_counts_the_inbox_and_one_event()
     {
         fake.Decide = token => token switch { "dev-b1" => PushResult.TokenInvalid, "dev-e1" => PushResult.Failed, _ => PushResult.Sent };

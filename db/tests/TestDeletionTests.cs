@@ -102,6 +102,24 @@ public sealed class TestDeletionTests
     }
 
     [Test]
+    public async Task A_member_with_more_than_1000_devices_is_completed_and_a_queued_push_to_the_last_device_is_redacted_REVIEW_S1()
+    {
+        var requestId = await AddTargetWithRequestAsync();
+        await TestDatabase.ExecuteAsync(
+            $"""
+            insert into notifications.user_devices (token, device_id) select {TestDeletionKit.Target}, 'bulk-924010-' || n from generate_series(1, 1200) as n;
+            insert into platform.outbound_messages (channel, recipient, payload, dedupe_key) values ('push', 'bulk-924010-1200', '[]', 'k-bulk-last');
+            """);
+
+        var reply = await api.CompleteAsync(TestDeletionKit.Admin, requestId);
+
+        ReplyAssert.Expect(reply, HttpStatusCode.OK);
+        Assert.That(await MembershipTestKit.CountAsync("notifications.user_devices", "token = " + TestDeletionKit.Target), Is.EqualTo(0));
+        Assert.That(await MembershipTestKit.CountAsync("platform.outbound_messages", "dedupe_key = 'k-bulk-last' and recipient = '[deleted]'"), Is.EqualTo(1),
+            "PHP redacts every device of the member, with no bound");
+    }
+
+    [Test]
     public async Task A_completion_touches_no_row_of_another_member_with_the_same_device_id_and_a_feedback_of_their_own()
     {
         var requestId = await AddTargetWithRequestAsync();

@@ -464,6 +464,22 @@ public sealed partial class TestSheetsTests
         Assert.That(await EventsAsync("assessment.quiz_state_changed"), Is.EqualTo(events + 4), "one event per publish");
     }
 
+    // The winners list shares the zero-rows line; the seeded world always yields a winners row, so only the scoreboard is driven here.
+    [TestCase("scoreboard", "scoreboard_updated")]
+    public async Task Publishing_an_empty_scoreboard_is_Published_0_rows_with_the_stamp_and_the_event_as_PHP_REVIEW_A1(string what, string stamp)
+    {
+        await SeedQuizWorldAsync();
+        var events = await EventsAsync("assessment.quiz_state_changed");
+
+        var reply = await Post(Admin, "/admin/quiz/publish", $$"""{"what":"{{what}}"}""");
+
+        Assert.That(reply.Status, Is.EqualTo(HttpStatusCode.OK), reply.Body);
+        Assert.That((reply.Json!["message"]!.GetValue<string>(), reply.Json["changed"]!.GetValue<bool>(), reply.Json["rows"]!.GetValue<int>()), Is.EqualTo(("Published 0 rows.", true, 0)));
+        Assert.That(sheets.Writes, Is.Not.Empty, "PHP clears the range with one empty row");
+        Assert.That((await DocAsync("timestamps"))![stamp + "_by"]!.GetValue<string>(), Is.EqualTo("Sheet Admin (923001)"));
+        Assert.That(await EventsAsync("assessment.quiz_state_changed"), Is.EqualTo(events + 1));
+    }
+
     [Test]
     public async Task A_publish_that_fails_on_the_second_scoreboard_write_says_so_and_saves_no_stamp_and_no_event()
     {

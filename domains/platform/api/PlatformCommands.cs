@@ -56,7 +56,7 @@ public static partial class PlatformCommands
         }
     }
 
-    private const int MaxRedactedRecipients = 1000;
+    private const int RedactChunk = 1000;
 
     /// <summary>
     /// PHP <c>AccountDeletionModel::complete</c>: <c>delete from feedback where user_id = :user_id</c>. Feedback is free text that may name the member. Run inside the caller's transaction.
@@ -70,21 +70,17 @@ public static partial class PlatformCommands
 
     /// <summary>
     /// PHP <c>redactQueuedMessages</c>: <c>update outbound_messages set recipient = '[deleted]' where recipient in (...)</c>. The queue has no member key, so a member's rows are found by their
-    /// recipient values (mobile number, device ids); the rows stay, with the recipient redacted. At most 1000 recipients (more throws). Run inside the caller's transaction.
+    /// recipient values (mobile number, device ids); the rows stay, with the recipient redacted. Any number of recipients, as PHP (a refusal here would strand a deletion whose Firebase account is already gone); 1000 per statement. Run inside the caller's transaction.
     /// </summary>
     public static async Task RedactRecipientsAsync(DbContext db, IReadOnlyCollection<string> recipients, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(recipients);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(recipients.Count, MaxRedactedRecipients);
         RequireTransaction(db);
-        if (recipients.Count == 0)
+        foreach (var values in recipients.Chunk(RedactChunk))
         {
-            return;
+            await db.Database.ExecuteSqlAsync($"update platform.outbound_messages set recipient = '[deleted]' where recipient = any({values}::citext[])", ct);
         }
-
-        var values = recipients.ToArray();
-        await db.Database.ExecuteSqlAsync($"update platform.outbound_messages set recipient = '[deleted]' where recipient = any({values}::citext[])", ct);
     }
 
     private static void RequireTransaction(DbContext db)

@@ -40,7 +40,8 @@ internal static class ReportMcqSummaryAllSlice
             return Problem.Detail(StatusCodes.Status404NotFound, "No MCQ summary to download");
         }
 
-        context.Response.Headers.ContentDisposition = "attachment; filename=\"MCQ_summary_" + report!.From + "_to_" + report.To + ".csv\"";
+        // Trimmed: ParseDay accepts a date with a trailing line feed (as PHP) and echoes it; a control character in a header is a 500 from Kestrel.
+        context.Response.Headers.ContentDisposition = "attachment; filename=\"MCQ_summary_" + report!.From.Trim() + "_to_" + report.To.Trim() + ".csv\"";
         return Results.Bytes(Encoding.UTF8.GetBytes(csv), "text/csv;charset=UTF-8");
     }
 }

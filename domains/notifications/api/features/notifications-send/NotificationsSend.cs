@@ -86,8 +86,9 @@ internal static class NotificationsSendSlice
             ["target_type"] = announcement.Target.Type,
             ["action_link"] = announcement.ActionLink ?? string.Empty,
         };
-        var report = await PushBatch.SendAsync(sender, announcement.Title, PushBatch.CutBody(announcement.Body), data, devices, ct);
-        var id = await RecordAsync(db, clock, logger, announcement, devices.Count, report, members, caller.Token, ct);
+        // Not the request's token from here on: a push cannot be unsent, so a caller or gateway that goes away must not cut it short or lose its record (PHP runs on too). PushBatch keeps its own deadline.
+        var report = await PushBatch.SendAsync(sender, announcement.Title, PushBatch.CutBody(announcement.Body), data, devices, CancellationToken.None);
+        var id = await RecordAsync(db, clock, logger, announcement, devices.Count, report, members, caller.Token, CancellationToken.None);
         return Results.Json(Outcome($"Notification sent to {report.Success} devices successfully", devices.Count, report.Success, report.Failure, id));
     }
 

@@ -92,7 +92,8 @@ internal static partial class AdminQuizPublishSlice
             return Problem.Detail(StatusCodes.Status502BadGateway, partly ? PartlyDone : Unreachable + " Nothing was changed or published.");
         }
 
-        if (written.Rows == 0)
+        // PHP: published is false only for the student winner with no range set; an empty scoreboard or winners list was written (one empty row) and is "Published 0 rows.".
+        if (written.Rows == 0 && what == "mega_student")
         {
             return Results.Json(Answer("Nothing was published: the sheet range for this winner is not set in the quiz settings.", changed: false, rows: 0));
         }

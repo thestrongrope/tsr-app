@@ -4,6 +4,8 @@ Independent, read-only review (Opus, `security` agent) of `dotnet-11` at `bcf02b
 
 **Verdict:** no authorization, row-scope, data-exposure or injection hole looser than PHP. One irreversible-action defect that PHP does not have (S1).
 
+**Follow-up (12 Nov 2026):** S1 is fixed: `EraseDevicesAsync` returns every device id and `RedactRecipientsAsync` redacts in chunks of 1000 (test `TestDeletionTests...REVIEW_S1`, failed first with the 1001-recipient exception). A cap or rate limit on device registration is still a decision. S2 and the notes are open.
+
 ## Should-fix
 
 **S1. A completion can get stuck for good after Firebase has already been deleted.** (reviewer: high confidence, traced from the code)

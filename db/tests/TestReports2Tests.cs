@@ -131,6 +131,16 @@ public sealed partial class TestReports2Tests
     }
 
     [Test]
+    public async Task Summary_csv_with_a_line_feed_after_a_date_is_still_a_download_as_PHP_never_a_500_REVIEW_R1()
+    {
+        var file = await kit.DownloadAsync(Super, "/reports/mcq-summary/download-all?from=2019-03-01%0A&to=2019-03-31%0A");
+
+        Assert.That(file.Status, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That(file.Text, Does.Contain("T2-G-1"));
+        Assert.That(file.Disposition, Does.Contain("MCQ_summary_2019-03-01_to_2019-03-31.csv"), "the test server lets a line feed through; Kestrel refuses the header with a 500");
+    }
+
+    [Test]
     public async Task Summary_class_routes_answer_with_an_empty_class_outside_reach_and_zero_or_a_word_means_the_first_class_inside_reach()
     {
         async Task<JsonNode> ClassAsync(int caller, string id)

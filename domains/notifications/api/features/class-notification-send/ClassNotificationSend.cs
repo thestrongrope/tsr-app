@@ -91,8 +91,9 @@ internal static class ClassNotificationSendSlice
             ["class_id"] = classId.ToString(System.Globalization.CultureInfo.InvariantCulture),
             ["action_link"] = text.ActionLink ?? string.Empty,
         };
-        var report = await PushBatch.SendAsync(sender, text.Title, PushBatch.CutBody(text.Body), data, devices, ct);
-        var id = await RecordAsync(db, clock, logger, classId, text, devices.Count, report, students, caller.Token, ct);
+        // Not the request's token from here on: a push cannot be unsent, so a caller or gateway that goes away must not cut it short or lose its record (PHP runs on too). PushBatch keeps its own deadline.
+        var report = await PushBatch.SendAsync(sender, text.Title, PushBatch.CutBody(text.Body), data, devices, CancellationToken.None);
+        var id = await RecordAsync(db, clock, logger, classId, text, devices.Count, report, students, caller.Token, CancellationToken.None);
         return Results.Json(Outcome($"Notification sent to {report.Success} devices successfully", devices.Count, students.Count, report.Success, report.Failure, id));
     }
 
