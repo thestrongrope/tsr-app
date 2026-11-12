@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Tsr.Notifications.Api;
+using Tsr.Search.Api;
 
 namespace Tsr.Host.Api;
 
@@ -17,6 +18,7 @@ public static partial class WorkerMode
     private static readonly (IReadOnlyList<string> Names, Action<IServiceCollection, IReadOnlySet<string>> Add)[] Domains =
     [
         (NotificationsModule.WorkerNames, (services, enabled) => services.AddNotificationsWorkers(enabled)),
+        (SearchModule.WorkerNames, (services, enabled) => services.AddSearchWorkers(enabled)),
     ];
 
     /// <summary>The names the host accepts in <c>TSR_WORKERS</c>.</summary>
