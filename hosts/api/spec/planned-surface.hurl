@@ -37,14 +37,14 @@ HTTP 501
 jsonpath "$.detail" == "Not implemented"
 
 # classes (a path with parameters: any non-slash segment)
-GET {{base_url}}/classes/900009/mcq/topics
+GET {{base_url}}/me/guides/a-slug
 {{auth_header}}: {{auth_value}}
 HTTP 501
 [Asserts]
 jsonpath "$.detail" == "Not implemented"
 
 # assessment
-GET {{base_url}}/classes/900009/mcq/manage
+GET {{base_url}}/mcq/manage/900009/scores
 {{auth_header}}: {{auth_value}}
 HTTP 501
 [Asserts]
@@ -96,8 +96,10 @@ HTTP 405
 jsonpath "$.detail" == "Method Not Allowed"
 
 # A planned literal path under a class (a path with parameters answers 501 the same way)
-GET {{base_url}}/classes/1/mcq/standard
+POST {{base_url}}/classes/1/mcq
 {{auth_header}}: {{auth_value}}
+Content-Type: application/json
+{}
 HTTP 501
 [Asserts]
 jsonpath "$.detail" == "Not implemented"

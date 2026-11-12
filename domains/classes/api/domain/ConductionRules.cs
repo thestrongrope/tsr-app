@@ -57,14 +57,7 @@ internal static partial class ConductionRules
     private static partial Regex MonthFirstText();
 
     /// <summary>filter_var($value, FILTER_VALIDATE_BOOLEAN) cast to bool, after PHP's <c>?? default</c> (a missing or null value takes the default).</summary>
-    public static bool Truthy(JsonElement value, bool whenMissing) => value.ValueKind switch
-    {
-        JsonValueKind.Undefined or JsonValueKind.Null => whenMissing,
-        JsonValueKind.True => true,
-        JsonValueKind.String => PhpText.LowerAscii(PhpText.Trim(value.GetString() ?? string.Empty)) is "1" or "true" or "on" or "yes",
-        JsonValueKind.Number => value.TryGetDouble(out var number) && number == 1.0,
-        _ => false,
-    };
+    public static bool Truthy(JsonElement value, bool whenMissing) => PhpValue.Truthy(value, whenMissing);
 
     /// <summary>
     /// PHP's strtotime reduced to a day: Y-m-d (one or two digit parts, an overflowing day such as 2025-02-30 rolls into the next month) with an optional time and offset (read at UTC, PHP's zone here),

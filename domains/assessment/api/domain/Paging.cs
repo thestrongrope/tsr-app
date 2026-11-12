@@ -8,10 +8,10 @@ internal sealed record Paging(long Page, int PageSize)
 {
     public long Offset => (long)Math.Min((decimal)(Page - 1) * PageSize, long.MaxValue);
 
-    public static Paging From(HttpContext context)
+    public static Paging From(HttpContext context, int maxSize = 100)
     {
         var page = Math.Max(1, QueryInt(context, "page", 1));
-        var size = (int)Math.Min(100, Math.Max(1, QueryInt(context, "pageSize", 20)));
+        var size = (int)Math.Min(maxSize, Math.Max(1, QueryInt(context, "pageSize", 20)));
         return new Paging(page, size);
     }
 

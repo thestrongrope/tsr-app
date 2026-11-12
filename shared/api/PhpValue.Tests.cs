@@ -68,4 +68,25 @@ public sealed class PhpValueTests
     [TestCase("\u0663", false)]
     public void IsNumeric_follows_PHP_8(string value, bool expected) =>
         Assert.That(PhpValue.IsNumeric(value), Is.EqualTo(expected));
+
+    [TestCase("true", true)]
+    [TestCase("false", false)]
+    [TestCase("\"YES\"", true)]
+    [TestCase("\" on \"", true)]
+    [TestCase("\"abc\"", false)]
+    [TestCase("\"\"", false)]
+    [TestCase("1", true)]
+    [TestCase("1.0", true)]
+    [TestCase("2", false)]
+    [TestCase("[true]", false)]
+    public void Truthy_is_the_filter_var_boolean(string json, bool expected) =>
+        Assert.That(PhpValue.Truthy(Json(json), whenMissing: !expected), Is.EqualTo(expected));
+
+    [Test]
+    public void Truthy_of_a_missing_or_null_value_is_the_default()
+    {
+        Assert.That(PhpValue.Truthy(default, true), Is.True);
+        Assert.That(PhpValue.Truthy(Json("null"), true), Is.True);
+        Assert.That(PhpValue.Truthy(default, false), Is.False);
+    }
 }
