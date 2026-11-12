@@ -1,0 +1,199 @@
+openapi: 3.1.0
+info:
+  title: TSR notifications
+  version: 0.1.0
+  description: |
+    The notifications domain's actions. Behaviour: tests/ (run against any base URL).
+    Forward compatible: a store-live app keeps calling these, so add fields and routes freely but
+    never remove or change one without the release process. Every error body is {"detail": "..."}.
+servers:
+  - url: http://localhost:8088
+    description: Local dev stack (gateway)
+paths:
+  /admin/whatsapp/reminders:
+    get:
+      operationId: listWhatsappReminders
+      summary: The notifier's WhatsApp reminders
+      description: |
+        whatsapp:manage (403). Proxies GET /reminders of the notifier (setting TSR_NOTIFIER_URL; absent or unreachable: 502 "notifier unreachable"). A notifier refusal keeps its status and its error text.
+        Answers {reminders: [...]}. Slice: features/whatsapp-reminders/WhatsappReminders.cs.
+      security:
+        - memberToken: []
+      responses:
+        "200": {description: "{reminders: [...]}", content: {application/json: {schema: {type: object}}}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "502": {$ref: "#/components/responses/Problem"}
+  /admin/whatsapp/reminders/{reminder_id}:
+    put:
+      operationId: updateWhatsappReminder
+      summary: Change a reminder's audience, language, schedule or switches
+      description: |
+        whatsapp:manage (403). Body: any of gender, city, country, levels, lang, leewayDays, timezone, weekday, sendTime, scheduleOn, enabled; only the keys present are sent on. The notifier judges the values (400 with its text, nothing saved); a string with a NUL byte or over 500 characters is 422.
+        reminder_id is read as PHP's (int): 0 or less is 400 "missing or invalid id". Answers {reminder}. Slice: features/whatsapp-reminder-update/WhatsappReminderUpdate.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: reminder_id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        "200": {description: "{reminder}", content: {application/json: {schema: {type: object}}}}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "502": {$ref: "#/components/responses/Problem"}
+  /admin/whatsapp/reminders/{reminder_id}/run:
+    post:
+      operationId: runWhatsappReminder
+      summary: Start a reminder run (a dry run unless dryRun is exactly false)
+      description: |
+        whatsapp:manage (403). Body {dryRun}: ONLY the JSON literal false starts a real send; missing, null or any other value is a dry run. Answers 202 {runId, dryRun}; the notifier's refusals (400, 409) keep its text.
+        Slice: features/whatsapp-reminder-run/WhatsappReminderRun.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: reminder_id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        "202": {description: "{runId, dryRun}", content: {application/json: {schema: {type: object}}}}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "502": {$ref: "#/components/responses/Problem"}
+  /admin/whatsapp/runs:
+    get:
+      operationId: listWhatsappRuns
+      summary: Recent runs, newest first
+      description: |
+        whatsapp:manage (403). Query reminderId and limit are passed on only as plain digits (at most 18). Answers {runs: [...]}. Slice: features/whatsapp-runs/WhatsappRuns.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: reminderId, in: query, schema: {type: string}}
+        - {name: limit, in: query, schema: {type: string}}
+      responses:
+        "200": {description: "{runs: [...]}", content: {application/json: {schema: {type: object}}}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "502": {$ref: "#/components/responses/Problem"}
+  /admin/whatsapp/runs/{run_id}:
+    get:
+      operationId: getWhatsappRun
+      summary: A run and each teacher it handled
+      description: |
+        whatsapp:manage (403). run_id is read as PHP's (int): 0 or less is 400 "missing or invalid id"; an unknown run is the notifier's 404 "run not found". Answers {run, messages}. Slice: features/whatsapp-run/WhatsappRun.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: run_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200": {description: "{run, messages}", content: {application/json: {schema: {type: object}}}}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "502": {$ref: "#/components/responses/Problem"}
+  /admin/whatsapp/test:
+    post:
+      operationId: sendWhatsappTest
+      summary: Send ONE real WhatsApp message to one number
+      description: |
+        whatsapp:manage (403). Body {mobile, message} (text, trimmed; mobile at most 40 characters, message at most 4096, no NUL byte: 422). The notifier judges the number and the link (400, 409). Answers {runId, status}. Slice: features/whatsapp-test/WhatsappTest.cs.
+      security:
+        - memberToken: []
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        "200": {description: "{runId, status}", content: {application/json: {schema: {type: object}}}}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "502": {$ref: "#/components/responses/Problem"}
+  /admin/whatsapp/link:
+    get:
+      operationId: getWhatsappLink
+      summary: The WhatsApp link state (connected, waiting, offline)
+      description: |
+        whatsapp:manage (403), 90 a minute per member (429). Cache-Control no-store on every answer. Answers {state, lastSeen}; a notifier that cannot answer is 503. Slice: features/whatsapp-link/WhatsappLink.cs.
+      security:
+        - memberToken: []
+      responses:
+        "200": {description: "{state, lastSeen}", content: {application/json: {schema: {type: object}}}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "429": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
+  /admin/whatsapp/link/qr:
+    get:
+      operationId: getWhatsappLinkQr
+      summary: The current QR code to link WhatsApp (a live credential)
+      description: |
+        whatsapp:manage (403), 90 a minute per member (429). Cache-Control no-store on every answer; the code is never logged. Answers {qr, ageSeconds, validSeconds, stale}; qr is null when there is none yet or it is older than 60 seconds. Slice: features/whatsapp-link-qr/WhatsappLinkQr.cs.
+      security:
+        - memberToken: []
+      responses:
+        "200": {description: "{qr, ageSeconds, validSeconds, stale}", content: {application/json: {schema: {type: object}}}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "429": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
+  /admin/whatsapp/link/relink:
+    post:
+      operationId: relinkWhatsapp
+      summary: Clear the WhatsApp session; a new QR code follows
+      description: |
+        whatsapp:manage (403), 6 a minute per member (429, shared with logout), an admin audit row, no-store. Answers {ok: true}; a notifier that does not do it is 502. Slice: features/whatsapp-link-relink/WhatsappLinkRelink.cs.
+      security:
+        - memberToken: []
+      responses:
+        "200": {description: "{ok: true}", content: {application/json: {schema: {type: object}}}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "429": {$ref: "#/components/responses/Problem"}
+        "502": {$ref: "#/components/responses/Problem"}
+  /admin/whatsapp/link/logout:
+    post:
+      operationId: logoutWhatsapp
+      summary: End the WhatsApp session on WhatsApp's side too
+      description: |
+        whatsapp:manage (403), 6 a minute per member (429, shared with relink), an admin audit row, no-store. Answers {ok: true}; a notifier that does not do it is 502. Slice: features/whatsapp-link-logout/WhatsappLinkLogout.cs.
+      security:
+        - memberToken: []
+      responses:
+        "200": {description: "{ok: true}", content: {application/json: {schema: {type: object}}}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "429": {$ref: "#/components/responses/Problem"}
+        "502": {$ref: "#/components/responses/Problem"}
+components:
+  securitySchemes:
+    memberToken:
+      type: http
+      scheme: bearer
+      bearerFormat: Firebase ID token
+  responses:
+    Problem:
+      description: |
+        An error. The body is always {"detail": "..."}
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [detail]
+            properties:
+              detail:
+                type: string
