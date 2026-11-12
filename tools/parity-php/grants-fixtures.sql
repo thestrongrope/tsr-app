@@ -40,7 +40,8 @@ INSERT INTO classes (id, code, language_id, link, name, class_level_id, started_
   (98503, 'GR-G-503', 7, 'grlnk98503', 'Gr Class Three', 2, '2025-01-06', 925001, 1, 'Offline', 'GRother', 'Grland', 'Gr Hall', 'A', 925001),
   (98504, 'GR-G-504', 7, 'grlnk98504', 'Gr Class Closed', 2, '2025-01-06', 925001, 1, 'Offline', 'GRville', 'Grland', 'Gr Hall', 'I', 925001),
   (98505, 'GR-L-505', 7, 'grlnk98505', 'Gr Ladies One', 2, '2025-01-06', 925001, 2, 'Offline', 'GRville', 'Grland', 'Gr Hall', 'A', 925001),
-  (98506, 'GR-L-506', 7, 'grlnk98506', 'Gr Ladies Two', 4, '2025-01-06', 925001, 2, 'Offline', 'GRlady', 'Grland', 'Gr Hall', 'A', 925001);
+  (98506, 'GR-L-506', 7, 'grlnk98506', 'Gr Ladies Two', 4, '2025-01-06', 925001, 2, 'Offline', 'GRlady', 'Grland', 'Gr Hall', 'A', 925001),
+  (98507, 'GR-G-507', 7, 'grlnk98507', 'Gr Closed Only', 2, '2025-01-06', 925001, 1, 'Offline', 'GRclosed', 'Grclosedland', 'Gr Hall', 'I', 925001);
 INSERT INTO tags (id, name) VALUES (9750001, 'gr-tag-a'), (9750002, 'gr-tag-b');
 INSERT INTO class_tags (class_id, tag_id, created_by) VALUES (98501, 9750001, 925001), (98502, 9750001, 925001), (98505, 9750002, 925001);
 

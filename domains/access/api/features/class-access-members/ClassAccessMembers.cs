@@ -29,7 +29,12 @@ internal static class ClassAccessMembersSlice
             return refusal!;
         }
 
-        var q = ClassAccessInput.Query(context.Request.Query["q"].ToString());
+        if (AdminMembers.QueryIsList(context.Request.Query))
+        {
+            return Problem.Detail(StatusCodes.Status422UnprocessableEntity, "q must be text");
+        }
+
+        var q = ClassAccessInput.Query(AdminMembers.LastQuery(context.Request.Query));
         if (q.Failed)
         {
             return q.Refusal!.ToResult();

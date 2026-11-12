@@ -14,6 +14,7 @@
  *   925051 revoke refusals (rules 9750041 ladies on a gents member, 9750042 either gender) 925052 revoke by a gents admin of a ladies member's rule (ladies member, rule 9750043)
  * Classes (language 7, gents unless said): 98501 A GRville Grland level 2 tag gr-tag-a 98502 A GRville Grland level 3 tag gr-tag-a 98503 A GRother Grland level 2 98504 CLOSED GRville level 2
  *   98505 ladies A GRville level 2 tag gr-tag-b 98506 ladies A GRlady Grland level 4
+ *   98507 CLOSED GRclosed Grclosedland level 2 (a city and a country no active class has)
  */
 INSERT INTO identity.users (token, email)
 SELECT v.token, 'gr.' || v.token || '@example.invalid' FROM (
@@ -55,7 +56,8 @@ INSERT INTO classes.classes (id, code, language_id, link, name, class_level_id, 
   (98503, 'GR-G-503', 7, 'grlnk98503', 'Gr Class Three', 2, DATE '2025-01-06', 925001, 1, 'Offline', 'GRother', 'Grland', 'Gr Hall', 'A', 925001),
   (98504, 'GR-G-504', 7, 'grlnk98504', 'Gr Class Closed', 2, DATE '2025-01-06', 925001, 1, 'Offline', 'GRville', 'Grland', 'Gr Hall', 'I', 925001),
   (98505, 'GR-L-505', 7, 'grlnk98505', 'Gr Ladies One', 2, DATE '2025-01-06', 925001, 2, 'Offline', 'GRville', 'Grland', 'Gr Hall', 'A', 925001),
-  (98506, 'GR-L-506', 7, 'grlnk98506', 'Gr Ladies Two', 4, DATE '2025-01-06', 925001, 2, 'Offline', 'GRlady', 'Grland', 'Gr Hall', 'A', 925001);
+  (98506, 'GR-L-506', 7, 'grlnk98506', 'Gr Ladies Two', 4, DATE '2025-01-06', 925001, 2, 'Offline', 'GRlady', 'Grland', 'Gr Hall', 'A', 925001),
+  (98507, 'GR-G-507', 7, 'grlnk98507', 'Gr Closed Only', 2, DATE '2025-01-06', 925001, 1, 'Offline', 'GRclosed', 'Grclosedland', 'Gr Hall', 'I', 925001);
 INSERT INTO classes.tags (id, name) VALUES (9750001, 'gr-tag-a'), (9750002, 'gr-tag-b');
 INSERT INTO classes.class_tags (class_id, tag_id, created_by) VALUES (98501, 9750001, 925001), (98502, 9750001, 925001), (98505, 9750002, 925001);
 

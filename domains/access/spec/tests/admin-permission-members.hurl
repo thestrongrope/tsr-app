@@ -184,3 +184,10 @@ q: no-such-member-gr
 HTTP 200
 [Asserts]
 jsonpath "$.members" count == 0
+
+# 9. PHP reads the LAST q when it is given twice
+GET {{base_url}}/admin/permissions/members?q=Gsrch+Plain&q=Gsrch+Many+01
+Authorization: {{auth_grants_925001}}
+HTTP 200
+[Asserts]
+jsonpath "$.members" count == 1
