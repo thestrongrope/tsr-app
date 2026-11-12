@@ -8,7 +8,7 @@ FROM (
   SELECT 925001 + seq AS token FROM seq_0_to_11
   UNION ALL SELECT 925021 + seq FROM seq_0_to_3
   UNION ALL SELECT 925031 + seq FROM seq_0_to_3
-  UNION ALL SELECT 925041 + seq FROM seq_0_to_11
+  UNION ALL SELECT 925041 + seq FROM seq_0_to_13
   UNION ALL SELECT 925060 + seq FROM seq_0_to_24) t
 WHERE NOT EXISTS (SELECT 1 FROM users u WHERE u.token = t.token);
 
@@ -55,8 +55,11 @@ INSERT INTO class_access_rules (id, token, gender, note, granted_by, reason, rev
   (9750034, 925050, 1, 'Gents, GRother', (SELECT id FROM users WHERE token = 925001), 'Gr fixture', NOW(), (SELECT id FROM users WHERE token = 925001), 'Gr fixture revoke'),
   (9750041, 925051, 2, 'Ladies, GRville', (SELECT id FROM users WHERE token = 925001), 'Gr fixture', NULL, NULL, NULL),
   (9750042, 925051, NULL, 'Any gender, GRville', (SELECT id FROM users WHERE token = 925001), 'Gr fixture', NULL, NULL, NULL),
-  (9750043, 925052, 2, 'Ladies, GRville', (SELECT id FROM users WHERE token = 925001), 'Gr fixture', NULL, NULL, NULL);
+  (9750043, 925052, 2, 'Ladies, GRville', (SELECT id FROM users WHERE token = 925001), 'Gr fixture', NULL, NULL, NULL),
+  (9750051, 925005, 1, 'Gents, GRville', (SELECT id FROM users WHERE token = 925001), 'Gr fixture', NULL, NULL, NULL),
+  (9750052, 925005, 1, 'Gents, GRother', (SELECT id FROM users WHERE token = 925001), 'Gr fixture', NULL, NULL, NULL);
 INSERT INTO class_access_rule_conditions (rule_id, field, negate, value, level_id) VALUES
   (9750021, 'city', 0, 'GRville', NULL), (9750022, 'level', 0, NULL, 2), (9750022, 'country', 0, 'Grland', NULL), (9750024, 'city', 0, 'GRother', NULL),
   (9750031, 'city', 0, 'GRville', NULL), (9750032, 'city', 0, 'GRville', NULL), (9750033, 'city', 0, 'GRville', NULL), (9750034, 'city', 0, 'GRother', NULL),
-  (9750041, 'city', 0, 'GRville', NULL), (9750042, 'city', 0, 'GRville', NULL), (9750043, 'city', 0, 'GRville', NULL);
+  (9750041, 'city', 0, 'GRville', NULL), (9750042, 'city', 0, 'GRville', NULL), (9750043, 'city', 0, 'GRville', NULL),
+  (9750051, 'city', 0, 'GRville', NULL), (9750052, 'city', 0, 'GRother', NULL);

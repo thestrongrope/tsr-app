@@ -11,6 +11,8 @@
  *   925031 to 925034 search names (a % in 925031, an _ in 925032) 925060 to 925084 twenty-five "Gsrch Many nn" members
  * Class access subjects (gents unless said): 925041 grant file 925042 revoke file (rules 9750021 and 9750022, a revoked 9750024) 925043 ladies 925044 no gender 925045 gents admin (peer)
  *   925046 super admin (peer) 925047 teacher role (6) 925048 guards file 925049 versions file 925050 read-only (rules 9750031 gents, 9750032 ladies, 9750033 either gender, 9750034 revoked)
+ *   925053 effect file (new API only: the assigned scope a rule gives) 925054 NUL byte cases (new API only)
+ *   (the second gents admin 925005 also holds gents rules 9750051 and 9750052: the revoke file's equal-rank and own-access cases)
  *   925051 revoke refusals (rules 9750041 ladies on a gents member, 9750042 either gender) 925052 revoke by a gents admin of a ladies member's rule (ladies member, rule 9750043)
  * Classes (language 7, gents unless said): 98501 A GRville Grland level 2 tag gr-tag-a 98502 A GRville Grland level 3 tag gr-tag-a 98503 A GRother Grland level 2 98504 CLOSED GRville level 2
  *   98505 ladies A GRville level 2 tag gr-tag-b 98506 ladies A GRlady Grland level 4
@@ -19,7 +21,7 @@
 INSERT INTO identity.users (token, email)
 SELECT v.token, 'gr.' || v.token || '@example.invalid' FROM (
   SELECT t AS token FROM generate_series(925001, 925012) t UNION ALL SELECT t FROM generate_series(925021, 925024) t UNION ALL SELECT t FROM generate_series(925031, 925034) t
-  UNION ALL SELECT t FROM generate_series(925041, 925052) t UNION ALL SELECT t FROM generate_series(925060, 925084) t) v
+  UNION ALL SELECT t FROM generate_series(925041, 925054) t UNION ALL SELECT t FROM generate_series(925060, 925084) t) v
 WHERE NOT EXISTS (SELECT 1 FROM identity.users u WHERE u.token = v.token);
 UPDATE identity.users SET email = 'gr.' || token || '@example.invalid' WHERE token BETWEEN 925000 AND 925999 AND email <> 'gr.' || token || '@example.invalid';
 
@@ -71,8 +73,11 @@ INSERT INTO access.class_access_rules (id, token, gender, note, created_at, gran
   (9750034, 925050, 1, 'Gents, GRother', now(), (SELECT id FROM identity.users WHERE token = 925001), 'Gr fixture', now(), (SELECT id FROM identity.users WHERE token = 925001), 'Gr fixture revoke'),
   (9750041, 925051, 2, 'Ladies, GRville', now(), (SELECT id FROM identity.users WHERE token = 925001), 'Gr fixture', NULL, NULL, NULL),
   (9750042, 925051, NULL, 'Any gender, GRville', now(), (SELECT id FROM identity.users WHERE token = 925001), 'Gr fixture', NULL, NULL, NULL),
-  (9750043, 925052, 2, 'Ladies, GRville', now(), (SELECT id FROM identity.users WHERE token = 925001), 'Gr fixture', NULL, NULL, NULL);
+  (9750043, 925052, 2, 'Ladies, GRville', now(), (SELECT id FROM identity.users WHERE token = 925001), 'Gr fixture', NULL, NULL, NULL),
+  (9750051, 925005, 1, 'Gents, GRville', now(), (SELECT id FROM identity.users WHERE token = 925001), 'Gr fixture', NULL, NULL, NULL),
+  (9750052, 925005, 1, 'Gents, GRother', now(), (SELECT id FROM identity.users WHERE token = 925001), 'Gr fixture', NULL, NULL, NULL);
 INSERT INTO access.class_access_rule_conditions (rule_id, field, negate, value, level_id) VALUES
   (9750021, 'city', false, 'GRville', NULL), (9750022, 'level', false, NULL, 2), (9750022, 'country', false, 'Grland', NULL), (9750024, 'city', false, 'GRother', NULL),
   (9750031, 'city', false, 'GRville', NULL), (9750032, 'city', false, 'GRville', NULL), (9750033, 'city', false, 'GRville', NULL), (9750034, 'city', false, 'GRother', NULL),
-  (9750041, 'city', false, 'GRville', NULL), (9750042, 'city', false, 'GRville', NULL), (9750043, 'city', false, 'GRville', NULL);
+  (9750041, 'city', false, 'GRville', NULL), (9750042, 'city', false, 'GRville', NULL), (9750043, 'city', false, 'GRville', NULL),
+  (9750051, 'city', false, 'GRville', NULL), (9750052, 'city', false, 'GRother', NULL);

@@ -27,7 +27,7 @@ fi
 
 FILES=(domains/access/spec/tests/admin-permission-*.hurl domains/access/spec/tests/class-access-*.hurl)
 TOKENS=(925001 925002 925003 925004 925005 925006 925007 925008 925009 925010 925011 925012 925021 925022 925023 925024
-  925041 925042 925043 925044 925045 925046 925047 925048 925049 925050 925051 925052)
+  925041 925042 925043 925044 925045 925046 925047 925048 925049 925050 925051 925052 925053 925054)
 
 parity() { docker compose -p tsr-parity -f tools/parity-php/compose.parity.yml --env-file tools/parity-php/parity.env "$@"; }
 php_sql() { parity exec -T db sh -c 'mariadb -uroot -p"$MARIADB_ROOT_PASSWORD" tsr_synth'; }
