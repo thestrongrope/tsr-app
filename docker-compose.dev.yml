@@ -108,6 +108,10 @@ services:
       TSR_APP_VERSIONS_FILE: /etc/tsr/app_versions.json
       # Where PDF downloads are rendered (the gotenberg service). Required: the API does not start without it. A renderer that is down answers 503 for a PDF; xlsx still works.
       TSR_GOTENBERG_URL: http://gotenberg:3000
+      # Where GET /search asks. Empty (the default) means no index: every search answers "unavailable". tools/dev-stack.sh sets it together with the
+      # compose profile "workers", which starts the elasticsearch service below.
+      TSR_ELASTICSEARCH_URL: ${TSR_ELASTICSEARCH_URL:-}
+      TSR_ELASTICSEARCH_PASSWORD: local-only-es
     volumes:
       - ./domains/platform/spec/tests/app_versions.synthetic.json:/etc/tsr/app_versions.json:ro
     depends_on:
