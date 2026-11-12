@@ -7,8 +7,9 @@
 # where the two ever differ, PHP wins (docs/specs/initial-build/php-parity-feedback.md).
 # Version 5 (PHP of 12 Nov 2026): `navigation`, `revision`, the revision as the ETag, 304 for If-None-Match. The revision's
 # value is not pinned here: only its shape, that it comes back as the tag, that two members with the same answer share it
-# (role 0 and role 6) and that a different answer has another. Not asserted: 503 (needs unreadable storage; database test),
-# and PHP's X-Permissions-Revision header on every signed-in response, which the new API does not send yet.
+# (role 0 and role 6) and that a different answer has another. Not asserted: 503 (needs unreadable storage; database test).
+# The header X-Permissions-Revision is the member's revision on every response of a request whose sign-in passed (here: this
+# route's 200 and 304, and the 200 and 404 of GET /me/permissions/{permission}); a request refused at sign-in has none.
 
 
 # Member, role 0: the member set only
@@ -81,6 +82,7 @@ HTTP 304
 header "ETag" == "{{member_etag}}"
 header "Cache-Control" == "private, no-cache"
 header "Vary" contains "Authorization"
+header "X-Permissions-Revision" == "{{member_revision}}"
 bytes count == 0
 
 # A weak tag matches (weak comparison)
@@ -114,6 +116,7 @@ If-None-Match: "0000000000000000"
 HTTP 200
 [Asserts]
 header "ETag" == "{{member_etag}}"
+header "X-Permissions-Revision" == "{{member_revision}}"
 jsonpath "$.revision" == "{{member_revision}}"
 jsonpath "$.permissions" count == 21
 
@@ -124,6 +127,19 @@ If-None-Match: {{member_revision}}
 HTTP 200
 [Asserts]
 jsonpath "$.revision" == "{{member_revision}}"
+
+# Any other signed-in route carries the same revision in the header, whatever it answers
+GET {{base_url}}/me/permissions/feedback:create
+Authorization: Bearer {{member_token}}
+HTTP 200
+[Asserts]
+header "X-Permissions-Revision" == "{{member_revision}}"
+
+GET {{base_url}}/me/permissions/nope:read
+Authorization: Bearer {{member_token}}
+HTTP 404
+[Asserts]
+header "X-Permissions-Revision" == "{{member_revision}}"
 
 # Super admin, role 1
 POST {{emulator_url}}/projects/{{project_id}}/accounts
@@ -641,9 +657,11 @@ Authorization: Bearer {{guest_token}}
 HTTP 403
 [Asserts]
 jsonpath "$.detail" == "Registration incomplete"
+header "X-Permissions-Revision" not exists
 
 # No sign-in
 GET {{base_url}}/me/permissions
 HTTP 401
 [Asserts]
 jsonpath "$.detail" == "Not authenticated"
+header "X-Permissions-Revision" not exists

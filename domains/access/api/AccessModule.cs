@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -44,6 +45,13 @@ public static class AccessModule
         services.AddScoped<UserPermissionsHandler>();
         return services;
     }
+
+    /// <summary>
+    /// Adds the <c>X-Permissions-Revision</c> response header to every request whose sign-in passed. The host calls it
+    /// right after identity's middleware, which establishes the caller.
+    /// </summary>
+    public static IApplicationBuilder UsePermissionsRevision(this IApplicationBuilder app) =>
+        app.UseMiddleware<PermissionsRevisionHeader>();
 
     public static IEndpointRouteBuilder MapAccess(this IEndpointRouteBuilder routes)
     {
