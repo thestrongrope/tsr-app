@@ -37,3 +37,18 @@ Found while porting (12 Nov 2026 on). Nothing here is proven or fixed yet; each 
 | 7 | Missing workers, none of them an API route: the push-queue drain, the scheduled class-notification sender, the search-index feeder, the WhatsApp reminder runner. | lanes |
 | 8 | Two lanes each made a `v_class_levels` view; the later copy was removed from its (never applied) migration at merge. | main thread |
 | 9 | `NotificationsCommands.AnnounceAsync` was extended by two lanes and is now one command (flat optional fields, `AnnounceCountedAsync` with `AnnounceResult`). The push is queued before the notification is written (both PHP paths act first, then record; the quiz publish needs the queue count). Two small changes for the nudge: its queued rows are created by the sender (the nudge lane used the system), and its push data no longer carries a null `action_link` (PHP sent only type, sent_at, class_ids). | merge |
+
+## Case-sensitive comparisons (found in the test phase, 12 Nov 2026)
+
+Every `string` column is `citext` by convention (`shared/api/TsrConvention.cs`), to match MariaDB. A C# `string` parameter is sent as `text`, and `citext_column = {value}` then compares as text: CASE-SENSITIVE unless the SQL says `{value}::citext`. Two test lanes each found one such bug (the device id in notifications, the quiz name duplicate check in assessment; both fixed). A read-only sweep of all 162 files that run SQL (about 400 comparisons read) lists these as still open; fix each test-first once the test lanes are merged:
+
+| # | Where | What goes wrong | Reach |
+|---|---|---|---|
+| C1 | `domains/platform/api/PlatformCommands.cs` (`recipient = any({values})`), called by identity's deletion completion | A queued message whose stored recipient differs in letter case from the erased member's mobile or device id is NOT redacted | privacy; admin action |
+| C2 | `domains/notifications/api/NotificationsCommands.cs` (`FindNotificationAsync`: title, body, action_link) | The "same announcement already recorded" lookup misses a case variant: a duplicate inbox entry | low |
+| C3 | `domains/classes/api/features/class-create/ClassCreate.cs` (`link = {link}`) | The "link already taken" check is case-sensitive while joining by link is not: a new class can get a link that differs only by case from an existing one, and a join by that link is then ambiguous | a PROVEN route (B2) |
+| C4 | `domains/identity/api/domain/DeletionRequests.cs` (`r.status::text = {status}::text`) | A status filter in another letter case matches nothing | low |
+| C5 | `domains/assessment/api/domain/QuizStateStore.cs` (`name = {name}`) | Latent: the names are lower-case constants | none today |
+| C6 | `domains/assessment/api/features/manage-standard-copy/ManageStandardCopy.cs` (`mcq_code = {standard.Code}`) | The questions of a standard MCQ whose code differs in case between its two tables are not copied | low |
+
+Not covered by the sweep: view bodies in the raw-SQL migrations, grouping or ordering over a `::text` cast, and most EF LINQ string comparisons (EF is believed to send the parameter as the column's type; one confirmed site to check: `domains/identity/api/domain/MemberDirectory.cs`, `u.Email == user.Email`). A structural guard is worth considering: a test that scans SQL literals for a citext column compared with an interpolated value without a cast, like `SqlBoundaryTests`.
