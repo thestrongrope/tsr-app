@@ -30,7 +30,8 @@ public sealed class PublicSurfaceTests
         // Tables and placeholder routes only so far: the module class and nothing else.
         ["classes"] = ["ClassesModule"],
         ["assessment"] = ["AssessmentModule"],
-        ["notifications"] = ["NotificationsModule"],
+        // notifications: the module; NotificationsCommands (published commands: announce to members) with the record it takes (Announcement).
+        ["notifications"] = ["NotificationsModule", "NotificationsCommands", "Announcement"],
         ["search"] = ["SearchModule"],
     };
 

@@ -232,6 +232,142 @@ paths:
         "403": {$ref: "#/components/responses/Problem"}
         "409": {$ref: "#/components/responses/Problem"}
         "422": {$ref: "#/components/responses/Problem"}
+  /admin/quiz:
+    get:
+      operationId: adminQuiz
+      summary: The quiz competition overview
+      description: |
+        Permission quiz:admin (403) first.
+        Answers {settings, quiz_day, download, eligibility[], gates{generate, mega, mega_student}, winners{episodes[], mega, mega_student}, activity{...}, can_reset}. No sheet ids, no token lists, no replaced winners. Slice: features/admin-quiz/AdminQuiz.cs.
+      security:
+        - memberToken: []
+      responses:
+        "200":
+          description: See the description
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+  /admin/quiz/settings/refresh:
+    post:
+      operationId: adminQuizSettingsRefresh
+      summary: Read the settings sheet
+      description: |
+        Permission quiz:admin (403) first. A change holds the quiz admin lock: 409 "Another quiz admin action is running. Try again in a moment.".
+        Reads tabs Technical and Functional of the settings sheet (setting TSR_QUIZ_SETTINGS_SHEET_ID) and saves the settings; 502 "The settings sheet could not be read. The settings are unchanged." when it cannot be read. A move from a not-live mode to a live one writes
+        the inbox copy and queues the push rows (nothing is sent). Answers {outcome, message, changed, settings}. Slice: features/admin-quiz-settings-refresh/AdminQuizSettingsRefresh.cs.
+      security:
+        - memberToken: []
+      responses:
+        "200":
+          description: See the description
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "502": {$ref: "#/components/responses/Problem"}
+  /admin/quiz/download:
+    post:
+      operationId: adminQuizDownload
+      summary: Download the episodes responses and rebuild the scoreboard
+      description: |
+        Permission quiz:admin (403) first. A change holds the quiz admin lock: 409 "Another quiz admin action is running. Try again in a moment.".
+        409 until the settings were loaded; 502 "Episode N could not be read from the sheet. Nothing was changed.". Answers {outcome, message, changed, quiz_day, submissions[{episode, submissions}]}. Slice: features/admin-quiz-download/AdminQuizDownload.cs.
+      security:
+        - memberToken: []
+      responses:
+        "200":
+          description: See the description
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "502": {$ref: "#/components/responses/Problem"}
+  /admin/quiz/winners/generate:
+    post:
+      operationId: adminQuizWinnersGenerate
+      summary: Draw winners that have none
+      description: |
+        Permission quiz:admin (403) first. A change holds the quiz admin lock: 409 "Another quiz admin action is running. Try again in a moment.".
+        Body {kind}: 422 "Unknown kind."; 409 settings not loaded; 404 "This quiz has no <kind> draw." (a Grand quiz offers grand, a Mega quiz daily, mega, mega_student); 409 with the reason when nothing could be drawn.
+        Answers {outcome: complete|incomplete, message, changed, drawn, missing, episodes[{episode|null, prize, drawn, missing}]}. Slice: features/admin-quiz-winners-generate/AdminQuizWinnersGenerate.cs.
+      security:
+        - memberToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [kind]
+              properties:
+                kind: {type: string, enum: [daily, grand, mega, mega_student]}
+      responses:
+        "200":
+          description: See the description
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /admin/quiz/winners/regenerate:
+    post:
+      operationId: adminQuizWinnersRegenerate
+      summary: Draw again, archiving the replaced winners
+      description: |
+        Permission quiz:admin (403) first. A change holds the quiz admin lock: 409 "Another quiz admin action is running. Try again in a moment.".
+        Body {kind}: 422 "Unknown kind."; 409 settings not loaded; 404 "This quiz has no <kind> draw." (a Grand quiz offers grand, a Mega quiz daily, mega, mega_student); 409 with the reason when nothing could be drawn.
+        Answers {outcome: complete|incomplete, message, changed, drawn, missing, episodes[{episode|null, prize, drawn, missing}]}. Slice: features/admin-quiz-winners-regenerate/AdminQuizWinnersRegenerate.cs.
+      security:
+        - memberToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [kind]
+              properties:
+                kind: {type: string, enum: [daily, grand, mega, mega_student]}
+      responses:
+        "200":
+          description: See the description
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /admin/quiz/publish:
+    post:
+      operationId: adminQuizPublish
+      summary: Write the scoreboard or winners into the public sheet (Mega quizzes)
+      description: |
+        Permission quiz:admin (403) first. A change holds the quiz admin lock: 409 "Another quiz admin action is running. Try again in a moment.".
+        Body {what: scoreboard|winners|mega|mega_student}: 422 "Unknown target."; 409 settings not loaded or no winner drawn; 404 "This quiz has nothing to publish from here." on a Grand quiz; 502 on a sheet failure.
+        Answers {outcome, message, changed, rows}. Slice: features/admin-quiz-publish/AdminQuizPublish.cs.
+      security:
+        - memberToken: []
+      responses:
+        "200":
+          description: See the description
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "502": {$ref: "#/components/responses/Problem"}
+  /admin/quiz/reset:
+    post:
+      operationId: adminQuizReset
+      summary: Delete the cycle data
+      description: |
+        Permission quiz:admin (403) first. A change holds the quiz admin lock: 409 "Another quiz admin action is running. Try again in a moment.".
+        Then permission quiz:reset (403 "Deleting all quiz data needs the quiz reset permission."). Archives the winners, clears scoreboard, quiz day, timestamps, winners and participants; keeps the settings and the replaced-winners record.
+        Answers {outcome, message, changed}. Slice: features/admin-quiz-reset/AdminQuizReset.cs.
+      security:
+        - memberToken: []
+      responses:
+        "200":
+          description: See the description
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
 components:
   securitySchemes:
     memberToken:

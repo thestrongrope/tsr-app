@@ -19,7 +19,8 @@ Push, WhatsApp reminders, devices, scheduled class notifications and the notifie
   (`user_notifications` to `notifications`, `notifier_sent_messages` to `notifier_runs`) stay inside the schema.
 - **Wall-clock columns** (not instants): `class_scheduled_notifications.send_at` is `timestamp without time zone`; `send_time` here and in `notifier_reminders` is `time`.
   They are read in the row's own zone (`tz`, `timezone`). Every other date-time is `timestamptz`, read as UTC.
-- Dependencies: none (`NotificationsModule.Dependencies` is empty).
+- Dependencies: `access` (only because platform needs it to start), `platform` (`PlatformCommands.QueueMessagesAsync`, the push queue), `identity` (SQL read of `identity.v_users`: token and email, to leave the demo cohort out).
+- Published command (`NotificationsCommands.AnnounceAsync(db, Announcement, ct)`, on the caller's open transaction; nothing is sent, no worker exists): the inbox copy (found again by title, body and link among system notifications, else created with created_by 0 and fanned out) and one queued push per device, deduped by the caller's key. `Announcement(Title, Body, ActionLink, DataType, DedupeKey, Tokens)`: `Tokens` null is every registered member, else exactly those member tokens (a class lane passes the class's students). First caller: assessment's quiz settings refresh.
 - Events: none published, none consumed.
 
 ## Checks

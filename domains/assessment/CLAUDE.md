@@ -25,12 +25,14 @@ Spot quizzes, standard MCQs, quiz competitions.
 
   Consumed: none. The answers are never in the key-less routes: the questions route never selects the answer column; only the caller's own answered quizzes show the correct text.
 
-## Google Sheets, locks, settings (lane sheets, build-out)
+## Google Sheets, quiz state, locks, settings (lane sheets, build-out)
 
-- `domain/ISheets.cs` is the one boundary to Google Sheets; `GoogleSheets.cs` calls the REST API over HTTP with a service-account JWT (no SDK). Optional setting `TSR_GOOGLE_SERVICE_ACCOUNT_B64` (base64 service-account JSON): without it the API starts and a sheet read fails with a `SheetsException`. Never log it.
-- Built: `GET /standard-mcqs/sources`, `POST /standard-mcqs/update` (slices `standard-mcq-sources`, `standard-mcq-update`; saved level is the chosen id + 1, as PHP).
+- `domain/ISheets.cs` is the one boundary to Google Sheets (read a range, write a range); `GoogleSheets.cs` calls the REST API over HTTP with a service-account JWT (no SDK). Optional settings (the API starts without them; a sheet route then answers 502 or "could not be read"): `TSR_GOOGLE_SERVICE_ACCOUNT_B64` (base64 service-account JSON, never logged) and `TSR_QUIZ_SETTINGS_SHEET_ID` (PHP `QUIZ_SETTINGS_GOOGLE_SHEET_ID`).
+- Built: `GET /standard-mcqs/sources`, `POST /standard-mcqs/update` (slices `standard-mcq-sources`, `standard-mcq-update`; saved level is the chosen id + 1, as PHP) and the quiz admin: `GET /admin/quiz`, `POST /admin/quiz/settings/refresh`, `/download`, `/winners/generate`, `/winners/regenerate`, `/publish`, `/reset` (slices `admin-quiz*`; shared rules in `domain/Quiz*.cs`: `QuizSettings`, `QuizEligibility`, `QuizDraw` with the `IQuizRandom` seam, `QuizDrawFlow`, `QuizOverview`, `QuizAdmin`, `QuizStateStore`).
+- Table `quiz_state(name pk, document jsonb, updated_at)` (migration `QuizState`) replaces PHP's JSON files: documents `settings`, `participants`, `quiz_day`, `timestamps`, `scoreboard`, `winners`, `winners_replaced` (append only; the archive). Reset clears five (scoreboard, quiz_day, timestamps, winners, participants). Member data (names, tokens, cities) lives only in these documents and the responses; never in logs or events.
 - Advisory locks (transaction-level, single bigint key, `domain/AssessmentLocks.cs`; membership's 3001 is the two-key form): 5001 standard MCQ update, 5002 quiz admin (PHP `quiz_admin`). No other code may use 5001 to 5099.
-- Event `assessment.standard_mcqs_updated` {languageId, levelId, quizzes}: one per updated language and level.
+- Events: `assessment.standard_mcqs_updated` {languageId, levelId, quizzes} (one per updated pair); `assessment.quiz_state_changed` {action: settings_refresh|download|generate|regenerate|publish|reset}.
+- Dependencies added: `notifications` (`NotificationsCommands.AnnounceAsync`, written by the settings refresh when a quiz goes live). Reads through views: `membership.v_members` (name, city, country), `classes.v_enrolments` and `classes.v_classes` (enrolled students).
 - Notes for the test phase: `docs/specs/initial-build/lane-sheets-notes.md`.
 
 ## Checks

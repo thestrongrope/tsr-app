@@ -36,14 +36,7 @@ internal static class Planned
             ("GET", "/reports/mcq-adherence"),
             ("GET", "/reports/mcq-adherence/download-all"),
             ("GET", "/reports/mcq-adherence/{class_id}"),
-            ("GET", "/reports/mcq-adherence/{class_id}/download"),
-            ("GET", "/admin/quiz"),
-            ("POST", "/admin/quiz/settings/refresh"),
-            ("POST", "/admin/quiz/download"),
-            ("POST", "/admin/quiz/winners/generate"),
-            ("POST", "/admin/quiz/winners/regenerate"),
-            ("POST", "/admin/quiz/publish"),
-            ("POST", "/admin/quiz/reset"));
+            ("GET", "/reports/mcq-adherence/{class_id}/download"));
         return routes;
     }
 }

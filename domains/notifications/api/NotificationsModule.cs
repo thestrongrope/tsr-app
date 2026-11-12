@@ -9,8 +9,8 @@ namespace Tsr.Notifications.Api;
 /// </summary>
 public static class NotificationsModule
 {
-    /// <summary>Other domain modules this one may use (domains/CLAUDE.md rule 7). None yet: it holds ids of other domains as plain integers.</summary>
-    public static readonly IReadOnlyList<string> Dependencies = [];
+    /// <summary>Other domain modules this one may use (domains/CLAUDE.md rule 7). platform (the push queue command); identity is read through its v_users view. Other domains' ids are plain integers.</summary>
+    public static readonly IReadOnlyList<string> Dependencies = ["access", "identity", "platform"];
 
     public static IServiceCollection AddNotifications(this IServiceCollection services)
     {

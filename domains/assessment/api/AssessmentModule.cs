@@ -2,6 +2,13 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Tsr.Assessment.Api.Domain;
+using Tsr.Assessment.Api.Features.AdminQuiz;
+using Tsr.Assessment.Api.Features.AdminQuizDownload;
+using Tsr.Assessment.Api.Features.AdminQuizPublish;
+using Tsr.Assessment.Api.Features.AdminQuizReset;
+using Tsr.Assessment.Api.Features.AdminQuizSettingsRefresh;
+using Tsr.Assessment.Api.Features.AdminQuizWinnersGenerate;
+using Tsr.Assessment.Api.Features.AdminQuizWinnersRegenerate;
 using Tsr.Assessment.Api.Features.ChildScores;
 using Tsr.Assessment.Api.Features.ClassMyScores;
 using Tsr.Assessment.Api.Features.ClassQuizzes;
@@ -22,14 +29,19 @@ namespace Tsr.Assessment.Api;
 /// </summary>
 public static class AssessmentModule
 {
-    /// <summary>Other domain modules this one may use (domains/CLAUDE.md rule 7). access (permissions); classes, membership and identity are read through their v_* views.</summary>
-    public static readonly IReadOnlyList<string> Dependencies = ["access"];
+    /// <summary>Other domain modules this one may use (domains/CLAUDE.md rule 7). access (permissions); notifications (the quiz announcement command); classes, membership and identity are read through their v_* views.</summary>
+    public static readonly IReadOnlyList<string> Dependencies = ["access", "notifications"];
 
     public static IServiceCollection AddAssessment(this IServiceCollection services)
     {
         services.AddDomainContext<AssessmentContext>(AssessmentContext.SchemaName);
         // Google Sheets: one client for the process (it caches the access token); the credential is an optional setting, so the API starts without it and a sheet route then answers 502 or "could not be read".
-        services.AddOptions<GoogleSheetsSettings>().Configure<IConfiguration>((settings, configuration) => settings.ServiceAccountB64 = configuration[GoogleSheetsSettings.Key]);
+        services.AddOptions<GoogleSheetsSettings>().Configure<IConfiguration>((settings, configuration) =>
+        {
+            settings.ServiceAccountB64 = configuration[GoogleSheetsSettings.Key];
+            settings.QuizSettingsSheetId = configuration[GoogleSheetsSettings.QuizSettingsSheetKey];
+        });
+        services.AddSingleton<IQuizRandom, CryptoQuizRandom>();
         services.AddSingleton<ISheets>(provider => new GoogleSheets(
             provider.GetRequiredService<IHttpClientFactory>().CreateClient("google-sheets"),
             provider.GetRequiredService<Microsoft.Extensions.Options.IOptions<GoogleSheetsSettings>>(),
@@ -55,6 +67,13 @@ public static class AssessmentModule
         routes.MapQuizSubmit();
         routes.MapStandardMcqSources();
         routes.MapStandardMcqUpdate();
+        routes.MapAdminQuiz();
+        routes.MapAdminQuizDownload();
+        routes.MapAdminQuizPublish();
+        routes.MapAdminQuizReset();
+        routes.MapAdminQuizSettingsRefresh();
+        routes.MapAdminQuizWinnersGenerate();
+        routes.MapAdminQuizWinnersRegenerate();
         routes.MapPlannedRoutes();
         return routes;
     }

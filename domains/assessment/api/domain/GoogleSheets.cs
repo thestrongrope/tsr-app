@@ -1,4 +1,5 @@
 using System.Net.Http.Headers;
+using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -12,6 +13,11 @@ internal sealed class GoogleSheetsSettings
     public const string Key = "TSR_GOOGLE_SERVICE_ACCOUNT_B64";
 
     public string? ServiceAccountB64 { get; set; }
+
+    /// <summary>Optional <c>TSR_QUIZ_SETTINGS_SHEET_ID</c> (PHP <c>QUIZ_SETTINGS_GOOGLE_SHEET_ID</c>): the spreadsheet the quiz settings are read from. Absent: a settings refresh answers 502.</summary>
+    public const string QuizSettingsSheetKey = "TSR_QUIZ_SETTINGS_SHEET_ID";
+
+    public string? QuizSettingsSheetId { get; set; }
 }
 
 /// <summary>
@@ -37,6 +43,16 @@ internal sealed class GoogleSheets(HttpClient http, IOptions<GoogleSheetsSetting
         using var response = await SendAsync(request, ct);
         var bytes = await response.Content.ReadAsByteArrayAsync(ct);
         return ParseValues(bytes);
+    }
+
+    public async Task WriteAsync(string spreadsheetId, string range, IReadOnlyList<IReadOnlyList<object?>> rows, CancellationToken ct)
+    {
+        var uri = new Uri(ApiBase + Uri.EscapeDataString(spreadsheetId) + "/values/" + Uri.EscapeDataString(range) + "?valueInputOption=RAW");
+        using var request = new HttpRequestMessage(HttpMethod.Put, uri)
+        {
+            Content = JsonContent.Create(new { range, majorDimension = "ROWS", values = rows }),
+        };
+        using var response = await SendAsync(request, ct);
     }
 
     public void Dispose() => _tokenLock.Dispose();
