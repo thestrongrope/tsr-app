@@ -171,7 +171,7 @@ paths:
       summary: The caller's active classes (taught, attended, and with include=managed the ones their reach covers)
       description: |
         Permission classes:read; no gender needed. Query include=managed, level, language (int casts), q (LIKE on code or name; "0" is empty). Conducting classes first, then newest id first.
-        role is conducting, attending or managing; studentCount only for managing; joinUrl is null until the public web base is configured.
+        role is conducting, attending or managing; studentCount only for managing; joinUrl is the public join page (TSR_PUBLIC_WEB_BASE plus /join/<the class link>) for the teacher and whoever reaches the class, null for a student, without a link or when the setting is not set (also on GET /classes/{id} and in the manage payload).
         Slice: features/classes-list/ClassesList.cs.
       security:
         - memberToken: []

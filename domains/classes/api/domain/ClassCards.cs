@@ -1,5 +1,6 @@
 using System.Globalization;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Tsr.Shared.Api;
 
 namespace Tsr.Classes.Api.Domain;
@@ -26,12 +27,13 @@ internal static class ClassCards
         DateOnly? StartedOn,
         string? TeacherName,
         string? TeacherMobile,
-        string? Role);
+        string? Role,
+        string? JoinCode);
 
     internal sealed record Slot(int ClassId, int Day, int Hour, int Minute, string? Timezone);
 
-    /// <summary>api_class_spec. <c>joinUrl</c> is the public join page (PHP: public_web_base()); it is null as on PHP without REDIRECT_URI (deferred: the setting).</summary>
-    public static Dictionary<string, object?> ToCard(Row r) => new()
+    /// <summary>api_class_spec. <c>JoinCode</c> is the class's link only when the caller may share it (the teacher or a manager; each query decides).</summary>
+    public static Dictionary<string, object?> ToCard(Row r, IConfiguration configuration) => new()
     {
         ["id"] = r.Id,
         ["code"] = r.Code,
@@ -47,8 +49,23 @@ internal static class ClassCards
         ["format"] = Text(r.Format),
         ["startedOn"] = r.StartedOn?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
         ["role"] = Text(r.Role),
-        ["joinUrl"] = null,
+        ["joinUrl"] = JoinUrl(configuration, r.JoinCode),
     };
+
+    /// <summary>
+    /// PHP ClassesModel::joinUrl: the public join page of a class, the public web base plus /join/ plus the class's link. PHP takes the base from REDIRECT_URI
+    /// (public_web_base()); here it is the setting <c>TSR_PUBLIC_WEB_BASE</c>. Null without a base or without a link, and the app then hides its share tile.
+    /// </summary>
+    public static string? JoinUrl(IConfiguration configuration, string? link)
+    {
+        var publicWebBase = (configuration["TSR_PUBLIC_WEB_BASE"] ?? string.Empty).TrimEnd('/');
+        if (publicWebBase.Length == 0 || string.IsNullOrEmpty(link))
+        {
+            return null;
+        }
+
+        return publicWebBase + "/join/" + link;
+    }
 
     /// <summary>api_schedule_spec per slot.</summary>
     public static Dictionary<string, object?> ToSchedule(Slot s) => new()

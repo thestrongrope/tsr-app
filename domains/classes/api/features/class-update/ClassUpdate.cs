@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
 using Tsr.Shared.Api;
@@ -45,7 +46,8 @@ internal static partial class ClassUpdateSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string class_id, HttpContext context, ClassesContext db, Permissions permissions, TimeProvider clock, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(
+        string class_id, HttpContext context, ClassesContext db, Permissions permissions, IConfiguration configuration, TimeProvider clock, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -78,7 +80,7 @@ internal static partial class ClassUpdateSlice
         }
 
         await SaveAsync(db, clock, head.Id, changes.Value!, caller.Token, ct);
-        return Results.Json(await ManagePayload.BuildAsync(db, permissions, caller, head.Id, ct));
+        return Results.Json(await ManagePayload.BuildAsync(db, permissions, configuration, caller, head.Id, ct));
     }
 
     private static async Task<Result<Changes>> ParseAsync(ClassesContext db, JsonBody body, ClassGuards.ClassHead head, CancellationToken ct)

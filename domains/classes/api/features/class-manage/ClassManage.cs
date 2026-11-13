@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.Configuration;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
 using Tsr.Shared.Api;
@@ -19,7 +20,8 @@ internal static class ClassManageSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string class_id, HttpContext context, ClassesContext db, Permissions permissions, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(
+        string class_id, HttpContext context, ClassesContext db, Permissions permissions, IConfiguration configuration, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -39,6 +41,6 @@ internal static class ClassManageSlice
         }
 
         await ClassGuards.LogAdminAccessAsync(db, context, permissions, caller, ct);
-        return Results.Json(await ManagePayload.BuildAsync(db, permissions, caller, head.Id, ct));
+        return Results.Json(await ManagePayload.BuildAsync(db, permissions, configuration, caller, head.Id, ct));
     }
 }

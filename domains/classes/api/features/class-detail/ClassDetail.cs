@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
 using Tsr.Shared.Api;
@@ -22,7 +23,8 @@ internal static class ClassDetailSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string class_id, HttpContext context, ClassesContext db, Permissions permissions, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(
+        string class_id, HttpContext context, ClassesContext db, Permissions permissions, IConfiguration configuration, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -62,7 +64,8 @@ internal static class ClassDetailSlice
                        case when c.teacher = {caller.Token} then 'conducting'
                             when {manager} and not exists (select 1 from classes.class_students cs where cs.class_id = c.id and cs.token_no = {caller.Token}
                                                            and cs.status = 'A' and cs.removed_at is null) then 'managing'
-                            else 'attending' end as "Role"
+                            else 'attending' end as "Role",
+                       case when ({isTeacher} or {manager}) and c.link <> '' then c.link::text end as "JoinCode"
                 from classes.classes c
                 left join classes.class_levels cl on cl.id = c.class_level_id
                 left join membership.v_members t on t.token = c.teacher
@@ -80,7 +83,7 @@ internal static class ClassDetailSlice
         }
 
         var slots = await ClassCards.SlotsAsync(db, [id], ct);
-        var body = ClassCards.ToCard(rows[0]);
+        var body = ClassCards.ToCard(rows[0], configuration);
         body["schedules"] = slots[id].Select(ClassCards.ToSchedule).ToList();
         return Results.Json(body);
     }

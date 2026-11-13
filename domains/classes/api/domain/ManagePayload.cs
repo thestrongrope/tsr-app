@@ -1,5 +1,6 @@
 using System.Globalization;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Tsr.Access.Api;
 using Tsr.Shared.Api;
 
@@ -31,7 +32,8 @@ internal static class ManagePayload
         string? Country,
         string? Location,
         int? Teacher,
-        string? TeacherName);
+        string? TeacherName,
+        string? Link);
 
     private sealed record Option(int Id, string? Name);
 
@@ -41,13 +43,14 @@ internal static class ManagePayload
 
     private sealed record Destination(int Id, string Code, string? Name);
 
-    public static async Task<Dictionary<string, object?>> BuildAsync(ClassesContext db, Permissions permissions, Caller caller, int classId, CancellationToken ct)
+    public static async Task<Dictionary<string, object?>> BuildAsync(
+        ClassesContext db, Permissions permissions, IConfiguration configuration, Caller caller, int classId, CancellationToken ct)
     {
         var rows = await db.Database
             .SqlQuery<ClassRow>($"""
                 select c.id as "Id", c.code as "Code", c.name as "Name", c.class_level_id as "LevelId", cl.name as "LevelName", c.gender as "Gender", g.name as "GenderName",
                        c.language_id as "LanguageId", c.started_on as "StartedOn", c.format as "Format", c.address as "Address", c.city as "City", c.country as "Country",
-                       c.location as "Location", c.teacher as "Teacher", t.name as "TeacherName"
+                       c.location as "Location", c.teacher as "Teacher", t.name as "TeacherName", c.link::text as "Link"
                 from classes.classes c
                 join platform.v_genders g on g.id = c.gender
                 join classes.class_levels cl on cl.id = c.class_level_id
@@ -64,7 +67,7 @@ internal static class ManagePayload
         var can = await ClassRoster.CanAsync(permissions, caller, classId, ct);
         var payload = new Dictionary<string, object?>
         {
-            ["class"] = ClassWire(rows[0]),
+            ["class"] = ClassWire(rows[0], configuration),
             ["tags"] = OptionsWire(await TagsAsync(db, classId, ct)),
             ["schedules"] = await SchedulesWireAsync(db, classId, ct),
             ["lookups"] = new Dictionary<string, object?>
@@ -85,8 +88,8 @@ internal static class ManagePayload
         return payload;
     }
 
-    // PHP joinUrl is null here: the public web base setting is deferred (as in the class card).
-    private static Dictionary<string, object?> ClassWire(ClassRow c) => new()
+    // joinUrl: whoever may open the manage screen may share the class (PHP api_manage_payload), so no caller check here.
+    private static Dictionary<string, object?> ClassWire(ClassRow c, IConfiguration configuration) => new()
     {
         ["id"] = c.Id,
         ["code"] = c.Code,
@@ -104,7 +107,7 @@ internal static class ManagePayload
         ["location"] = Text(Empty(c.Location)),
         ["teacher"] = c.Teacher ?? 0,
         ["teacherName"] = Text(Empty(c.TeacherName)),
-        ["joinUrl"] = null,
+        ["joinUrl"] = ClassCards.JoinUrl(configuration, c.Link),
     };
 
     private static async Task<List<Option>> TagsAsync(ClassesContext db, int? classId, CancellationToken ct) =>

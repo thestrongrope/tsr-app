@@ -21,6 +21,10 @@ internal sealed class MembershipTestKit : IDisposable
     public MembershipTestKit(Action<IServiceCollection>? configure = null) =>
         _factory = configure is null ? TestApi.Create() : TestApi.Create().WithWebHostBuilder(builder => builder.ConfigureTestServices(configure));
 
+    /// <summary>The API under test with one more setting (for example <c>TSR_PUBLIC_WEB_BASE</c>, which the test API leaves unset).</summary>
+    public MembershipTestKit(string setting, string value) =>
+        _factory = TestApi.Create().WithWebHostBuilder(builder => builder.UseSetting(setting, value));
+
     public static Task ResetAsync() => TestDatabase.ExecuteAsync(
         """
         truncate identity.users, identity.account_deletion_requests, access.user_roles, membership.member_profiles,

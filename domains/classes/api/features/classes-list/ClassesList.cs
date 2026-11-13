@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
 using Tsr.Shared.Api;
@@ -11,7 +12,7 @@ namespace Tsr.Classes.Api.Features.ClassesList;
 // Slice: GET /classes?include=managed&level&language&q -> the caller's active classes (taught, attended, and with include=managed the ones their classes:read reach covers). Contract: spec/api.yaml.
 // PHP: routes/classes.php route_classes_list (classes.php:178), ClassesModel::listForUser / listingDetails / getSchedulesForClasses. Guard: classes:read (403), no gender needed.
 // Copied quirks: q is a LIKE %q% on code or name with % and _ unescaped, and q "0" counts as empty (PHP empty()); level and language are (int) casts; studentCount counts every
-// enrolment row without a removed_at (any status) plus the lines of extra_students, and is given only to role "managing". joinUrl is null (needs the public web base setting; deferred).
+// enrolment row without a removed_at (any status) plus the lines of extra_students, and is given only to role "managing". joinUrl (domain/ClassCards.cs JoinUrl) goes to the teacher and to whoever reaches the class, never to a student.
 
 internal static class ClassesListSlice
 {
@@ -27,7 +28,7 @@ internal static class ClassesListSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(HttpContext context, ClassesContext db, Permissions permissions, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(HttpContext context, ClassesContext db, Permissions permissions, IConfiguration configuration, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -51,7 +52,7 @@ internal static class ClassesListSlice
 
         var body = rows.Select(r =>
         {
-            var card = ClassCards.ToCard(r);
+            var card = ClassCards.ToCard(r, configuration);
             var detail = details.GetValueOrDefault(r.Id);
             card["city"] = detail?.City;
             card["country"] = detail?.Country;
@@ -84,7 +85,9 @@ internal static class ClassesListSlice
                 select * from (select distinct c.id as "Id", c.code as "Code", c.name as "Name", c.class_level_id as "Level", cl.name as "LevelName", c.language_id as "Language",
                        c.gender as "Gender", c.status as "Status", c.location as "Location", c.format as "Format", c.started_on as "StartedOn",
                        t.name as "TeacherName", t.mobile as "TeacherMobile",
-                       case when c.teacher = {token} then 'conducting' when {hasReach} and cs.token_no is null then 'managing' else 'attending' end as "Role"
+                       case when c.teacher = {token} then 'conducting' when {hasReach} and cs.token_no is null then 'managing' else 'attending' end as "Role",
+                       case when (c.teacher = {token} or {all} or ({gender}::int is not null and c.gender = {gender}::int) or c.id = any({reachedIds}))
+                                 and c.link <> '' then c.link::text end as "JoinCode"
                 from classes.classes c
                 left join classes.class_students cs on cs.class_id = c.id and cs.token_no = {token} and cs.status = 'A' and cs.removed_at is null
                 left join classes.class_levels cl on cl.id = c.class_level_id
