@@ -11,7 +11,7 @@ what the member may do (that is `access`). Parity first: PHP's behaviour is copi
 |---|---|
 | Token verification (Google keys, or the Auth emulator in Development) | built; `api/FirebaseVerifier.cs` |
 | Member middleware, failure table, per-request sign-in write | built; `api/CallerMiddleware.cs` |
-| `POST /auth/link` (create route; `me` has identity fields only) | built; `api/features/link-account/` |
+| `POST /auth/link` (create route) | the sign-in is this domain's middleware and its contract is `spec/tests/link-account.hurl`; the route itself is membership's slice `link-account`, because `me` is the member's profile (the sixteen fields of `GET /me`, which the app reads right after sign-in) |
 | `/me/deletion-request` (3), the six `/admin/deletion-requests` routes (list, raise, hold, confirmation-sent, complete), `/auth/debug-token` | built; proved in the test phase (Hurl on PHP and the new API: `spec/tests/deletion-*.hurl`, `admin-deletion-*.hurl`, `debug-token.hurl`, run by `tools/contract-deletion.sh`; `db/tests/TestDeletion*Tests.cs`, `TestDebugTokenTests.cs`); notes `docs/specs/initial-build/test-deletion-notes.md`, `lane-identity-notes.md` |
 | Claim sync | not started |
 

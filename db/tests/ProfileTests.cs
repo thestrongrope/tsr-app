@@ -40,6 +40,22 @@ public sealed class ProfileTests
         _userId = await MembershipTestKit.AddMemberAsync(Token, "Synthetic Member", "1");
     }
 
+    // ---- POST /auth/link: the app's first call after sign-in reads the same profile as GET /me (PHP routes/auth.php)
+
+    [Test]
+    public async Task Signing_in_answers_me_with_the_same_sixteen_fields_as_GET_me()
+    {
+        await TestDatabase.ExecuteAsync($"update membership.member_profiles set mobile = '+911234567890', language = 2 where user_id = {_userId}");
+        await TestDatabase.ExecuteAsync($"insert into access.user_roles (user_id, roleid) values ({_userId}, 3)");
+
+        var link = await _kit.SendAsync(Token, HttpMethod.Post, "/auth/link");
+        var me = await _kit.SendAsync(Token, HttpMethod.Get, "/me");
+
+        Assert.That(link.Status, Is.EqualTo(HttpStatusCode.OK), link.Body);
+        Assert.That(link.Json!.AsObject().Select(p => p.Key).Single(), Is.EqualTo("me"));
+        Assert.That(link.Json!["me"]!.ToJsonString(), Is.EqualTo(me.Json!.ToJsonString()));
+    }
+
     // ---- GET /me
 
     [Test]

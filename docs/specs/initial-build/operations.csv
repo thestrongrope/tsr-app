@@ -2,7 +2,7 @@ method,path,domain,auth,state
 GET,/health,platform,public,built
 GET,/app-version,platform,public,built
 GET,/release-notes,platform,public,built
-POST,/auth/link,identity,create,built
+POST,/auth/link,membership,create,built
 POST,/auth/debug-token,identity,public,built
 GET,/me,membership,create,built
 PATCH,/me,membership,create,built

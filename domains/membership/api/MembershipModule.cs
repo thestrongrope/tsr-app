@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Tsr.Membership.Api.Domain;
+using Tsr.Membership.Api.Features.LinkAccount;
 using Tsr.Membership.Api.Features.MeChildren;
 using Tsr.Membership.Api.Features.MemberParentLinkCreate;
 using Tsr.Membership.Api.Features.MemberParentLinks;
@@ -69,6 +70,7 @@ public static class MembershipModule
 
     public static IEndpointRouteBuilder MapMembership(this IEndpointRouteBuilder routes)
     {
+        routes.MapLinkAccount();
         routes.MapProfileGet();
         routes.MapProfileUpdate();
         routes.MapRegistrationGet();

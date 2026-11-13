@@ -13,7 +13,6 @@ using Tsr.Identity.Api.Features.DebugToken;
 using Tsr.Identity.Api.Features.DeletionRequestCancel;
 using Tsr.Identity.Api.Features.DeletionRequestCreate;
 using Tsr.Identity.Api.Features.DeletionRequestGet;
-using Tsr.Identity.Api.Features.LinkAccount;
 using Tsr.Shared.Api;
 
 namespace Tsr.Identity.Api;
@@ -83,7 +82,6 @@ public static class IdentityModule
 
     public static IEndpointRouteBuilder MapIdentity(this IEndpointRouteBuilder routes)
     {
-        routes.MapLinkAccount();
         routes.MapDebugToken();
         routes.MapDeletionRequestCreate();
         routes.MapDeletionRequestGet();

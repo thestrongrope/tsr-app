@@ -60,7 +60,7 @@ copied (facts: `docs/specs/initial-build/phase-3-membership-recon.md`; design: `
 
 | Need | File |
 |---|---|
-| A slice (endpoint, handler) | `api/features/<slice>/` (the nine B4b slices above, profile-get, profile-update, registration-get, registration-save, children-links, children-link-inspect, children-link-accept, children-link-revoke, parents-list, parent-revoke) |
+| A slice (endpoint, handler) | `api/features/<slice>/` (the nine B4b slices above, link-account (`POST /auth/link`: `{"me": <the GET /me answer>}`, no permission checked, as PHP), profile-get, profile-update, registration-get, registration-save, children-links, children-link-inspect, children-link-accept, children-link-revoke, parents-list, parent-revoke) |
 | PHP's rules without a database (casts, validation, the form, link rules, views) | `api/domain/` (`PhpText`, `PhpValue`, `JsonBody`, `ProfileFields`, `PlaceRules`, `RegistrationForm`, `GuardianRules`, `GenderLock`, `LinkRowView`...), tests beside them |
 | What a capability does today, with every quirk copied | `capabilities/profile.md`, `class-request.md`, `guardian-links.md` |
 | Words, contract | `spec/glossary.md`, `spec/api.yaml`, `spec/tests/*.hurl` |
