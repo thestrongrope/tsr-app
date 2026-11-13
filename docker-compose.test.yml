@@ -12,11 +12,17 @@ services:
     ports: !override
       - "127.0.0.1:8089:8080"
   # The test stack runs the profile "workers" (tools/test-stack.sh): its API searches the stack's own Elasticsearch, and the
-  # one worker that sends nothing outward feeds it. Literal, so no shell variable can switch a sending worker on.
+  # two workers that send nothing outward run: search-feed feeds that index, content-refresh copies the content files mounted at
+  # /var/tsr/content (the synthetic set of db/synthetic/content). Literal, so no shell variable can switch a sending worker on,
+  # and the channel id is empty, so no test stack calls the video feed.
   api:
     environment:
       TSR_ELASTICSEARCH_URL: http://elasticsearch:9200
       TSR_ELASTICSEARCH_PASSWORD: local-only-es
+      TSR_CONTENT_DIR: /var/tsr/content
+      TSR_YOUTUBE_CHANNEL_ID: ""
   workers:
     environment:
-      TSR_WORKERS: search-feed
+      TSR_WORKERS: search-feed,content-refresh
+      TSR_CONTENT_DIR: /var/tsr/content
+      TSR_YOUTUBE_CHANNEL_ID: ""

@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Tsr.Content.Api;
 using Tsr.Notifications.Api;
 using Tsr.Search.Api;
 
@@ -17,6 +18,7 @@ public static partial class WorkerMode
     // One entry per domain that owns workers: the names it accepts, and the call that registers those that are enabled.
     private static readonly (IReadOnlyList<string> Names, Action<IServiceCollection, IReadOnlySet<string>> Add)[] Domains =
     [
+        (ContentModule.WorkerNames, (services, enabled) => services.AddContentWorkers(enabled)),
         (NotificationsModule.WorkerNames, (services, enabled) => services.AddNotificationsWorkers(enabled)),
         (SearchModule.WorkerNames, (services, enabled) => services.AddSearchWorkers(enabled)),
     ];

@@ -112,8 +112,13 @@ services:
       # compose profile "workers", which starts the elasticsearch service below.
       TSR_ELASTICSEARCH_URL: ${TSR_ELASTICSEARCH_URL:-}
       TSR_ELASTICSEARCH_PASSWORD: local-only-es
+      # The content files the Library reads are copied from (content's content-refresh worker reads this directory; empty, the default, reads nothing),
+      # and the channel whose public feed GET /api/v1/youtube reads (empty: no outside call, an empty list).
+      TSR_CONTENT_DIR: ${TSR_CONTENT_DIR:-}
     volumes:
       - ./domains/platform/spec/tests/app_versions.synthetic.json:/etc/tsr/app_versions.json:ro
+      # Read-only. The synthetic set unless TSR_CONTENT_SRC names another directory (the website's own content files, for a parity run).
+      - ${TSR_CONTENT_SRC:-./db/synthetic/content}:/var/tsr/content:ro
     depends_on:
       seed:
         condition: service_completed_successfully
@@ -160,6 +165,9 @@ services:
       TSR_ELASTICSEARCH_URL: http://elasticsearch:9200
       TSR_ELASTICSEARCH_PASSWORD: local-only-es
       TSR_WORKERS: ${TSR_WORKERS:-}
+      TSR_CONTENT_DIR: ${TSR_CONTENT_DIR:-}
+    volumes:
+      - ${TSR_CONTENT_SRC:-./db/synthetic/content}:/var/tsr/content:ro
     depends_on:
       seed:
         condition: service_completed_successfully

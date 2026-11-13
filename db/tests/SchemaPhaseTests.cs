@@ -13,9 +13,15 @@ public sealed class SchemaPhaseTests
     private static readonly string[] Schemas =
         ["identity", "access", "platform", "membership", "content", "classes", "assessment", "notifications"];
 
-    /// <summary>Tables that exist in PostgreSQL but never in PHP: platform's outbox, the articles, the profile split off <c>users</c>, the role tables.</summary>
+    /// <summary>
+    /// Tables that exist in PostgreSQL but never in PHP: platform's outbox, the articles, the profile split off <c>users</c>, the role tables,
+    /// and content's copy of the website's published content files (the Library reads).
+    /// </summary>
     private static readonly string[] NotFromPhp =
-        ["platform.outbox", "content.articles", "membership.member_profiles", "access.roles", "access.user_roles", "assessment.quiz_state"];
+    [
+        "platform.outbox", "content.articles", "membership.member_profiles", "access.roles", "access.user_roles", "assessment.quiz_state",
+        "content.published_articles", "content.categories", "content.publications", "content.refresh_state",
+    ];
 
     private const string History = "__ef_migrations_history";
 

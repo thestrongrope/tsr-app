@@ -43,6 +43,22 @@ public sealed class SchemaGuardTests
         ["classes.v_classes.country"] = ClassesReason,
     };
 
+    private const string LibraryReason =
+        "an article's address, a category and a tag match exactly, case included, as today's website does "
+        + "(LIB-R3, LIB-R4, LIB-R11; docs/specs/website-port/f1-plan-draft.md, Data and migrations)";
+
+    /// <summary>
+    /// "schema.table.column" to the reason it is plain case-sensitive text: the columns of content's copy of the published
+    /// content files that a request is matched on. Its two text[] columns (categories, tags) are case-sensitive for the same reason.
+    /// </summary>
+    private static readonly Dictionary<string, string> CaseSensitive = new()
+    {
+        ["content.published_articles.slug"] = LibraryReason,
+        ["content.published_articles.slug_decoded"] = LibraryReason,
+        ["content.categories.slug"] = LibraryReason,
+        ["content.categories.parent_slug"] = LibraryReason,
+    };
+
     /// <summary>Domains that own no table (routes only), so no context.</summary>
     private static readonly HashSet<string> DomainsWithoutTables = ["search"];
 
@@ -70,7 +86,7 @@ public sealed class SchemaGuardTests
     [Test]
     public void Allow_list_entries_carry_a_reason()
     {
-        Assert.That(NotCitext.Where(e => string.IsNullOrWhiteSpace(e.Value)).Select(e => e.Key), Is.Empty);
+        Assert.That(NotCitext.Concat(CaseSensitive).Where(e => string.IsNullOrWhiteSpace(e.Value)).Select(e => e.Key), Is.Empty);
     }
 
     [Test]
@@ -109,7 +125,7 @@ public sealed class SchemaGuardTests
         var columns = await TextColumnsAsync();
 
         var offenders = columns
-            .Where(c => c.Type != "citext" && !NotCitext.ContainsKey(c.Name))
+            .Where(c => c.Type != "citext" && !NotCitext.ContainsKey(c.Name) && !CaseSensitive.ContainsKey(c.Name))
             .Select(c => c.Name + " is " + c.Type);
 
         Assert.That(columns, Is.Not.Empty);
@@ -141,6 +157,30 @@ public sealed class SchemaGuardTests
             Assert.That(reader.GetString(1), Is.EqualTo("i"), column + " uses ICU");
             Assert.That(reader.GetBoolean(2), Is.False, column + " is nondeterministic, so it ignores case and accents");
         }
+    }
+
+    [Test]
+    public async Task Case_sensitive_columns_are_plain_text_with_the_default_collation()
+    {
+        var types = (await TextColumnsAsync()).ToDictionary(c => c.Name, c => c.Type);
+        foreach (var column in CaseSensitive.Keys)
+        {
+            Assert.That(types.GetValueOrDefault(column), Is.EqualTo("text"), column);
+            Assert.That(await CollationAsync(column), Is.EqualTo("\"default\""), column + " keeps the database's deterministic collation");
+        }
+    }
+
+    /// <summary>The collation of one "schema.table.column".</summary>
+    private static async Task<string?> CollationAsync(string column)
+    {
+        var dot = column.LastIndexOf('.');
+        await using var connection = new NpgsqlConnection(TestDatabase.OwnerConnection);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            "select a.attcollation::regcollation::text from pg_attribute a where a.attrelid = @table::regclass and a.attname = @column", connection);
+        command.Parameters.AddWithValue("table", column[..dot]);
+        command.Parameters.AddWithValue("column", column[(dot + 1)..]);
+        return await command.ExecuteScalarAsync() as string;
     }
 
     [Test]

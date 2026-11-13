@@ -1,0 +1,93 @@
+# The parity cases of TC-LIB-Q1-01: one path and query a line, fetched from today's website and from the new API by
+# tools/website-parity.cs. A line may end in "| expect <tsr-web status> <new status>": only the two statuses are checked.
+# The line with {TSR_PARITY_DRAFT_SLUG} runs only when that environment variable names a draft (never written here). Written for the website's own content (501 published articles on 13 Nov 2026); a slug here
+# names a real article, nothing of its text is copied. Lines starting with # are skipped.
+
+# The list: default, pages, page size clamps, offsets past the end
+/api/v1/articles
+/api/v1/articles?limit=20&offset=20
+/api/v1/articles?limit=0
+/api/v1/articles?limit=1
+/api/v1/articles?limit=100
+/api/v1/articles?limit=1000
+/api/v1/articles?limit=abc
+/api/v1/articles?offset=-5
+/api/v1/articles?offset=500
+/api/v1/articles?offset=501
+/api/v1/articles?offset=100000
+
+# The list: each order (title order over all the articles, page by page), and one that is refused
+/api/v1/articles?sort=publishedDate:desc&limit=100&offset=400
+/api/v1/articles?sort=publishedDate:asc
+/api/v1/articles?sort=publishedDate:asc&limit=100&offset=200
+/api/v1/articles?sort=title:asc&limit=100
+/api/v1/articles?sort=title:asc&limit=100&offset=100
+/api/v1/articles?sort=title:asc&limit=100&offset=200
+/api/v1/articles?sort=title:asc&limit=100&offset=300
+/api/v1/articles?sort=title:asc&limit=100&offset=400
+/api/v1/articles?sort=title:desc&limit=100
+/api/v1/articles?sort=title:desc&limit=100&offset=250
+/api/v1/articles?sort=newest
+/api/v1/articles?sort=TITLE:ASC
+
+# The list: a word (common, upper case, a tag's word, with a typographic apostrophe, with a space, none)
+/api/v1/articles?q=imam
+/api/v1/articles?q=IMAM&limit=100&offset=100
+/api/v1/articles?q=ghadir&limit=100
+/api/v1/articles?q=Ja%E2%80%99far
+/api/v1/articles?q=ahle%20bait&limit=50
+/api/v1/articles?q=zzzzqqq
+
+# The list: category (top level, child, unknown, two joined as the app's multi-select sends them)
+/api/v1/articles?category=beliefs&limit=100
+/api/v1/articles?category=tawheed
+/api/v1/articles?category=Beliefs
+/api/v1/articles?category=no-such-category
+/api/v1/articles?category=beliefs,imams
+
+# The list: tag (one word, with a space, another case, unknown)
+/api/v1/articles?tag=Imamate&limit=100
+/api/v1/articles?tag=Ahle%20Bait&limit=100
+/api/v1/articles?tag=ahle%20bait
+/api/v1/articles?tag=no-such-tag
+
+# The list: language (the only one present, one absent), combinations, an unused option
+/api/v1/articles?locale=en&limit=5
+/api/v1/articles?locale=ur
+/api/v1/articles?category=wilayah&tag=Imamate&sort=title:asc&limit=50
+/api/v1/articles?q=imam&category=imams&limit=5&offset=5
+/api/v1/articles?q=ali&tag=Wilayah&locale=en&sort=publishedDate:asc&limit=10
+/api/v1/articles?foo=bar&limit=3
+
+# One article: the newest, the oldest, percent-encoded slugs (the website never finds them; the new side does), one with
+# raw HTML, one with ten tags, unknown, a draft (the website serves it; the new side never copies one)
+/api/v1/articles/no-one-can-be-compared-to-the-ahl-al-bayt
+/api/v1/articles/dedication-fragrance-of-mastership
+/api/v1/articles/what-it-means-to-be-a-true-%e1%b8%a5awari | expect 404 200
+/api/v1/articles/%d9%86%da%a9%d9%84%d8%a7-%db%81%db%92-%d8%ac%d9%86%d8%a7%d8%b2%db%81-%da%a9%d9%88%d8%a6%db%8c-%d8%a7%d9%84%d9%84%db%81-%da%a9%db%92-%da%af%da%be%d8%b1-%d8%b3%db%92 | expect 404 200
+/api/v1/articles/imam-husain-as-the-radiant-moon-from-earth-to-the-throne
+/api/v1/articles/outcomes-of-intezaar-in-history-success-and-failure
+/api/v1/articles/no-such-article
+/api/v1/articles/{TSR_PARITY_DRAFT_SLUG} | expect 200 404
+
+# Categories and tags
+/api/v1/taxonomies/categories
+/api/v1/taxonomies/categories?hierarchical=false
+/api/v1/taxonomies/categories?includeArticleCounts=false
+/api/v1/taxonomies/categories?hierarchical=false&includeArticleCounts=false
+/api/v1/taxonomies/tags
+
+# Publications: default and the one option the handler reads
+/api/v1/publications
+/api/v1/publications?language=English
+/api/v1/publications?language=urdu
+/api/v1/publications?language=Hindi
+/api/v1/publications?language=Multilingual
+/api/v1/publications?language=none
+
+# Latest videos (both sides read the channel's public feed)
+/api/v1/youtube
+/api/v1/youtube?limit=3
+/api/v1/youtube?limit=3&offset=2
+/api/v1/youtube?limit=0
+/api/v1/youtube?limit=1000

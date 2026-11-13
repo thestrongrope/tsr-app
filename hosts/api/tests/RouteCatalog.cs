@@ -17,7 +17,16 @@ internal sealed record CatalogRoute(string Method, string Path, string Domain, s
 internal static class RouteCatalog
 {
     /// <summary>Routes that exist in the new API and are not in PHP's router. Listed here so an extra route cannot slip in unseen.</summary>
-    public static readonly IReadOnlySet<string> NotInPhp = new HashSet<string> { "GET /articles" };
+    public static readonly IReadOnlySet<string> NotInPhp = new HashSet<string>
+    {
+        "GET /articles",
+        "GET /api/v1/articles",
+        "GET /api/v1/articles/{}",
+        "GET /api/v1/taxonomies/categories",
+        "GET /api/v1/taxonomies/tags",
+        "GET /api/v1/publications",
+        "GET /api/v1/youtube",
+    };
 
     public static IReadOnlyList<CatalogRoute> Load()
     {

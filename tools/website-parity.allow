@@ -1,0 +1,19 @@
+# The known differences between today's website and the new API, read by tools/website-parity.cs.
+# One a line: case | JSON path | reason. A * in the case or the path stands for any text; a path of * alone is refused,
+# and a status difference can never be allowed (a case states its expected statuses in the cases file instead).
+# Only intended differences and the website's own run-to-run noise belong here; anything else is a finding to decide on.
+
+# Intended (decided before the port)
+/api/v1/articles/* | data.rawContent | Not sent: the unsanitised Markdown of the file (owner's decision, 13 Nov 2026); the app does not read it.
+/api/v1/articles/* | data.content | The HTML differs in form only: Markdig and remark write entities and white space differently, and raw HTML is dropped. The text a reader sees is compared separately as data.content(text), and its link targets as data.content(links); neither is allowed.
+/api/v1/youtube* | data.videos[*].title | XML entities of the feed are decoded on the new side; the website sends them still escaped.
+/api/v1/youtube* | data.videos[*].description | XML entities of the feed are decoded on the new side; the website sends them still escaped.
+/api/v1/youtube* | data.videos[*].intro | The first 200 characters of the description, so the same decoding shows here.
+
+# Noise: each side reads the channel's feed at its own moment and keeps it for 30 minutes
+/api/v1/youtube* | data.meta.lastUpdated | The time that side last read the feed.
+/api/v1/youtube* | data.meta.cacheHit | Whether that side's 30 minute copy was still fresh when asked.
+
+# The website's order here is the file system's, not a rule (plan, Risks: equal category orders tie by slug)
+/api/v1/taxonomies/categories?hierarchical=false* | data(order) | imam-hasan and imamate share order 4; the website keeps directory order, the new side orders by slug. Every item is still compared field by field, matched by slug. The app reads the hierarchical answer, which is equal.
+/api/v1/youtube* | data.videos[*].views | The feed's view count at the moment that side read it (seen 13 Nov 2026: 450 against 458 for one video, read an hour apart).

@@ -1,0 +1,42 @@
+---
+title: "Sample Publications"
+slug: "tsr-publications"
+metaTitle: "Sample Publications"
+metaDescription: "Invented study booklets used as test data."
+language: "en"
+status: "published"
+pageType: "resource"
+order: 1
+publications:
+- title: "A Pocket Guide to Margin Notes"
+  type: "PDF"
+  size: "1 MB"
+  updated: "Jun 26, 2025"
+  language: "English"
+  file: "/downloads/sample-publications/a-pocket-guide-to-margin-notes.pdf"
+  downloadOnly: true
+  summary: "A short invented booklet on writing notes beside a text."
+- title: "ہفتہ وار منصوبہ کی کتاب"
+  type: "PDF"
+  size: "617 KB"
+  updated: "Apr 06, 2024"
+  language: "Urdu"
+  file: "/downloads/sample-publications/weekly-plan-booklet.pdf"
+  readOnlineUrl: "/weekly-plan-booklet"
+  summary: "مطالعہ کے ہفتہ وار منصوبے پر ایک فرضی کتابچہ۔"
+- title: "A Booklet With No Link"
+  type: "PDF"
+  size: "2 MB"
+  updated: "Mar 26, 2024"
+  language: "English"
+  summary: "This entry has neither a file nor a read online address, so the reader must drop it."
+- title: "Revision Cycles Handbook"
+  type: "Web"
+  size: "—"
+  updated: "Mar 19, 2024"
+  language: "English"
+  readOnlineUrl: "/revision-cycles-handbook"
+  summary: "An invented handbook on spacing revision, read online only."
+---
+
+Invented study booklets used as test data.
