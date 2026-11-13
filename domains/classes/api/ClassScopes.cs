@@ -15,28 +15,26 @@ internal sealed class ClassScopes(ClassesContext db) : IClassScopes
 
     internal sealed record TagRow(int ClassId, string Name);
 
+    internal sealed record MembershipRow(int[] Taught, int[] Flagged, int[] Enrolled);
+
+    // One command: access asks this for every signed-in request.
     public async Task<ClassMemberships> MembershipsAsync(int token, CancellationToken ct)
     {
-        var taught = await db.Database
-            .SqlQuery<int>($"""select id as "Value" from classes.classes where teacher = {token} and status = 'A' order by id""")
-            .ToListAsync(ct);
-        var flagged = await db.Database
-            .SqlQuery<int>($"""
-                select distinct cs.class_id as "Value" from classes.class_students cs
-                join classes.classes c on c.id = cs.class_id
-                where cs.token_no = {token} and cs.mcq_admin = 1 and cs.removed_at is null and c.status = 'A'
-                order by 1
+        var rows = await db.Database
+            .SqlQuery<MembershipRow>($"""
+                select
+                  array(select id from classes.classes where teacher = {token} and status = 'A' order by id) as "Taught",
+                  array(select distinct cs.class_id from classes.class_students cs
+                        join classes.classes c on c.id = cs.class_id
+                        where cs.token_no = {token} and cs.mcq_admin = 1 and cs.removed_at is null and c.status = 'A'
+                        order by 1) as "Flagged",
+                  array(select distinct cs.class_id from classes.class_students cs
+                        join classes.classes c on c.id = cs.class_id
+                        where cs.token_no = {token} and cs.status = 'A' and cs.removed_at is null and c.status = 'A'
+                        order by 1) as "Enrolled"
                 """)
             .ToListAsync(ct);
-        var enrolled = await db.Database
-            .SqlQuery<int>($"""
-                select distinct cs.class_id as "Value" from classes.class_students cs
-                join classes.classes c on c.id = cs.class_id
-                where cs.token_no = {token} and cs.status = 'A' and cs.removed_at is null and c.status = 'A'
-                order by 1
-                """)
-            .ToListAsync(ct);
-        return new ClassMemberships(taught, flagged, enrolled);
+        return new ClassMemberships(rows[0].Taught, rows[0].Flagged, rows[0].Enrolled);
     }
 
     public async Task<ClassFacts?> ActiveClassAsync(int classId, CancellationToken ct)

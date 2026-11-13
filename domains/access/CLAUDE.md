@@ -55,8 +55,9 @@ create route has just made. The value is the member's revision BEFORE the route 
 permissions still carries the old one, the next request the new one. No header: a request refused at sign-in (401, `User not found`,
 `Registration incomplete`, `Account deletion pending`, recently deleted, a `precheck:` refusal), a route without `RequireMember`
 (public reads, `/health`, `/auth/debug-token`), and permissions that cannot be loaded (logged as a warning; the request goes on).
-Cost: the request's one resolution (role, stored names, three class-fact reads through the port, live rules, catalog: 7 queries,
-9 for a member with class access rules; PHP: 7), paid on every signed-in request and kept by `Permissions`, so the route's own
+Cost: the request's one resolution, 2 commands (PHP: 7): one on access's tables (role, catalog, stored names, whether a live class
+access rule exists: `Permissions.StoredAsync`) and one through the port (`IClassScopes.MembershipsAsync`); a member with class access
+rules pays 4 more (rules, conditions, active classes and their tags). Pinned by `db/tests/PermissionsRevisionHeaderTests.cs`. Paid on every signed-in request and kept by `Permissions`, so the route's own
 checks read nothing again; a route that checks no permission pays it only for the header, as in PHP. Because that resolution is
 kept, a route that changes what its caller holds and then asks `Permissions` about the caller must call `Permissions.Forget` first
 (the grant routes do). An unhandled error (500) has no header. Tests: `db/tests/PermissionsRevisionHeaderTests.cs`.

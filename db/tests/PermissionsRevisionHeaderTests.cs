@@ -5,6 +5,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using NUnit.Framework;
 using Tsr.Access.Api;
 
@@ -196,6 +197,25 @@ public sealed class PermissionsRevisionHeaderTests
         Assert.That(counter.Memberships, Is.EqualTo(1));
     }
 
+    // The resolution is paid on every signed-in request, so its cost is pinned: one command on access's tables and one
+    // through the classes port, for a member with no class access rule.
+    [Test]
+    public async Task Resolving_a_member_costs_one_access_command_and_one_classes_command()
+    {
+        var commands = new CommandLog();
+        await using var logged = factory.WithWebHostBuilder(builder => builder.ConfigureTestServices(services => services.AddLogging(logging => logging
+            .AddFilter("Microsoft.EntityFrameworkCore.Database.Command", LogLevel.Information)
+            .AddProvider(commands))));
+
+        // A route that asks access nothing itself, so every command counted is the resolution.
+        var reply = await SendAsync(HttpMethod.Get, "/me/deletion-request", Admin, api: logged);
+
+        Assert.That(reply.Status, Is.EqualTo(HttpStatusCode.OK), reply.Body);
+        Assert.That(reply.Revision, Is.EqualTo(await RevisionOfAsync(Admin)));
+        Assert.That(commands.Mentioning("access."), Has.Count.EqualTo(1), string.Join("\n---\n", commands.Mentioning("access.")));
+        Assert.That(commands.Mentioning("classes."), Has.Count.EqualTo(1), string.Join("\n---\n", commands.Mentioning("classes.")));
+    }
+
     private static string? RevisionIn(string body)
     {
         using var json = JsonDocument.Parse(body);
@@ -241,5 +261,33 @@ public sealed class PermissionsRevisionHeaderTests
         public Task<ClassFacts?> ActiveClassAsync(int classId, CancellationToken ct) => Task.FromResult<ClassFacts?>(null);
 
         public Task<IReadOnlyList<ClassFacts>> ActiveClassesAsync(CancellationToken ct) => Task.FromResult<IReadOnlyList<ClassFacts>>([]);
+    }
+
+    /// <summary>Collects the SQL commands EF Core reports as executed.</summary>
+    private sealed class CommandLog : ILoggerProvider, ILogger
+    {
+        private const int CommandExecuted = 20101;
+        private readonly System.Collections.Concurrent.ConcurrentQueue<string> executed = new();
+
+        public List<string> Mentioning(string text) => executed.Where(c => c.Contains(text, StringComparison.Ordinal)).ToList();
+
+        public ILogger CreateLogger(string categoryName) => this;
+
+        public IDisposable? BeginScope<TState>(TState state)
+            where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            if (eventId.Id == CommandExecuted)
+            {
+                executed.Enqueue(formatter(state, exception));
+            }
+        }
+
+        public void Dispose()
+        {
+        }
     }
 }
