@@ -11,20 +11,36 @@ namespace Tsr.Notifications.Api.Workers;
 /// What one tick did, in rows. <c>Lost</c> is a row whose claim another worker took over before this one recorded the result (nothing was overwritten). <c>InvalidTokens</c> is how many tokens FCM called unknown or invalid
 /// (logged as a count only; no device row is deleted). <c>Unrecorded</c> is a row whose result could not be written (the database failed for it): it stays <c>sending</c> until the queue's lease takes it over.
 /// </summary>
-internal sealed record DrainReport(int Claimed, int Sent, int Retrying, int Dead, int Released, int Lost, int InvalidTokens, int Unrecorded);
+internal sealed record DrainReport(int Claimed, int Sent, int Retrying, int Dead, int Released, int Lost, int InvalidTokens, int Unrecorded)
+{
+    public DrainReport Plus(DrainReport other) => new(
+        Claimed + other.Claimed,
+        Sent + other.Sent,
+        Retrying + other.Retrying,
+        Dead + other.Dead,
+        Released + other.Released,
+        Lost + other.Lost,
+        InvalidTokens + other.InvalidTokens,
+        Unrecorded + other.Unrecorded);
+}
 
 /// <summary>
-/// PHP <c>cli/drain_push.php</c> as one tick: claim up to <see cref="MaxRows"/> due <c>push</c> rows from platform's queue, send each to its one device (at most <see cref="PushBatch.Parallelism"/> at a time, the sender's own 10 s timeout),
+/// PHP <c>cli/drain_push.php</c> as one batch: claim up to <see cref="MaxRows"/> due <c>push</c> rows from platform's queue, send each to its one device (at most <see cref="PushBatch.Parallelism"/> at a time, the sender's own 10 s timeout),
 /// then record every outcome. The claim commits before any send. Outcomes, as PHP: sent; a past <c>deadline</c> or an unusable payload is dead without a send; FCM calling the token unknown or invalid, or any other failure of this message, burns the attempt
 /// (backoff, dead after the 5th); a sender mismatch is dead at once; the service being unusable (<see cref="PushResult.Unavailable"/>) releases the row and every row not yet started, with the attempt given back, and no further send starts.
 /// A sender that THROWS counts as a failure of that one message (the attempt is burnt): the push may or may not have left, and a bounded retry with backoff is safer than a release, which would retry every minute with no ceiling and stop the batch.
 /// The host stopping starts no new send; the sends in flight finish (the sender's own 10 s timeout) and every result is recorded, each row on its own, so one failed write does not leave the others unrecorded.
+/// Faster than PHP on purpose (owner decision, 12 Nov 2026): PHP sends one batch a minute; a tick here takes batch after batch until the queue has nothing due, a batch released a row (the service is unusable or the host is stopping),
+/// or <see cref="ClaimFor"/> has passed since the tick began (the batch in hand is always finished). A failed row is not taken again in the same tick: its backoff is at least a minute.
 /// The error column and the log hold short reason codes and counts only, never a token, a title or a body. A device row is never deleted here (the cleanup route owns that).
 /// </summary>
 internal static partial class PushDrain
 {
     public const string Channel = "push";
     public const int MaxRows = 50;
+
+    /// <summary>How long one tick goes on claiming batches: under the worker's one minute, so ticks keep their rhythm.</summary>
+    public static readonly TimeSpan ClaimFor = TimeSpan.FromSeconds(50);
 
     private static readonly DrainReport Nothing = new(0, 0, 0, 0, 0, 0, 0, 0);
 
@@ -52,6 +68,21 @@ internal static partial class PushDrain
             return Nothing;
         }
 
+        var claimUntil = clock.GetUtcNow() + ClaimFor;
+        var total = Nothing;
+        while (true)
+        {
+            var batch = await BatchAsync(db, sender, clock, log, ct);
+            total = total.Plus(batch);
+            if (batch.Claimed < MaxRows || batch.Released > 0 || ct.IsCancellationRequested || clock.GetUtcNow() >= claimUntil)
+            {
+                return total;
+            }
+        }
+    }
+
+    private static async Task<DrainReport> BatchAsync(NotificationsContext db, IPushSender sender, TimeProvider clock, ILogger log, CancellationToken ct)
+    {
         var rows = await PlatformCommands.ClaimMessagesAsync(db, Channel, MaxRows, clock.GetUtcNow(), ct);
         if (rows.Count == 0)
         {

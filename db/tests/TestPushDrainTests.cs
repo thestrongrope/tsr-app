@@ -532,19 +532,51 @@ public sealed class TestPushDrainTests
     }
 
     [Test]
-    public async Task A_tick_takes_at_most_fifty_rows_and_sends_at_most_sixteen_at_a_time()
+    public async Task A_tick_keeps_claiming_fifty_rows_at_a_time_until_the_queue_is_empty_and_sends_at_most_sixteen_at_a_time()
     {
-        fake.Pause = TimeSpan.FromMilliseconds(30);
+        fake.Pause = TimeSpan.FromMilliseconds(10);
+        for (var i = 0; i < 120; i++)
+        {
+            await AddAsync("device-" + i);
+        }
+
+        var report = await TickAsync();
+
+        Assert.That(fake.Calls, Is.EqualTo(120));
+        Assert.That(fake.Peak, Is.LessThanOrEqualTo(16));
+        Assert.That((report.Claimed, report.Sent), Is.EqualTo((120, 120)));
+        Assert.That(await MembershipTestKit.CountAsync("platform.outbound_messages", "status = 'sent'"), Is.EqualTo(120));
+    }
+
+    [Test]
+    public async Task A_tick_claims_no_new_batch_once_fifty_seconds_have_passed()
+    {
+        fake.Started = () => clock.Now = T0.AddSeconds(51);
+        for (var i = 0; i < 120; i++)
+        {
+            await AddAsync("device-" + i);
+        }
+
+        var report = await TickAsync();
+
+        Assert.That(fake.Calls, Is.EqualTo(50), "the batch in hand is finished; the next minute's tick takes the rest");
+        Assert.That(report.Claimed, Is.EqualTo(50));
+        Assert.That(await MembershipTestKit.CountAsync("platform.outbound_messages", "status = 'queued'"), Is.EqualTo(70));
+    }
+
+    [Test]
+    public async Task A_tick_whose_rows_all_fail_does_not_claim_them_again()
+    {
+        fake.Decide = _ => PushResult.Failed;
         for (var i = 0; i < 60; i++)
         {
             await AddAsync("device-" + i);
         }
 
-        await TickAsync();
+        var report = await TickAsync();
 
-        Assert.That(fake.Calls, Is.EqualTo(50));
-        Assert.That(fake.Peak, Is.LessThanOrEqualTo(16));
-        Assert.That(await MembershipTestKit.CountAsync("platform.outbound_messages", "status = 'queued'"), Is.EqualTo(10));
+        Assert.That(fake.Calls, Is.EqualTo(60), "each row is tried once: a failed row waits for its backoff");
+        Assert.That(report.Retrying, Is.EqualTo(60));
     }
 
     [Test]
