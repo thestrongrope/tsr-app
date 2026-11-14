@@ -11,9 +11,12 @@
 #   project tsr-app-test-n, gateway 8100+n, database 5440+n, emulator 19110+n, tokens in build/test-n/ (the mapping is tools/stack-env.sh).
 #   The ports are written literally into build/test-n/compose.override.yml from the validated integer. The stack builds from
 #   the checkout this script lives in, so a worktree's lane runs that worktree's code. Contract scripts: TSR_STACK=n tools/<x>-contract.sh test.
-# A lane runs no worker unless TSR_LANE_WORKERS names them at `up` (today only content-refresh, which sends nothing outward): the lane then runs the
-#   workers service with exactly that list, still without Elasticsearch, and the api and workers read the content files mounted at /var/tsr/content
-#   (db/synthetic/content, or the directory TSR_CONTENT_SRC names: the parity and timing runs over the website's own files).
+# A lane runs no worker unless TSR_LANE_WORKERS names ONE at `up` (content-refresh or search-feed; neither sends anything outward, and a sending
+#   worker is refused). content-refresh: the lane runs the workers service with that worker, still without Elasticsearch, and the api and workers
+#   read the content files mounted at /var/tsr/content (db/synthetic/content, or the directory TSR_CONTENT_SRC names: the parity and timing runs
+#   over the website's own files). search-feed: the lane also runs its own Elasticsearch (about 1 GB; its own container and volume, no host port,
+#   so it cannot clash with another stack's) and the api searches it; tools/patrol-lane.sh up-personas uses it. Every command regenerates the
+#   lane's override, so name the same TSR_LANE_WORKERS on a later `up` of that lane.
 # Only the selected tsr-app-test project is touched; every command carries -p <project>. All ports are 127.0.0.1 only.
 set -euo pipefail
 
@@ -63,15 +66,29 @@ YML
         condition: service_completed_successfully
 YML
       ;;
-    *) echo "TSR_LANE_WORKERS must be unset or content-refresh (no sending worker and no search-feed on a lane)" >&2; exit 1 ;;
+    search-feed)
+      # Elasticsearch and the workers service leave the "workers" profile, so they start with this lane. Literal names: no variable can add a sending worker.
+      cat >> "$OVERRIDE" <<YML
+  api:
+    environment:
+      TSR_ELASTICSEARCH_URL: http://elasticsearch:9200
+  elasticsearch:
+    profiles: !reset []
+  workers:
+    profiles: !reset []
+    environment:
+      TSR_WORKERS: "search-feed"
+YML
+      ;;
+    *) echo "TSR_LANE_WORKERS must be unset, content-refresh or search-feed (never a sending worker)" >&2; exit 1 ;;
   esac
 elif [ -n "${TSR_LANE_WORKERS:-}" ]; then
   echo "TSR_LANE_WORKERS is for a lane stack (TSR_STACK=n); the default test stack's workers are fixed in docker-compose.test.yml" >&2; exit 1
 fi
 
 # The default test stack also runs Elasticsearch and its workers (compose profile "workers"); a lane stack does not run Elasticsearch
-# (about 1 GB each), so its API answers every search "unavailable". For down and remove a lane names the profile too, so a workers
-# container started with TSR_LANE_WORKERS is removed whether or not the variable is set now.
+# (about 1 GB each) unless TSR_LANE_WORKERS=search-feed asks for it, so its API answers every search "unavailable". For down and remove a
+# lane names the profile too, so a workers or Elasticsearch container started with TSR_LANE_WORKERS is removed whether or not the variable is set now.
 PROFILE=()
 if [ -z "${TSR_STACK:-}" ]; then PROFILE=(--profile workers); fi
 case "${1:-}" in down|remove) PROFILE=(--profile workers) ;; esac
