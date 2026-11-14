@@ -922,7 +922,8 @@ paths:
       operationId: getClassGuide
       summary: The guide of the class's level
       description: |
-        Gender set (400), active class (404), classes:read on the class (403). guide and share_url are null for a level with no or a blank guide; share_url is null until the public web base is configured.
+        Gender set (400), active class (404), classes:read on the class (403). guide and share_url are null for a level with no guide page, no guide or a blank one; otherwise share_url is the public guide page
+        (TSR_PUBLIC_WEB_BASE plus /guide.php?guide=<the level's slug>), null when the setting is not set.
         Slice: features/class-guide/ClassGuide.cs.
       security:
         - memberToken: []
