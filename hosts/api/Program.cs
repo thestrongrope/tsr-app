@@ -14,6 +14,7 @@ using Tsr.Shared.Api;
 // its own endpoints; this file decides which modules this host loads and the middleware order.
 
 var builder = WebApplication.CreateBuilder(args);
+HostLogging.AddDefaults(builder.Configuration);
 
 var connectionString = builder.Configuration["TSR_DB"]
     ?? throw new InvalidOperationException("TSR_DB is not set. Locally it comes from docker-compose.dev.yml.");

@@ -56,6 +56,9 @@ services:
   # network. Verified with docker run: the image ships curl (not wget), so the check uses curl; /health answers {"status":"up",...}.
   gotenberg:
     image: gotenberg/gotenberg:8
+    # One render may take as long as the API waits for it (60 s, platform's PlatformModule); the image's own default is 30 s, which answered 503
+    # first when several PDFs queued (load test, 14 Nov 2026). The gateway waits 70 s on downloads. Flag checked with `gotenberg --help`.
+    command: ["gotenberg", "--api-timeout=60s"]
     environment:
       # The report HTML references nothing outside itself: Chromium may fetch no address at all (defence in depth).
       CHROMIUM_DENY_PRIVATE_IPS: "true"
