@@ -1,0 +1,125 @@
+== Load report 20261114T142146Z (UTC)
+source zone (--source-tz): UTC (the default: --source-tz was not given)
+== Tables: source rows exported, rows filtered by design, loaded, rejected (refused by the target, merge tables too), skipped (merge: kept the seed row)
+identity.users                                       src     26244  filtered       0  loaded     26244  rejected       0  skipped     0
+identity.account_deletion_requests                   src        12  filtered       0  loaded        12  rejected       0  skipped     0
+access.user_roles                                    src     26244  filtered   26193  loaded        51  rejected       0  skipped     0
+access.permissions                                   src       102  filtered       0  loaded         0  rejected       0  skipped   102  [merge]
+access.role_permissions                              src        88  filtered       0  loaded         0  rejected       0  skipped    88  [merge]
+access.class_access_rules                            src        40  filtered       0  loaded        40  rejected       0  skipped     0
+access.class_access_rule_conditions                  src        78  filtered       0  loaded        78  rejected       0  skipped     0
+access.user_permissions                              src        13  filtered       0  loaded        13  rejected       0  skipped     0
+membership.member_profiles                           src     26244  filtered       0  loaded     26244  rejected       0  skipped     0
+membership.interest_options                          src        19  filtered       0  loaded         0  rejected       0  skipped    19  [merge]
+membership.student_interests                         src       706  filtered       0  loaded       706  rejected       0  skipped     0
+membership.class_registrations                       src      4276  filtered       0  loaded      4276  rejected       0  skipped     0
+membership.class_registrations_languages             src      5108  filtered       0  loaded      5108  rejected       0  skipped     0
+membership.user_guardians                            src        12  filtered       0  loaded        12  rejected       0  skipped     0
+platform.genders                                     src         2  filtered       0  loaded         2  rejected       0  skipped     0
+platform.languages                                   src         3  filtered       0  loaded         3  rejected       0  skipped     0
+platform.lookups                                     src        72  filtered       0  loaded         0  rejected       0  skipped    72  [merge]
+platform.admin_access_log                            src     27500  filtered       0  loaded     27500  rejected       0  skipped     0
+platform.feedback                                    src         9  filtered       0  loaded         9  rejected       0  skipped     0
+platform.outbound_messages                           src       709  filtered       0  loaded       709  rejected       0  skipped     0
+content.holy_quran                                   src       114  filtered       0  loaded       114  rejected       0  skipped     0
+classes.class_levels                                 src         5  filtered       0  loaded         5  rejected       0  skipped     0
+classes.tags                                         src         2  filtered       0  loaded         2  rejected       0  skipped     0
+classes.topics                                       src        10  filtered       0  loaded        10  rejected       0  skipped     0
+classes.teachers                                     src       180  filtered       0  loaded       180  rejected       0  skipped     0
+classes.teachers_history                             src       236  filtered       0  loaded       236  rejected       0  skipped     0
+classes.classes                                      src       376  filtered       0  loaded       376  rejected       0  skipped     0
+classes.class_schedules                              src       400  filtered       0  loaded       400  rejected       0  skipped     0
+classes.class_schedule_topics                        src        95  filtered       0  loaded        95  rejected       0  skipped     0
+classes.class_sessions                               src     24400  filtered       0  loaded     24400  rejected       0  skipped     0
+classes.class_attendance                             src    228000  filtered       0  loaded    228000  rejected       0  skipped     0
+classes.class_students                               src      3731  filtered       0  loaded      3731  rejected       0  skipped     0
+classes.class_tags                                   src        15  filtered       0  loaded        15  rejected       0  skipped     0
+classes.class_audit_log                              src        16  filtered       0  loaded        16  rejected       0  skipped     0
+classes.guides                                       src         4  filtered       0  loaded         4  rejected       0  skipped     0
+classes.student_transfers                            src        86  filtered       0  loaded        86  rejected       0  skipped     0
+classes.syllabus                                     src         2  filtered       0  loaded         2  rejected       0  skipped     0
+assessment.quiz_campaigns                            src         3  filtered       0  loaded         3  rejected       0  skipped     0
+assessment.standard_mcqs                             src       669  filtered       0  loaded       669  rejected       0  skipped     0
+assessment.standard_mcq_questions                    src      7460  filtered       0  loaded      7460  rejected       0  skipped     0
+assessment.spot_quizzes                              src      4910  filtered       0  loaded      4910  rejected       0  skipped     0
+assessment.spot_quiz_questions                       src     42000  filtered       0  loaded     42000  rejected       0  skipped     0
+assessment.spot_quiz_responses                       src    237000  filtered       0  loaded    237000  rejected       0  skipped     0
+assessment.spot_quiz_submissions                     src     34300  filtered       0  loaded     34300  rejected       0  skipped     0
+notifications.notifications                          src       157  filtered       0  loaded       157  rejected       0  skipped     0
+notifications.user_notifications                     src      1680  filtered       0  loaded      1680  rejected       0  skipped     0
+notifications.user_devices                           src       504  filtered       0  loaded       504  rejected       0  skipped     0
+notifications.notifier_reminders                     src         2  filtered       0  loaded         2  rejected       0  skipped     0
+notifications.notifier_runs                          src        46  filtered       0  loaded        46  rejected       0  skipped     0
+notifications.notifier_sent_messages                 src      1150  filtered       0  loaded      1150  rejected       0  skipped     0
+notifications.class_scheduled_notifications          src         2  filtered       0  loaded         2  rejected       0  skipped     0
+notifications.class_scheduled_notification_runs      src         2  filtered       0  loaded         2  rejected       0  skipped     0
+TOTAL                                                src    705038  filtered   26193  loaded    678564  rejected       0  skipped   281
+== Details (rejected, cut, set to NULL, orphaned logical references). Counts only.
+identity.users                                       zero_date_set_null             createdon                                                            1
+access.user_roles                                    filtered_by_design             roleid <> '0'                                                    26193
+membership.member_profiles                           truncated_to_2000              picture                                                              1
+membership.interest_options                          seed_value_differs_kept_target created_at                                                          19
+platform.lookups                                     seed_value_differs_kept_target created_at                                                          72
+platform.outbound_messages                           target_column_not_in_source    claimed_at                                                           1
+classes.syllabus                                     zero_date_set_null             deleted_at                                                           1
+== Orphaned logical references (rows whose reference names nothing; NULL is not counted; token 0 is looked up like any value)
+classes.class_sessions                               class_id -> classes.classes.id                                       0
+classes.class_sessions                               teacher -> identity.users.token                                      0
+classes.class_attendance                             session_id -> classes.class_sessions.id                              0
+classes.class_attendance                             token -> identity.users.token                                        0
+classes.class_students                               class_id -> classes.classes.id                                       1
+classes.class_students                               token_no -> identity.users.token                                     0
+classes.class_schedules                              class_id -> classes.classes.id                                       0
+classes.class_schedule_topics                        class_schedule_id -> classes.class_schedules.id                      0
+classes.class_schedule_topics                        topic_id -> classes.topics.id                                        0
+classes.class_tags                                   class_id -> classes.classes.id                                       0
+classes.class_tags                                   tag_id -> classes.tags.id                                            0
+classes.class_audit_log                              class_id -> classes.classes.id                                       0
+classes.classes                                      class_level_id -> classes.class_levels.id                            0
+classes.classes                                      language_id -> platform.languages.id                                 0
+classes.classes                                      gender -> platform.genders.id                                        0
+classes.classes                                      teacher -> identity.users.token                                      0
+classes.student_transfers                            token_no -> identity.users.token                                     0
+classes.student_transfers                            from_class_id -> classes.classes.id                                  0
+classes.student_transfers                            to_class_id -> classes.classes.id                                    0
+classes.guides                                       level_id -> classes.class_levels.id                                  0
+classes.guides                                       language_id -> platform.languages.id                                 0
+classes.teachers                                     token -> identity.users.token                                        0
+classes.teachers_history                             token -> identity.users.token                                        0
+assessment.spot_quizzes                              class_id -> classes.classes.id                                       0
+assessment.spot_quizzes                              level_id -> classes.class_levels.id                                  0
+assessment.spot_quizzes                              language_id -> platform.languages.id                                 0
+assessment.spot_quizzes                              topic_id -> classes.topics.id                                        0
+assessment.spot_quiz_questions                       spot_quiz_id -> assessment.spot_quizzes.id                           0
+assessment.spot_quiz_responses                       spot_quiz_id -> assessment.spot_quizzes.id                           0
+assessment.spot_quiz_responses                       spot_quiz_question_id -> assessment.spot_quiz_questions.id           0
+assessment.spot_quiz_responses                       token -> identity.users.token                                        0
+assessment.spot_quiz_submissions                     spot_quiz_id -> assessment.spot_quizzes.id                           0
+assessment.spot_quiz_submissions                     token -> identity.users.token                                        0
+assessment.standard_mcqs                             language_id -> platform.languages.id                                 0
+assessment.standard_mcqs                             level_id -> classes.class_levels.id                                  0
+notifications.user_devices                           token -> identity.users.token                                        1
+notifications.user_notifications                     user_token -> identity.users.token                                   0
+notifications.class_scheduled_notifications          class_id -> classes.classes.id                                       0
+notifications.class_scheduled_notifications          class_schedule_id -> classes.class_schedules.id                      0
+notifications.class_scheduled_notifications          created_by_user_id -> identity.users.id                              0
+notifications.class_scheduled_notification_runs      scheduled_id -> notifications.class_scheduled_notifications.id         0
+notifications.class_scheduled_notification_runs      class_id -> classes.classes.id                                       0
+notifications.notifier_runs                          reminder_id -> notifications.notifier_reminders.id                   0
+notifications.notifier_sent_messages                 teacher_token -> identity.users.token                                0
+platform.admin_access_log                            user_id -> identity.users.id                                         0
+platform.admin_access_log                            token -> identity.users.token                                        0
+platform.feedback                                    user_id -> identity.users.id                                         0
+membership.member_profiles                           language -> platform.languages.id                                 3119
+membership.class_registrations                       token -> identity.users.token                                        0
+membership.class_registrations                       for_classid -> classes.classes.id                                    0
+membership.class_registrations_languages             token -> identity.users.token                                        0
+membership.student_interests                         token -> identity.users.token                                        0
+membership.user_guardians                            parent_token -> identity.users.token                                 0
+membership.user_guardians                            child_token -> identity.users.token                                  0
+access.class_access_rules                            token -> identity.users.token                                        0
+access.class_access_rule_conditions                  level_id -> classes.class_levels.id                                  0
+access.user_permissions                              user_id -> identity.users.id                                         0
+access.user_roles                                    user_id -> identity.users.id                                         0
+identity.account_deletion_requests                   token -> identity.users.token                                        0
+RESULT: every exported row was loaded (or filtered by design / kept as a seed row)

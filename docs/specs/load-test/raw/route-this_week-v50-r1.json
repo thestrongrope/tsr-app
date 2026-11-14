@@ -1,0 +1,41 @@
+{
+  "mode": "route",
+  "route": "this_week",
+  "vus": 50,
+  "measured_seconds": 60,
+  "warmup_seconds": 15,
+  "all": {
+    "requests": 8767,
+    "req_per_s": 146.11666666666667,
+    "http_failed_rate": 0,
+    "latency_ms": {
+      "min": 104.407679,
+      "avg": 341.86155092494744,
+      "p50": 292.918814,
+      "p90": 540.1903776000001,
+      "p95": 731.14884,
+      "p99": 1156.2037888799994,
+      "max": 1809.939747
+    }
+  },
+  "iterations": 8767,
+  "routes": {
+    "this_week": {
+      "requests": 8767,
+      "req_per_s": 146.11666666666667,
+      "http_failed_rate": 0,
+      "latency_ms": {
+        "min": 104.407679,
+        "avg": 341.86155092494744,
+        "p50": 292.918814,
+        "p90": 540.1903776000001,
+        "p95": 731.14884,
+        "p99": 1156.2037888799994,
+        "max": 1809.939747
+      }
+    }
+  },
+  "bad_status": {},
+  "bad_short_body": 0,
+  "checks_failed": 0
+}

@@ -1,0 +1,41 @@
+{
+  "mode": "heavy",
+  "route": "xlsx",
+  "vus": 5,
+  "measured_seconds": 0,
+  "warmup_seconds": 0,
+  "all": {
+    "requests": 100,
+    "req_per_s": null,
+    "http_failed_rate": 0,
+    "latency_ms": {
+      "min": 116.769839,
+      "avg": 556.44146159,
+      "p50": 518.3052625,
+      "p90": 828.3479081,
+      "p95": 923.6314547499999,
+      "p99": 1184.84332417,
+      "max": 1186.939171
+    }
+  },
+  "iterations": 100,
+  "routes": {
+    "xlsx": {
+      "requests": 100,
+      "req_per_s": null,
+      "http_failed_rate": 0,
+      "latency_ms": {
+        "min": 116.769839,
+        "avg": 556.44146159,
+        "p50": 518.3052625,
+        "p90": 828.3479081,
+        "p95": 923.6314547499999,
+        "p99": 1184.84332417,
+        "max": 1186.939171
+      }
+    }
+  },
+  "bad_status": {},
+  "bad_short_body": 0,
+  "checks_failed": 0
+}

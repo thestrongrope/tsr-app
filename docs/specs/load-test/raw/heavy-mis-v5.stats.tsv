@@ -1,0 +1,12 @@
+16:38:15	tsr-app-test-5-api-1	34.38%	316.6MiB / 512MiB
+16:38:15	tsr-app-test-5-db-1	94.13%	423.6MiB / 15.66GiB
+16:38:15	tsr-app-test-5-gateway-1	1.31%	9.754MiB / 15.66GiB
+16:38:15	tsr-app-test-5-firebase-emulator-1	100.61%	126.8MiB / 15.66GiB
+16:38:15	tsr-app-test-5-gotenberg-1	0.12%	180.7MiB / 15.66GiB
+16:38:15	tsr-app-test-5-elasticsearch-1	4.82%	673.4MiB / 15.66GiB
+16:38:19	tsr-app-test-5-api-1	218.06%	372.4MiB / 512MiB
+16:38:19	tsr-app-test-5-db-1	132.26%	469.2MiB / 15.66GiB
+16:38:19	tsr-app-test-5-gateway-1	4.84%	11.15MiB / 15.66GiB
+16:38:19	tsr-app-test-5-firebase-emulator-1	40.88%	143MiB / 15.66GiB
+16:38:19	tsr-app-test-5-gotenberg-1	1.61%	308.4MiB / 15.66GiB
+16:38:19	tsr-app-test-5-elasticsearch-1	1.40%	670.3MiB / 15.66GiB

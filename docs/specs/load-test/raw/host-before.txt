@@ -1,0 +1,45 @@
+2026-11-14T14:20:28Z
+19:50  up 10 days, 19:47, 2 users, load averages: 4.33 4.56 4.52
+docker: cpus=10 mem=16818991104 server=29.8.2 os=OrbStack
+tsr-app-dev-api-1	0.01%	79.35MiB / 15.66GiB
+tsr-app-dev-db-1	0.00%	27.79MiB / 15.66GiB
+tsr-app-dev-elasticsearch-1	0.54%	657.3MiB / 15.66GiB
+tsr-app-dev-firebase-emulator-1	0.17%	93.43MiB / 15.66GiB
+tsr-app-dev-gateway-1	0.00%	9.305MiB / 15.66GiB
+tsr-app-dev-gotenberg-1	0.06%	45.27MiB / 15.66GiB
+tsr-app-dev-workers-1	0.02%	110.4MiB / 15.66GiB
+tsr-app-test-1-api-1	0.01%	149.8MiB / 15.66GiB
+tsr-app-test-1-db-1	0.00%	23.48MiB / 15.66GiB
+tsr-app-test-1-firebase-emulator-1	0.02%	121.8MiB / 15.66GiB
+tsr-app-test-1-gateway-1	0.00%	9.125MiB / 15.66GiB
+tsr-app-test-1-gotenberg-1	0.32%	46.5MiB / 15.66GiB
+tsr-app-test-2-api-1	0.02%	221.5MiB / 15.66GiB
+tsr-app-test-2-db-1	0.00%	28.57MiB / 15.66GiB
+tsr-app-test-2-firebase-emulator-1	0.03%	96.86MiB / 15.66GiB
+tsr-app-test-2-gateway-1	0.00%	9.672MiB / 15.66GiB
+tsr-app-test-2-gotenberg-1	0.05%	121.9MiB / 15.66GiB
+tsr-app-test-2-workers-1	0.12%	157.2MiB / 15.66GiB
+tsr-app-test-3-api-1	0.17%	57.26MiB / 15.66GiB
+tsr-app-test-3-db-1	0.00%	24.6MiB / 15.66GiB
+tsr-app-test-3-firebase-emulator-1	0.04%	111.5MiB / 15.66GiB
+tsr-app-test-3-gateway-1	0.00%	9.621MiB / 15.66GiB
+tsr-app-test-3-gotenberg-1	0.03%	8.527MiB / 15.66GiB
+tsr-app-test-3-workers-1	0.01%	157.2MiB / 15.66GiB
+tsr-app-test-4-api-1	0.10%	236.1MiB / 15.66GiB
+tsr-app-test-4-db-1	0.00%	32.67MiB / 15.66GiB
+tsr-app-test-4-elasticsearch-1	0.56%	811.4MiB / 15.66GiB
+tsr-app-test-4-firebase-emulator-1	0.05%	113MiB / 15.66GiB
+tsr-app-test-4-gateway-1	0.00%	9.207MiB / 15.66GiB
+tsr-app-test-4-gotenberg-1	0.05%	50.18MiB / 15.66GiB
+tsr-app-test-4-workers-1	0.01%	92.79MiB / 15.66GiB
+tsr-app-test-api-1	0.01%	292.2MiB / 15.66GiB
+tsr-app-test-db-1	0.00%	30.28MiB / 15.66GiB
+tsr-app-test-elasticsearch-1	0.96%	769MiB / 15.66GiB
+tsr-app-test-firebase-emulator-1	0.03%	138.1MiB / 15.66GiB
+tsr-app-test-gateway-1	0.00%	9.859MiB / 15.66GiB
+tsr-app-test-gotenberg-1	0.09%	58.89MiB / 15.66GiB
+tsr-app-test-workers-1	0.01%	172.2MiB / 15.66GiB
+tsr-parity-api-1	0.01%	32.84MiB / 15.66GiB
+tsr-parity-db-1	0.01%	474.7MiB / 15.66GiB
+tsr-parity-firebase-emulator-1	0.03%	97.79MiB / 15.66GiB
+(17 containers of other projects were also running; their lines are left out)

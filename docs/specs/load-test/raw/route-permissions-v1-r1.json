@@ -1,0 +1,41 @@
+{
+  "mode": "route",
+  "route": "permissions",
+  "vus": 1,
+  "measured_seconds": 60,
+  "warmup_seconds": 15,
+  "all": {
+    "requests": 5708,
+    "req_per_s": 95.13333333333334,
+    "http_failed_rate": 0,
+    "latency_ms": {
+      "min": 3.188971,
+      "avg": 9.87040253819202,
+      "p50": 8.6795665,
+      "p90": 14.439224700000002,
+      "p95": 18.084245549999988,
+      "p99": 29.498415829999974,
+      "max": 101.878663
+    }
+  },
+  "iterations": 5708,
+  "routes": {
+    "permissions": {
+      "requests": 5708,
+      "req_per_s": 95.13333333333334,
+      "http_failed_rate": 0,
+      "latency_ms": {
+        "min": 3.188971,
+        "avg": 9.87040253819202,
+        "p50": 8.6795665,
+        "p90": 14.439224700000002,
+        "p95": 18.084245549999988,
+        "p99": 29.498415829999974,
+        "max": 101.878663
+      }
+    }
+  },
+  "bad_status": {},
+  "bad_short_body": 0,
+  "checks_failed": 0
+}

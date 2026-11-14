@@ -10,7 +10,7 @@ Every number below names where it came from; the last section lists what was run
 - **It is well tested locally.** 3,293 .NET tests and 3,344 contract requests pass. The same contract files pass against
   PHP. The Flutter app's own Patrol journeys pass against the new API: 20 of 20 reviewer journeys, 33 of 36 persona journeys.
 - **It has never run for real.** No production wiring exists in this repo, no external service (push, Firebase deletion,
-  Sheets, WhatsApp) has been called with real credentials, and no load test has been run on the built API.
+  Sheets, WhatsApp) has been called with real credentials, and the one load test so far ran on a laptop.
 - **Security work is mostly decisions taken, not holes left.** The serious findings of the build were decided and built on
   12 Nov. What remains is a list of behaviours kept as PHP on purpose, and go-live items for the public routes.
 
@@ -111,7 +111,7 @@ The three persona journeys that still fail:
   once, in the parity run.
 - **Production.** There is no production compose file in this repo, no deploy has been made, and no data migration
   from MariaDB to PostgreSQL has been rehearsed end to end for a cut-over.
-- **Load.** No load test has been run on the built API (section 6).
+- **Load.** One load test on a laptop (section 6); not repeated, and not on production-class hardware.
 - **The app on the Library routes.** Its website address is a constant, so its Library screens have never called the
   new routes; that rests on the parity run and field assertions.
 - **The live website.** Parity was measured against a local development run on a feature branch.
@@ -136,7 +136,7 @@ The three persona journeys that still fail:
 **To verify**
 
 9. Each external service once with real credentials, in a controlled way.
-10. A load test of the built API on PostgreSQL (running, 14 Nov).
+10. Act on the load test's findings (section 6), then repeat it with three repetitions on a quiet machine.
 11. A confirming full persona run; a second ladies class in the persona seed.
 
 **Housekeeping**
@@ -163,10 +163,44 @@ The benchmark's own fairness review (`docs/specs/profile-bench/review.md`) notes
 uneven logging between stacks; its direction (C# several times PHP's throughput under concurrency, with far lower tail
 latency) held across three repetitions.
 
-**What is not known**
+**Load test of the built API (14 Nov, `docs/specs/load-test/results.md`)**
 
-- Throughput and tail latency of the built API on PostgreSQL under concurrent load. The benchmark used a prototype on
-  MariaDB with a different driver, so its figures do not transfer.
+Lane 5, PostgreSQL, 26,244 synthetic users, the API limited to 2 CPUs and 512 MB, k6 inside the Docker network.
+The mix is the five calls the app makes on opening.
+
+| Members in flight | Requests a second | p95 | Errors |
+|---|---|---|---|
+| 10 | 287 | 77 ms | none |
+| 20, for 15 minutes | 437 | 96 ms | none |
+| 50 | 358 | 255 ms | none |
+| 100 | 177 | 1.4 s | 20 answers of 401, 2 of 500 |
+
+- The API uses its 2 CPUs fully from about 10 members in flight; past 50, throughput falls instead of holding.
+- Memory was flat over the 15 minutes (320 to 335 MiB) with 20 database connections.
+- Slowest routes at 10 members (p95): the registrations report 195 ms, search 151 ms, the class list 113 to 142 ms,
+  this-week 118 ms.
+
+Findings:
+
+1. **Logging. Fixed 14 Nov.** The image set no log level, so every request logged each SQL command. The framework now
+   logs at Warning by default. Measured gain: 60% in one control run, 2% to 17% in the rerun after the fix; single runs
+   on a noisy machine, so the size of the gain is not established.
+2. **Every signed-in request runs six SQL commands before its route**, one of them an `UPDATE`.
+3. **The registrations report** answers 577 KB of JSON, unpaged.
+4. **PDF downloads. Partly fixed 14 Nov.** The gateway now waits 70 s on downloads, so it no longer cuts a render short.
+   The renderer's own limit is raised from 30 s to 60 s (15 Nov). A rerun of five at once had no failure (p95 2.6 s), but it
+   was also about eight times faster than the earlier runs for a reason not found, so the new limit was not exercised.
+5. **Overload:** no shedding; at 100 members throughput halves and sign-in checks start to time out.
+
+Limits of this test: one to two repetitions, a laptop that was itself saturated at 50 members and above (repetitions
+differ by up to 1.8 times), and sign-in checked against a local emulator over HTTP where production checks a signature
+in process. A PHP run was made on the same data but is not a valid comparison (the synthetic MariaDB lacks
+production's indexes), so no ratio is quoted. That PHP run's own sign-in wrote a last-login stamp to about 360
+synthetic user rows in the parity database.
+
+**What is still not known**
+
+- A like-for-like comparison with PHP on the same data and indexes, and figures from production-class hardware.
 - The heavy routes: report downloads, PDF rendering through Gotenberg, the MIS report, bulk adds, search.
 - The workers at production volume: the push drain takes batches of 50 for up to 50 seconds a tick; never run against FCM.
 - Memory and start-up of the real image. The API is built with the AOT and trim analyzers on; no AOT publish is in the

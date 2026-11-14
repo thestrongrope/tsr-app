@@ -1,0 +1,6 @@
+16:59:35 nolog-route-me-v10-r1 load=9.56 9.29 12.38
+17:01:01 nolog-route-permissions-v10-r1 load=14.64 10.66 12.59
+17:02:34 nolog-route-notifications-v10-r1 load=122.58 38.71 22.64
+17:03:57 nolog-route-articles-v10-r1 load=51.96 38.33 24.15
+17:05:21 nolog-mixed-v10-r1 load=18.57 30.75 22.59
+17:06:43 nolog-mixed-v50-r1 load=24.50 28.63 22.45
