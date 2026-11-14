@@ -54,12 +54,14 @@ else. If supported app builds keep working on that, the approach holds for the r
 | 5 | Known faults in today's answers (comma-joined filters, wrong totals, id 0) | Kept as they are in F1 to F3; each fix is its own later change |
 | 6 | Drafts | Never copied; only published articles leave the files |
 | 7 | Reindexing | Automatic; the hand-called admin addresses are dropped |
-| 8 | Decap CMS and its sign-in | Dropped, once confirmed unused |
+| 8 | Decap CMS and its sign-in | Dropped: confirmed unused (Asif, 14 Nov 2026) |
+| 9 | Where the website's search lives | Blended into the app's API: the search features (F2, F3) are part of the one API, not a separate website API (Asif, 14 Nov 2026) |
+| 10 | Article details as built in F1 | Accepted as they are. A push notification for new content (articles, videos) is a later feature, out of scope here (Asif, 14 Nov 2026) |
 
 ### Open questions (epic)
 1. Does production use lecture search by meaning today? It decides whether F7 exists.
 2. Which of the small pages (self-reflection, donate, docs, pages) are kept in F4?
-3. Is Decap CMS really unused (assumed answer 8)?
+3. Answered 14 Nov 2026: Decap CMS is unused (answer 8).
 
 ## Part 2. Feature 1 spec: the app's Library reads
 
