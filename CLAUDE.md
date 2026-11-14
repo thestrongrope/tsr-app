@@ -113,6 +113,17 @@ The test lanes' routes have their own contract scripts, `tools/contract-<lane>.s
 
 Required settings (the API does not start without them): `TSR_DB`, `TSR_FIREBASE_PROJECT_ID`, and `TSR_GOTENBERG_URL` (the Gotenberg container that renders PDF report downloads; the compose file sets it; production must too).
 
+## Branches (gitflow, 15 Nov 2026)
+
+| Branch | Holds | Changes arrive by |
+|---|---|---|
+| `main` | production: only what is released | a release PR from `develop`, then a version tag on `main` |
+| `develop` (the default) | all finished work | a PR from a feature branch |
+| `feature/<issue>-<slug>` | one user story | commits; cut from `develop`, deleted after its PR merges |
+
+Both `main` and `develop` are protected on GitHub: a PR only, no force push, no deletion. Never commit to either directly.
+Hotfix and `release/*` branches are not used until there is a production deployment.
+
 ## Done means
 
 The build has zero warnings, the tests you touched pass (and a new rule has a test that failed
