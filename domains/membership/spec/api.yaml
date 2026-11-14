@@ -489,7 +489,7 @@ paths:
       operationId: reportRegistrations
       summary: The people waiting to be placed in a class
       description: |
-        registrations:read for the gender (403); a caller tied to one gender gets that gender, anyone else "2" for ladies and gents otherwise. No row scope beyond the gender. Answers {gender, registrants[{id, token, name, status, registeredOn, requestedClass, email, mobile, residenceLocation, preferredLocation, workLocation, birthYear, classLevel, classNumber, profession, islamicStudyYears, interests, city, country, zip}]}, newest first, at most 5000. One row per member (the greatest value of each column over their forms); people in an active class, with a Rejected form, or with a placeholder email are left out. Slice: features/report-registrations/ReportRegistrations.cs.
+        registrations:read for the gender (403); a caller tied to one gender gets that gender, anyone else "2" for ladies and gents otherwise. No row scope beyond the gender: a coordinator of assigned classes sees every waiting person of that gender, whichever class they asked for. Answers {gender, registrants[{id, token, name, status, registeredOn, requestedClass, email, mobile, residenceLocation, preferredLocation, workLocation, birthYear, classLevel, classNumber, profession, islamicStudyYears, interests, city, country, zip}]}, newest first, at most 5000. One row per member (the greatest value of each column over their forms); people in an active class, with a Rejected form, or with a placeholder email are left out. Slice: features/report-registrations/ReportRegistrations.cs.
       security:
         - memberToken: []
       parameters:

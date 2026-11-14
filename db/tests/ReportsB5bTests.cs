@@ -163,7 +163,7 @@ public sealed partial class ReportsB5bTests
         var assigned = await kit.SendAsync(Coordinator, HttpMethod.Get, "/reports/registrations?gender=2");
         Assert.That(assigned.Status, Is.EqualTo(HttpStatusCode.OK), assigned.Body);
         Assert.That(assigned.Json!["gender"]!.GetValue<int>(), Is.EqualTo(1));
-        Assert.That(Ids(assigned.Json["registrants"], "token"), Is.EqualTo((int[])[901711]), "decided 11 Nov 2026, stricter than PHP: only the people who asked for an assigned class (9701), not an open request or another class");
+        Assert.That(Ids(assigned.Json["registrants"], "token"), Is.EqualTo((int[])[901714, 901712, 901711]), "as PHP: every waiting person of the gender, whether they asked for the assigned class (9701), another class (9702) or none; never the other gender (901713)");
 
         var file = await kit.SendAsync(Coordinator, HttpMethod.Get, "/reports/registrations/download?format=xlsx");
         Assert.That(file.Status, Is.EqualTo(HttpStatusCode.OK));

@@ -89,3 +89,17 @@ HTTP 200
 jsonpath "$.gender" == 2
 jsonpath "$.registrants[?(@.token==901814)]" exists
 jsonpath "$.registrants[?(@.token==901811)]" not exists
+
+# 6. A coordinator assigned one gents class (b5d_coord: 9561 only) is locked to gents and sees every waiting person of that gender: the one who asked for the assigned class, the ones who asked for another class
+# (closed, gone) and the open request; never a lady
+GET {{base_url}}/reports/registrations?gender=2
+Authorization: {{auth_b5d_coord}}
+HTTP 200
+[Asserts]
+jsonpath "$.gender" == 1
+jsonpath "$.registrants[?(@.token==901811)].requestedClass" == "B4B-G-61"
+jsonpath "$.registrants[?(@.token==901816)]" exists
+jsonpath "$.registrants[?(@.token==901817)]" exists
+jsonpath "$.registrants[?(@.token==901819)]" exists
+jsonpath "$.registrants[?(@.token==901814)]" not exists
+jsonpath "$.registrants[?(@.token==901812)]" not exists

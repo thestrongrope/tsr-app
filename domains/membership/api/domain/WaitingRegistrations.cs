@@ -8,8 +8,8 @@ namespace Tsr.Membership.Api.Domain;
 // The waiting list as data, for the screen (GET /reports/registrations?gender) and the download (its /download) -> {gender, registrants[{id, token, name, status, registeredOn, requestedClass, email, mobile, residenceLocation, preferredLocation, workLocation, birthYear, classLevel,
 // classNumber, profession, islamicStudyYears, interests, city, country, zip}]}: the people waiting to be placed in a class, newest first.
 // PHP: routes/reports.php api_require_registrations_report (:1696), subscribers.php waitingRegistrations (:584). Guard: the gender (locked by registrations:read, else "2" is ladies,
-// anything else gents), then registrations:read for that gender (403). Row scope, STRICTER THAN PHP (decided 11 Nov 2026): a caller who reaches only assigned classes sees only the people who asked
-// for one of those classes (PHP shows such a caller every waiting person of the gender); a caller who reaches all classes or a whole gender sees everyone, open requests included. One query.
+// anything else gents), then registrations:read for that gender (403). Row scope, as PHP: the gender and nothing else, so a caller who reaches only assigned classes (a coordinator) sees every
+// waiting person of the gender, whichever class they asked for and open requests included. One query.
 // Copied: one row per token, each column the MAX over the member's registrations (so the status is the greatest TEXT: Rejected > Pending > Accepted, and one Rejected form hides the member); members with an enrolment
 // that is not removed in an active class, members whose email ends @thestrongrope.com (case-insensitive) and members with no account are left out; the requested class is shown only while that class is active;
 // the gender is the stored text compared with "1" or "2". Deviations: at most 5000 rows (PHP has no bound); ties on the creation time are ordered by id (PHP: undefined); the text MAX uses the "C" collation
@@ -28,7 +28,7 @@ internal static class WaitingRegistrations
 
     /// <summary>
     /// PHP <c>api_require_registrations_report</c>'s guard: the gender (locked by registrations:read, else "2" is ladies, anything else gents), then registrations:read for it (403). <c>ClassIds</c> is null for a
-    /// caller who reaches all classes or a whole gender, else the assigned classes the caller is limited to (PHP managedReach).
+    /// caller who reaches all classes or a whole gender, else the assigned classes the caller is limited to (PHP managedReach): the placed-registrations file narrows its rows by it, the waiting list does not.
     /// </summary>
     public static async Task<(int Gender, int[]? ClassIds, IResult? Refusal)> GuardAsync(HttpContext context, Permissions permissions, Caller caller, CancellationToken ct)
     {
@@ -45,12 +45,10 @@ internal static class WaitingRegistrations
         return (gender, seesOpen ? null : [.. reach.ClassIds], null);
     }
 
-    /// <summary>The waiting people of one gender. <paramref name="classIds"/>: only the people who asked for one of those classes (null: everyone).</summary>
-    public static async Task<List<Row>> LoadAsync(MembershipContext db, int gender, int[]? classIds, CancellationToken ct)
+    /// <summary>The waiting people of one gender, whoever asks (PHP <c>getClassRegistrations</c>).</summary>
+    public static async Task<List<Row>> LoadAsync(MembershipContext db, int gender, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(db);
-        var limited = classIds is not null;
-        var ids = classIds ?? [];
         var stored = gender.ToString(System.Globalization.CultureInfo.InvariantCulture);
         return await db.Database
             .SqlQuery<Row>($"""
@@ -76,7 +74,6 @@ internal static class WaitingRegistrations
                       where c.status = 'A' and cs.removed_at is null and cs.token_no = r.token)
                   and u.email not ilike '%@thestrongrope.com'
                   and p.gender::text = {stored}
-                  and ({limited} = false or r.for_classid = any({ids}))
                 order by r.created_at desc, r.id desc
                 limit {MaxRows}
                 """)
