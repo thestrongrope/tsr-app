@@ -14,8 +14,10 @@ and runs the file. It holds no secret and publishes no port; `hosts/api/tests/Pr
 | `workers` | the API image with `--workers`: runs the workers named in `TSR_WORKERS` | always |
 | `gotenberg` | PDF rendering for report downloads | always |
 | `elasticsearch` | the search index; data in the volume `es-data` | always |
+| `site-build` | the static site generator (`hosts/site`): reads the API, writes the pages into the volume `site-data` | once per start; retried up to five times while the API is not ready |
+| `site` | nginx serving `site-data`, read-only; port 80. It forwards nothing | always |
 
-Only `api` is reached from outside. Attach the host name to it in the deployment tool, on port 8080. The server's proxy (Traefik) is the
+Two services are reached from outside. Attach the API's host name to `api`, port 8080, and the site's host name to `site`, port 80. The server's proxy (Traefik) is the
 only proxy: the nginx gateway in `hosts/gateway/` belongs to the dev and test stacks.
 
 ## Settings
@@ -42,6 +44,12 @@ A first start on an empty host creates the database, the limited role and every 
 no member exists. Real data arrives by a separate load (`docs/specs/repo-structure.md` section 3.3).
 
 A later start keeps both volumes and applies only new migrations. **Removing the volume `db-data` removes every member's data.**
+
+## The static site
+
+The site is rebuilt at every start of the stack, from what the API answers at that moment. A build that fails keeps the pages built
+before. It writes a `robots.txt` that keeps crawlers out (`TSR_SITE_NO_CRAWL` in `docker-compose.yml`). A change of content does not
+rebuild it: redeploy, or start `site-build` again. Until the first build has finished, `site` answers 403 and is reported unhealthy.
 
 ## Not covered here
 

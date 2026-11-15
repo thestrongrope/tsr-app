@@ -12,7 +12,7 @@ public sealed partial class ProductionStackTests
     private static readonly string[] RequiredSettings =
         ["TSR_DB_OWNER_PASSWORD", "TSR_APP_DB_PASSWORD", "TSR_ELASTICSEARCH_PASSWORD", "TSR_FIREBASE_PROJECT_ID"];
 
-    private static readonly string[] LongRunningServices = ["db", "gotenberg", "elasticsearch", "api", "workers"];
+    private static readonly string[] LongRunningServices = ["db", "gotenberg", "elasticsearch", "api", "workers", "site"];
 
     /// <summary>The file without its comments: a comment may name what the stack must not contain.</summary>
     private static readonly string Stack = string.Join(
@@ -51,10 +51,17 @@ public sealed partial class ProductionStackTests
         });
     }
 
-    /// <summary>The server's proxy reaches the API itself; the nginx gateway of the dev and test stacks has no job in production.</summary>
+    /// <summary>
+    /// The server's proxy reaches the API itself; the gateway of the dev and test stacks has no job in production. The site's server
+    /// serves files and forwards nothing: it mounts no configuration, so it cannot be turned into a proxy from this file.
+    /// </summary>
     [Test]
     public void No_second_proxy() =>
-        Assert.That(Stack, Does.Not.Match(@"(?m)^  gateway:").And.Not.Contain("nginx"));
+        Assert.That(Stack, Does.Not.Match(@"(?m)^  gateway:").And.Not.Contain("hosts/gateway").And.Not.Contain("conf.d"));
+
+    [Test]
+    public void The_site_tells_search_engines_not_to_crawl_it() =>
+        Assert.That(Stack, Does.Contain("TSR_SITE_NO_CRAWL: \"true\""));
 
     [Test]
     public void No_port_is_published() =>
