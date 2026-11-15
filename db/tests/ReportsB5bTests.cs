@@ -139,6 +139,20 @@ public sealed partial class ReportsB5bTests
         Assert.That(hidden.Json["stages"]!["alignment"]!.AsArray().Select(r => r!["teacherMobile"]), Has.All.Null);
     }
 
+    /// <summary>PHP teacherMobiles since 1.6.0: the number in full, with the teacher's own country code; one that cannot be completed is left out.</summary>
+    [Test]
+    public async Task This_week_completes_a_teacher_mobile_with_the_code_of_the_teacher_own_country_or_leaves_it_out()
+    {
+        async Task<IEnumerable<string?>> MobilesAsync() =>
+            (await kit.SendAsync(Admin, HttpMethod.Get, "/reports/this-week")).Json!["stages"]!["alignment"]!.AsArray().Select(r => r!["teacherMobile"]?.GetValue<string>());
+
+        await TestDatabase.ExecuteAsync("update membership.member_profiles set mobile = '09000000001', country = 'India Mumbai' where gender = '1'");
+        Assert.That(await MobilesAsync(), Is.Not.Empty.And.All.EqualTo("+919000000001"));
+
+        await TestDatabase.ExecuteAsync("update membership.member_profiles set country = 'Atlantis' where gender = '1'");
+        Assert.That(await MobilesAsync(), Is.Not.Empty.And.All.Null);
+    }
+
     [Test]
     public async Task Registrations_lists_only_the_waiting_people_of_the_gender_asked_for_newest_first_and_a_coordinator_is_locked_to_the_gender_of_their_classes()
     {

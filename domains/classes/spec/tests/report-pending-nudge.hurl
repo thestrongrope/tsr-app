@@ -133,8 +133,8 @@ HTTP 200
 [Asserts]
 jsonpath "$.teacherToken" == 921011
 jsonpath "$.teacher" == "R2 Member 921011"
-jsonpath "$.title" == "Reminder from the class coordination team"
-jsonpath "$.body" == "Assalamu Alaikum. Please complete the following for your classes:\n• R2-G-102: 1 MCQ to conduct\n• R2-G-101: 1 MCQ to conduct\nJazakallah khair."
+jsonpath "$.title" == "Pending C Form Reminder"
+jsonpath "$.body" == "Salaamun Alaikum\n\nClass Number: R2-G-102\nPending MCQ(s): 1\n\nClass Number: R2-G-101\nPending MCQ(s): 1\n\nTSR CC Team"
 jsonpath "$.alreadyReminded" == false
 jsonpath "$.lastReminded" == null
 jsonpath "$.sent" == false
@@ -154,7 +154,7 @@ Authorization: {{auth_r2_one}}
 {"teacher": 921011, "from": "03-2019", "to": "03-2019"}
 HTTP 200
 [Asserts]
-jsonpath "$.body" == "Assalamu Alaikum. Please complete the following for your classes:\n• R2-G-101: 1 MCQ to conduct\nJazakallah khair."
+jsonpath "$.body" == "Salaamun Alaikum\n\nClass Number: R2-G-101\nPending MCQ(s): 1\n\nTSR CC Team"
 
 # 6. Outside the reach, the other gender, nothing pending, not a teacher: the same 422 for all, so nothing says whether the teacher exists
 POST {{base_url}}/reports/pending/nudge
@@ -206,7 +206,7 @@ Authorization: {{auth_r2_gadmin}}
 HTTP 200
 [Asserts]
 jsonpath "$.teacher" == "R2 Member 921012"
-jsonpath "$.body" == "Assalamu Alaikum. Please complete the following for your classes:\n• R2-G-103: 1 MCQ to conduct\nJazakallah khair."
+jsonpath "$.body" == "Salaamun Alaikum\n\nClass Number: R2-G-103\nPending MCQ(s): 1\n\nTSR CC Team"
 
 POST {{base_url}}/reports/pending/nudge?gender=2
 Authorization: {{auth_r2_coord}}
@@ -214,7 +214,7 @@ Authorization: {{auth_r2_coord}}
 HTTP 200
 [Asserts]
 jsonpath "$.teacher" == "R2 Member 921013"
-jsonpath "$.body" == "Assalamu Alaikum. Please complete the following for your classes:\n• R2-L-104: 1 MCQ to conduct\nJazakallah khair."
+jsonpath "$.body" == "Salaamun Alaikum\n\nClass Number: R2-L-104\nPending MCQ(s): 1\n\nTSR CC Team"
 jsonpath "$.deviceCount" == 0
 
 POST {{base_url}}/reports/pending/nudge?gender=2

@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -26,7 +25,9 @@ internal static class ReportPendingNudgeSlice
     private const int WindowHours = 24;
     private const int MaxPerHour = 30;
     private const int BodyLimit = 500;
-    internal const string Title = "Reminder from the class coordination team";
+    private const string Greeting = "Salaamun Alaikum";
+    private const string SignOff = "TSR CC Team";
+    internal const string Title = "Pending C Form Reminder";
 
     internal sealed record Answer(int TeacherToken, string Teacher, string Title, string Body, bool AlreadyReminded, string? LastReminded, bool Sent, int DeviceCount);
 
@@ -150,50 +151,52 @@ internal static class ReportPendingNudgeSlice
         return devices;
     }
 
-    /// <summary>PHP PendingNudgeModel::message: a fixed template, one line per class, cut so the body is at most 500 characters, with "and N more classes" for what does not fit.</summary>
+    /// <summary>
+    /// PHP PendingNudgeModel::message: the wording every pending C-form reminder shares (English, no name, no form of address). One block per class, cut so the body is at most 500
+    /// characters, with "and N more classes" for what does not fit. The heading is the title.
+    /// </summary>
     internal static (string Title, string Body) Message(PendingRules.PendingTeacher teacher)
     {
         ArgumentNullException.ThrowIfNull(teacher);
-        var lines = teacher.Classes.Select(Line).ToList();
-        const string head = "Assalamu Alaikum. Please complete the following for your classes:\n";
-        const string tail = "\nJazakallah khair.";
+        var blocks = teacher.Classes.Select(Block).ToList();
+        const string head = Greeting + "\n\n";
+        const string tail = "\n\n" + SignOff;
         var shown = new List<string>();
-        for (var i = 0; i < lines.Count; i++)
+        for (var i = 0; i < blocks.Count; i++)
         {
-            var more = lines.Count - i;
-            var candidate = head + string.Join('\n', shown.Append(lines[i])) + tail;
-            var reserve = more > 1 ? PhpText.CodePointCount($"\n…and {more} more classes") : 0;
+            var more = blocks.Count - i;
+            var candidate = head + string.Join("\n\n", shown.Append(blocks[i])) + tail;
+            var reserve = more > 1 ? PhpText.CodePointCount($"\n\n…and {more} more classes") : 0;
             if (PhpText.CodePointCount(candidate) + reserve > BodyLimit)
             {
                 break;
             }
 
-            shown.Add(lines[i]);
+            shown.Add(blocks[i]);
         }
 
-        var rest = lines.Count - shown.Count;
-        var body = new StringBuilder(head).Append(string.Join('\n', shown));
+        var rest = blocks.Count - shown.Count;
         if (rest > 0)
         {
-            body.Append(CultureInfo.InvariantCulture, $"\n…and {rest} more ").Append(rest == 1 ? "class" : "classes");
+            shown.Add($"…and {rest} more " + (rest == 1 ? "class" : "classes"));
         }
 
-        return (Title, body.Append(tail).ToString());
+        return (Title, head + string.Join("\n\n", shown) + tail);
     }
 
-    private static string Line(PendingRules.PendingClass c)
+    private static string Block(PendingRules.PendingClass c)
     {
-        var parts = new List<string>();
+        var lines = new List<string> { "Class Number: " + c.Class };
         if (c.NotFilled > 0)
         {
-            parts.Add($"{c.NotFilled} " + (c.NotFilled == 1 ? "class form" : "class forms"));
+            lines.Add(string.Create(CultureInfo.InvariantCulture, $"Pending C Form(s): {c.NotFilled}"));
         }
 
         if (c.McqPending > 0)
         {
-            parts.Add($"{c.McqPending} " + (c.McqPending == 1 ? "MCQ" : "MCQs") + " to conduct");
+            lines.Add(string.Create(CultureInfo.InvariantCulture, $"Pending MCQ(s): {c.McqPending}"));
         }
 
-        return $"• {c.Class}: {string.Join(", ", parts)}";
+        return string.Join('\n', lines);
     }
 }
