@@ -1,6 +1,6 @@
 # Guardian links: a parent's and a child's own view
 
-Owner domain: `membership` · Status: live for the six self-service operations; the staff operations (create invite, direct add, cancel) are built with `classes`
+Owner domain: `membership` · Status: live for the six self-service operations, `GET /me/children` and the five staff operations (batch B4b)
 
 <!-- Living document: describes TODAY. Rewrite in every PR that changes behaviour. Template: docs/templates/capability.md -->
 
@@ -10,10 +10,11 @@ A parent links to a child with a one-time invite. A parent sees and ends their o
 ## 2. Actors and scope
 - **Actors:** a signed-in member as parent (`children:read`, `children:link`) or as child (`parents:manage`); the invite's creator (a staff member or the child) only through the 403 rule.
 - **In scope:** `GET /me/children/links`, `GET` and `POST /me/children/link/{code}`, `DELETE /me/children/{child_token}/link`, `GET /me/parents`, `DELETE /me/parents/{parent_token}`.
-- **Out of scope:** creating an invite, adding a parent by token, cancelling an invite (the staff operations); `GET /me/children` (needs each child's classes).
+- **Also in scope (B4b):** `GET /me/children`; staff and child create (`POST`), list (`GET`) and cancel (`DELETE`) invites at `/members/{child_token}/parent-links[/{id}]`; the candidate lookup `GET /members/{child_token}/parents/candidate/{parent_token}`; add by token `POST /members/{child_token}/parents`.
+- **Out of scope:** the child-facing class, attendance and performance views (`classes`).
 
 ## 3. Requirements (current behaviour)
-`D` = `db/tests/GuardianTests.cs`, `MembershipRightsTests.cs`; `U` = `api/domain/GuardianRules.Tests.cs`, `LinkRowView.Tests.cs`; `H` = `spec/tests/children-links.hurl`, `children-link-inspect.hurl`, `children-link-accept.hurl`, `children-link-revoke.hurl`, `parents-list.hurl`, `parent-revoke.hurl`.
+`D` = `db/tests/GuardianTests.cs`, `MembershipRightsTests.cs`; `U` = `api/domain/GuardianRules.Tests.cs`, `LinkRowView.Tests.cs`; `H` = (B4b: `me-children.hurl`, `member-parent-*.hurl`, `member-parents-add.hurl`), `spec/tests/children-links.hurl`, `children-link-inspect.hurl`, `children-link-accept.hurl`, `children-link-revoke.hurl`, `parents-list.hurl`, `parent-revoke.hurl`.
 
 | ID | Requirement (EARS, one behaviour) | Rationale | Priority | Verification: method, location |
 |---|---|---|---|---|
@@ -31,6 +32,11 @@ A parent links to a child with a one-time invite. A parent sees and ends their o
 | GRD-R12 | IF the body of an accept is not valid JSON THEN 422 `Invalid JSON body`, before the code is looked up | PHP reads the body first | Must | Test: D `A_body_that_is_not_JSON_is_a_422_...`; H children-link-accept 2 |
 | GRD-R13 | WHEN a member revokes (a parent their link to a child, a child one of their parents) THEN the system SHALL mark every active link of that pair revoked with the caller's user id and the time, and answer 204 with no body; none matched is 404 `Active link not found` / `Active parent link not found` | PHP's `revokeForPair` | Must | Test: D `A_parent_revokes_their_own_active_link_...`, `A_child_revokes_a_parent_and_the_row_records_the_child_...`; H children-link-revoke 4, parent-revoke 4 |
 | GRD-R14 | The system SHALL read the token in the path as PHP's `(int)`: "abc" is 0 and matches nothing | PHP's cast | Must | Test: D `Revoking_a_link_that_is_not_there_is_a_404_and_a_non_number_is_token_zero`; H children-link-revoke 2, parent-revoke 2 |
+| GRD-R15 | WHEN a caller lists children THEN the system SHALL return their active links in link order, each child with name, first and last name, gender as PHP's integer cast (the word Male is 0) and the active classes they are in (not distinct) | PHP `getChildrenForParent` | Must | Test: H me-children 2, 3 |
+| GRD-R16 | WHEN the child (parents:manage) or staff in reach (parents:add) create an invite THEN the system SHALL store one invite (32 hex characters, 7 days, source `link`) and answer 201 `{code, link, url, expires_at}`; IF the child already has 5 live invites THEN 422; a token of 0 or less is 404 before any permission is asked, and an unknown, shared or guest child is 404 `Student not found` | PHP `route_member_parent_links_create` | Must | Test: H member-parent-link-create; D `Concurrent_invites_for_one_child_stop_at_five_under_the_lock`, `A_class_coordinator_may_invite_...`; U `ParentLinkRulesTests` |
+| GRD-R17 | The system SHALL list only the caller's own live invites for the child (newest first, at most 5, no code) and let only the creator or a holder of parents:manage for the child's gender cancel one that is still `invited` (an expired one too); anything else is 404 `Invite not found` | PHP `pendingInvitesFor`, `cancelInvite` | Must | Test: H member-parent-links, member-parent-link-cancel; D `Cancelling_is_for_the_creator_or_a_manager_and_never_anyone_else` |
+| GRD-R18 | WHEN staff add a parent by token THEN the system SHALL answer 201 with an active `token_entry` link, in PHP's order: staff in reach (else 403 or 404), the body, the parent, the child, a self link or the caller as parent (422), the relationship (422), under the child's lock an existing active link (409), then a pair the child ended (403 `Child previously revoked this parent; admin approval required` unless the caller holds parents:manage for the child's gender) | PHP `addDirect` | Must | Test: H member-parents-add; D `A_direct_add_writes_...`, `A_parent_the_child_removed_returns_only_through_...` |
+| GRD-R19 | WHILE a caller holds parents:add-direct the system SHALL answer the candidate lookup with the name only, 30 lookups an hour per caller (429), 404 `Member not found` out of reach, 422 code `ambiguous_token` for a shared token | PHP `candidateLookup` | Must | Test: H member-parent-candidate; D `The_candidate_lookup_follows_the_callers_reach` |
 
 **Quirks copied on purpose** (also in `php-parity-feedback.md`, "Membership batch 3b-2"):
 
@@ -43,10 +49,11 @@ A parent links to a child with a one-time invite. A parent sees and ends their o
 | GRD-Q5 | The inspect answer takes the first holder of a token two members hold | none (section 9) |
 | GRD-Q6 | The child's later removal of a parent is what makes a return need an admin: `revoked_by` is the child's user id | D `A_child_revokes_a_parent_and_the_row_records_the_child_so_a_return_needs_an_admin` |
 
+
 ## 4. Quality requirements (ISO/IEC 25010)
 | ID | Characteristic | Requirement (measurable) | Rationale | Priority | Verification: method, location |
 |---|---|---|---|---|---|
-| GRD-Q7 | Compatibility | The six Hurl files give the same results on PHP and on the new API | store-live builds | Must | Demonstration: `tools/membership-contract.sh parity` and `dev` |
+| GRD-Q7 | Compatibility | The Hurl files of this capability give the same results on PHP and on the new API | store-live builds | Must | Demonstration: `tools/membership-contract.sh parity` and `dev` |
 | GRD-Q8 | Security | A code is 32 characters and a longer one is never looked up; the inspect count limits guessing; every query is a prepared statement; no log line carries a member token | CODING-GUIDELINES | Must | Inspection: `api/features/children-link-*/` |
 | GRD-Q9 | Reliability | A list is capped at 200 rows (PHP has no cap) | bounded work | Should | Inspection: `api/domain/LinkLister.cs` |
 
@@ -56,7 +63,7 @@ A parent links to a child with a one-time invite. A parent sees and ends their o
 ## 6. Interfaces
 - **API:** the six routes (`spec/api.yaml`; gateway: `= /me/children/links`, `^~ /me/children/link/`, `~ ^/me/children/[^/]+/link$`, `= /me/parents`, `^~ /me/parents/`; `GET /me/children` stays on PHP).
 - **Uses:** `UserDirectory` (identity: holders of a token, tokens of user ids), `Permissions` (access).
-- **Events:** none; no notification (PHP sends none).
+- **Events:** `membership.parent_invite_created`, `parent_invite_cancelled`, `parent_link_added` (domain `CLAUDE.md`); no notification (PHP sends none).
 
 ## 7. Data
 Table `membership.user_guardians` (keyed by token, no foreign keys, unique `code`; "one active link per pair" has no key, only the lock). The advisory lock class is 3001 (`GuardianLock`). PII: who is whose parent. Erasure on account deletion: not built (PHP leaves these rows; an open decision for the erasure handler).
@@ -65,7 +72,8 @@ Table `membership.user_guardians` (keyed by token, no foreign keys, unique `code
 | ID | Decision | Reason |
 |---|---|---|
 | GRD-D1 | No new unique index; a lock only | old data may hold a duplicate pair (design decision 5) |
-| GRD-D2 | `TSR_PUBLIC_WEB_BASE` is not added: none of the six operations builds an invite link | the setting arrives with the staff operation that does |
+| GRD-D2 | `TSR_PUBLIC_WEB_BASE` (configuration, unset means no base) prefixes the invite link `<base>/link/<code>` of the create-invite route | PHP builds it from `REDIRECT_URI` |
+| GRD-D3 | The invite code is in no event payload and no log | a code is a bearer secret |
 
 ## 9. Known limitations, gaps and open questions
 - **Permission 403:** the member set gives every member these permissions and nothing can deny them, so the 403 is not provable end to end.

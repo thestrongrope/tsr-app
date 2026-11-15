@@ -2,7 +2,10 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using NUnit.Framework;
+using Tsr.Identity.Api;
 
 namespace Tsr.Db.Tests;
 
@@ -284,7 +287,7 @@ public sealed class SignInTests
 
         var row = await UserAsync(900001);
         Assert.That(row["lastlogin"], Is.Not.Null);
-        Assert.That(row["lastloginip"], Is.EqualTo("203.0.113.9"));
+        Assert.That(row["lastloginip"], Is.Null, "a forwarded address is believed only from our own proxy; the test server has no peer address");
         Assert.That(row["lastdevice"], Is.EqualTo("TsrTest/1.0"));
         Assert.That(row["device"], Is.EqualTo("Pixel"));
         Assert.That(row["platform"], Is.EqualTo("Android 15"));
@@ -371,8 +374,21 @@ public sealed class SignInTests
 
         using var response = await client.SendAsync(request);
         var text = await response.Content.ReadAsStringAsync();
-        return new Reply(response.StatusCode, text.Length == 0 ? default : JsonDocument.Parse(text).RootElement.Clone());
+        return new Reply(response.StatusCode, text.Length == 0 ? default : JsonElement.Parse(text));
     }
 
     private sealed record Reply(HttpStatusCode Status, JsonElement Body);
+
+    [Test]
+    public async Task An_EF_comparison_of_an_email_matches_a_row_that_differs_only_in_letter_case_LINQ_CHECK()
+    {
+        await TestDatabase.ExecuteAsync("insert into identity.users (token, email) values (924901, 'case.check@example.invalid') on conflict do nothing");
+        using var factory = TestApi.Create();
+        using var scope = factory.Services.CreateScope();
+        var identity = scope.ServiceProvider.GetRequiredService<IdentityContext>();
+
+        var found = await identity.Users.CountAsync(u => u.Email == "CASE.CHECK@EXAMPLE.INVALID");
+
+        Assert.That(found, Is.EqualTo(1), "EF sends the parameter as the column's type (citext)");
+    }
 }

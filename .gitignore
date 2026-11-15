@@ -24,3 +24,6 @@ pubspec_overrides.yaml
 .DS_Store
 .idea/
 .vscode/
+
+# Python (tools/)
+__pycache__/

@@ -212,6 +212,11 @@ HTTP 200
 jsonpath "$.me.email" == "{{member_email}}"
 jsonpath "$.me.token" isInteger
 jsonpath "$.me.id" isInteger
+# me is the whole profile, as GET /me answers it: the app reads its fields right after sign-in
+jsonpath "$.me.*" count == 16
+jsonpath "$.me.roleid" isInteger
+jsonpath "$.me.name" exists
+jsonpath "$.me.sendupdates" exists
 
 # 11. A verified email that matches a member with no Firebase id claims that member (a create route)
 POST {{emulator_url}}/projects/{{project_id}}/accounts

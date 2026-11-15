@@ -1,0 +1,41 @@
+{
+  "mode": "route",
+  "route": "emulator_lookup",
+  "vus": 1,
+  "measured_seconds": 20,
+  "warmup_seconds": 5,
+  "all": {
+    "requests": 42844,
+    "req_per_s": 2142.2,
+    "http_failed_rate": 0,
+    "latency_ms": {
+      "min": 0.121542,
+      "avg": 0.3331394152740187,
+      "p50": 0.219459,
+      "p90": 0.47102970000000005,
+      "p95": 0.7546555499999998,
+      "p99": 2.5463621199999995,
+      "max": 34.539919
+    }
+  },
+  "iterations": 42844,
+  "routes": {
+    "emulator_lookup": {
+      "requests": 42844,
+      "req_per_s": 2142.2,
+      "http_failed_rate": 0,
+      "latency_ms": {
+        "min": 0.121542,
+        "avg": 0.3331394152740187,
+        "p50": 0.219459,
+        "p90": 0.47102970000000005,
+        "p95": 0.7546555499999998,
+        "p99": 2.5463621199999995,
+        "max": 34.539919
+      }
+    }
+  },
+  "bad_status": {},
+  "bad_short_body": 0,
+  "checks_failed": 0
+}

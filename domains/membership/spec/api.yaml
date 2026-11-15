@@ -284,6 +284,243 @@ paths:
           $ref: "#/components/responses/Problem"
         "404":
           $ref: "#/components/responses/Problem"
+  /me/children:
+    get:
+      operationId: listMyChildren
+      summary: The caller's active linked children with the classes each is in
+      description: Needs children:read:self. Each child {token, name, first_name, last_name, gender (PHP's int cast: the word Male is 0), relationship, classes[{class_id, class_name, class_code, status}]}; at most 200 links.
+      security:
+        - memberToken: []
+      responses:
+        "200": {description: The children}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+  /members/{child_token}/parent-links:
+    parameters:
+      - {name: child_token, in: path, required: true, schema: {type: string}}
+    post:
+      operationId: createParentInvite
+      summary: Create a one-time parent invite for a child
+      description: |
+        The child (parents:manage) or staff in reach (parents:add). A token of 0 or less, an unknown or a shared token is 404 `Student not found`; the sixth live invite is 422.
+        201 {code, link, url, expires_at}; link and url are the same (TSR_PUBLIC_WEB_BASE plus /link/<code>).
+      security:
+        - memberToken: []
+      responses:
+        "201": {description: The invite}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+    get:
+      operationId: listParentInvites
+      summary: The caller's own unused, unexpired invites for a child
+      description: Same guard as the creation. [{id, created_at, expires_at}], newest first, at most 5; no code.
+      security:
+        - memberToken: []
+      responses:
+        "200": {description: The invites}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /members/{child_token}/parent-links/{id}:
+    delete:
+      operationId: cancelParentInvite
+      summary: Cancel an unused invite
+      description: The invite's creator, or a holder of parents:manage for the child's gender. An unknown, used or someone else's invite is 404 `Invite not found`.
+      parameters:
+        - {name: child_token, in: path, required: true, schema: {type: string}}
+        - {name: id, in: path, required: true, schema: {type: string}}
+      security:
+        - memberToken: []
+      responses:
+        "204": {description: Cancelled}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /members/{child_token}/parents/candidate/{parent_token}:
+    get:
+      operationId: parentCandidate
+      summary: The display name of a member, before adding them as a parent
+      description: parents:add-direct, 30 lookups an hour per caller (429), then staff in reach of the child. {name}. A shared token is 422 {detail, code ambiguous_token}.
+      parameters:
+        - {name: child_token, in: path, required: true, schema: {type: string}}
+        - {name: parent_token, in: path, required: true, schema: {type: string}}
+      security:
+        - memberToken: []
+      responses:
+        "200": {description: The name}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "429": {$ref: "#/components/responses/Problem"}
+  /members/{child_token}/parents:
+    post:
+      operationId: addParentDirect
+      summary: Staff add an active parent link by token number
+      description: |
+        Body {parent_token, relationship}. Staff in reach of the child (404 `Student not found` otherwise, 403 without parents:add-direct). 201 {id, parent_token, child_token, relationship, status}.
+        409 an active link exists; 403 the child removed this parent and the caller lacks parents:manage for the child's gender; 422 a self link, the caller as the parent, an unknown relationship or a shared token (code ambiguous_token).
+      parameters:
+        - {name: child_token, in: path, required: true, schema: {type: string}}
+      security:
+        - memberToken: []
+      responses:
+        "201": {description: The link}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /registrations/{registration_id}/reject:
+    post:
+      operationId: rejectRegistration
+      summary: Turn a waiting registrant down
+      description: |
+        Body {reason}, 1 to 500 characters after trimming. registrations:read for the registrant's gender, then registrations:reject for it. The registration must be the member's latest and still waiting (409 otherwise).
+        Every registration row of the member becomes Rejected. 200 {rejected, registrationId}.
+      parameters:
+        - {name: registration_id, in: path, required: true, schema: {type: string}}
+      security:
+        - memberToken: []
+      responses:
+        "200": {description: Rejected}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /admin/donors/download:
+    get:
+      operationId: adminDonorsDownload
+      summary: The donors list as an xlsx or PDF file
+      description: |
+        format must be xlsx or pdf (422, checked before the sign-in), then donors:read (403). The same rows as GET /admin/donors (every member in an active class, one row per enrolment, no reach limit as in PHP): Name, Email, Mobile, City, State, Country, Zip. 404 "There are no donors to download" when there are none. Named TSR_Donors_Export_YYYYMMDD_HHMMSS. A PDF that cannot be rendered is 503. Slice: features/admin-donors-download/AdminDonorsDownload.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: format, in: query, required: true, schema: {type: string, enum: [xlsx, pdf]}}
+      responses:
+        "200":
+          description: The file (attachment)
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: {type: string, format: binary}
+            application/pdf:
+              schema: {type: string, format: binary}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
+  /admin/donors:
+    get:
+      operationId: listDonors
+      summary: Every member in an active class, by name
+      description: donors:read. {donors: [{name, email, mobile, city, state, country, zip}]}, one row per enrolment, no reach limit (PHP has none), at most 50000 rows. The file download is not built.
+      security:
+        - memberToken: []
+      responses:
+        "200": {description: The donors}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+  /subscribers/{token}:
+    get:
+      operationId: subscriberCard
+      summary: A registered person who is in no class
+      description: classes:read, and only a caller reaching every class gets a card; everyone else, and a person in a class or unknown, is 404 `Person not found`. {token, name, gender, registeredOn, requestedClass}; no contact details.
+      parameters:
+        - {name: token, in: path, required: true, schema: {type: string}}
+      security:
+        - memberToken: []
+      responses:
+        "200": {description: The card}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /reports/registrations/download:
+    get:
+      operationId: reportRegistrationsDownload
+      summary: The people waiting to be placed in a class, as an xlsx or PDF file
+      description: |
+        format must be xlsx or pdf (422, checked before the sign-in), then registrations:read for the gender (403; the gender is locked for a gender administrator or a coordinator of one gender). The same people as GET /reports/registrations (no row scope beyond the gender), newest first and numbered, with email, mobile and address; the cells are the raw values (full creation time). Named Registrations-Gents-YYYYMMDD. A PDF that cannot be rendered is 503. Slice: features/report-registrations-download/ReportRegistrationsDownload.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: format, in: query, required: true, schema: {type: string, enum: [xlsx, pdf]}}
+        - {name: gender, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: The file (attachment)
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: {type: string, format: binary}
+            application/pdf:
+              schema: {type: string, format: binary}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
+  /reports/registrations/allocated/download:
+    get:
+      operationId: reportRegistrationsAllocatedDownload
+      summary: The people who registered and are placed in a class, as an xlsx or PDF file
+      description: |
+        format must be xlsx or pdf (422, checked before the sign-in), then registrations:read for the gender (403). 25 columns per person (contact details, address, registration answers, the class, level and teacher placed with). Reach as PHP: a super administrator or a gender administrator gets every placed person of the gender, open registrations too; anyone else holding registrations:read (a coordinator) gets only registrations that name a class, of people placed in their assigned classes. Named Registrations-placed-Gents-YYYYMMDD. A PDF that cannot be rendered is 503. Slice: features/report-registrations-allocated-download/ReportRegistrationsAllocatedDownload.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: format, in: query, required: true, schema: {type: string, enum: [xlsx, pdf]}}
+        - {name: gender, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: The file (attachment)
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: {type: string, format: binary}
+            application/pdf:
+              schema: {type: string, format: binary}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
+  /reports/registrations:
+    get:
+      operationId: reportRegistrations
+      summary: The people waiting to be placed in a class
+      description: |
+        registrations:read for the gender (403); a caller tied to one gender gets that gender, anyone else "2" for ladies and gents otherwise. No row scope beyond the gender: a coordinator of assigned classes sees every waiting person of that gender, whichever class they asked for. Answers {gender, registrants[{id, token, name, status, registeredOn, requestedClass, email, mobile, residenceLocation, preferredLocation, workLocation, birthYear, classLevel, classNumber, profession, islamicStudyYears, interests, city, country, zip}]}, newest first, at most 5000. One row per member (the greatest value of each column over their forms); people in an active class, with a Rejected form, or with a placeholder email are left out. Slice: features/report-registrations/ReportRegistrations.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: gender, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+  /students/{token}:
+    get:
+      operationId: studentCard
+      summary: The card of a member in an active class
+      description: |
+        classes:read (403). Answers {token, name, gender, classes[{id, code, level}]}: only the classes the caller's classes:read reaches. A token of 0 or less, an unknown member, a member in no active class or in none the caller reaches is 404 "Person not found". No contact details. Slice: features/student-card/StudentCard.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: token, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
 components:
   securitySchemes:
     memberToken:

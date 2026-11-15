@@ -16,7 +16,7 @@ case "$EMAIL" in *.invalid) ;; *) echo "refusing: $EMAIL is not a .invalid addre
 # Local-only placeholders; they guard an in-memory emulator on 127.0.0.1 (docker-compose.dev.yml).
 PROJECT="demo-tsr-app"
 PASSWORD="dev-member-local-only"
-PORT="19099"
+PORT="${TSR_EMULATOR_PORT:-19099}"
 HOST="http://127.0.0.1:${PORT}/identitytoolkit.googleapis.com/v1"
 BODY="$(jq -n --arg e "$EMAIL" --arg p "$PASSWORD" '{email:$e,password:$p,emailVerified:true,returnSecureToken:true}')"
 

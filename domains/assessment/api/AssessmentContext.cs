@@ -29,10 +29,21 @@ internal sealed class AssessmentContext(DbContextOptions<AssessmentContext> opti
 
     public DbSet<QuizCampaign> QuizCampaigns => Set<QuizCampaign>();
 
+    public DbSet<QuizState> QuizStates => Set<QuizState>();
+
     protected override void Configure(ModelBuilder modelBuilder)
     {
         ConfigureSpotQuizzes(modelBuilder);
         ConfigureStandardMcqs(modelBuilder);
+
+        modelBuilder.Entity<QuizState>(state =>
+        {
+            state.ToTable("quiz_state");
+            state.HasKey(q => q.Name);
+            state.Property(q => q.Name).HasMaxLength(50);
+            state.Property(q => q.Document).HasColumnType("jsonb");
+            state.Property(q => q.UpdatedAt).HasDefaultValueSql(Now);
+        });
 
         modelBuilder.Entity<QuizCampaign>(campaign => campaign.Property(c => c.Name).HasMaxLength(300));
     }
@@ -48,6 +59,7 @@ internal sealed class AssessmentContext(DbContextOptions<AssessmentContext> opti
             quiz.Property(q => q.RestrictToClass).HasDefaultValue((short)1);
             quiz.Property(q => q.CreatedAt).HasDefaultValueSql(Now);
             quiz.HasIndex(q => new { q.ClassId, q.PublishedAt }).HasDatabaseName("idx_sq_class_published");
+            quiz.HasIndex(q => q.Code).IsUnique().HasDatabaseName("spot_quizzes_code");
         });
 
         modelBuilder.Entity<SpotQuizQuestion>(question =>

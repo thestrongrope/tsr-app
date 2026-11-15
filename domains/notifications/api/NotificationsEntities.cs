@@ -223,3 +223,65 @@ internal sealed class ClassScheduledNotificationRun
 
     public string? SkippedReason { get; set; }
 }
+
+/// <summary>
+/// A weekly event a class's sender put on its students' calendars (PHP <c>class_scheduled_events</c>): <c>Weekdays</c> ("1,3,5", 1 = Monday) at <c>SendTime</c>, a wall-clock time in <c>Tz</c>
+/// (the creator's zone, kept across edits). Soft-deleted: <c>Status</c> "deleted" with <c>DeletedAt</c>. <c>CreatedBy</c> is a member token, <c>CreatedByUserId</c> identity's user id.
+/// </summary>
+internal sealed class ClassScheduledEvent
+{
+    public int Id { get; set; }
+
+    public int ClassId { get; set; }
+
+    public int CreatedBy { get; set; }
+
+    public int CreatedByUserId { get; set; }
+
+    public string Message { get; set; } = string.Empty;
+
+    public string? Description { get; set; }
+
+    public string? ActionLink { get; set; }
+
+    public string Weekdays { get; set; } = string.Empty;
+
+    public TimeOnly SendTime { get; set; }
+
+    public string Tz { get; set; } = string.Empty;
+
+    public string Status { get; set; } = "active";
+
+    public DateTimeOffset CreatedAt { get; set; }
+
+    public DateTimeOffset UpdatedAt { get; set; }
+
+    public DateTimeOffset? DeletedAt { get; set; }
+}
+
+/// <summary>
+/// A member's own alert setting for one calendar item (PHP <c>member_event_settings</c>), synced between their phones: <c>EventKey</c> is <c>event:&lt;id&gt;</c> or <c>slot:&lt;id&gt;</c>,
+/// <c>DeletedForMe</c> is a tombstone that never clears, <c>ClientUpdatedAt</c> (the phone's time, whole milliseconds) and <c>DeviceKey</c> decide the last writer. <c>UserId</c> is identity's user id.
+/// </summary>
+internal sealed class MemberEventSetting
+{
+    public int Id { get; set; }
+
+    public int UserId { get; set; }
+
+    public int ClassId { get; set; }
+
+    public string EventKey { get; set; } = string.Empty;
+
+    public int? OffsetMinutes { get; set; }
+
+    public short Muted { get; set; }
+
+    public short DeletedForMe { get; set; }
+
+    public DateTimeOffset ClientUpdatedAt { get; set; }
+
+    public DateTimeOffset ServerUpdatedAt { get; set; }
+
+    public string DeviceKey { get; set; } = string.Empty;
+}

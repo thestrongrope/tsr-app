@@ -78,6 +78,32 @@ namespace Tsr.Assessment.Api.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Tsr.Assessment.Api.QuizState", b =>
+                {
+                    b.Property<string>("Name")
+                        .HasMaxLength(50)
+                        .HasColumnType("citext")
+                        .HasColumnName("name");
+
+                    b.Property<string>("Document")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("document");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.HasKey("Name");
+
+                    b.ToTable("quiz_state", "assessment", t =>
+                        {
+                            t.HasCheckConstraint("ck_quiz_state_name_length", "char_length(\"name\") <= 50");
+                        });
+                });
+
             modelBuilder.Entity("Tsr.Assessment.Api.SpotQuiz", b =>
                 {
                     b.Property<int>("Id")
@@ -176,6 +202,10 @@ namespace Tsr.Assessment.Api.Migrations
                         .HasColumnName("topic_id");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasDatabaseName("spot_quizzes_code");
 
                     b.HasIndex("ClassId", "PublishedAt")
                         .HasDatabaseName("idx_sq_class_published");

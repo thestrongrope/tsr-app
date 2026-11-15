@@ -12,8 +12,6 @@ namespace Tsr.Identity.Api;
 /// </summary>
 internal sealed partial class MemberDirectory(IdentityContext db, TimeProvider clock, IProfileSink profiles, ILogger<MemberDirectory> logger)
 {
-    private const int FirstToken = 1000;
-    private const long TokenLock = 7_100_001;
 
     /// <summary>The member's row, or null (the caller answers 404). With <paramref name="create"/> a first sign-in adds the row.</summary>
     public async Task<User?> FindAsync(FirebaseIdentity who, bool create, CancellationToken ct)
@@ -144,14 +142,13 @@ internal sealed partial class MemberDirectory(IdentityContext db, TimeProvider c
         try
         {
             await using var transaction = await db.Database.BeginTransactionAsync(ct);
-            await db.Database.ExecuteSqlAsync($"select pg_advisory_xact_lock({TokenLock})", ct);
-            var highest = await db.Users.MaxAsync(u => (int?)u.Token, ct);
+            var token = await TokenAllocation.NextAsync(db, ct);
             var user = new User
             {
                 Email = who.Email,
                 Provider = "firebase",
                 FirebaseUid = who.Uid,
-                Token = (highest ?? FirstToken) + 1,
+                Token = token,
                 CreatedOn = clock.GetUtcNow(),
             };
             db.Users.Add(user);

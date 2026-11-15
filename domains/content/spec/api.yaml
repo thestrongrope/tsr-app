@@ -5,7 +5,8 @@ info:
   description: |
     The content domain's actions. Words: glossary.md. Behaviour: tests/ (run against any base URL).
     Forward compatible: add fields and routes freely, never remove or change one without the
-    release process. Every error body is {"detail": "..."}.
+    release process. Every error body is {"detail": "..."}, except on the routes under /api/v1/: those keep
+    the answer shape of the website they were moved from (V1Error), because supported app builds read it.
 servers:
   - url: http://localhost:8088
     description: Local dev stack (gateway)
@@ -25,8 +26,470 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ListPublishedArticlesResponse"
+  /api/v1/articles:
+    get:
+      operationId: v1ListArticles
+      summary: One page of the published articles, in the shape the app's Library reads
+      description: |
+        Public: no sign-in. Only published articles; a draft is never in the table it reads. The body is never sent here.
+        Out-of-range limit and offset are clamped, never refused; only an unknown sort is refused. An empty option is no
+        option and unknown options are ignored. category, tag and locale each match ONE whole value exactly (case too);
+        two values joined with a comma match nothing. Equal dates go by slug; equal titles newest first.
+        Sends Cache-Control (public, max-age=300, stale-while-revalidate=600), ETag (a hash of data and pagination),
+        Last-Modified (the newest change of all published articles), Vary: Accept-Encoding and
+        Access-Control-Allow-Origin: *. Slice: features/v1-articles/V1Articles.cs. Behaviour: tests/v1-articles.hurl.
+      security: []
+      parameters:
+        - name: limit
+          in: query
+          description: Page size, 1 to 100. Below 1 is 1, above 100 is 100, not a number is 20.
+          schema: {type: integer, default: 20}
+        - name: offset
+          in: query
+          description: Articles to skip. Below 0 or not a number is 0.
+          schema: {type: integer, default: 0}
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: ["publishedDate:desc", "publishedDate:asc", "title:asc", "title:desc"]
+            default: "publishedDate:desc"
+        - name: q
+          in: query
+          description: Text found in the title, the excerpt or one tag, whatever its case.
+          schema: {type: string}
+        - name: category
+          in: query
+          description: One category slug.
+          schema: {type: string}
+        - name: tag
+          in: query
+          description: One tag NAME (not its slug).
+          schema: {type: string}
+        - name: locale
+          in: query
+          description: One language code, as the article's language field has it.
+          schema: {type: string}
+        - name: If-None-Match
+          in: header
+          description: The ETag of an earlier answer, as it was sent (one value).
+          schema: {type: string}
+        - name: If-Modified-Since
+          in: header
+          schema: {type: string}
+      responses:
+        "200":
+          description: The page
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data, meta, pagination]
+                properties:
+                  success: {type: boolean, const: true}
+                  data:
+                    type: array
+                    maxItems: 100
+                    items:
+                      $ref: "#/components/schemas/V1ArticleListItem"
+                  meta:
+                    $ref: "#/components/schemas/V1Meta"
+                  pagination:
+                    $ref: "#/components/schemas/V1Pagination"
+        "304":
+          description: Not changed (If-None-Match equals the ETag; or, only when no If-None-Match is sent, If-Modified-Since is not older than Last-Modified). No body.
+        "400":
+          description: An unknown sort (error.code VALIDATION_ERROR)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/V1Error"
+  /api/v1/articles/{slug}:
+    get:
+      operationId: v1GetArticle
+      summary: One published article with its HTML and five related articles (its Markdown is not sent)
+      description: |
+        Public: no sign-in. Only a published article; a draft's slug is an unknown slug (a draft is never in the table it reads).
+        The slug is matched exactly (case too) after percent-decoding, so a slug the file writes percent-encoded opens when
+        asked as written and as the characters it stands for; the answer's slug is the file's own text.
+        relatedArticles: every other published article scores 2 for each category it shares with this one and 1 for each
+        tag; the five highest, equal scores newest first. A score of 0 counts, so an article sharing nothing can fill the five.
+        Sends Cache-Control (public, max-age=3600, stale-while-revalidate=86400), ETag (a hash of data), Last-Modified
+        (the article's modified date, else its published date), Vary: Accept-Encoding and Access-Control-Allow-Origin: *.
+        Slice: features/v1-article/V1Article.cs. Behaviour: tests/v1-article.hurl.
+      security: []
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: {type: string}
+        - name: If-None-Match
+          in: header
+          description: The ETag of an earlier answer, as it was sent (one value).
+          schema: {type: string}
+        - name: If-Modified-Since
+          in: header
+          schema: {type: string}
+      responses:
+        "200":
+          description: The article
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data, meta]
+                properties:
+                  success: {type: boolean, const: true}
+                  data:
+                    $ref: "#/components/schemas/V1ArticleDetail"
+                  meta:
+                    $ref: "#/components/schemas/V1Meta"
+        "304":
+          description: Not changed (If-None-Match equals the ETag; or, only when no If-None-Match is sent, If-Modified-Since is not older than Last-Modified). No body.
+        "404":
+          description: 'No published article has this slug (error.code NOT_FOUND, error.message "Article not found: " and the slug asked)'
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/V1Error"
+  /api/v1/taxonomies/categories:
+    get:
+      operationId: v1ListCategories
+      summary: The categories, each with its count of published articles
+      description: |
+        Public: no sign-in. Every category, no paging. Order: the category's order (999 when its file has none), equal orders by slug.
+        A count is of the published articles filed under that category's own slug; a parent's count does not include its children's.
+        An option is off only when its value is exactly "false"; any other value, an empty one too, leaves it on.
+        The tree is one level deep: a child of a child is only in the flat list.
+        Sends Cache-Control (public, max-age=3600, stale-while-revalidate=86400), ETag (a hash of data), Vary: Accept-Encoding and
+        Access-Control-Allow-Origin: *; no Last-Modified. Slice: features/v1-categories/V1Categories.cs. Behaviour: tests/v1-categories.hurl.
+      security: []
+      parameters:
+        - name: hierarchical
+          in: query
+          description: On (the default), the categories without a parent, each with its subcategories. "false", every category flat.
+          schema: {type: string, default: "true"}
+        - name: includeArticleCounts
+          in: query
+          description: '"false": every articleCount is 0 (the field is still sent).'
+          schema: {type: string, default: "true"}
+        - name: If-None-Match
+          in: header
+          description: The ETag of an earlier answer, as it was sent (one value).
+          schema: {type: string}
+      responses:
+        "200":
+          description: The categories
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data, meta]
+                properties:
+                  success: {type: boolean, const: true}
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/V1Category"
+                  meta:
+                    $ref: "#/components/schemas/V1Meta"
+        "304":
+          description: Not changed (If-None-Match equals the ETag). No body.
+  /api/v1/taxonomies/tags:
+    get:
+      operationId: v1ListTags
+      summary: Every tag of the published articles with its count, most used first
+      description: |
+        Public: no sign-in. No options and no paging. A tag is its exact name (case too). Equal counts come in the order each
+        tag is first met, walking the articles newest first and each article's tags in file order.
+        Sends Cache-Control (public, max-age=3600, stale-while-revalidate=86400), ETag (a hash of data), Vary: Accept-Encoding and
+        Access-Control-Allow-Origin: *; no Last-Modified. Slice: features/v1-tags/V1Tags.cs. Behaviour: tests/v1-tags.hurl.
+      security: []
+      parameters:
+        - name: If-None-Match
+          in: header
+          description: The ETag of an earlier answer, as it was sent (one value).
+          schema: {type: string}
+      responses:
+        "200":
+          description: The tags
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data, meta]
+                properties:
+                  success: {type: boolean, const: true}
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/V1Tag"
+                  meta:
+                    $ref: "#/components/schemas/V1Meta"
+        "304":
+          description: Not changed (If-None-Match equals the ETag). No body.
+  /api/v1/publications:
+    get:
+      operationId: v1ListPublications
+      summary: The publications, in the order of the publications page
+      description: |
+        Public: no sign-in. Every publication that has a download or a read-online address, no paging: pagination.limit is the
+        total and hasMore is false. file and readOnlineUrl are sent as the content file has them, relative to the website
+        (the app joins them to its website address); no file is served by this API. A field the file lacks is left out.
+        Sends Cache-Control (public, max-age=3600, stale-while-revalidate=86400), ETag (a hash of data and pagination),
+        Vary: Accept-Encoding and Access-Control-Allow-Origin: *; no Last-Modified.
+        Slice: features/v1-publications/V1Publications.cs. Behaviour: tests/v1-publications.hurl.
+      security: []
+      parameters:
+        - name: language
+          in: query
+          description: Only the publications of this language (the whole word, any case). Empty or absent, all of them.
+          schema: {type: string}
+        - name: If-None-Match
+          in: header
+          description: The ETag of an earlier answer, as it was sent (one value).
+          schema: {type: string}
+      responses:
+        "200":
+          description: The publications
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data, meta, pagination]
+                properties:
+                  success: {type: boolean, const: true}
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/V1Publication"
+                  meta:
+                    $ref: "#/components/schemas/V1Meta"
+                  pagination:
+                    $ref: "#/components/schemas/V1Pagination"
+        "304":
+          description: Not changed (If-None-Match equals the ETag). No body.
+  /api/v1/youtube:
+    get:
+      operationId: v1ListLatestVideos
+      summary: The channel's latest videos, newest first
+      description: |
+        Public: no sign-in. Read from the channel's public feed and kept in memory for 30 minutes; at most the 50 newest.
+        When the feed cannot be read, the last list that was read is sent, and an empty list when none ever was: never an error.
+        The totals (data.meta.total, pagination.total) are the size of the slice taken (limit + offset, or fewer), not the
+        channel's count, so hasMore is never true; a client pages by "got a full page".
+        The channel is in the code; the setting TSR_YOUTUBE_CHANNEL_ID names another. Set to nothing (every test stack), no feed is asked and the list is empty.
+        Sends Cache-Control (public, max-age=3600, stale-while-revalidate=7200), ETag, Vary: Accept-Encoding and
+        Access-Control-Allow-Origin: *. The ETag is never compared: there is no 304.
+        Slice: features/v1-videos/V1Videos.cs. Behaviour: db/tests/LatestVideosTests.cs (a fake feed), tests/v1-videos.hurl.
+      security: []
+      parameters:
+        - name: limit
+          in: query
+          description: Videos on the page. Below 1 is 1, above 50 is 50, not a number is 10.
+          schema: {type: integer, default: 10, minimum: 1, maximum: 50}
+        - name: offset
+          in: query
+          description: Videos to pass over. Below 0, or not a number, is 0.
+          schema: {type: integer, default: 0, minimum: 0}
+      responses:
+        "200":
+          description: The videos
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data, meta, pagination]
+                properties:
+                  success: {type: boolean, const: true}
+                  data:
+                    type: object
+                    required: [videos, meta]
+                    properties:
+                      videos:
+                        type: array
+                        maxItems: 50
+                        items:
+                          $ref: "#/components/schemas/V1Video"
+                      meta:
+                        type: object
+                        required: [total, channelId, channelName, channelUrl, lastUpdated, cacheHit]
+                        properties:
+                          total: {type: integer, description: "The size of the slice taken: limit + offset, or fewer."}
+                          channelId: {type: string, description: "The channel read; empty when the setting TSR_YOUTUBE_CHANNEL_ID is set to nothing."}
+                          channelName: {type: string}
+                          channelUrl: {type: string}
+                          lastUpdated: {type: string, description: "When the feed was last asked, UTC with milliseconds and Z."}
+                          cacheHit: {type: boolean, description: "False on the answer that asked the feed (even when the feed failed and the kept list is sent), true for the 30 minutes after."}
+                  meta:
+                    $ref: "#/components/schemas/V1Meta"
+                  pagination:
+                    $ref: "#/components/schemas/V1Pagination"
+  /holy-quran:
+    get:
+      operationId: listHolyQuran
+      summary: The surahs with their verse counts, in order
+      description: |
+        Any signed-in member; no permission is checked (as PHP). A first sign-in creates the member's row
+        (PHP's api_authenticate(true)). A missing Arabic name reads "". Slice: features/holy-quran/HolyQuran.cs.
+      security:
+        - memberToken: []
+      responses:
+        "200":
+          description: The surahs
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 200
+                items:
+                  $ref: "#/components/schemas/Surah"
+        "401":
+          $ref: "#/components/responses/Problem"
 components:
+  securitySchemes:
+    memberToken:
+      type: http
+      scheme: bearer
+      bearerFormat: Firebase ID token
+  responses:
+    Problem:
+      description: |
+        An error. The body is always {"detail": "..."}
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [detail]
+            properties:
+              detail:
+                type: string
   schemas:
+    V1Meta:
+      type: object
+      required: [timestamp, version, cache]
+      properties:
+        timestamp: {type: string, description: "When the answer was made, UTC with milliseconds and Z (2026-11-13T10:00:00.000Z)."}
+        version: {type: string, const: "1.0"}
+        cache:
+          type: object
+          required: [expires, maxAge]
+          properties:
+            expires: {type: string, description: "timestamp plus maxAge seconds, in the same form."}
+            maxAge: {type: integer, description: "Seconds; 0 on an error."}
+    V1Publication:
+      type: object
+      required: [title, downloadOnly]
+      properties:
+        title: {type: string, description: '"Untitled publication" when the file gives none.'}
+        summary: {type: string}
+        type: {type: string, description: "The kind, as the file words it (PDF, Web)."}
+        size: {type: string, description: "As the file words it (1 MB)."}
+        updated: {type: string, description: "The date of the last update, as the file words it (Jun 26, 2025)."}
+        language: {type: string, description: "As the file words it (English, Urdu)."}
+        file: {type: string, description: "The download address, relative to the website (one leading /) or http(s)."}
+        readOnlineUrl: {type: string, description: "The read-online address, relative to the website or http(s)."}
+        downloadOnly: {type: boolean}
+    V1Video:
+      type: object
+      required: [id, videoId, title, youtubeLink, publishedDate, publishedDateFormatted, views, intro, description, thumbnail]
+      properties:
+        id: {type: string, description: "The same as videoId."}
+        videoId: {type: string}
+        title: {type: string, description: "Plain text."}
+        youtubeLink: {type: string}
+        publishedDate: {type: string, description: "As the feed writes it (2026-10-05T14:00:07+00:00)."}
+        publishedDateFormatted: {type: string, description: 'The day in UTC, "Oct 5, 2026"; "Invalid Date" when the date cannot be read.'}
+        views: {type: [integer, "null"], description: "null when the feed gives none or 0."}
+        intro: {type: string, description: 'The description when it has at most 200 characters; else its first 200, trimmed, then "...".'}
+        description: {type: string, description: "Plain text."}
+        thumbnail:
+          type: object
+          required: [url, width, height]
+          properties:
+            url: {type: string}
+            width: {type: integer, const: 480}
+            height: {type: integer, const: 360}
+    V1Pagination:
+      type: object
+      required: [total, limit, offset, hasMore]
+      properties:
+        total: {type: integer, description: "Everything the options match, not only this page (the latest videos differ: see that route)."}
+        limit: {type: integer}
+        offset: {type: integer}
+        hasMore: {type: boolean}
+    V1Error:
+      description: The error body of the routes under /api/v1/ (not {"detail"}).
+      type: object
+      required: [success, error, meta]
+      properties:
+        success: {type: boolean, const: false}
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: {type: string, description: "VALIDATION_ERROR (400), NOT_FOUND (404), INTERNAL_ERROR (500, any of these routes, with the message \"An unexpected error occurred\")."}
+            message: {type: string}
+        meta:
+          $ref: "#/components/schemas/V1Meta"
+    V1ArticleListItem:
+      type: object
+      required: [id, slug, title, publishedDate, author, categories, tags, language, readingTime]
+      properties:
+        id: {type: integer, description: "The article's old number; 0 when its file has none."}
+        slug: {type: string, description: "As written in the file; may hold percent-encoded characters."}
+        title: {type: string}
+        excerpt: {type: string, description: "Left out when the file has none."}
+        publishedDate: {type: string, description: "The file's own text, unchanged: with or without a zone or a fraction."}
+        modifiedDate: {type: string, description: "As publishedDate. Left out when the file has none."}
+        author: {type: string, description: "admin when the file names none."}
+        categories: {type: array, items: {type: string}, description: "Category slugs, in file order."}
+        tags: {type: array, items: {type: string}, description: "Tag names, in file order."}
+        language: {type: string, description: "en when the file names none."}
+        readingTime: {type: integer, description: "Minutes. Always 1 in this list (as the website it was moved from); the article route computes it."}
+    V1ArticleDetail:
+      description: The list item's fields (readingTime computed from the Markdown here), then the body and the related articles.
+      allOf:
+        - $ref: "#/components/schemas/V1ArticleListItem"
+        - type: object
+          required: [content, relatedArticles]
+          properties:
+            content: {type: string, description: "The article as HTML. Raw HTML in the Markdown is dropped and a link that could run script has an empty address."}
+            relatedArticles:
+              type: array
+              maxItems: 5
+              items:
+                $ref: "#/components/schemas/V1ArticleListItem"
+    V1Category:
+      type: object
+      required: [slug, title, order, articleCount]
+      properties:
+        slug: {type: string, description: "The category file's name."}
+        title: {type: string}
+        description: {type: string, description: "Left out when the file has none."}
+        order: {type: integer, description: "999 when the file has none."}
+        parent: {type: string, description: "The parent's slug. Left out on a category without one."}
+        articleCount: {type: integer, description: "Published articles filed under this slug itself. 0 with includeArticleCounts=false."}
+        subcategories:
+          type: array
+          description: The categories naming this one as parent (same fields, no subcategories of their own). Left out when there is none, and in the flat list.
+          items:
+            $ref: "#/components/schemas/V1Category"
+    V1Tag:
+      type: object
+      required: [name, slug, articleCount]
+      properties:
+        name: {type: string}
+        slug: {type: string, description: "Made from the name: lower case, each run of white space one \"-\", then only a-z, 0-9, \"_\" and \"-\" kept. Not unique, and empty for a name in another script."}
+        articleCount: {type: integer}
+    Surah:
+      type: object
+      required: [id, surah, arabic, verses]
+      properties:
+        id: {type: integer}
+        surah: {type: string}
+        arabic: {type: string}
+        verses: {type: integer}
     ListPublishedArticlesResponse:
       type: object
       required: [articles]

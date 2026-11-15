@@ -1,4 +1,5 @@
 using Tsr.Access.Api;
+using Tsr.Host.Api;
 using Tsr.Assessment.Api;
 using Tsr.Classes.Api;
 using Tsr.Content.Api;
@@ -13,6 +14,7 @@ using Tsr.Shared.Api;
 // its own endpoints; this file decides which modules this host loads and the middleware order.
 
 var builder = WebApplication.CreateBuilder(args);
+HostLogging.AddDefaults(builder.Configuration);
 
 var connectionString = builder.Configuration["TSR_DB"]
     ?? throw new InvalidOperationException("TSR_DB is not set. Locally it comes from docker-compose.dev.yml.");
@@ -24,25 +26,15 @@ builder.Services.AddSingleton(TimeProvider.System);
 // verifier, so it runs in any environment. Normal start-up still fails closed outside Development.
 var migrating = args.Contains("--migrate");
 
-// Registration order is migration order: identity owns users, which other domains reference.
-if (migrating)
-{
-    builder.Services.AddIdentityTables();
-}
-else
-{
-    builder.Services.AddIdentity(builder.Environment, builder.Configuration);
-}
+// The worker run mode (hosts/api/WorkerMode.cs): background workers named in TSR_WORKERS, no API routes. It loads the same modules as the API, so it needs the same settings. Put --workers LAST on a command line:
+// the command line reader takes the argument after a bare switch as its value.
+var workerMode = args.Contains("--workers") && !migrating;
 
-builder.Services.AddAccess();
-builder.Services.AddPlatform();
-builder.Services.AddMembership();
-builder.Services.AddContent();
-// Tables only so far (schema phase); registered after platform, whose migration creates the collation classes uses.
-builder.Services.AddClasses();
-builder.Services.AddAssessment();
-builder.Services.AddNotifications();
-builder.Services.AddSearch();
+var mode = migrating ? RunMode.Migrate : workerMode ? RunMode.Workers : RunMode.Api;
+HostServices.AddDomains(builder.Services, builder.Environment, builder.Configuration, mode);
+
+// Only in the worker run mode, and only the workers TSR_WORKERS names; an unknown name stops the start here.
+var enabledWorkers = WorkerMode.Register(builder.Services, workerMode, builder.Configuration[WorkerMode.Setting]);
 
 var app = builder.Build();
 
@@ -54,9 +46,19 @@ if (migrating)
     return;
 }
 
+// Worker mode: the hosted workers run; the only route is a health check, so a platform can tell the process is up.
+if (workerMode)
+{
+    WorkerMode.Announce(app.Logger, enabledWorkers);
+    app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
+    app.Run();
+    return;
+}
+
 app.UseRouterErrors();
 app.UseRouting();
 app.UseIdentity();
+app.UsePermissionsRevision();
 app.MapIdentity();
 app.MapAccess();
 app.MapPlatform();

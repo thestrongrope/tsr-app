@@ -1,0 +1,10 @@
+18:00:04 fixed-mixed-v10-r1 load=15.74 35.32 42.88
+18:03:27 fixed-mixed-v50-r1 load=14.98 25.65 37.11
+18:03:37 fixed-heavy-xlsx-v1 load=14.41 25.18 36.81
+18:04:23 fixed-heavy-pdf-v1 load=11.06 22.80 35.34
+18:04:25 fixed-heavy-mis-v1 load=11.06 22.80 35.34
+18:04:28 fixed-heavy-write-v1 load=10.73 22.54 35.17
+18:04:40 fixed-heavy-xlsx-v5 load=9.69 21.93 34.81
+18:08:25 fixed-heavy-pdf-v5 load=21.28 22.69 32.21
+18:08:28 fixed-heavy-mis-v5 load=23.66 23.16 32.32
+18:08:30 fixed-heavy-write-v5 load=23.66 23.16 32.32

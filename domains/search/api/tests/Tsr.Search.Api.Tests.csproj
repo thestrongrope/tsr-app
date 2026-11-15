@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Unit tests for search. The test files live next to the code ("*.Tests.cs"). -->
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../**/*.Tests.cs" Exclude="../tests/**" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Tsr.Search.Api.csproj" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="NUnit" />
+    <PackageReference Include="NUnit3TestAdapter" />
+    <PackageReference Include="NUnit.Analyzers" PrivateAssets="all" />
+  </ItemGroup>
+</Project>

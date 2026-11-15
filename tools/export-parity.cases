@@ -1,0 +1,45 @@
+# alias path (xlsx only), one line per built download route and case; read by tools/export-parity.sh
+# --unordered: PHP leaves rows (also: one student in two classes ties on score, name and token, and PHP keeps the database order, which changes between loads) in no defined order inside a tie (two sessions of one class in one week), so the rows are compared as a set.
+# Use callers whose reach is FIXTURE classes only (a coordinator): an administrator also sees each side's own seed data, which differs between PHP's database and the new one.
+rb_coord /reports/active-teachers/download?format=xlsx
+rp_coord /reports/class-sessions/9581/download?format=xlsx
+rp_coord /reports/conduction/download?format=xlsx&year=2025&week=45 --unordered
+rp_coord /reports/conduction/download?format=xlsx&year=2025&week=45&level=MIQDAD --unordered
+rp_coord /reports/weekly/download?format=xlsx&from=11-2025&to=11-2025
+rp_coord /reports/weekly/download?format=xlsx&from=10-2025&to=11-2025&level=MIQDAD
+rp_coord /reports/summary/download?format=xlsx&from=10-2025&to=11-2025
+rp_coord /reports/summary/download?format=xlsx&from=11-2025&to=11-2025&level=ABUZAR
+rp_coord /reports/subject-conduction/download?format=xlsx&from=11-2025&to=11-2025
+rp_coord /reports/subject-conduction/download?format=xlsx&from=10-2025&to=11-2025&classId=9581
+rc_coord /reports/pending/download?format=xlsx&from=10-2025&to=10-2025
+rc_coord /reports/pending/download?format=xlsx&from=10-2025&to=10-2025&gender=2
+rc_coord /reports/tsr/download?format=xlsx&from=2025-10-01&to=2025-11-30
+rc_coord /reports/tsr/download?format=xlsx&from=2025-10-01&to=2025-11-05&gender=2
+rc_coord /reports/students/download?format=xlsx&from=2025-10-01&to=2025-11-30 --unordered
+rc_coord /reports/students/download?format=xlsx&from=2025-10-01&to=2025-11-05&gender=2
+rc_coord /reports/students/download?format=xlsx&from=2025-10-01&to=2025-11-30&level=MIQDAD&class=RC-G-564
+# Run after tools/membership-contract.sh parity --prepare and test --prepare (a membership reset clears the classes fixtures: prepare classes again before the classes cases).
+# Administrators also see each side's own seed data: compare the fixture members only (token column B starting 9018), ignoring the row number in column A.
+b5b_admin /reports/registrations/download?format=xlsx --filter B:9018 --filter B:9271 --ignore A
+b5b_admin /reports/registrations/download?format=xlsx&gender=2 --filter B:9018 --filter B:9271 --ignore A
+b4b_donor_admin /admin/donors/download?format=xlsx --filter B:b4b.9011
+b5b_admin /reports/registrations/allocated/download?format=xlsx --filter B:9021 --filter B:9271 --ignore A
+b5b_admin /reports/registrations/allocated/download?format=xlsx&gender=2 --filter B:9021 --filter B:9271 --ignore A
+b5b_gents_admin /reports/registrations/allocated/download?format=xlsx --filter B:9021 --filter B:9271 --ignore A
+b5d_coord /reports/registrations/allocated/download?format=xlsx --filter B:9021 --filter B:9271 --ignore A
+# The admin access log (edge lane; tools/contract-edge.sh test|parity --prepare on both sides first): the fixture subjects only. Column A (the time) is ignored: the two sides load their rows seconds apart (the hurl file and the db test prove the time text).
+# The whole subject 927100 is not compared: its row with a "=cmd|calc" device differs by design (ClosedXML hides the leading apostrophe PHP shows; see docs/specs/initial-build/test-edge-notes.md).
+edge_download /admin/access-log/download?format=xlsx&token=927101 --filter B:9271 --ignore A
+edge_download /admin/access-log/download?format=xlsx&token=927100&page=alpha --filter B:9271 --ignore A
+edge_download /admin/access-log/download?format=xlsx&token=927100&page=gamma --filter B:9271 --ignore A
+# reports2 lane: the leaderboard's Recitation cell is TEXT in PHP (MariaDB SUM is a decimal string) and a NUMBER here, so those cases ignore column E and compare single rows (tied rows have no order in PHP); the summary of 98101 ignores column E (the Topic A figure, a PHP spelling quirk). (TSR_STACK lane vars: build/test-<n>/reports2.vars and build/parity-php/reports2.vars after tools/contract-reports2.sh test|parity --prepare). 2019 fixtures, a coordinator or the leaderboard administrators (global ranks in 2019 are ours alone).
+r2_coord /reports/mcq-summary/98101/download?format=xlsx&from=2019-03-01&to=2019-03-31 --filter A:R2 --ignore E
+r2_coord /reports/mcq-summary/0/download?format=xlsx&from=2019-03-01&to=2019-03-31
+r2_coord /reports/mcq-summary/98104/download?format=xlsx&from=2019-03-01&to=2019-03-31&gender=2
+r2_coord /reports/mcq-adherence/98101/download?format=xlsx
+r2_coord /reports/mcq-adherence/98106/download?format=xlsx
+r2_coord /reports/mcq-adherence/0/download?format=xlsx
+r2_coord /reports/mcq-adherence/98104/download?format=xlsx&gender=2
+r2_super /reports/quran-leaderboard/download?format=xlsx&from=2019-03-01&to=2019-03-31&level=ABUZAR --filter B:R2 --ignore E
+r2_super /reports/quran-leaderboard/download?format=xlsx&from=2019-03-01&to=2019-03-01 --filter B:R2 --ignore E
+r2_ladmin /reports/quran-leaderboard/download?format=xlsx&from=2019-03-01&to=2019-03-31&gender=2 --filter B:R2 --ignore E

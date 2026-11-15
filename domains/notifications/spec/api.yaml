@@ -1,0 +1,496 @@
+openapi: 3.1.0
+info:
+  title: TSR notifications
+  version: 0.1.0
+  description: |
+    The notifications domain's actions built so far (lane notify-core: devices, the member inbox, announcements, class notifications). Behaviour: tests/ (not written yet; the test phase).
+    Forward compatible: a store-live app keeps calling these, so add fields and routes freely but never remove or change one without the release process. Every error body is {"detail": "..."}.
+    Every operation here is `create`: PHP signs the caller in with the member-creating sign-in. Details of each rule: the slice's header comment and docs/specs/initial-build/lane-notify-core-notes.md.
+servers:
+  - url: http://localhost:8088
+    description: Local dev stack (gateway)
+paths:
+  /devices:
+    post:
+      operationId: registerDevice
+      summary: Register the caller's push address
+      description: |
+        Permission devices:manage. Body {fcmToken} (or fcm_token), trimmed, 1 to 500 characters. The caller's own row is updated or inserted; the same token held by any other member is deleted
+        (a device belongs to whoever registered it last). Limits (the owner's rule; PHP has none): at most 10 registrations an hour of a device id new to the member (429 "Too many device registrations. Please wait a while and try again."; a device the caller already holds is never counted or refused), and at most 20 devices: a new device id beyond that deletes the member's least recently used rows so 20 remain, a device the caller already holds is never affected. Slice: features/device-register/DeviceRegister.cs. Event notifications.device_registered.
+      security: [{memberToken: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, required: [fcmToken], properties: {fcmToken: {type: string}, fcm_token: {type: string}}}
+      responses:
+        "201": {description: "{ok: true}"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "429": {$ref: "#/components/responses/Problem"}
+    delete:
+      operationId: removeDevice
+      summary: Forget one of the caller's push addresses
+      description: |
+        Permission devices:manage. Same body. Only the caller's own row goes. Slice: features/device-remove/DeviceRemove.cs. Event notifications.device_removed (only when a row went).
+      security: [{memberToken: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, required: [fcmToken], properties: {fcmToken: {type: string}, fcm_token: {type: string}}}
+      responses:
+        "200": {description: "{ok: true, deleted: n}"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /user/notifications:
+    get:
+      operationId: listMyNotifications
+      summary: The caller's own inbox, newest first
+      description: |
+        Permission notifications:read. limit (default 20, at most 200 used) and offset (default 0) are whole numbers or 422 "Invalid limit" / "Invalid offset".
+        Items: {id (inbox row id), notification_id, title, body, actionLink, sentAt, isRead, readAt, classes: [{id, name}]}. Slice: features/user-notifications/UserNotifications.cs.
+      security: [{memberToken: []}]
+      responses:
+        "200": {description: "{notifications, total, unread_count, limit, offset}"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /user/notifications/unread-count:
+    get:
+      operationId: myUnreadCount
+      summary: How many inbox rows are unread
+      description: Permission notifications:read. Slice: features/user-notifications-unread-count/UserNotificationsUnreadCount.cs.
+      security: [{memberToken: []}]
+      responses:
+        "200": {description: "{unread_count}"}
+        "403": {$ref: "#/components/responses/Problem"}
+  /user/notifications/read-all:
+    post:
+      operationId: markAllMyNotificationsRead
+      summary: Mark every unread inbox row of the caller read
+      description: Permission notifications:read. Slice: features/user-notifications-read-all/UserNotificationsReadAll.cs.
+      security: [{memberToken: []}]
+      responses:
+        "200": {description: "{ok: true}"}
+        "403": {$ref: "#/components/responses/Problem"}
+  /user/notifications/{notification_id}/read:
+    post:
+      operationId: markMyNotificationRead
+      summary: Mark one inbox row read
+      description: |
+        Permission notifications:read. The id is the INBOX ROW id. Someone else's row, or none, changes nothing and still answers ok.
+        Slice: features/user-notification-read/UserNotificationRead.cs.
+      security: [{memberToken: []}]
+      parameters:
+        - {name: notification_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200": {description: "{ok: true}"}
+        "403": {$ref: "#/components/responses/Problem"}
+  /notifications/send:
+    post:
+      operationId: sendAnnouncement
+      summary: Push an announcement to an audience and record it
+      description: |
+        IRREVERSIBLE. Permission notifications:broadcast (403 "Only super administrators can send notifications"); writes an admin audit row.
+        Body {title (1 to 255 characters), body (1 to 2000), target: {type: ALL_USERS | CLASS_LEVEL | GENDER | TEACHERS, value: list}, action_link?}.
+        GENDER: value is a list whose first element is 1 or 2; the push and the inbox rows go to the same members (those with a device whose gender is that code); anything else reaches nobody. The gateway allows this route 130 s (the push batch has a 120 s deadline).
+        500 {"detail": "Push notifications are not configured"} when no FCM credential is set (nothing is sent or written). Slice: features/notifications-send/NotificationsSend.cs. Event notifications.sent.
+      security: [{memberToken: []}]
+      responses:
+        "200": {description: "{success, message, device_count, success_count, failure_count, notification_id}"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "500": {$ref: "#/components/responses/Problem"}
+  /notifications/history:
+    get:
+      operationId: notificationHistory
+      summary: What has been sent, newest first, with who it reached
+      description: |
+        Permission notifications:broadcast (403 "Only super administrators can view notification history"). limit (default 50, at most 200 used), offset.
+        Slice: features/notifications-history/NotificationsHistory.cs.
+      security: [{memberToken: []}]
+      responses:
+        "200": {description: "{notifications: [{notification_id, title, body, device_count, success_count, failure_count, sent_at, action_link, sender_name, sender_email, target_audience_criteria, audience_summary, audience_items, recipient_count}], limit, offset, count}"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /notifications/cleanup-invalid-tokens:
+    post:
+      operationId: cleanupInvalidDeviceTokens
+      summary: Push a "System Check" to every device and delete the tokens FCM rejects
+      description: |
+        VISIBLE TO EVERY USER. Permission notifications:broadcast (403 "Only super administrators can cleanup invalid tokens"). Slice: features/notifications-cleanup/NotificationsCleanup.cs.
+        Event notifications.invalid_devices_removed.
+      security: [{memberToken: []}]
+      responses:
+        "200": {description: "{success, message, tokens_before, tokens_after, tokens_removed, successful_sends, failed_sends} (tokens_after and the send counts are absent when there was no device)"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "500": {$ref: "#/components/responses/Problem"}
+  /notifications/stats:
+    get:
+      operationId: notificationStats
+      summary: Delivery totals
+      description: Permission notifications:broadcast (403 "Only super administrators can view notification statistics"). Slice: features/notifications-stats/NotificationsStats.cs.
+      security: [{memberToken: []}]
+      responses:
+        "200": {description: "{total_notifications, total_devices_targeted, total_successful, total_failed, last_sent_at} (the last four null on an empty table)"}
+        "403": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}/notifications:
+    post:
+      operationId: sendClassNotification
+      summary: Push to the devices of a class's active students and record it
+      description: |
+        IRREVERSIBLE. The class (404 "Class not found"), notifications:send on it (403 "You do not have permission to send notifications for this class"). Body {title, body, action_link?}
+        (trimmed; 255 and 2000 characters). 10 an hour per member (429 "Too many class notifications; try again later"). 500 when no FCM credential is set.
+        Slice: features/class-notification-send/ClassNotificationSend.cs. Event notifications.sent.
+      security: [{memberToken: []}]
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200": {description: "{success, message, device_count, student_count, success_count, failure_count, notification_id}"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "429": {$ref: "#/components/responses/Problem"}
+        "500": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}/notifications/scheduled:
+    post:
+      operationId: createScheduledClassNotification
+      summary: Schedule a notification for a class (sends nothing now)
+      description: |
+        Guards as the send. Body {title, body, action_link?, kind: ONCE | WEEKLY | REMINDER, timezone (IANA), send_at | weekdays + send_time | class_schedule_id + offset_minutes (+ repeat_weekly)}.
+        At most 20 active per class (422); 20 an hour per member (429 "Too many scheduled notifications created; try again later"). A worker fires them (not built).
+        Slice: features/class-scheduled-create/ClassScheduledCreate.cs. Event notifications.class_schedule_created.
+      security: [{memberToken: []}]
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "201": {description: "{success: true, item}"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "429": {$ref: "#/components/responses/Problem"}
+    get:
+      operationId: listScheduledClassNotifications
+      summary: A class's scheduled notifications and its schedule slots
+      description: Guards as the send. At most 500 items. Slice: features/class-scheduled-list/ClassScheduledList.cs.
+      security: [{memberToken: []}]
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200": {description: "{items, schedules: [{id, day, hour, minute, timezone}]}"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}/notifications/scheduled/{scheduled_id}:
+    delete:
+      operationId: deleteScheduledClassNotification
+      summary: Remove one scheduled notification of the class
+      description: Guards as the send, then 404 "Scheduled notification not found". Slice: features/class-scheduled-delete/ClassScheduledDelete.cs. Event notifications.class_schedule_deleted.
+      security: [{memberToken: []}]
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+        - {name: scheduled_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200": {description: "{success: true}"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /me/calendar:
+    get:
+      operationId: getMyCalendar
+      summary: The member's calendar as a student, with their alert settings
+      description: |
+        The live events and timetable slots of every live class the caller is currently enrolled in (enrolment active, not removed), minus the items they deleted for themselves, and all
+        their settings (tombstones included). Teaching or administering a class puts nothing here; nothing is editable here (editable_by_me and takeover are false).
+        Answers {server_time "Y-m-dTH:i:sZ", freshness: {max_hours: 12, target_hours: 6}, classes: [{class_id, code, name, events: [event], slots: [slot]}], settings: {<event_key>: setting}}
+        (settings is an object even when empty). event: {key "event:<id>", id, kind "event", class_id, message, description|null, action_link|null, weekdays [1..7, 1 = Monday], send_time
+        "HH:MM" (wall clock in timezone), timezone (IANA), created_by_user_id, editable_by_me, takeover}. slot: {key "slot:<id>", kind "slot", class_id, message "Class timetable",
+        description null, action_link "/classes/<id>/dashboard", weekdays [day], send_time, timezone|null, editable_by_me false, takeover false}. setting: {offset_minutes|null, muted,
+        deleted, updated_at, server_updated_at (both "Y-m-dTH:i:s.vZ"), device_key}. Limits: 200 classes, 500 events and 500 slots a class, 10000 settings (beyond: 500).
+        Slice: features/calendar-get/CalendarGet.cs.
+      security: [{memberToken: []}]
+      responses:
+        "200": {description: "{server_time, freshness, classes, settings}", content: {application/json: {schema: {type: object}}}}
+        "401": {$ref: "#/components/responses/Problem"}
+  /me/calendar/settings:
+    put:
+      operationId: syncMyCalendarSettings
+      summary: Sync the member's alert settings from one phone
+      description: |
+        Body {device_key (16 to 64 of a-z A-Z 0-9 _ -), changes: [{event_key "event:<id>" | "slot:<id>", offset_minutes? (null or one of 0, -5, -15, -30, -60, -1440, -2880), muted (boolean),
+        deleted (boolean), client_updated_at "Y-m-dTH:i:s[.mmm]Z"}]} with at most 200 changes. 422, in order: "Invalid JSON body"; "device_key must be a random installation identifier
+        (16-64 characters)"; "A batch must contain at most 200 changes"; then per change "Each change must be an object", "event_key must be a string", "Invalid event_key",
+        "Choose a supported alert offset", "muted and deleted must be booleans", "client_updated_at must be an ISO UTC timestamp", "Invalid client_updated_at". One 422 refuses the whole batch.
+        A change for an item that is gone, or of a class the caller is not a current student of, is skipped and its key listed in `rejected` (no further check of it).
+        Sync rule: a change is stored unless the stored setting is newer by client time, or equally new (same millisecond) from a device_key that is not smaller (byte order); a client time
+        more than 5 minutes ahead of the server is replaced by the server's and `clock_skew` is true; `deleted` true is a tombstone that a later change cannot clear.
+        Answers {settings: {<event_key>: setting as stored now}, rejected: [event_key], clock_skew, server_time "Y-m-dTH:i:s.vZ"}.
+        Slice: features/calendar-settings-sync/CalendarSettingsSync.cs. Event notifications.event_settings_synced (only when a row was written).
+      security: [{memberToken: []}]
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        "200": {description: "{settings, rejected, clock_skew, server_time}", content: {application/json: {schema: {type: object}}}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}/scheduled-events:
+    get:
+      operationId: listClassScheduledEvents
+      summary: A class's scheduled events and timetable slots, for who manages them
+      description: |
+        notifications:send on the class (403 "You cannot manage events for this class"; the class is not looked up, so an unknown class is this 403). Answers {events: [event], slots: [slot]}
+        (shapes as GET /me/calendar), live ones only, by id. editable_by_me: the caller owns the event, or its owner can no longer send for the class (then takeover is true).
+        Slice: features/class-events-list/ClassEventsList.cs.
+      security: [{memberToken: []}]
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200": {description: "{events, slots}", content: {application/json: {schema: {type: object}}}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+    post:
+      operationId: createClassScheduledEvent
+      summary: Put a weekly event on a class's calendar
+      description: |
+        Guard as the list, then the body. Body {message (1 to 500 characters, trimmed), description? (at most 2000), action_link? (https or an in-app path; a pasted article or video link is
+        rewritten), weekdays (one to seven integers 1 to 7), send_time "HH:MM", timezone (IANA; Asia/Calcutta is stored as Asia/Kolkata)}. 422, in order: "Invalid JSON body"; "Message is
+        required and must be at most 500 characters"; "Description must be at most 2000 characters"; "Time must be HH:MM"; the action_link texts of the class notification; "Choose between
+        one and seven weekdays"; "Weekdays must be integers from 1 (Monday) to 7"; "A valid IANA time zone from this phone is required"; "This class already has 500 scheduled events".
+        Answers 201 {item: event}. Slice: features/class-event-create/ClassEventCreate.cs. Event notifications.class_event_created.
+      security: [{memberToken: []}]
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        "201": {description: "{item}", content: {application/json: {schema: {type: object}}}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}/scheduled-events/{event_id}:
+    patch:
+      operationId: updateClassScheduledEvent
+      summary: Change an event of a class
+      description: |
+        Guard as the list (403), the body (422 "Invalid JSON body"), the live event of this class (404 "Scheduled event not found"), the owner rule (403 "Only the owner can change this event
+        while they retain access"), then the fields as on create (422). Body: any of message, description, action_link, weekdays, send_time; a field left out keeps its value, a field sent as
+        null is checked as null (description and action_link are cleared). The zone is the creator's and does not change; a take-over does not change the owner.
+        Answers {item: event}. Slice: features/class-event-update/ClassEventUpdate.cs. Event notifications.class_event_updated.
+      security: [{memberToken: []}]
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+        - {name: event_id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        "200": {description: "{item}", content: {application/json: {schema: {type: object}}}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+    delete:
+      operationId: deleteClassScheduledEvent
+      summary: Remove an event of a class (the row is kept, marked deleted)
+      description: |
+        Guard as the list (403), the live event of this class (404 "Scheduled event not found"), the owner rule (403 "Only the owner can delete this event while they retain access").
+        Answers {success: true}. Slice: features/class-event-delete/ClassEventDelete.cs. Event notifications.class_event_deleted.
+      security: [{memberToken: []}]
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+        - {name: event_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200": {description: "{success: true}"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /admin/whatsapp/reminders:
+    get:
+      operationId: listWhatsappReminders
+      summary: The notifier's WhatsApp reminders
+      description: |
+        whatsapp:manage (403). Proxies GET /reminders of the notifier (setting TSR_NOTIFIER_URL; absent or unreachable: 502 "notifier unreachable"). A notifier refusal keeps its status and its error text.
+        Answers {reminders: [...]}. Slice: features/whatsapp-reminders/WhatsappReminders.cs.
+      security:
+        - memberToken: []
+      responses:
+        "200": {description: "{reminders: [...]}", content: {application/json: {schema: {type: object}}}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "502": {$ref: "#/components/responses/Problem"}
+  /admin/whatsapp/reminders/{reminder_id}:
+    put:
+      operationId: updateWhatsappReminder
+      summary: Change a reminder's audience, language, schedule or switches
+      description: |
+        whatsapp:manage (403). Body: any of gender, city, country, levels, lang, leewayDays, timezone, weekday, sendTime, scheduleOn, enabled; only the keys present are sent on. The notifier judges the values (400 with its text, nothing saved); a string with a NUL byte or over 500 characters is 422.
+        reminder_id is read as PHP's (int): 0 or less is 400 "missing or invalid id". Answers {reminder}. Slice: features/whatsapp-reminder-update/WhatsappReminderUpdate.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: reminder_id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        "200": {description: "{reminder}", content: {application/json: {schema: {type: object}}}}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "502": {$ref: "#/components/responses/Problem"}
+  /admin/whatsapp/reminders/{reminder_id}/run:
+    post:
+      operationId: runWhatsappReminder
+      summary: Start a reminder run (a dry run unless dryRun is exactly false)
+      description: |
+        whatsapp:manage (403). Body {dryRun}: ONLY the JSON literal false starts a real send; missing, null or any other value is a dry run. Answers 202 {runId, dryRun}; the notifier's refusals (400, 409) keep its text.
+        Slice: features/whatsapp-reminder-run/WhatsappReminderRun.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: reminder_id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        "202": {description: "{runId, dryRun}", content: {application/json: {schema: {type: object}}}}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "502": {$ref: "#/components/responses/Problem"}
+  /admin/whatsapp/runs:
+    get:
+      operationId: listWhatsappRuns
+      summary: Recent runs, newest first
+      description: |
+        whatsapp:manage (403). Query reminderId and limit are passed on only as plain digits (at most 18). Answers {runs: [...]}. Slice: features/whatsapp-runs/WhatsappRuns.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: reminderId, in: query, schema: {type: string}}
+        - {name: limit, in: query, schema: {type: string}}
+      responses:
+        "200": {description: "{runs: [...]}", content: {application/json: {schema: {type: object}}}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "502": {$ref: "#/components/responses/Problem"}
+  /admin/whatsapp/runs/{run_id}:
+    get:
+      operationId: getWhatsappRun
+      summary: A run and each teacher it handled
+      description: |
+        whatsapp:manage (403). run_id is read as PHP's (int): 0 or less is 400 "missing or invalid id"; an unknown run is the notifier's 404 "run not found". Answers {run, messages}. Slice: features/whatsapp-run/WhatsappRun.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: run_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200": {description: "{run, messages}", content: {application/json: {schema: {type: object}}}}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "502": {$ref: "#/components/responses/Problem"}
+  /admin/whatsapp/test:
+    post:
+      operationId: sendWhatsappTest
+      summary: Send ONE real WhatsApp message to one number
+      description: |
+        whatsapp:manage (403). Body {mobile, message} (text, trimmed; mobile at most 40 characters, message at most 4096, no NUL byte: 422). The notifier judges the number and the link (400, 409). Answers {runId, status}. Slice: features/whatsapp-test/WhatsappTest.cs.
+      security:
+        - memberToken: []
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        "200": {description: "{runId, status}", content: {application/json: {schema: {type: object}}}}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "502": {$ref: "#/components/responses/Problem"}
+  /admin/whatsapp/link:
+    get:
+      operationId: getWhatsappLink
+      summary: The WhatsApp link state (connected, waiting, offline)
+      description: |
+        whatsapp:manage (403), 90 a minute per member (429). Cache-Control no-store on every answer. Answers {state, lastSeen}; a notifier that cannot answer is 503. Slice: features/whatsapp-link/WhatsappLink.cs.
+      security:
+        - memberToken: []
+      responses:
+        "200": {description: "{state, lastSeen}", content: {application/json: {schema: {type: object}}}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "429": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
+  /admin/whatsapp/link/qr:
+    get:
+      operationId: getWhatsappLinkQr
+      summary: The current QR code to link WhatsApp (a live credential)
+      description: |
+        whatsapp:manage (403), 90 a minute per member (429). Cache-Control no-store on every answer; the code is never logged. Answers {qr, ageSeconds, validSeconds, stale}; qr is null when there is none yet or it is older than 60 seconds. Slice: features/whatsapp-link-qr/WhatsappLinkQr.cs.
+      security:
+        - memberToken: []
+      responses:
+        "200": {description: "{qr, ageSeconds, validSeconds, stale}", content: {application/json: {schema: {type: object}}}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "429": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
+  /admin/whatsapp/link/relink:
+    post:
+      operationId: relinkWhatsapp
+      summary: Clear the WhatsApp session; a new QR code follows
+      description: |
+        whatsapp:manage (403), 6 a minute per member (429, shared with logout), an admin audit row, no-store. Answers {ok: true}; a notifier that does not do it is 502. Slice: features/whatsapp-link-relink/WhatsappLinkRelink.cs.
+      security:
+        - memberToken: []
+      responses:
+        "200": {description: "{ok: true}", content: {application/json: {schema: {type: object}}}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "429": {$ref: "#/components/responses/Problem"}
+        "502": {$ref: "#/components/responses/Problem"}
+  /admin/whatsapp/link/logout:
+    post:
+      operationId: logoutWhatsapp
+      summary: End the WhatsApp session on WhatsApp's side too
+      description: |
+        whatsapp:manage (403), 6 a minute per member (429, shared with relink), an admin audit row, no-store. Answers {ok: true}; a notifier that does not do it is 502. Slice: features/whatsapp-link-logout/WhatsappLinkLogout.cs.
+      security:
+        - memberToken: []
+      responses:
+        "200": {description: "{ok: true}", content: {application/json: {schema: {type: object}}}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "429": {$ref: "#/components/responses/Problem"}
+        "502": {$ref: "#/components/responses/Problem"}
+components:
+  securitySchemes:
+    memberToken:
+      type: http
+      scheme: bearer
+      bearerFormat: Firebase ID token
+  responses:
+    Problem:
+      description: |
+        An error. The body is always {"detail": "..."}
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [detail]
+            properties:
+              detail:
+                type: string

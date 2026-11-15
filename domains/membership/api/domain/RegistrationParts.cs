@@ -1,3 +1,4 @@
+using Tsr.Shared.Api;
 using System.Text.Json;
 
 namespace Tsr.Membership.Api.Domain;
@@ -58,7 +59,7 @@ internal static class RegistrationParts
         var kept = new List<int>();
         foreach (var (_, item) in JsonBody.Entries(value))
         {
-            var id = PhpValue.Int(item);
+            var id = PhpValue.ToInteger(item);
             if (id is >= int.MinValue and <= int.MaxValue && activeIds.Contains((int)id))
             {
                 kept.Add((int)id);

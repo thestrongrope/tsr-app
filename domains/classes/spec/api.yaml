@@ -1,0 +1,2204 @@
+openapi: 3.1.0
+info:
+  title: TSR classes
+  version: 0.1.0
+  description: |
+    The classes domain's actions. Words: glossary.md (not written yet). Behaviour: tests/ (run against any base URL).
+    Forward compatible: a store-live app keeps calling these, so add fields and routes freely but
+    never remove or change one without the release process. Every error body is {"detail": "..."}.
+servers:
+  - url: http://localhost:8088
+    description: Local dev stack (gateway)
+paths:
+  /class-levels:
+    get:
+      operationId: listClassLevels
+      summary: The class levels in display order
+      description: |
+        Any signed-in member; no permission is checked (as PHP). A first sign-in creates the member's row
+        (PHP's api_authenticate(true)). Ordered by sort order then id; the sort order itself is not returned
+        (GET /syllabus/levels has it). Slice: features/class-levels/ClassLevels.cs.
+      security:
+        - memberToken: []
+      responses:
+        "200":
+          description: The levels
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ClassLevel"
+        "401":
+          $ref: "#/components/responses/Problem"
+  /guides:
+    get:
+      operationId: listGuideLevels
+      summary: The class levels that can have a guide
+      description: |
+        Permission guides:manage (403 "You do not have permission to do that"). Levels 2 to 5 in level order, id and name only.
+        Slice: features/guides-list/GuidesList.cs.
+      security:
+        - memberToken: []
+      responses:
+        "200":
+          description: "{levels: [{id, name}]}"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [levels]
+                properties:
+                  levels:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, name]
+                      properties:
+                        id: {type: integer}
+                        name: {type: string}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+  /guides/{level_id}:
+    get:
+      operationId: getGuideForEditing
+      summary: The English guide of a level, as the editor starts from it
+      description: |
+        Permission guides:manage. The id is PHP's (int) cast. A level without a guide page (not 2 to 5) is 404 "Level not found". guide is null when no row exists.
+        Slice: features/guide-get/GuideGet.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: level_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: "{guide: string or null, level_name}"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [guide, level_name]
+                properties:
+                  guide: {type: [string, "null"]}
+                  level_name: {type: string}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+    put:
+      operationId: putGuide
+      summary: Replace a level's English guide
+      description: |
+        Body {guide}. guides:manage (403), the level has a guide page (404), guide non-blank text of at most 65535 bytes (422). Answers {guide}.
+        Slice: features/guide-update/GuideUpdate.cs. Event: classes.guide_saved.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: level_id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "413": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /me/guides:
+    get:
+      operationId: listReaderGuides
+      summary: The guides a student or teacher can open, by slug
+      description: |
+        Permission syllabus:read (403 "You do not have permission to do that"), then the caller must be a student (an active enrolment in an
+        active class) or a teacher (teaches an active class), else 403 "Guides are for students and teachers". The levels that have a guide
+        page (2 to 5) in level order, slug and name only, whether or not the guide has text. Slice: features/me-guides/MeGuides.cs.
+      security:
+        - memberToken: []
+      responses:
+        "200":
+          description: "{guides: [{slug, name}]}"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [guides]
+                properties:
+                  guides:
+                    type: array
+                    items:
+                      type: object
+                      required: [slug, name]
+                      properties:
+                        slug: {type: string, enum: [abuzar, miqdad, ammar, bilal]}
+                        name: {type: string}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+  /me/guides/{slug}:
+    get:
+      operationId: getReaderGuide
+      summary: One level's English guide, by the slug of its guide link
+      description: |
+        The guards of GET /me/guides (403), then the lookup: a slug that names no level (the match is exact, case included), a level with no
+        English guide or a blank one is 404 "Guide not found". guide is the stored text, untrimmed. share_url is the public guide page
+        (TSR_PUBLIC_WEB_BASE plus /guide.php?guide=<slug>), null when the setting is not set. Slice: features/me-guide/MeGuide.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: slug, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: "{guide, share_url: string or null, level_name}"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [guide, share_url, level_name]
+                properties:
+                  guide: {type: string}
+                  share_url: {type: [string, "null"]}
+                  level_name: {type: string}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /classes:
+    get:
+      operationId: listMyClasses
+      summary: The caller's active classes (taught, attended, and with include=managed the ones their reach covers)
+      description: |
+        Permission classes:read; no gender needed. Query include=managed, level, language (int casts), q (LIKE on code or name; "0" is empty). Conducting classes first, then newest id first.
+        role is conducting, attending or managing; studentCount only for managing; joinUrl is the public join page (TSR_PUBLIC_WEB_BASE plus /join/<the class link>) for the teacher and whoever reaches the class, null for a student, without a link or when the setting is not set (also on GET /classes/{id} and in the manage payload).
+        Slice: features/classes-list/ClassesList.cs.
+      security:
+        - memberToken: []
+      responses:
+        "200":
+          description: The class cards with city, country, tags, studentCount and schedules
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: "#/components/schemas/ClassCard"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+    post:
+      operationId: postClass
+      summary: Create a class
+      description: |
+        Body {gender 1|2, levelId, location, city, country, teacher, tags, schedules}. classes:create for the gender (403), 422s, 409 when the same class was made within a minute. 201 {classId}.
+        Slice: features/class-create/ClassCreate.cs. Event: classes.class_created.
+      security:
+        - memberToken: []
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        "201":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "413": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}:
+    get:
+      operationId: getClass
+      summary: One class with its schedule
+      description: |
+        404 unknown or inactive class; 403 without classes:read on it; a member who is neither the teacher nor covered by their reach needs a numeric gender (400) and must attend the class of their gender.
+        Slice: features/class-detail/ClassDetail.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: The class card and schedules
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ClassCard"}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+    put:
+      operationId: putClass
+      summary: Edit a class's details, teacher, tags and schedule
+      description: |
+        Body {languageId?, startedOn?, format, address?, city?, country?, location?, teacher, tags, schedules}. Active complete class (404), classes:update (403), then 422. Answers with the manage payload.
+        Slice: features/class-update/ClassUpdate.cs. Event: classes.class_updated.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "413": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}/sessions:
+    get:
+      operationId: listClassSessions
+      summary: A class's sessions, newest day first
+      description: |
+        Gender set (400), active class (404), classes:read on the class (403). Query page, pageSize (default 20, at most 100). A bare array; not-conducted sessions are included.
+        Slice: features/class-sessions/ClassSessions.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+        - {name: page, in: query, schema: {type: integer}}
+        - {name: pageSize, in: query, schema: {type: integer}}
+      responses:
+        "200":
+          description: "[{id, conductedOn, conducted, duration, attendance, <five>Conducted, <five>Topic, nonConductionReason}]"
+          content:
+            application/json:
+              schema: {type: array, items: {type: object}}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}/conduction:
+    get:
+      operationId: listClassConduction
+      summary: A class's conduction records for the teacher's screen
+      description: |
+        Active class (404), then sessions:create on it (403 "You do not have permission to manage this class"); no gender check. Query page, pageSize (default 20, at most 100). Newest day first; no deleted filter; totalPages is a float.
+        Slice: features/conduction-list/ConductionList.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+        - {name: page, in: query, schema: {type: integer}}
+        - {name: pageSize, in: query, schema: {type: integer}}
+      responses:
+        "200":
+          description: "{class: {id, code, name, level, levelName, gender, status, teacherName, students, extraStudents, totalStudents}, sessions: [session], totalRecords, totalPages, page}"
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+    post:
+      operationId: recordClassConduction
+      summary: Record a class session (201; a repeat of the same request answers 200 with the record it made)
+      description: |
+        Active class (404), then sessions:create on it (403 "You do not have permission to manage this class"); no gender check. Then the body (422), the payload rules in PHP order, the replay (same class, day, caller and recordedAt), a session already on the day (409).
+        Body: conductedOn, conducted (default true), nonConductionReason, duration, quranRecitationSurah, quranRecitationVerse, students [{token, present, recitation}], extraStudents [{name, token, present}], <five>Conducted, <five>Topic, recordedAt. Students who never were in the class are dropped.
+        Slice: features/conduction-create/ConductionCreate.cs; the rules in domain/ConductionRules.cs, the write in domain/ConductionWriter.cs. Event classes.session_recorded.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        "201":
+          description: "the saved session"
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}/conduction/new:
+    get:
+      operationId: getClassConductionForm
+      summary: The data of the new-record form
+      description: |
+        Active class (404), then sessions:create on it (403 "You do not have permission to manage this class"); no gender check.
+        lastSessionDate (the newest session, else the class start day), nextSessionDate (schedule rows of every state), futureDate (the next day when after today), latestTopics (newest non-blank per subject among held sessions), latestSurah, holyQuran.
+        Slice: features/conduction-new/ConductionNew.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: "{class, lastSessionDate, nextSessionDate, futureDate, latestTopics, latestSurah, holyQuran}"
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}/conduction/check:
+    get:
+      operationId: checkClassConductionDay
+      summary: Is there a session on the day, and is its week full
+      description: |
+        Active class (404), then sessions:create on it (403 "You do not have permission to manage this class"); no gender check. Query date (read as PHP strtotime: Y-m-d with time and offset, YYYYMMDD, d-m-Y, m/d/Y, "20 September 2025", today, tomorrow, yesterday); missing or unreadable is 422.
+        Slice: features/conduction-check/ConductionCheck.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+        - {name: date, in: query, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: "{alreadyConducted, sameWeek}"
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}/conduction/{session_id}:
+    get:
+      operationId: getClassConduction
+      summary: One record for editing, with its attendance
+      description: |
+        Active class (404), then sessions:update on it (403 "You do not have permission to manage this class"). The session must belong to the class (404 "Session not found").
+        Slice: features/conduction-get/ConductionGet.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+        - {name: session_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: "{class, session, attendance: [{token, name, present, recitation, extra}], holyQuran}"
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+    put:
+      operationId: updateClassConduction
+      summary: Replace a record and its attendance (within ten days of its making)
+      description: |
+        Active class (404), then sessions:update on it (403 "You do not have permission to manage this class"). The session must belong to the class (404), still be editable (403 "Session is not editable"); then the body as for the POST (422); another session on the new day is 409.
+        Slice: features/conduction-update/ConductionUpdate.cs. Event classes.session_updated. Teacher, author and creation time stay.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+        - {name: session_id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        "200":
+          description: "the saved session"
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /classes/create-options:
+    get:
+      operationId: getClassCreateOptions
+      summary: What the create-class form offers
+      description: |
+        classes:create at any scope (403). genders: each of 1, 2 the caller may create for; tags: live tags by name; timezones: 121 zones, first label each.
+        Slice: features/class-create-options/ClassCreateOptions.cs; data: api/data/timezones.json.
+      security:
+        - memberToken: []
+      responses:
+        "200":
+          description: "{genders: [int], tags: [{id, name}], timezones: [{timezone, label}]}"
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+  /classes/teachers:
+    get:
+      operationId: searchNewClassTeachers
+      summary: Teacher candidates for a class not yet created
+      description: |
+        Query gender (2 only when exactly "2", else 1) and q (trimmed; empty gives an empty list). classes:create for that gender (403). At most 20, by name; a gents class takes gents only.
+        Slice: features/class-create-teachers/ClassCreateTeachers.cs; pool: domain/TeacherSearch.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: gender, in: query, schema: {type: string}}
+        - {name: q, in: query, schema: {type: string}}
+      responses:
+        "200":
+          description: "{teachers: [{token, name}]}"
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}/students:
+    get:
+      operationId: listClassStudents
+      summary: A class's active roster
+      description: |
+        Active complete class (404), class-students:read on it (403). email, mobile and notes are null unless the caller holds classes:update on the class.
+        Slice: features/class-students/ClassStudents.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: "{students: [{token, name, email, mobile, joinedOn, notes, mcqAdmin}]}"
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+    post:
+      operationId: addClassStudent
+      summary: Enrol one member in a class
+      description: |
+        Body {token}. Active complete class (404), students:enrol on it (403), token a JSON integer above 0 (422), already on the roster is a no-op, a non-member or a known gender other than the class's is 422. Answers with the roster payload.
+        Slice: features/class-student-add/ClassStudentAdd.cs. Event: classes.student_enrolled (source added).
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}/teachers:
+    get:
+      operationId: searchClassTeachers
+      summary: Teacher candidates for an existing class
+      description: |
+        Active complete class (404), classes:update on it (403). q trimmed; empty gives an empty list. At most 20, by name; a gents class takes gents only.
+        Slice: features/class-teachers/ClassTeachers.cs; pool: domain/TeacherSearch.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+        - {name: q, in: query, schema: {type: string}}
+      responses:
+        "200":
+          description: "{teachers: [{token, name}]}"
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}/schedule:
+    get:
+      operationId: getClassSchedule
+      summary: A class's schedule slots and the timezones to pick from
+      description: |
+        Active complete class (404), classes:update or classes:schedule on it (403).
+        Slice: features/class-schedule/ClassSchedule.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: "{schedules: [{id, day, hour, minute, timezone}], timezones: [{timezone, label}]}"
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+    put:
+      operationId: putClassSchedule
+      summary: Replace the class's weekly slots
+      description: |
+        Body {schedules: [{id?, day 1-7, hour 0-23, minute 0-59, timezone}]}, at most 21. Same guards as GET (404, 403), then 422. Answers like GET.
+        Slice: features/class-schedule-update/ClassScheduleUpdate.cs. Event: classes.schedule_replaced.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "413": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}/manage:
+    get:
+      operationId: getClassManage
+      summary: Everything the manage screen needs
+      description: |
+        Active complete class (404), classes:update on it (403). {class, tags, schedules (with topics), lookups, can, students, removedStudents, mcqStudents, transferHistory, destinations}.
+        Slice: features/class-manage/ClassManage.cs; payload: domain/ManagePayload.cs, domain/ClassRoster.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}/students/performance:
+    get:
+      operationId: getClassStudentsPerformance
+      summary: Each student's attendance, quiz results and recitation over a range
+      description: |
+        Active complete class (404), mcqs:manage on it (403), then from and to (YYYY-MM-DD, at most 366 days apart; default the year to today) (422).
+        Slice: features/class-students-performance/ClassStudentsPerformance.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}/students/{token}/class-admin:
+    put:
+      operationId: setClassStudentAdmin
+      summary: Set or clear a student's MCQ-admin flag
+      description: |
+        Body {status: true|false}. Active complete class (404), class-students:update on it (403), the member is on the active roster (404), status is a JSON bool (422). Answers with the roster payload.
+        Slice: features/class-student-admin/ClassStudentAdmin.cs. Event: classes.student_class_admin_changed.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+        - {name: token, in: path, required: true, schema: {type: string}}
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}/students/{token}/remove:
+    post:
+      operationId: removeClassStudent
+      summary: Take a student off a class
+      description: |
+        Body {reason} (trimmed, 1 to 500 characters, 422). Active complete class (404), students:enrol on it (403), the member is on the active roster (404). Writes every enrolment row of the pair. Answers with the roster payload.
+        Slice: features/class-student-remove/ClassStudentRemove.cs. Event: classes.student_removed.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+        - {name: token, in: path, required: true, schema: {type: string}}
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}/students/{token}/restore:
+    post:
+      operationId: restoreClassStudent
+      summary: Put a removed student back
+      description: |
+        No body is read. Active complete class (404), students:enrol on it (403), the member is on the removed list (404). Writes every enrolment row of the pair. Answers with the roster payload.
+        Slice: features/class-student-restore/ClassStudentRestore.cs. Event: classes.student_restored.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+        - {name: token, in: path, required: true, schema: {type: string}}
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}/students/{token}/transfer:
+    post:
+      operationId: transferClassStudent
+      summary: Move a student to another class of the same gender
+      description: |
+        Body {toClassId, type?, reason?}. Active complete class (404), students:transfer with no target (403), the member is on the active roster (404), toClassId a JSON integer other than this class, type transfer, promotion or demotion, reason at most 500 characters (422), the destination an active class (404) of the same gender (422) without the student in it (422). Answers with the SOURCE class's roster payload.
+        Slice: features/class-student-transfer/ClassStudentTransfer.cs. Event: classes.student_transferred.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+        - {name: token, in: path, required: true, schema: {type: string}}
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}/students/bulk:
+    post:
+      operationId: bulkAddClassStudents
+      summary: Enrol a pasted list of names, each with an optional mobile
+      description: |
+        Body {lines: [text], resolutions: {lineNumber: add|enrol|skip}}; no other field is read. Active complete class (404), students:enrol on the class (403), then the admin audit row for a privileged caller and a limit of 10 calls a minute per member (429 "Too many bulk adds. Please wait a minute and try again.", counted before the body is checked, so 422s count), then 422: lines a list of at most 200 texts of at most 300 characters (a NUL is refused) with one not blank; each resolution add, enrol or skip.
+        A line is "name" or "name, mobile" (name at most 100 characters; mobile digits, spaces, dashes, a leading plus, 7 to 15 digits). Each answered line has line (its position from 1, blank lines are skipped), name, status and, where it applies, reason or member {name} (first name and last initial only, never a token or number). Status: rejected (reason), duplicate_name, mobile_match (an existing member of the class's gender, or with none recorded, has that mobile on its last ten digits), ready, then added or enrolled once written. A flagged line without a usable answer (duplicate_name takes add or skip; mobile_match takes enrol, add or skip) holds the whole batch back: status "confirm", nothing written. Otherwise one transaction writes every wanted line (a new member, or an existing one enrolled with the gender checked again): status "added" with roster, "none" when nothing was left to write. A failure rolls everything back: 500 "Nothing was added. Please try again."
+        Slice: features/class-students-bulk/ClassStudentsBulk.cs. Events: classes.student_enrolled (source bulk) per enrolled member, identity.member_created and membership.member_created per created member.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        "200":
+          description: "{status, added, lines, roster (when added > 0)}"
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "429": {$ref: "#/components/responses/Problem"}
+        "500": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}/students/{token}:
+    put:
+      operationId: editClassStudent
+      summary: Edit a student's name, email, mobile and class note
+      description: |
+        Body {name, email, mobile, notes}, each absent (empty) or text of at most 500 characters, trimmed; no other field is read. Active complete class (404), classes:update on the class (403), the member is on the active roster (404); an email that is another member's token address or malformed (422); a different email only for a member whose address is blank or their token address and who has no Firebase link (422). The name is written only when not "" or "0"; the mobile and the note are always written (an omitted one blanks it). A database refusal (a value too long) rolls everything back: 422 "Failed to update student". Answers with the roster payload.
+        Slice: features/class-student-edit/ClassStudentEdit.cs. Events: identity.member_email_changed, membership.member_contact_changed, classes.student_edited.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+        - {name: token, in: path, required: true, schema: {type: string}}
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}/deactivate:
+    post:
+      operationId: deactivateClass
+      summary: Retire a class and remove its students
+      description: |
+        Body {type, effectiveDate, reason}. deactivated-classes:manage with no target (403), then 422 in order: type completed or shutdown, effectiveDate a real YYYY-MM-DD date, reason non-blank after trimming and at most 300 bytes; the class exists (404 "Class #<id> not found") and is active (409 "Class #<id> is not active (status=<s>)"). Answers {deactivated, classId, auditId}. One transaction: the class, its active enrolments, its schedules and topics, one class_audit_log row.
+        Slice: features/class-deactivate/ClassDeactivate.cs. Event: classes.class_deactivated.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /classes/join:
+    post:
+      operationId: joinClass
+      summary: Join, or rejoin, the class a link names
+      description: |
+        Body {link}. classes:join (403), the caller's gender is a number (400), link required (422), an active class (404), of the caller's gender (403). 200 {success, message, classId, className}: success false when already enrolled; a member removed by someone else is 403; one who left rejoins; a new member is enrolled.
+        Slice: features/class-join/ClassJoin.cs. Events: classes.student_enrolled (source joined), classes.student_rejoined.
+      security:
+        - memberToken: []
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /join/{code}:
+    get:
+      operationId: previewJoinLink
+      summary: The class a join link names (public)
+      description: |
+        No sign-in: the app shows it before sign-in; only name, level, language, gender and open, never the teacher, counts or ids. 30 calls a minute per client address (429); a malformed or unknown code is a bare 404.
+        Slice: features/join-preview/JoinPreview.cs.
+      security: []
+      parameters:
+        - {name: code, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "404": {$ref: "#/components/responses/Problem"}
+        "429": {$ref: "#/components/responses/Problem"}
+  /registrations/{registration_id}/classes:
+    get:
+      operationId: listRegistrationClasses
+      summary: The classes a waiting registrant could be placed in
+      description: |
+        registrations:read for a gender (403), a waiting registrant (409), registrations:read for the registrant's gender (403). Active classes of that gender the caller may enrol into: {classes: [{id, code, level, teacher, location, students}]}.
+        Slice: features/registration-classes/RegistrationClasses.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: registration_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+  /registrations/{registration_id}/place:
+    post:
+      operationId: placeRegistration
+      summary: Put a waiting registrant in a class
+      description: |
+        Body {classId}. The registrant guard as the list above (403, 409), classId a JSON integer above 0 (422), an active class (404), students:enrol on it (403), the registrant's gender must match (422). 200 {placed, registrationId, classId}.
+        Slice: features/registration-place/RegistrationPlace.cs. Event: classes.student_enrolled (source placed).
+      security:
+        - memberToken: []
+      parameters:
+        - {name: registration_id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /teachers/{token}:
+    get:
+      operationId: getTeacher
+      summary: A teacher's details, trained levels, classes and training history
+      description: |
+        teachers:lookup (403); a member the caller may not see, or no such member, is 404 "Teacher not found".
+        Slice: features/teacher-detail/TeacherDetail.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: token, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}/syllabus-topics:
+    get:
+      operationId: getClassSyllabusTopics
+      summary: The topic catalogue of the class's level
+      description: |
+        Gender set (400), active class (404), syllabus:read and classes:read on the class (403). An object of subjects to topics to lessons (only MIQDAD has one), else {}.
+        Slice: features/class-syllabus-topics/ClassSyllabusTopics.cs; data: api/data/syllabus_topics.json.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: The catalogue object
+          content:
+            application/json:
+              schema: {type: object}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}/guide:
+    get:
+      operationId: getClassGuide
+      summary: The guide of the class's level
+      description: |
+        Gender set (400), active class (404), classes:read on the class (403). guide and share_url are null for a level with no guide page, no guide or a blank one; otherwise share_url is the public guide page
+        (TSR_PUBLIC_WEB_BASE plus /guide.php?guide=<the level's slug>), null when the setting is not set.
+        Slice: features/class-guide/ClassGuide.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: "{guide, share_url, level_name}"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  guide: {type: [string, "null"]}
+                  share_url: {type: [string, "null"]}
+                  level_name: {type: [string, "null"]}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}/my-attendance:
+    get:
+      operationId: getMyClassAttendance
+      summary: The caller's own attendance in a class
+      description: |
+        attendance:read (403), gender set (400), enrolled student or teacher of an active class (404 "Class not found or not enrolled"). Query start_date, end_date (Y-m-d, inclusive).
+        A bare array of conducted sessions, newest first; a teacher sees every session as absent. Slice: features/my-attendance/MyAttendance.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+        - {name: start_date, in: query, schema: {type: string, format: date}}
+        - {name: end_date, in: query, schema: {type: string, format: date}}
+      responses:
+        "200":
+          description: "[{sessionId, conductedOn, present, recitation}]"
+          content:
+            application/json:
+              schema: {type: array, items: {type: object}}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}/my-performance:
+    get:
+      operationId: getMyClassPerformance
+      summary: The caller's attendance and quiz figures in a class
+      description: |
+        As my-attendance with performance:read. Percentages are floats. The dates bound the sessions, not the quiz part. Slice: features/my-performance/MyPerformance.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+        - {name: start_date, in: query, schema: {type: string, format: date}}
+        - {name: end_date, in: query, schema: {type: string, format: date}}
+      responses:
+        "200":
+          description: "{totalSessions, attendedSessions, attendancePercent, totalRecitation, averageRecitation, quizzesAttempted, quizAverageScore}"
+          content:
+            application/json:
+              schema: {type: object}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /me/children/{child_token}/classes:
+    get:
+      operationId: listChildClasses
+      summary: Every class a linked child is or was enrolled in
+      description: |
+        children-performance:read (403); an active guardian link to the child (404 "Child not found"). No status filter. Slice: features/child-classes/ChildClasses.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: child_token, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: "[{class_id, class_name, class_code, gender, teacher_name, started_on, enrolment_status}]"
+          content:
+            application/json:
+              schema: {type: array, items: {type: object}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /me/children/{child_token}/classes/{class_id}/attendance:
+    get:
+      operationId: getChildClassAttendance
+      summary: A linked child's attendance summary and history in a class
+      description: |
+        children-performance:read (403); an active link and any enrolment row (404 "Child or class not found"). Query start_date, end_date. Slice: features/child-attendance/ChildAttendance.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: child_token, in: path, required: true, schema: {type: string}}
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+        - {name: start_date, in: query, schema: {type: string, format: date}}
+        - {name: end_date, in: query, schema: {type: string, format: date}}
+      responses:
+        "200":
+          description: "{summary: {total_sessions, attended_sessions, attendance_percentage, total_recitation}, history: [{date, duration, present, recitation}]}"
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /me/children/{child_token}/classes/{class_id}/performance:
+    get:
+      operationId: getChildClassPerformance
+      summary: A linked child's attendance and quiz summary in a class
+      description: |
+        As the child's attendance. The dates bound the sessions, not the quiz part. Slice: features/child-performance/ChildPerformance.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: child_token, in: path, required: true, schema: {type: string}}
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+        - {name: start_date, in: query, schema: {type: string, format: date}}
+        - {name: end_date, in: query, schema: {type: string, format: date}}
+      responses:
+        "200":
+          description: "{attendance: {total_sessions, attended_sessions, attendance_percentage, total_recitation}, quizzes: {quizzes_attempted, quiz_average_score}}"
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /syllabus/levels:
+    get:
+      operationId: listSyllabusLevels
+      summary: Every class level with its sort order
+      description: |
+        Permission syllabus:read (every member). Unlike GET /class-levels the sort_order is returned. Slice: features/syllabus-levels/SyllabusLevels.cs.
+      security:
+        - memberToken: []
+      responses:
+        "200":
+          description: "[{id, code, name, sort_order}]"
+          content:
+            application/json:
+              schema: {type: array, items: {type: object}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+  /syllabus/level/{level_id}:
+    get:
+      operationId: getSyllabusLevel
+      summary: One level's active syllabus items
+      description: |
+        Permission syllabus:read. Unknown level (the id is an int cast) is 404 "Level not found". Times are naive Y-m-dTH:i:s. Slice: features/syllabus-level/SyllabusLevel.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: level_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: "{level_id, level_name, level_code, items: [{id, level_id, subject_name, description, link_type, url, sort_order, is_active, created_at, modified_at}]}"
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /admin/syllabus:
+    get:
+      operationId: listAdminSyllabus
+      summary: Every level with its live syllabus items
+      description: |
+        Super admin only (syllabus:update, 403 "Only super admins can access this resource"). Query include_inactive (true/1/yes/on, false/0/no/off; else 422). Answers [{level_id, level_name, level_code, items}] for every level. Slice: features/admin-syllabus-list/AdminSyllabusList.cs.
+      security:
+        - memberToken: []
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+    post:
+      operationId: createAdminSyllabus
+      summary: Add a syllabus item
+      description: |
+        Body {level_id, subject_name, url, link_type?, sort_order?, description?}. 403 as the list, 422 in order (level_id, subject_name, url, link_type, sort_order, description), 400 "Invalid level_id". 201 with the item. Slice: features/admin-syllabus-create/AdminSyllabusCreate.cs. Event: classes.syllabus_item_created.
+      security:
+        - memberToken: []
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "400": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /admin/syllabus/{syllabus_id}:
+    put:
+      operationId: updateAdminSyllabus
+      summary: Edit a syllabus item
+      description: |
+        Partial body; a field is given when present and not null. 404 "Syllabus item not found" (before the field checks), 422 per field, 400 "No fields to update". Answers the item. Slice: features/admin-syllabus-update/AdminSyllabusUpdate.cs. Event: classes.syllabus_item_updated.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: syllabus_id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "400": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+    delete:
+      operationId: deleteAdminSyllabus
+      summary: Soft-delete a syllabus item
+      description: |
+        404 "Syllabus not found". Answers {success: true}. Slice: features/admin-syllabus-delete/AdminSyllabusDelete.cs. Event: classes.syllabus_item_deleted.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: syllabus_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /admin/transfers/classes:
+    get:
+      operationId: listTransferClasses
+      summary: Every class and the level names, for transfers
+      description: |
+        students:transfer (403 "Only administrators can transfer students"). Answers {classes, levels}. Slice: features/admin-transfer-classes/AdminTransferClasses.cs.
+      security:
+        - memberToken: []
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+  /admin/transfers/classes/{class_id}/students:
+    get:
+      operationId: listTransferStudents
+      summary: Who can be moved out of a class
+      description: |
+        students:transfer (403), the class in any status (404). Answers {students}: the active students, or for a closed class with none its deactivation cohort. Slice: features/admin-transfer-students/AdminTransferStudents.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /admin/transfers/history:
+    get:
+      operationId: listTransferHistory
+      summary: The transfer log
+      description: |
+        students:transfer (403). Query q, page, pageSize (1 to 100, default 50). Answers {total, page, pageSize, items}. Slice: features/admin-transfer-history/AdminTransferHistory.cs.
+      security:
+        - memberToken: []
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+  /admin/transfers:
+    post:
+      operationId: saveTransfers
+      summary: Move several students between two classes
+      description: |
+        Body {fromClassId, toClassId, type, reason?, tokens}. students:transfer (403), 422 in order, 404 "Class not found", 422 destination not active or other gender. Answers {moved, failed}, 200 even when all failed; each student moves in a transaction of its own. Slice: features/admin-transfer-save/AdminTransferSave.cs. Event: classes.student_transferred.
+      security:
+        - memberToken: []
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /admin/members/{token}:
+    get:
+      operationId: getAdminMember
+      summary: A member's details by token
+      description: |
+        members:enrol-by-token (403), 30 lookups an hour per caller (429). 404 "No registered member has this token"; 422 with code ambiguous_token when two members hold it. Slice: features/admin-member-get/AdminMemberGet.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: token, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "429": {$ref: "#/components/responses/Problem"}
+  /admin/members/{token}/enrolments:
+    post:
+      operationId: enrolMemberByToken
+      summary: Enrol a member, found by token, in a class
+      description: |
+        Body {classId}. members:enrol-by-token (403), classId an integer above 0 (422), an active class (404), students:enrol (403), 30 an hour per caller (429). Refusals with a code: 409 already_enrolled, 422 other_gender, 422 ambiguous_token, 409 class_inactive. Answers {saved: true} with the class roster. Slice: features/admin-member-enrol/AdminMemberEnrol.cs. Events: classes.student_enrolled (source by_token), classes.student_restored.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: token, in: path, required: true, schema: {type: string}}
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "429": {$ref: "#/components/responses/Problem"}
+        "500": {$ref: "#/components/responses/Problem"}
+  /admin/deactivated-classes:
+    get:
+      operationId: listDeactivatedClasses
+      summary: The closed classes and the deactivation log
+      description: |
+        deactivated-classes:manage (403). Answers {deactivated, log}. Slice: features/admin-deactivated-classes/AdminDeactivatedClasses.cs.
+      security:
+        - memberToken: []
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+  /admin/deactivated-classes/candidates:
+    get:
+      operationId: listDeactivationCandidates
+      summary: The active classes one may deactivate
+      description: |
+        deactivated-classes:manage (403). Answers {classes}. Slice: features/admin-deactivated-candidates/AdminDeactivatedCandidates.cs.
+      security:
+        - memberToken: []
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+  /admin/teachers:
+    get:
+      operationId: listAdminTeachers
+      summary: A gender's trained teachers
+      description: |
+        Query gender (a gender administrator is held to their own; exactly 2 is ladies, anything else gents), teachers:read for it (403). Answers {gender, levels, teachers}. Slice: features/admin-teachers/AdminTeachers.cs.
+      security:
+        - memberToken: []
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+  /admin/teachers/training:
+    post:
+      operationId: changeTeacherTraining
+      summary: Add or remove the levels teachers are trained for
+      description: |
+        Body {changes: [{token, level, action}], comments}. teachers:read (403 before the body), 422/404/403 per PHP's order. Answers {changed}. Slice: features/admin-teachers-training/AdminTeachersTraining.cs. Event: classes.teacher_training_changed.
+      security:
+        - memberToken: []
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "500": {$ref: "#/components/responses/Problem"}
+  /admin/teachers/import:
+    post:
+      operationId: importTeachers
+      summary: Give teachers of active classes a training record
+      description: |
+        Body {gender?}. teachers:read for the gender (403). Answers {added}. Slice: features/admin-teachers-import/AdminTeachersImport.cs. Event: classes.teacher_training_changed.
+      security:
+        - memberToken: []
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "500": {$ref: "#/components/responses/Problem"}
+  /reports/conduction:
+    get:
+      operationId: reportConduction
+      summary: The conduction of one week for every class the caller reaches, and the figures around it
+      description: |
+        reports:read for the gender (403); the gender is the caller's locked gender, else 2 only for the text 2, else 1. year and week (default: the last completed week; 422 Invalid year or week; weeks are Sunday to Saturday, numbered per calendar year, week 0 is the days before the first Sunday). Answers {gender, year, week, previous, next, weekOf, summaryStart, summaryEnd, levels, classes, lastWeek}; level narrows classes and lastWeek by exact name. A week with no day in the calendar or one not yet begun answers an empty report (PHP prints a fatal error). Slice: features/report-conduction/ReportConduction.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: gender, in: query, required: false, schema: {type: string}}
+        - {name: year, in: query, required: false, schema: {type: integer}}
+        - {name: week, in: query, required: false, schema: {type: integer}}
+        - {name: level, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /reports/conduction/download-all:
+    get:
+      operationId: reportConductionDownloadAll
+      summary: Every week's raw rows of the conduction window as CSV
+      description: |
+        As /reports/conduction (the level is not read). text/csv, Content-Disposition Class_Report_All_<Ymd_His>.csv (UTC); 404 No data to download when there are no rows. Cells that would run as a formula get a leading quote. Slice: features/report-conduction-all/ReportConductionAll.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: gender, in: query, required: false, schema: {type: string}}
+        - {name: year, in: query, required: false, schema: {type: integer}}
+        - {name: week, in: query, required: false, schema: {type: integer}}
+      responses:
+        "200":
+          description: The file
+          content:
+            text/csv:
+              schema: {type: string}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /reports/weekly:
+    get:
+      operationId: reportWeekly
+      summary: Every class the caller reaches and how each week of the months went
+      description: |
+        reports:read for the gender (403). from and to are months MM-YYYY (default this month; to defaults to from); 422 from and to must be months as MM-YYYY, from not after to; 422 The range can cover at most 12 months. Answers {gender, from, to, levels, weeks[{month, label, from, to}], classes[{classId, level, class, teacher, weeks[{status held|notHeld|notFilled, sessions}]}]}. The classes are also limited to the assigned ones for a caller whose classes:read is assigned-only (PHP getAll). Slice: features/report-weekly/ReportWeekly.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: gender, in: query, required: false, schema: {type: string}}
+        - {name: from, in: query, required: false, schema: {type: string}}
+        - {name: to, in: query, required: false, schema: {type: string}}
+        - {name: level, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /reports/summary:
+    get:
+      operationId: reportSummary
+      summary: Per class over the months: sessions expected, held, not filled, averages, subjects
+      description: |
+        reports:read for the gender (403). from (required: PHP's default is built from an invalid date text, so a request without it is always 422) and to (default this month) are months MM-YYYY; no 12-month limit. Answers {gender, from, to, levels, classes[{classId, level, class, teacher, expected, conducted, notFilled, notConducted, avgStudents, avgDuration, percentNotFilled, percentConduction, percentAttendance, subjects|null}]}, every figure a whole number. A class with no schedule slot in a finished week is not listed. Slice: features/report-summary/ReportSummary.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: gender, in: query, required: false, schema: {type: string}}
+        - {name: from, in: query, required: true, schema: {type: string}}
+        - {name: to, in: query, required: false, schema: {type: string}}
+        - {name: level, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /reports/subject-conduction:
+    get:
+      operationId: reportSubjectConduction
+      summary: Per class and week, the date it last met and the topics each subject covered
+      description: |
+        reports:read for the gender (403). from and to are months MM-YYYY (default this month), at most 12; classId must be a class the caller reaches (403 otherwise, checked after the months). Answers {gender, from, to, levels, classes[{classId, class, level, teacher}], rows[{class, level, teacher, week, heldOn, arabic, aqaed, ahkam, akhlaq, other}]}. Slice: features/report-subject-conduction/ReportSubjectConduction.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: gender, in: query, required: false, schema: {type: string}}
+        - {name: from, in: query, required: false, schema: {type: string}}
+        - {name: to, in: query, required: false, schema: {type: string}}
+        - {name: level, in: query, required: false, schema: {type: string}}
+        - {name: classId, in: query, required: false, schema: {type: integer}}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /reports/class-sessions:
+    get:
+      operationId: reportClassSessions
+      summary: Every class the caller reaches with its session count and last session
+      description: |
+        reports:read for the gender (403). Answers {gender, levels, classes[{classId, class, level, teacher, totalSessions, lastDate, lastQuran, lastArabic, lastAqaed, lastAhkam, lastAkhlaq, lastOther}]}. Slice: features/report-class-sessions/ReportClassSessions.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: gender, in: query, required: false, schema: {type: string}}
+        - {name: level, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+  /reports/class-sessions/download-all:
+    get:
+      operationId: reportClassSessionsDownloadAll
+      summary: Every session of every class the caller reaches as CSV
+      description: |
+        As /reports/class-sessions (the level is not read). text/csv, Content-Disposition Class_Sessions_Report_<Gents|Ladies>_<Ymd_His>.csv; 404 No sessions to download. At most 200000 rows. Slice: features/report-class-sessions-all/ReportClassSessionsAll.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: gender, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: The file
+          content:
+            text/csv:
+              schema: {type: string}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /reports/class-sessions/{class_id}:
+    get:
+      operationId: reportClassSessionHistory
+      summary: A class's sessions, newest day first
+      description: |
+        reports:read with no target (403). A class that is missing, closed or out of the caller's reach answers 200 {sessions: []}. At most 5000 sessions. Slice: features/report-class-session-history/ReportClassSessionHistory.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+  /reports/active-teachers:
+    get:
+      operationId: reportActiveTeachers
+      summary: The teachers of the active classes the caller reaches
+      description: |
+        reports:read for the gender (403). The teachers are filtered by their own gender. Answers {gender, teachers[{token, name, attendingClass, selfTeacher, maxLevel, totalClasses, conductingClasses}]}, by lower-case name then token. Slice: features/report-active-teachers/ReportActiveTeachers.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: gender, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+  /reports/active-teachers/download:
+    get:
+      operationId: reportActiveTeachersDownload
+      summary: The active teachers report as an xlsx or PDF file
+      description: |
+        format must be xlsx or pdf (422, checked before the sign-in), then reports:read for the gender (403). The same rows as GET /reports/active-teachers, one row per teacher; the file is named Active-teachers-Gents or -Ladies. A PDF that cannot be rendered is 503. Slice: features/report-active-teachers-download/ReportActiveTeachersDownload.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: format, in: query, required: true, schema: {type: string, enum: [xlsx, pdf]}}
+        - {name: gender, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: The file (attachment)
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: {type: string, format: binary}
+            application/pdf:
+              schema: {type: string, format: binary}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
+  /reports/class-sessions/{class_id}/download:
+    get:
+      operationId: reportClassSessionHistoryDownload
+      summary: One class session history as an xlsx or PDF file
+      description: |
+        format must be xlsx or pdf (422, checked before the sign-in), then reports:read with no target (403). The same sessions as GET /reports/class-sessions/{class_id}, oldest first and numbered; a class that is missing or out of reach is a file with headers only. Named Class-sessions-<class_id>. A PDF that cannot be rendered is 503. Slice: features/report-class-session-history-download/ReportClassSessionHistoryDownload.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+        - {name: format, in: query, required: true, schema: {type: string, enum: [xlsx, pdf]}}
+      responses:
+        "200":
+          description: The file (attachment)
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: {type: string, format: binary}
+            application/pdf:
+              schema: {type: string, format: binary}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
+  /reports/conduction/download:
+    get:
+      operationId: reportConductionDownload
+      summary: The conduction report as an xlsx or PDF file
+      description: |
+        format must be xlsx or pdf (422, checked before the sign-in), then reports:read for the gender (403), then year and week (422 "Invalid year or week"). The same rows and level narrowing as GET /reports/conduction: a section of the week's classes (Class, Level, Teacher, Status Held / Not held / Not filled, Date, Present, Minutes, Reason) and a section of the overall figures (whole percentages). Named Conduction-Gents-week-W-YYYY. A PDF that cannot be rendered is 503. Slice: features/report-conduction-download/ReportConductionDownload.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: format, in: query, required: true, schema: {type: string, enum: [xlsx, pdf]}}
+        - {name: gender, in: query, required: false, schema: {type: string}}
+        - {name: year, in: query, required: false, schema: {type: integer}}
+        - {name: week, in: query, required: false, schema: {type: integer}}
+        - {name: level, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: The file (attachment)
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: {type: string, format: binary}
+            application/pdf:
+              schema: {type: string, format: binary}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
+  /reports/weekly/download:
+    get:
+      operationId: reportWeeklyDownload
+      summary: The weekly report as an xlsx or PDF file
+      description: |
+        format must be xlsx or pdf (422, checked before the sign-in), then reports:read for the gender (403), then the months (422). One table of the same classes as GET /reports/weekly: Class, Level, Teacher and a column per week (Held, Held (n), Not held, Not filled). Named Weekly-Gents-MM-YYYY or Weekly-Gents-MM-YYYY-to-MM-YYYY. A PDF that cannot be rendered is 503. Slice: features/report-weekly-download/ReportWeeklyDownload.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: format, in: query, required: true, schema: {type: string, enum: [xlsx, pdf]}}
+        - {name: gender, in: query, required: false, schema: {type: string}}
+        - {name: from, in: query, required: false, schema: {type: string}}
+        - {name: to, in: query, required: false, schema: {type: string}}
+        - {name: level, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: The file (attachment)
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: {type: string, format: binary}
+            application/pdf:
+              schema: {type: string, format: binary}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
+  /reports/summary/download:
+    get:
+      operationId: reportSummaryDownload
+      summary: The class summary as an xlsx or PDF file
+      description: |
+        format must be xlsx or pdf (422, checked before the sign-in), then reports:read for the gender (403), then the months (422; from is required). The same classes and whole-number figures as GET /reports/summary, a row per class, the subjects as "count (percent%)" (empty when the class held no subject). Named Summary-Gents-MM-YYYY-to-MM-YYYY. A PDF that cannot be rendered is 503. Slice: features/report-summary-download/ReportSummaryDownload.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: format, in: query, required: true, schema: {type: string, enum: [xlsx, pdf]}}
+        - {name: gender, in: query, required: false, schema: {type: string}}
+        - {name: from, in: query, required: true, schema: {type: string}}
+        - {name: to, in: query, required: false, schema: {type: string}}
+        - {name: level, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: The file (attachment)
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: {type: string, format: binary}
+            application/pdf:
+              schema: {type: string, format: binary}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
+  /reports/subject-conduction/download:
+    get:
+      operationId: reportSubjectConductionDownload
+      summary: The subject conduction report as an xlsx or PDF file
+      description: |
+        format must be xlsx or pdf (422, checked before the sign-in), then reports:read for the gender (403), the months (422), a classId the caller does not reach (403). The same rows as GET /reports/subject-conduction, one per class and week (Class, Level, Teacher, Week, Held on and a column per subject). Named Subject-conduction-Gents-MM-YYYY or with -to-MM-YYYY. A PDF that cannot be rendered is 503. Slice: features/report-subject-conduction-download/ReportSubjectConductionDownload.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: format, in: query, required: true, schema: {type: string, enum: [xlsx, pdf]}}
+        - {name: gender, in: query, required: false, schema: {type: string}}
+        - {name: from, in: query, required: false, schema: {type: string}}
+        - {name: to, in: query, required: false, schema: {type: string}}
+        - {name: level, in: query, required: false, schema: {type: string}}
+        - {name: classId, in: query, required: false, schema: {type: integer}}
+      responses:
+        "200":
+          description: The file (attachment)
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: {type: string, format: binary}
+            application/pdf:
+              schema: {type: string, format: binary}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
+  /reports/pending/download:
+    get:
+      operationId: reportPendingDownload
+      summary: The pending work report as an xlsx or PDF file
+      description: |
+        format must be xlsx or pdf (422, checked before the sign-in), then reports:read for the gender (403), then the months (422). The same teachers and classes as GET /reports/pending, a row per pending class (Teacher, Class, Level, Forms not filled, MCQs pending, MCQs conducted, MCQs in the syllabus). Named Pending-Gents-MM-YYYY-to-MM-YYYY. A PDF that cannot be rendered is 503. Slice: features/report-pending-download/ReportPendingDownload.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: format, in: query, required: true, schema: {type: string, enum: [xlsx, pdf]}}
+        - {name: gender, in: query, required: false, schema: {type: string}}
+        - {name: from, in: query, required: false, schema: {type: string}}
+        - {name: to, in: query, required: false, schema: {type: string}}
+        - {name: level, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: The file (attachment)
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: {type: string, format: binary}
+            application/pdf:
+              schema: {type: string, format: binary}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
+  /reports/tsr/download:
+    get:
+      operationId: reportTsrDownload
+      summary: TSR at a glance as an xlsx or PDF file
+      description: |
+        format must be xlsx or pdf (422, checked before the sign-in), then reports:read for the gender (403), then the dates (422). The same figures as GET /reports/tsr as eight tables: per level and per class for conduction, MCQ, attendance and recitation; a class that never held or set an MCQ reads "None in this period". Named TSR-Gents-YYYY-MM-DD-to-YYYY-MM-DD. A PDF that cannot be rendered is 503. Slice: features/report-tsr-download/ReportTsrDownload.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: format, in: query, required: true, schema: {type: string, enum: [xlsx, pdf]}}
+        - {name: gender, in: query, required: false, schema: {type: string}}
+        - {name: from, in: query, required: false, schema: {type: string}}
+        - {name: to, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: The file (attachment)
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: {type: string, format: binary}
+            application/pdf:
+              schema: {type: string, format: binary}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
+  /reports/quran-leaderboard:
+    get:
+      operationId: getQuranLeaderboard
+      summary: The recitation leaderboard, top 100
+      description: |
+        Permission quran-leaderboard:read for the gender (its own gender lock; 403). from and to are days YYYY-MM-DD (default the year to today; from after to or a bad day is 422;
+        more than five years is 422 "The range can cover at most five years"); level is a level name (422 "Unknown level"); minimum is a whole number from 0 (else 1).
+        Ranks are global (every attendance mark of the range, all genders and levels, ranked first); a member in two active classes is listed twice. total counts every ranked row.
+        Slice: features/report-quran-leaderboard/ReportQuranLeaderboard.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: gender, in: query, required: false, schema: {type: string}}
+        - {name: from, in: query, required: false, schema: {type: string}}
+        - {name: to, in: query, required: false, schema: {type: string}}
+        - {name: level, in: query, required: false, schema: {type: string}}
+        - {name: minimum, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: "{gender, from, to, levels[], total, students[{rank, name, token, class, recitation}]}"
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /reports/quran-leaderboard/download:
+    get:
+      operationId: downloadQuranLeaderboard
+      summary: Every ranked row of the recitation leaderboard as a file
+      description: |
+        format must be xlsx or pdf (422, before the sign-in), then the same checks and rows as GET /reports/quran-leaderboard without the top-100 cut (at most 50000). Columns Rank, Name, Token, Class, Recitation.
+        Named Quran-leaderboard-Gents-YYYY-MM-DD-to-YYYY-MM-DD. A PDF that cannot be rendered is 503. Slice: features/report-quran-leaderboard-download/ReportQuranLeaderboardDownload.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: format, in: query, required: true, schema: {type: string, enum: [xlsx, pdf]}}
+        - {name: gender, in: query, required: false, schema: {type: string}}
+        - {name: from, in: query, required: false, schema: {type: string}}
+        - {name: to, in: query, required: false, schema: {type: string}}
+        - {name: level, in: query, required: false, schema: {type: string}}
+        - {name: minimum, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: The file
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
+  /reports/students/download:
+    get:
+      operationId: reportStudentsDownload
+      summary: The student performance report as an xlsx or PDF file
+      description: |
+        format must be xlsx or pdf (422, checked before the sign-in), then reports:read for the gender (403), then the dates (422). The same students as GET /reports/students narrowed to the level and class named (exact text, trimmed), best TSR score first, then name, then token; the token is text in the file. Named Students-Gents-YYYY-MM-DD-to-YYYY-MM-DD. A PDF that cannot be rendered is 503. Slice: features/report-students-download/ReportStudentsDownload.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: format, in: query, required: true, schema: {type: string, enum: [xlsx, pdf]}}
+        - {name: gender, in: query, required: false, schema: {type: string}}
+        - {name: from, in: query, required: false, schema: {type: string}}
+        - {name: to, in: query, required: false, schema: {type: string}}
+        - {name: level, in: query, required: false, schema: {type: string}}
+        - {name: class, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: The file (attachment)
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: {type: string, format: binary}
+            application/pdf:
+              schema: {type: string, format: binary}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
+  /reports/this-week:
+    get:
+      operationId: reportThisWeek
+      summary: The class coordinator's review of the last completed week
+      description: |
+        reports:read for the gender (403). Answers {gender, week{from, to}, summary{met, of, formsMissing, attendance (float or null), flagged}, stages{cform, conduction, attendance, alignment, met, attended}}; every row is {classId, code, level, teacher, teacherToken, teacherMobile, detail, action (message, call or null), quiet[{subject, weeks}]}. teacherMobile only for a teacher the caller may look up (teachers:lookup), null otherwise and in the met and attended lists; it is the saved number in full, a plus then digits, completed with the calling code of the teacher's own country when saved without one, and null when it cannot be completed (too short, or no code and an unknown country). Slice: features/report-this-week/ReportThisWeek.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: gender, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+  /reports/this-week/class/{class_id}:
+    get:
+      operationId: reportThisWeekClass
+      summary: What one class taught in each of the last 8 weeks
+      description: |
+        reports:read for the gender (403). A class that is missing, closed or out of the caller's reach (by the class's own gender) is 404 "Class not found". Answers {classId, code, level, weeks[{from, to, status (taught, no class, no form), subjects}], chart}, newest week first; chart is the Standard Syllabus Chart of the level or null. Slice: features/report-this-week-class/ReportThisWeekClass.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+        - {name: gender, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /reports/pending:
+    get:
+      operationId: reportPending
+      summary: Per teacher, the class forms not filled and the MCQs copied but not conducted
+      description: |
+        reports:read for the gender (403); from and to are months MM-YYYY (default last month to this month, at most 12 months, else 422). Answers {gender, from, to, levels, teachers[{teacherToken, teacher, notFilled, mcqPending, classes[{classId, level, class, notFilled, mcqPending, mcqConducted, mcqExpected}]}]}: only teachers and classes with something pending, most forms then most MCQs first; level narrows the teachers (levels lists every level before it). The MCQ figures ignore the months. Slice: features/report-pending/ReportPending.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: gender, in: query, required: false, schema: {type: string}}
+        - {name: from, in: query, required: false, schema: {type: string}}
+        - {name: to, in: query, required: false, schema: {type: string}}
+        - {name: level, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /reports/pending/nudge:
+    post:
+      operationId: reportPendingNudge
+      summary: A coordinator reminds a teacher of the pending class forms and MCQs
+      description: |
+        reports:read for the gender (403). Body {teacher (a JSON integer above 0, else 422 "teacher must be a member token"), send (only true sends), from, to (months MM-YYYY, default last month to this month, at most 12 months, else 422)}.
+        The teacher must be in the caller's own pending report, else 422 "Nothing is pending for this teacher" (also outside the caller's reach). Without send, answers {teacherToken, teacher, title, body, alreadyReminded, lastReminded, sent: false, deviceCount: 0}.
+        With send: 429 when the teacher was reminded in the last 24 hours, 429 over 30 reminders an hour per sender; else the reminder is recorded, put in the teacher's inbox and its pushes queued (nothing is sent here): 200 {sent: true, deviceCount (devices queued for), lastReminded, ...}. Slice: features/report-pending-nudge/ReportPendingNudge.cs.
+      security:
+        - memberToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "429": {$ref: "#/components/responses/Problem"}
+  /reports/tsr:
+    get:
+      operationId: reportTsr
+      summary: TSR at a glance, per level and per class, over a range of days
+      description: |
+        reports:read for the gender (403); from and to are days YYYY-MM-DD (default the 14 days to today; from after to, a bad day or more than 366 days is 422). Answers {gender, from, to, conduction, mcq, attendance, recitation}; conduction and mcq have levels[{levelId, level, conducted, total, percent (float)}] and classes[{level, class, teacher, lastConducted (a day; for mcq the time of the latest publish)}], attendance has levels[{levelId, level, percent}] and classes[{level, class, teacher, percent}], recitation has levels[{levelId, level, total}] and classes[{level, class, teacher, total}]. The level rows count the classes of every gender in the caller's reach and show the asked gender's figures; the recitation class list also holds closed classes (PHP has no status condition there). Slice: features/report-tsr/ReportTsr.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: gender, in: query, required: false, schema: {type: string}}
+        - {name: from, in: query, required: false, schema: {type: string}}
+        - {name: to, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /reports/students:
+    get:
+      operationId: reportStudents
+      summary: Every student of every class in reach with attendance, MCQ and recitation figures over a range of days
+      description: |
+        reports:read for the gender (403); from and to are days YYYY-MM-DD (default the 30 days to today; from after to, a bad day or more than 366 days is 422). Answers {gender, from, to, levels, classes[{class, level}], students[{token (text), name, level, class, sessions, attendance, totalMcqs, mcqAttempted, mcqPerformance, recitation, recitationAvg (float), tsrScore}]}, best tsrScore first; percentages are whole numbers. Only students with an attendance mark of a held session in the range are listed, one row per class. The recitation is PHP's global leaderboard figure (every mark of the range, ranked, then limited to enrolments with status A in active classes, to members of the asked gender and, for an assigned-only caller, to the assigned classes; only the first 1000 rows by rank count, the rest are 0). Slice: features/report-students/ReportStudents.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: gender, in: query, required: false, schema: {type: string}}
+        - {name: from, in: query, required: false, schema: {type: string}}
+        - {name: to, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /reports/mcq-summary:
+    get:
+      operationId: reportMcqSummary
+      summary: Per class, how many MCQs were published in a range and how many students are listed
+      description: |
+        reports:read for the gender (403); from and to are days YYYY-MM-DD (default the 30 days to today; from after to, a bad day or more than 366 days is 422). Answers {gender, from, to, levels, classes[{classId, class, level, teacher (null when none), mcqs, students}]}: only classes that published an MCQ in the range (midnight of from to midnight of to), in class order. Slice: features/report-mcq-summary/ReportMcqSummary.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: gender, in: query, required: false, schema: {type: string}}
+        - {name: from, in: query, required: false, schema: {type: string}}
+        - {name: to, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /reports/mcq-summary/download-all:
+    get:
+      operationId: reportMcqSummaryAll
+      summary: The MCQ summary of every class as one CSV file
+      description: |
+        Same guard, gender and dates as GET /reports/mcq-summary. A row per student of every class in the report, or only of the classIds asked for (?classIds=1,2; a class outside the caller's reach adds nothing), a Score and a Max column for each topic. 404 when no student is left. Named MCQ_summary_YYYY-MM-DD_to_YYYY-MM-DD.csv. Slice: features/report-mcq-summary-all/ReportMcqSummaryAll.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: gender, in: query, required: false, schema: {type: string}}
+        - {name: from, in: query, required: false, schema: {type: string}}
+        - {name: to, in: query, required: false, schema: {type: string}}
+        - {name: classIds, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: The CSV file (attachment)
+          content:
+            text/csv:
+              schema: {type: string}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /reports/mcq-summary/{class_id}:
+    get:
+      operationId: reportMcqSummaryClass
+      summary: One class's students with their MCQ results
+      description: |
+        Same guard, gender and dates as the list. Answers {mcqs, maxMarks, students[{name, attempted, pending, correct, percent (null when nothing attempted), topics[{topic, max, correct (null when none)}]}]}, best score first. A class with no MCQ in the range, one out of reach and one of the other gender answer with no students. A class_id that is 0 or not a number narrows nothing: the answer is the first class of the whole report. Slice: features/report-mcq-summary-class/ReportMcqSummaryClass.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+        - {name: gender, in: query, required: false, schema: {type: string}}
+        - {name: from, in: query, required: false, schema: {type: string}}
+        - {name: to, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /reports/mcq-summary/{class_id}/download:
+    get:
+      operationId: reportMcqSummaryClassDownload
+      summary: One class's MCQ summary as an xlsx or PDF file
+      description: |
+        format must be xlsx or pdf (422, checked before the sign-in), then reports:read for the gender (403), then the dates (422). The class's students (Name, Attempted, Pending, Score, a column per topic), all cells text as the screen shows them. Named MCQ-summary-<class_id>-YYYY-MM-DD-to-YYYY-MM-DD. A PDF that cannot be rendered is 503. Slice: features/report-mcq-summary-class-download/ReportMcqSummaryClassDownload.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+        - {name: format, in: query, required: true, schema: {type: string, enum: [xlsx, pdf]}}
+        - {name: gender, in: query, required: false, schema: {type: string}}
+        - {name: from, in: query, required: false, schema: {type: string}}
+        - {name: to, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: The file (attachment)
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: {type: string, format: binary}
+            application/pdf:
+              schema: {type: string, format: binary}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
+  /reports/mcq-adherence:
+    get:
+      operationId: reportMcqAdherence
+      summary: Per class, how many of its standard MCQs were conducted
+      description: |
+        reports:read for the gender (403). Answers {gender, levels, classes[{classId, class, level, teacher (null when none), expected, conducted, pending, skipped, adherencePercent (float, one decimal)}]}: only classes with standard MCQs, worst adherence first. Slice: features/report-mcq-adherence/ReportMcqAdherence.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: gender, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+  /reports/mcq-adherence/download-all:
+    get:
+      operationId: reportMcqAdherenceAll
+      summary: The MCQ adherence of every class as one CSV file
+      description: |
+        Same guard and gender as the list. A row per standard MCQ of every class in the report, or only of the classIds asked for (?classIds=1,2). 404 when none is left. Named MCQ_adherence.csv. Slice: features/report-mcq-adherence-all/ReportMcqAdherenceAll.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: gender, in: query, required: false, schema: {type: string}}
+        - {name: classIds, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: The CSV file (attachment)
+          content:
+            text/csv:
+              schema: {type: string}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /reports/mcq-adherence/{class_id}:
+    get:
+      operationId: reportMcqAdherenceClass
+      summary: One class's standard MCQs and whether each was conducted
+      description: |
+        Same guard and gender as the list. Answers {expected, conducted, pending, skipped, adherencePercent, mcqs[{topic, subject, lesson, name, status conducted|pending|skipped}]}. A class out of reach or with no standard MCQs answers with zeros and no MCQs. A class_id that is 0 or not a number narrows nothing: the answer is the first (worst) class of the whole report. Slice: features/report-mcq-adherence-class/ReportMcqAdherenceClass.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+        - {name: gender, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: The body described above
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+  /reports/mcq-adherence/{class_id}/download:
+    get:
+      operationId: reportMcqAdherenceClassDownload
+      summary: One class's MCQ adherence as an xlsx or PDF file
+      description: |
+        format must be xlsx or pdf (422, checked before the sign-in), then reports:read for the gender (403). The class's standard MCQs (Topic, Subject, Lesson, Name, Status as a word). Named MCQ-adherence-<class_id>. A PDF that cannot be rendered is 503. Slice: features/report-mcq-adherence-class-download/ReportMcqAdherenceClassDownload.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+        - {name: format, in: query, required: true, schema: {type: string, enum: [xlsx, pdf]}}
+        - {name: gender, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: The file (attachment)
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: {type: string, format: binary}
+            application/pdf:
+              schema: {type: string, format: binary}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
+components:
+  securitySchemes:
+    memberToken:
+      type: http
+      scheme: bearer
+      bearerFormat: Firebase ID token
+  responses:
+    Problem:
+      description: |
+        An error. The body is always {"detail": "..."}
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [detail]
+            properties:
+              detail:
+                type: string
+  schemas:
+    ClassLevel:
+      type: object
+      required: [id, code, name]
+      properties:
+        id:
+          type: integer
+        code:
+          type: string
+        name:
+          type: string
+    ClassCard:
+      type: object
+      description: |
+        The class card of GET /classes and GET /classes/{class_id}. The list adds city, country (raw), tags, studentCount (managing only) and schedules; the detail adds schedules.
+      required: [id, code, name, level, gender, status]
+      properties:
+        id: {type: integer}
+        code: {type: string}
+        name: {type: string}
+        level: {type: integer}
+        levelName: {type: [string, "null"]}
+        language: {type: [integer, "null"]}
+        gender: {type: integer}
+        status: {type: string}
+        location: {type: [string, "null"]}
+        teacherName: {type: [string, "null"]}
+        teacherMobile: {type: [string, "null"]}
+        format: {type: [string, "null"]}
+        startedOn: {type: [string, "null"], format: date}
+        role: {type: [string, "null"], enum: [conducting, attending, managing, null]}
+        joinUrl: {type: [string, "null"]}
+        schedules:
+          type: array
+          items:
+            type: object
+            properties:
+              day: {type: integer}
+              hour: {type: integer}
+              minute: {type: integer}
+              timezone: {type: [string, "null"]}

@@ -1,22 +1,28 @@
 #!/usr/bin/env bash
 # Run membership's Hurl contract files (domains/membership/spec/tests/*.hurl) against one side.
-# Usage: tools/membership-contract.sh dev|parity [--prepare] [extra hurl args]
+# Usage: tools/membership-contract.sh dev|test|parity [--prepare] [extra hurl args]
 #   dev     the new API on the dev stack (http://localhost:8088; docker-compose.dev.yml must be up)
+#   test    the new API on the synthetic TEST stack (http://localhost:8089, or TSR_STACK=n for lane n; tools/test-stack.sh up); never run dev against real data
 #   parity  the PHP API on the parity stack (http://127.0.0.1:18091, tools/parity-php/README.md; synthetic data only)
 #   --prepare  do the preparation below and stop (for the all-files command in CLAUDE.md, Commands)
 # Preparation, so both sides answer from the same data and a file can be run again:
 #   - RESETS the membership fixtures (members, guardian links, registrations) on that side: db/synthetic/membership-fixtures.sql for the
 #     new API, tools/parity-php/membership-fixtures.sh for PHP (which also refuses a fixture that touches a class). The files change
 #     rows (accept an invite, revoke a link, save a profile), so run this script, or --prepare, before each run;
+#   - loads the B4b fixtures (db/synthetic/membership-b4b-fixtures.sql, tools/parity-php/membership-b4b-fixtures.sql: tokens 9011xx, classes 9561 to 9563, they touch classes);
 #   - loads the geo rows (db/synthetic/geo-fixtures.sql) that PATCH /me checks a country and postal code against;
 #   - signs each fixture member in at that side's Auth emulator and writes build/<side>/membership.vars (auth_<alias>=Bearer ...).
-# Only the tsr-app-dev and tsr-parity compose projects are touched. Needs docker, curl, jq, hurl. Prints no secret.
+# Only the tsr-app-dev, tsr-app-test and tsr-parity compose projects are touched. Needs docker, curl, jq, hurl. Prints no secret.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SIDE="${1:?usage: membership-contract.sh dev|parity [--prepare] [hurl args]}"
+SIDE="${1:?usage: membership-contract.sh dev|test|parity [--prepare] [hurl args]}"
 shift || true
 cd "$ROOT"
+# shellcheck disable=SC1091
+. tools/stack-env.sh
+# shellcheck disable=SC1091
+. tools/parity-lock.sh
 
 PREPARE_ONLY=0
 if [ "${1:-}" = "--prepare" ]; then
@@ -49,34 +55,66 @@ MEMBERS=(
   "profile_entity=profile.entity@example.invalid"
   "profile_noname=profile.noname@example.invalid"
   "profile_patch=profile.patch@example.invalid"
+  "b4b_invite_admin=b4b.901101@example.invalid"
+  "b4b_candidate_admin=b4b.901102@example.invalid"
+  "b4b_direct_admin=b4b.901103@example.invalid"
+  "b4b_cancel_admin=b4b.901104@example.invalid"
+  "b4b_cancel_manager=b4b.901105@example.invalid"
+  "b4b_donor_admin=b4b.901106@example.invalid"
+  "b4b_card_admin=b4b.901107@example.invalid"
+  "b4b_reject_admin=b4b.901108@example.invalid"
+  "b4b_gents_admin=b4b.901109@example.invalid"
+  "b4b_plain=b4b.901110@example.invalid"
+  "b4b_self_child=b4b.901114@example.invalid"
+  "b4b_cancel_child=b4b.901115@example.invalid"
+  "b4b_parent_kids=b4b.901121@example.invalid"
+  "b4b_parent_none=b4b.901122@example.invalid"
+  "b5b_admin=b5b.901801@example.invalid"
+  "b5b_gents_admin=b5b.901802@example.invalid"
+  "b5b_ladies_admin=b5b.901803@example.invalid"
+  "b5b_plain=b5b.901804@example.invalid"
+  "b5d_coord=b5d.902101@example.invalid"
 )
 
 parity() { docker compose -p tsr-parity -f tools/parity-php/compose.parity.yml --env-file tools/parity-php/parity.env "$@"; }
 php_sql() { parity exec -T db sh -c 'mariadb -uroot -p"$MARIADB_ROOT_PASSWORD" tsr_synth'; }
-dev_sql() { docker compose -p tsr-app-dev -f docker-compose.dev.yml exec -T db psql -v ON_ERROR_STOP=1 -q -U tsr -d tsr; }
+dev_sql() { docker compose -p "${PROJECT:-tsr-app-dev}" -f docker-compose.dev.yml exec -T db psql -v ON_ERROR_STOP=1 -q -U tsr -d tsr; }
 
 case "$SIDE" in
-  dev)
+  dev|test)
+    if [ "$SIDE" = test ]; then PROJECT="$TSR_TEST_PROJECT"; PORT="$TSR_TEST_GATEWAY_PORT"; VARS_DIR="$TSR_TEST_VARS_DIR"; export TSR_EMULATOR_PORT="$TSR_TEST_EMULATOR_PORT"
+    else PROJECT=tsr-app-dev; PORT=8088; VARS_DIR=build/dev; export TSR_EMULATOR_PORT=19099; fi
+    "$ROOT/tools/require-synthetic-stack.sh" "$PROJECT"
     # TSR_FIXTURES_LOADED=1: the members are already in the database (a database filled by tools/data-load from the
     # parity source, which holds the same fixtures); do not add db/synthetic/membership-fixtures.sql on top.
-    [ -n "${TSR_FIXTURES_LOADED:-}" ] || dev_sql < db/synthetic/membership-fixtures.sql
+    [ -n "${TSR_FIXTURES_LOADED:-}" ] || { dev_sql < db/synthetic/membership-fixtures.sql; dev_sql < db/synthetic/membership-b4b-fixtures.sql; dev_sql < db/synthetic/membership-b5b-fixtures.sql; dev_sql < db/synthetic/membership-b5d-fixtures.sql; }
+
     { echo "set search_path = platform, public;"; cat db/synthetic/geo-fixtures.sql; } | dev_sql
     MINT="tools/dev-auth/mint-token.sh"
-    BASE="http://localhost:8088" ;;
+    BASE="http://localhost:$PORT" ;;
   parity)
+    parity_lock
     tools/parity-php/membership-fixtures.sh
+    php_sql < tools/parity-php/membership-b4b-fixtures.sql
+    php_sql < tools/parity-php/membership-b5b-fixtures.sql
+    php_sql < tools/parity-php/membership-b5d-fixtures.sql
     php_sql < db/synthetic/geo-fixtures.sql
     MINT="tools/parity-php/mint-token.sh"
-    BASE="http://127.0.0.1:18091" ;;
-  *) echo "side must be dev or parity" >&2; exit 1 ;;
+    BASE="http://127.0.0.1:18091"
+    # Files named *-new-api.hurl hold cases only the new API answers (a NUL byte in a text: PHP stores it, here it is 422); they run on the new API only.
+    KEPT=()
+    for f in "${FILES[@]}"; do case "$f" in *-new-api.hurl) ;; *) KEPT+=("$f") ;; esac; done
+    FILES=("${KEPT[@]}") ;;
+  *) echo "side must be dev, test or parity" >&2; exit 1 ;;
 esac
 
-VARS="build/$([ "$SIDE" = dev ] && echo dev || echo parity-php)/membership.vars"
+case "$SIDE" in test) VARS_DIR="$TSR_TEST_VARS_DIR" ;; parity) VARS_DIR=build/parity-php ;; *) VARS_DIR=build/dev ;; esac
+VARS="$VARS_DIR/membership.vars"
 mkdir -p "$(dirname "$VARS")"
 umask 077
 : > "$VARS"
 TMP="$(mktemp)"
-trap 'rm -f "$TMP"' EXIT
+trap 'rm -f "$TMP"; parity_unlock' EXIT
 for entry in "${MEMBERS[@]}"; do
   alias="${entry%%=*}"
   email="${entry#*=}"

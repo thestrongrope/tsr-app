@@ -1,6 +1,17 @@
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Tsr.Access.Api.Features.AdminPermissionGrant;
+using Tsr.Access.Api.Features.AdminPermissionMember;
+using Tsr.Access.Api.Features.AdminPermissionMembers;
+using Tsr.Access.Api.Features.AdminPermissionRevoke;
+using Tsr.Access.Api.Features.ClassAccessGrant;
+using Tsr.Access.Api.Features.ClassAccessMember;
+using Tsr.Access.Api.Features.ClassAccessMembers;
+using Tsr.Access.Api.Features.ClassAccessOptions;
+using Tsr.Access.Api.Features.ClassAccessPreview;
+using Tsr.Access.Api.Features.ClassAccessRevoke;
 using Tsr.Access.Api.Features.MePermission;
 using Tsr.Access.Api.Features.MePermissions;
 using Tsr.Access.Api.Features.UserPermissions;
@@ -35,12 +46,28 @@ public static class AccessModule
         return services;
     }
 
+    /// <summary>
+    /// Adds the <c>X-Permissions-Revision</c> response header to every request whose sign-in passed. The host calls it
+    /// right after identity's middleware, which establishes the caller.
+    /// </summary>
+    public static IApplicationBuilder UsePermissionsRevision(this IApplicationBuilder app) =>
+        app.UseMiddleware<PermissionsRevisionHeader>();
+
     public static IEndpointRouteBuilder MapAccess(this IEndpointRouteBuilder routes)
     {
         routes.MapMePermissions();
         routes.MapMePermission();
         routes.MapUserPermissions();
-        routes.MapPlannedRoutes();
+        routes.MapAdminPermissionMembers();
+        routes.MapAdminPermissionMember();
+        routes.MapAdminPermissionGrant();
+        routes.MapAdminPermissionRevoke();
+        routes.MapClassAccessMembers();
+        routes.MapClassAccessMember();
+        routes.MapClassAccessOptions();
+        routes.MapClassAccessPreview();
+        routes.MapClassAccessGrant();
+        routes.MapClassAccessRevoke();
         return routes;
     }
 }

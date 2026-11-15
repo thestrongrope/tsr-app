@@ -1,86 +1,22 @@
-# The API's whole route surface, spot-checked on the running stack: one placeholder route per domain, plus PHP's router
-# answers for a path or verb it does not know. A placeholder (state "planned" in docs/specs/initial-build/operations.csv)
-# signs the caller in and answers 501 {"detail": "Not implemented"}. When the slice behind one of these is built, point
-# its line at another planned route of the same domain. New API only: PHP has no 501.
+# The API's whole route surface, spot-checked on the running stack: PHP's router answers for a path or verb it does not know,
+# and the paths that were the last placeholders. No placeholder is left: every operation in docs/specs/initial-build/operations.csv
+# is "built" (a "planned" one would sign the caller in and answer 501 {"detail": "Not implemented"}; hosts/api/tests checks that
+# none is mapped). New API only: the 404 fallback and the 405 texts are the gateway's and the API's.
 # Cross-domain, so it lives here and not in a domain's spec/tests. Variables: base_url, auth_header, auth_value.
 #   hurl --test --variable base_url=http://localhost:8088 --variables-file build/dev/token.vars \
 #        hosts/api/spec/planned-surface.hurl
 # Every contract file at once: see CLAUDE.md, Commands. Synthetic members only.
 
-# identity (member route)
-GET {{base_url}}/me/deletion-request
+# classes: the last placeholders (GET /me/guides and /me/guides/{slug}) are built; signed in, the path no longer answers 501
+# (403 for a member who neither studies nor teaches, 404 for an unknown slug: domains/classes/spec/tests/me-guide.hurl)
+GET {{base_url}}/me/guides/a-slug
 {{auth_header}}: {{auth_value}}
-HTTP 501
+HTTP *
 [Asserts]
-jsonpath "$.detail" == "Not implemented"
+status != 501
+jsonpath "$.detail" != "Not implemented"
 
-# identity (public route: no token needed)
-POST {{base_url}}/auth/debug-token
-Content-Type: application/json
-{}
-HTTP 501
-[Asserts]
-jsonpath "$.detail" == "Not implemented"
-
-# access
-GET {{base_url}}/admin/permissions/members
-{{auth_header}}: {{auth_value}}
-HTTP 501
-[Asserts]
-jsonpath "$.detail" == "Not implemented"
-
-# platform
-GET {{base_url}}/admin/access-log
-{{auth_header}}: {{auth_value}}
-HTTP 501
-[Asserts]
-jsonpath "$.detail" == "Not implemented"
-
-# membership
-GET {{base_url}}/me/children
-{{auth_header}}: {{auth_value}}
-HTTP 501
-[Asserts]
-jsonpath "$.detail" == "Not implemented"
-
-# classes (a path with parameters: any non-slash segment)
-GET {{base_url}}/me/children/900009/classes
-{{auth_header}}: {{auth_value}}
-HTTP 501
-[Asserts]
-jsonpath "$.detail" == "Not implemented"
-
-# assessment
-GET {{base_url}}/me/children/900009/classes/1/scores
-{{auth_header}}: {{auth_value}}
-HTTP 501
-[Asserts]
-jsonpath "$.detail" == "Not implemented"
-
-# notifications
-POST {{base_url}}/devices
-{{auth_header}}: {{auth_value}}
-Content-Type: application/json
-{}
-HTTP 501
-[Asserts]
-jsonpath "$.detail" == "Not implemented"
-
-# content
-GET {{base_url}}/holy-quran
-{{auth_header}}: {{auth_value}}
-HTTP 501
-[Asserts]
-jsonpath "$.detail" == "Not implemented"
-
-# search
-GET {{base_url}}/search
-{{auth_header}}: {{auth_value}}
-HTTP 501
-[Asserts]
-jsonpath "$.detail" == "Not implemented"
-
-# A placeholder asks for sign-in first, exactly as the real route will
+# search has no placeholder left (GET /search is built); its path still answers 401 without a sign-in
 GET {{base_url}}/search
 HTTP 401
 [Asserts]
@@ -101,13 +37,6 @@ Content-Type: application/json
 HTTP 405
 [Asserts]
 jsonpath "$.detail" == "Method Not Allowed"
-
-# The overlap PHP resolves by listing the literal path first: /classes/teachers is not /classes/{class_id}
-GET {{base_url}}/classes/teachers
-{{auth_header}}: {{auth_value}}
-HTTP 501
-[Asserts]
-jsonpath "$.detail" == "Not implemented"
 
 # A path no route knows: the gateway's fallback answers (the API's own "Not Found" is tested in hosts/api/tests)
 GET {{base_url}}/no/such/path

@@ -2,6 +2,21 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Tsr.Membership.Api.Domain;
+using Tsr.Membership.Api.Features.LinkAccount;
+using Tsr.Membership.Api.Features.MeChildren;
+using Tsr.Membership.Api.Features.MemberParentLinkCreate;
+using Tsr.Membership.Api.Features.MemberParentLinks;
+using Tsr.Membership.Api.Features.MemberParentLinkCancel;
+using Tsr.Membership.Api.Features.MemberParentCandidate;
+using Tsr.Membership.Api.Features.MemberParentsAdd;
+using Tsr.Membership.Api.Features.RegistrationReject;
+using Tsr.Membership.Api.Features.ReportRegistrations;
+using Tsr.Membership.Api.Features.ReportRegistrationsAllocatedDownload;
+using Tsr.Membership.Api.Features.ReportRegistrationsDownload;
+using Tsr.Membership.Api.Features.StudentCard;
+using Tsr.Membership.Api.Features.AdminDonors;
+using Tsr.Membership.Api.Features.AdminDonorsDownload;
+using Tsr.Membership.Api.Features.SubscriberCard;
 using Tsr.Membership.Api.Features.ChildrenLinkAccept;
 using Tsr.Membership.Api.Features.ChildrenLinkInspect;
 using Tsr.Membership.Api.Features.ChildrenLinkRevoke;
@@ -33,6 +48,7 @@ public static class MembershipModule
     {
         services.AddDomainContext<MembershipContext>(MembershipContext.SchemaName);
         services.AddScoped<Tsr.Identity.Api.IProfileSink, ProfileSink>();
+        services.AddScoped<Tsr.Identity.Api.IMemberErasure, MemberErasure>();
         services.TryAddScoped<IClassEnrolments, NoEnrolments>();
         services.AddScoped(provider => new MemberNames(provider.GetRequiredService<MembershipContext>()));
         services.TryAddSingleton<MemberRateLimit>();
@@ -54,6 +70,7 @@ public static class MembershipModule
 
     public static IEndpointRouteBuilder MapMembership(this IEndpointRouteBuilder routes)
     {
+        routes.MapLinkAccount();
         routes.MapProfileGet();
         routes.MapProfileUpdate();
         routes.MapRegistrationGet();
@@ -64,7 +81,20 @@ public static class MembershipModule
         routes.MapChildrenLinkRevoke();
         routes.MapParentsList();
         routes.MapParentRevoke();
-        routes.MapPlannedRoutes();
+        routes.MapMeChildren();
+        routes.MapMemberParentLinkCreate();
+        routes.MapMemberParentLinks();
+        routes.MapMemberParentLinkCancel();
+        routes.MapMemberParentCandidate();
+        routes.MapMemberParentsAdd();
+        routes.MapRegistrationReject();
+        routes.MapReportRegistrations();
+        routes.MapReportRegistrationsDownload();
+        routes.MapReportRegistrationsAllocatedDownload();
+        routes.MapStudentCard();
+        routes.MapAdminDonors();
+        routes.MapAdminDonorsDownload();
+        routes.MapSubscriberCard();
         return routes;
     }
 }

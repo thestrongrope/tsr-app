@@ -21,8 +21,11 @@ domains/<context>/
 ├── api/               THE ONE IMPLEMENTATION (C#, one project per domain)
 │   ├── <Context>Module.cs   registration: Add<Context>(), Map<Context>(), Dependencies
 │   ├── <Interface>.cs       what other domains may call (e.g. access's Permissions); not a slice
-│   ├── features/<slice>/    one folder per use case, usually one file: <Slice>.cs
-│   ├── domain/              value objects and rules shared by this domain's slices
+│   ├── <Context>Commands.cs published commands: the only way another domain writes here (rule 3)
+│   ├── Migrations/          tables, and the published `v_*` views (a migration of its own, rule 2)
+│   ├── features/<slice>/    one folder per use case, one file: <Slice>.cs = one static class (route, guards, SQL, response
+│   │                        record; no handler class). Template: classes/api/features/class-levels/ClassLevels.cs
+│   ├── domain/              helpers and rules used by two or more slices (a helper moves here on its second user, rule 6)
 │   └── tests/               only the test .csproj: it compiles every *.Tests.cs next to the
 │                            code it tests (a second .csproj in api/ would clash with the first)
 ├── app/               Flutter package (pub workspace member): views, view models, repository
@@ -66,15 +69,21 @@ Platform-owned tables (no domain): `outbox`, `outbound_messages` (PHP's `schema_
 ## Rules for code in domains/
 
 1. A slice never calls another slice. Shared rules go to `domain/` once two slices need them.
-2. A domain uses another only through its listed public interface or its events, never its
-   tables. Events first (the outbox): a direct call becomes a network call once domains run apart. List every dependency in `<Context>Module.Dependencies`; `access` is the usual one.
-3. Commands write only this domain's tables. Cross-domain reads go through read models.
+2. **The database is the integration surface for reads (D1).** A domain publishes views `v_*` in its own schema, created by its own
+   migration; another domain's SQL may join those views and nothing else of that domain (`platform.outbox` aside). Permissions
+   still go through `access` in C#. Other uses go through the listed public interface or events. A view is a contract: change
+   one with its readers. List every dependency in `<Context>Module.Dependencies`. `hosts/api/tests/SqlBoundaryTests.cs` scans every domain's, `shared/` and `hosts/` SQL literals (quoted names too). It cannot see a name built from variables: review that.
+3. Commands write only this domain's tables. A cross-domain write is a published command of the owner (D2): a public static method
+   in the owning domain, run on the caller's connection and transaction (planned shape, e.g. `MembershipCommands.RecordAcceptedRegistrationAsync`; each is built by the batch that first needs it).
 4. Every member handler: caller present (401) → `access` allows it (403) → validate (422) → act.
    A **public read** (no sign-in, e.g. `GET /articles`) skips the caller and `access` checks; its
    query must return only public data (e.g. only published articles), so no client or the site can
    show more by mistake. Mark it `security: []` in `api.yaml` and say why in the domain `CLAUDE.md`.
 5. Expected failures are `Result<T>` (shared); exceptions are for bugs and infrastructure.
-6. Interfaces only at external boundaries (DB, HTTP, FCM, Firebase). No repository layer.
+6. Interfaces only at external boundaries (DB, HTTP, FCM, Firebase). No repository layer, no handler class, no mapping layer (D3):
+   reads are parameterised `SqlQuery<T>` ported from PHP; writes use EF entities or `ExecuteSql`. A helper moves to `domain/` only
+   when two slices use it; the PHP-emulation helpers (`PhpValue`, `PhpText`, `JsonBody`) are in `shared/api` (D4). PHP is the oracle (D6):
+   a slice is done when its Hurl file passes on PHP and on the new API.
 7. Each domain module must start with only its listed dependencies; `hosts/api/tests` checks it.
    Each `site/` module references only `shared/site` and builds its pages alone; `hosts/site/tests`
    checks it. Both checks see real use of another module, not an unused project reference.
@@ -82,13 +91,13 @@ Platform-owned tables (no domain): `outbox`, `outbound_messages` (PHP's `schema_
 9. Business rules never live in `site/` or `app/`: they render what the API returns. A `site/` module
    copies the response shapes it reads from `api.yaml` (it is a client of the published contract).
 10. A cross-domain report is owned by the domain whose question it answers (e.g. the MIS report by
-    `classes`), reads through read models only, and lists the domains it reads.
+    `classes`), reads other domains through their `v_*` views only, and lists the domains it reads.
 11. Account deletion is one command in `identity`; every domain owning member data handles its
     erasure event from the outbox (the privacy policy promises erasure). Not built or tested yet.
 12. The change test: a typical business change touches one domain folder. If it keeps touching two,
     the boundary is wrong.
 
-Enforced by tests: rule 7 (and with it the dependency part of rule 2), and the public surface: in each
+Enforced by tests: rule 7 (the dependency part), rule 2's SQL boundary (`SqlBoundaryTests`), and the public surface: in each
 `api/` library only the module class and the listed interface are `public`; slices, value objects and
 plumbing are `internal`, so another domain cannot call a slice even when it lists the dependency
 (`hosts/api/tests/PublicSurfaceTests.cs`; a new public type is added to its list). A domain's own unit

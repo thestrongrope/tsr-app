@@ -1,0 +1,15 @@
+try 1	restart to first 200 (includes docker stopping the old process): 924 ms
+try 1	database request 1: 0.401936 s
+try 1	database request 2: 0.020077 s
+try 1	database request 3: 0.022023 s
+try 1	memory 12 s later: 77.08MiB / 512MiB
+try 2	restart to first 200 (includes docker stopping the old process): 919 ms
+try 2	database request 1: 0.426013 s
+try 2	database request 2: 0.018927 s
+try 2	database request 3: 0.025393 s
+try 2	memory 12 s later: 72.23MiB / 512MiB
+try 3	restart to first 200 (includes docker stopping the old process): 1010 ms
+try 3	database request 1: 0.551586 s
+try 3	database request 2: 0.017603 s
+try 3	database request 3: 0.029776 s
+try 3	memory 12 s later: 72.06MiB / 512MiB

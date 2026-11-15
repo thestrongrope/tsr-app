@@ -22,7 +22,7 @@ internal static class ProfileText
                 break;
             }
 
-            cut.Append(rune.ToString());
+            cut.Append(rune);
             count++;
         }
 

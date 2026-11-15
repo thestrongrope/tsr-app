@@ -7,6 +7,9 @@
 # Start order: db healthy, then migrate (one-off: every domain's EF migrations), then seed (one-off:
 # synthetic members and articles), then api. To start again from scratch:
 #   docker compose -f docker-compose.dev.yml down -v
+# The separate synthetic TEST stack (contract tests; own containers, network and volumes) is this same file under
+# the override docker-compose.test.yml (other project name, other ports): tools/test-stack.sh up/down/remove. No environment
+# variable can move a stack: the dev ports are literal here.
 
 name: tsr-app-dev
 
@@ -49,6 +52,24 @@ services:
       retries: 30
       start_period: 60s
 
+  # HTML to PDF with Chromium for the report downloads (platform ReportExport). No published port: only the api reaches it, on the compose
+  # network. Verified with docker run: the image ships curl (not wget), so the check uses curl; /health answers {"status":"up",...}.
+  gotenberg:
+    image: gotenberg/gotenberg:8
+    # One render may take as long as the API waits for it (60 s, platform's PlatformModule); the image's own default is 30 s, which answered 503
+    # first when several PDFs queued (load test, 14 Nov 2026). The gateway waits 70 s on downloads. Flag checked with `gotenberg --help`.
+    command: ["gotenberg", "--api-timeout=60s"]
+    environment:
+      # The report HTML references nothing outside itself: Chromium may fetch no address at all (defence in depth).
+      CHROMIUM_DENY_PRIVATE_IPS: "true"
+      CHROMIUM_DENY_PUBLIC_IPS: "true"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "--max-time", "3", "http://127.0.0.1:3000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
   migrate:
     # The same image as the API, run once with --migrate (production: the same, as a Dokploy job).
     build:
@@ -88,12 +109,72 @@ services:
       TSR_AUTH_EMULATOR_HOST: firebase-emulator:9099
       # The synthetic catalog GET /app-version and /release-notes read (the parity stack mounts the same file).
       TSR_APP_VERSIONS_FILE: /etc/tsr/app_versions.json
+      # Where PDF downloads are rendered (the gotenberg service). Required: the API does not start without it. A renderer that is down answers 503 for a PDF; xlsx still works.
+      TSR_GOTENBERG_URL: http://gotenberg:3000
+      # Where GET /search asks. Empty (the default) means no index: every search answers "unavailable". tools/dev-stack.sh sets it together with the
+      # compose profile "workers", which starts the elasticsearch service below.
+      TSR_ELASTICSEARCH_URL: ${TSR_ELASTICSEARCH_URL:-}
+      TSR_ELASTICSEARCH_PASSWORD: local-only-es
+      # The content files the Library reads are copied from (content's content-refresh worker reads this directory; empty, the default, reads nothing),
+      # and the channel whose public feed GET /api/v1/youtube reads (empty: no outside call, an empty list).
+      TSR_CONTENT_DIR: ${TSR_CONTENT_DIR:-}
     volumes:
       - ./domains/platform/spec/tests/app_versions.synthetic.json:/etc/tsr/app_versions.json:ro
+      # Read-only. The synthetic set unless TSR_CONTENT_SRC names another directory (the website's own content files, for a parity run).
+      - ${TSR_CONTENT_SRC:-./db/synthetic/content}:/var/tsr/content:ro
     depends_on:
       seed:
         condition: service_completed_successfully
       firebase-emulator:
+        condition: service_healthy
+
+  # Elasticsearch and the background workers start only with the compose profile "workers" (COMPOSE_PROFILES=workers):
+  # a plain `up` of the dev stack starts neither. The dev database may hold real member data and real device tokens, so
+  # never set TSR_WORKERS to a sending worker (push-drain, class-schedules) on the dev stack. tools/test-stack.sh turns the
+  # profile on for the synthetic test stack only, with TSR_WORKERS=search-feed (docker-compose.test.yml).
+  elasticsearch:
+    # The image and settings production runs for the PHP system (tsr-account docker-compose.yml).
+    image: elastic/elasticsearch:9.2.3
+    profiles: ["workers"]
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "true"
+      ELASTIC_PASSWORD: local-only-es
+      ES_JAVA_OPTS: -Xms512m -Xmx512m
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+    healthcheck:
+      # The official image ships curl (production uses the same check).
+      test: ["CMD-SHELL", "curl -fsS -u elastic:$$ELASTIC_PASSWORD http://localhost:9200/_cluster/health >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+
+  # The API image in its second run mode: it serves only /health and runs the workers named in TSR_WORKERS (none by default).
+  workers:
+    build:
+      context: .
+      dockerfile: hosts/api/Dockerfile
+    profiles: ["workers"]
+    command: ["--workers"]
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      TSR_DB: "Host=db;Port=5432;Database=tsr;Username=tsr_app;Password=local-only-app"
+      # The worker host loads the same modules as the API, so it takes the same identity settings.
+      TSR_FIREBASE_PROJECT_ID: demo-tsr-app
+      TSR_AUTH_EMULATOR_HOST: firebase-emulator:9099
+      TSR_GOTENBERG_URL: http://gotenberg:3000
+      TSR_ELASTICSEARCH_URL: http://elasticsearch:9200
+      TSR_ELASTICSEARCH_PASSWORD: local-only-es
+      TSR_WORKERS: ${TSR_WORKERS:-}
+      TSR_CONTENT_DIR: ${TSR_CONTENT_DIR:-}
+    volumes:
+      - ${TSR_CONTENT_SRC:-./db/synthetic/content}:/var/tsr/content:ro
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+      elasticsearch:
         condition: service_healthy
 
   gateway:
@@ -114,3 +195,4 @@ services:
 volumes:
   db-data:
   emulator-cache:
+  es-data:

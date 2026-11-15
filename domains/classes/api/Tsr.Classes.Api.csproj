@@ -3,6 +3,21 @@
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <ProjectReference Include="../../../shared/api/Tsr.Shared.Api.csproj" />
+    <ProjectReference Include="../../access/api/Tsr.Access.Api.csproj" />
+    <ProjectReference Include="../../platform/api/Tsr.Platform.Api.csproj" />
+    <ProjectReference Include="../../membership/api/Tsr.Membership.Api.csproj" />
+    <ProjectReference Include="../../identity/api/Tsr.Identity.Api.csproj" />
+    <ProjectReference Include="../../notifications/api/Tsr.Notifications.Api.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- PhpFloat and RequestBodies moved to shared/api when assessment became their second user. -->
+    <Using Include="Tsr.Shared.Api" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- PHP data file web/data/syllabus_topics.json: the topic catalogue by level name (today only MIQDAD). -->
+    <EmbeddedResource Include="data/syllabus_topics.json" LogicalName="syllabus_topics.json" />
+    <!-- PHP ClassesModel::getTimezones(): the 143 static zone and label pairs. -->
+    <EmbeddedResource Include="data/timezones.json" LogicalName="timezones.json" />
   </ItemGroup>
   <ItemGroup>
     <!-- Tests sit next to the code they test; tests/ compiles them. -->

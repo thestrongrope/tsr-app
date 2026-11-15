@@ -1,0 +1,182 @@
+openapi: 3.1.0
+info:
+  title: TSR identity
+  version: 0.1.0
+  description: |
+    The identity domain's actions (sign-in is in the middleware; this file holds the routes built so far: account deletion and the debug token).
+    Behaviour: tests/ (run against any base URL; the deletion routes have no Hurl file yet). Forward compatible: a store-live app keeps calling these,
+    so add fields and routes freely but never remove or change one without the release process. Every error body is {"detail": "..."}.
+servers:
+  - url: http://localhost:8088
+    description: Local dev stack (gateway)
+paths:
+  /auth/debug-token:
+    post:
+      operationId: debugToken
+      summary: Echo what the bearer token decoded to (never in Production)
+      description: |
+        Public: no member row needed and no database. 404 "Not found" in the Production environment (checked first). Otherwise 401 "Not authenticated"
+        without a Bearer header, 401 "Invalid auth token" for a token that does not verify. Slice: features/debug-token/DebugToken.cs.
+      security: []
+      responses:
+        "200":
+          description: The decoded claims; each is null when the token lacks it
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, email, uid, name, provider]
+                properties:
+                  status: {type: string, const: success}
+                  email: {type: [string, "null"]}
+                  uid: {type: [string, "null"]}
+                  name: {type: [string, "null"]}
+                  provider: {type: [string, "null"]}
+        "401": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /me/deletion-request:
+    post:
+      operationId: raiseDeletionRequest
+      summary: Ask for the caller's account to be deleted
+      description: |
+        Permission account:delete. Body {reason?}: text, at most 500 characters (422). 202 with the new request; 200 with the live request when the caller already has one.
+        Slice: features/deletion-request-create/DeletionRequestCreate.cs.
+      security: [{memberToken: []}]
+      responses:
+        "200": {$ref: "#/components/responses/MemberDeletionRequest"}
+        "202": {$ref: "#/components/responses/MemberDeletionRequest"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+    get:
+      operationId: getDeletionRequest
+      summary: The caller's live deletion request (status "none" when there is none)
+      description: Permission account:delete. Slice: features/deletion-request-get/DeletionRequestGet.cs.
+      security: [{memberToken: []}]
+      responses:
+        "200": {$ref: "#/components/responses/MemberDeletionRequest"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+    delete:
+      operationId: cancelDeletionRequest
+      summary: Withdraw the caller's live deletion request
+      description: |
+        Permission account:delete. 409 when the account was already deleted, 404 when there is no live request.
+        Slice: features/deletion-request-cancel/DeletionRequestCancel.cs.
+      security: [{memberToken: []}]
+      responses:
+        "200":
+          description: "{status: cancelled}"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: {type: string, const: cancelled}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+  /admin/deletion-requests:
+    get:
+      operationId: listDeletionRequests
+      summary: The deletion queue, newest first, with a count per status
+      description: |
+        Permission deletion-requests:manage. Query status (pending, awaiting_prize_delivery, completed, cancelled; anything else is no filter). At most 1000 requests.
+        Slice: features/admin-deletion-list/AdminDeletionList.cs.
+      security: [{memberToken: []}]
+      responses:
+        "200":
+          description: "{counts: {pending, awaiting_prize_delivery, completed, cancelled}, requests: [AdminDeletionRequest]}"
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+    post:
+      operationId: raiseDeletionRequestForEmail
+      summary: Raise a request from an emailed address
+      description: |
+        Permission deletion-requests:manage. Body {email}. 201 {request, created: true}; 200 {request, created: false} when the member has a live request; 404 when no member (token above 0) has the address.
+        Slice: features/admin-deletion-raise/AdminDeletionRaise.cs.
+      security: [{memberToken: []}]
+      responses:
+        "200": {description: "{request, created: false}"}
+        "201": {description: "{request, created: true}"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /admin/deletion-requests/{request_id}/hold:
+    post:
+      operationId: holdDeletionRequest
+      summary: Hold a live request for prize delivery, with a note the member reads
+      description: |
+        Permission deletion-requests:manage. Body {note?} (text, at most 500 characters). 404 unknown request, 409 "This request is no longer live".
+        Slice: features/admin-deletion-hold/AdminDeletionHold.cs.
+      security: [{memberToken: []}]
+      parameters: [{name: request_id, in: path, required: true, schema: {type: string}}]
+      responses:
+        "200": {description: "{request: AdminDeletionRequest}"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /admin/deletion-requests/{request_id}/confirmation-sent:
+    post:
+      operationId: recordDeletionConfirmationSent
+      summary: Record that the operator sent the member the confirmation (nothing is sent)
+      description: |
+        Permission deletion-requests:manage. A second call keeps the first time (200); a settled request is 409. The request's `confirmation` object holds the email text while it is still to be sent.
+        Slice: features/admin-deletion-confirmation-sent/AdminDeletionConfirmationSent.cs.
+      security: [{memberToken: []}]
+      parameters: [{name: request_id, in: path, required: true, schema: {type: string}}]
+      responses:
+        "200": {description: "{request: AdminDeletionRequest}"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+  /admin/deletion-requests/{request_id}/complete:
+    post:
+      operationId: completeDeletionRequest
+      summary: IRREVERSIBLE. Delete the member's sign-in and anonymise them
+      description: |
+        Permission deletion-requests:manage. 409 (detail is the reason) for: a request naming token 0, a second call within a minute, not live, no confirmation recorded, a reviewer demo member,
+        a token with no user row, a token with more than 20 user rows, an email address of a row with no stored uid (or the Firebase account found for it) that belongs to another token's row (detail: "An email address of this member is also held by another member, so the Firebase account cannot be told apart. Handle the Firebase account by hand."; checked before any delete; new API), Firebase failing or not configured. Every user row of the token has its Firebase account deleted (new API; PHP deletes one). Slice: features/admin-deletion-complete/AdminDeletionComplete.cs.
+      security: [{memberToken: []}]
+      parameters: [{name: request_id, in: path, required: true, schema: {type: string}}]
+      responses:
+        "200": {description: "{request: AdminDeletionRequest}"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+components:
+  securitySchemes:
+    memberToken:
+      type: http
+      scheme: bearer
+      description: A Firebase ID token.
+  responses:
+    Problem:
+      description: '{"detail": "..."}'
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [detail]
+            properties:
+              detail: {type: string}
+    MemberDeletionRequest:
+      description: The caller's request, or status "none"
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [id, status, requested_at, expected_completion_days, message]
+            properties:
+              id: {type: [integer, "null"]}
+              status: {type: string}
+              requested_at: {type: [string, "null"]}
+              expected_completion_days: {type: integer}
+              message: {type: [string, "null"]}

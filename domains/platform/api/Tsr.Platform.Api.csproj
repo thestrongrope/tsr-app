@@ -4,6 +4,8 @@
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <ProjectReference Include="../../../shared/api/Tsr.Shared.Api.csproj" />
     <ProjectReference Include="../../access/api/Tsr.Access.Api.csproj" />
+    <!-- xlsx writer for the report downloads (ReportExport), MIT. Only this project uses it. -->
+    <PackageReference Include="ClosedXML" />
   </ItemGroup>
   <ItemGroup>
     <!-- Tests sit next to the code they test; tests/ compiles them. -->
@@ -13,5 +15,7 @@
   <ItemGroup>
     <!-- Slices and value objects are internal; this domain's own unit tests may see them. -->
     <InternalsVisibleTo Include="Tsr.Platform.Api.Tests" />
+    <!-- The database tests swap the PDF renderer (IPdfRenderer) for a fake. -->
+    <InternalsVisibleTo Include="Tsr.Db.Tests" />
   </ItemGroup>
 </Project>

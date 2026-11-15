@@ -1,0 +1,41 @@
+{
+  "mode": "route",
+  "route": "classes_coordinator",
+  "vus": 50,
+  "measured_seconds": 60,
+  "warmup_seconds": 15,
+  "all": {
+    "requests": 11952,
+    "req_per_s": 199.2,
+    "http_failed_rate": 0,
+    "latency_ms": {
+      "min": 57.596089,
+      "avg": 250.68901281542838,
+      "p50": 207.792811,
+      "p90": 433.8775644,
+      "p95": 518.1340729999998,
+      "p99": 727.51924721,
+      "max": 1111.704475
+    }
+  },
+  "iterations": 11952,
+  "routes": {
+    "classes_coordinator": {
+      "requests": 11952,
+      "req_per_s": 199.2,
+      "http_failed_rate": 0,
+      "latency_ms": {
+        "min": 57.596089,
+        "avg": 250.68901281542838,
+        "p50": 207.792811,
+        "p90": 433.8775644,
+        "p95": 518.1340729999998,
+        "p99": 727.51924721,
+        "max": 1111.704475
+      }
+    }
+  },
+  "bad_status": {},
+  "bad_short_body": 694,
+  "checks_failed": 694
+}

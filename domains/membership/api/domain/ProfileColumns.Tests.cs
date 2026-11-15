@@ -7,7 +7,7 @@ namespace Tsr.Membership.Api.Tests.Domain;
 /// <summary>The values PATCH /me stores, as PDO and MariaDB make them (probed on the parity stack).</summary>
 public sealed class ProfileColumnsTests
 {
-    private static JsonElement Json(string json) => JsonDocument.Parse(json).RootElement.Clone();
+    private static JsonElement Json(string json) => JsonElement.Parse(json);
 
     [TestCase("\"abc\"", "abc")]
     [TestCase("12345", "12345")]

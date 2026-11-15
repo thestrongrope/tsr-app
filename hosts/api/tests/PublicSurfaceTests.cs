@@ -12,8 +12,9 @@ public sealed class PublicSurfaceTests
 {
     private static readonly Dictionary<string, string[]> Allowed = new()
     {
-        // identity: the module; UserDirectory with the record it returns (UserRef); IProfileSink, the one port it declares (membership supplies it).
-        ["identity"] = ["IdentityModule", "UserDirectory", "UserRef", "IProfileSink"],
+        // identity: the module; UserDirectory with the record it returns (UserRef); IProfileSink, the one port it declares (membership supplies it); IdentityCommands (published commands: the email change).
+        // Also IMemberErasure, the second port (membership supplies it: account deletion anonymises its tables).
+        ["identity"] = ["IdentityModule", "UserDirectory", "UserRef", "IProfileSink", "IMemberErasure", "IdentityCommands"],
         // access: the module; Permissions (the interface every domain calls) and the types in its signatures
         // (AccessTarget, Reach, SearchReach, UserAccess, AccessScopes); IClassScopes, the one port classes will supply, with the
         // two records it returns (ClassMemberships, ClassFacts). Nothing else.
@@ -22,15 +23,16 @@ public sealed class PublicSurfaceTests
             "AccessModule", "Permissions", "AccessTarget", "Reach", "SearchReach", "UserAccess", "AccessScopes",
             "IClassScopes", "ClassMemberships", "ClassFacts",
         ],
-        // platform: the module; Lookups and Geo (read interfaces) with the two records Geo returns (GeoCountryInfo, GeoPlace).
-        ["platform"] = ["PlatformModule", "Lookups", "Geo", "GeoCountryInfo", "GeoPlace"],
-        // membership: the module; MemberNames (read interface); IClassEnrolments, the one port classes will supply.
-        ["membership"] = ["MembershipModule", "MemberNames", "IClassEnrolments"],
+        // platform: the module; Lookups and Geo (read interfaces) with the two records Geo returns (GeoCountryInfo, GeoPlace); PlatformCommands (published commands: the admin audit row, the delivery queue's claim and result commands) with the record the claim returns (ClaimedMessage); ReportExport (xlsx and PDF downloads) with the types in its signatures (ReportFormat, ReportSection).
+        ["platform"] = ["PlatformModule", "Lookups", "Geo", "GeoCountryInfo", "GeoPlace", "PlatformCommands", "ClaimedMessage", "ReportExport", "ReportFormat", "ReportSection"],
+        // membership: the module; MemberNames (read interface); IClassEnrolments, the one port classes will supply; MembershipCommands (published commands).
+        ["membership"] = ["MembershipModule", "MemberNames", "IClassEnrolments", "MembershipCommands"],
         ["content"] = ["ContentModule"],
         // Tables and placeholder routes only so far: the module class and nothing else.
         ["classes"] = ["ClassesModule"],
         ["assessment"] = ["AssessmentModule"],
-        ["notifications"] = ["NotificationsModule"],
+        // notifications: the module; NotificationsErasure (account deletion deletes a member's devices); NotificationsCommands (announce to members) with the record it takes (Announcement) and the one it answers (AnnounceResult).
+        ["notifications"] = ["NotificationsModule", "NotificationsErasure", "NotificationsCommands", "Announcement", "AnnounceResult"],
         ["search"] = ["SearchModule"],
     };
 

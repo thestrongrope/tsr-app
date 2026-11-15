@@ -1,0 +1,41 @@
+{
+  "mode": "heavy",
+  "route": "pdf",
+  "vus": 1,
+  "measured_seconds": 0,
+  "warmup_seconds": 0,
+  "all": {
+    "requests": 20,
+    "req_per_s": null,
+    "http_failed_rate": 0,
+    "latency_ms": {
+      "min": 1207.5215,
+      "avg": 2209.3906193,
+      "p50": 1735.543964,
+      "p90": 3023.8380064000003,
+      "p95": 3685.4660145499975,
+      "p99": 6299.36253811,
+      "max": 6952.836669
+    }
+  },
+  "iterations": 20,
+  "routes": {
+    "pdf": {
+      "requests": 20,
+      "req_per_s": null,
+      "http_failed_rate": 0,
+      "latency_ms": {
+        "min": 1207.5215,
+        "avg": 2209.3906193,
+        "p50": 1735.543964,
+        "p90": 3023.8380064000003,
+        "p95": 3685.4660145499975,
+        "p99": 6299.36253811,
+        "max": 6952.836669
+      }
+    }
+  },
+  "bad_status": {},
+  "bad_short_body": 0,
+  "checks_failed": 0
+}

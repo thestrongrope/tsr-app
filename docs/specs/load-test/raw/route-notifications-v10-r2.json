@@ -1,0 +1,41 @@
+{
+  "mode": "route",
+  "route": "notifications",
+  "vus": 10,
+  "measured_seconds": 60,
+  "warmup_seconds": 15,
+  "all": {
+    "requests": 15819,
+    "req_per_s": 263.65,
+    "http_failed_rate": 0,
+    "latency_ms": {
+      "min": 7.623713,
+      "avg": 37.345700733548284,
+      "p50": 31.397397,
+      "p90": 57.7588718,
+      "p95": 71.5458044,
+      "p99": 126.14964006,
+      "max": 795.695567
+    }
+  },
+  "iterations": 15819,
+  "routes": {
+    "notifications": {
+      "requests": 15819,
+      "req_per_s": 263.65,
+      "http_failed_rate": 0,
+      "latency_ms": {
+        "min": 7.623713,
+        "avg": 37.345700733548284,
+        "p50": 31.397397,
+        "p90": 57.7588718,
+        "p95": 71.5458044,
+        "p99": 126.14964006,
+        "max": 795.695567
+      }
+    }
+  },
+  "bad_status": {},
+  "bad_short_body": 0,
+  "checks_failed": 0
+}

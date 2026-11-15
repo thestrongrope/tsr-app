@@ -205,3 +205,16 @@ internal sealed class QuizCampaign
 
     public int? Active { get; set; }
 }
+
+/// <summary>
+/// One document of the quiz competition's state (replaces PHP's JSON files under state/): <c>settings</c> (the settings sheet read), <c>participants</c>, <c>quiz_day</c>, <c>timestamps</c>, <c>scoreboard</c>, <c>winners</c>,
+/// and <c>winners_replaced</c> (the append-only record of replaced winners). The documents keep PHP's JSON shape. Member data lives here and in the responses PHP returns, never in logs or events.
+/// </summary>
+internal sealed class QuizState
+{
+    public string Name { get; set; } = string.Empty;
+
+    public string Document { get; set; } = "null";
+
+    public DateTimeOffset UpdatedAt { get; set; }
+}

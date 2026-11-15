@@ -26,9 +26,13 @@ internal sealed class ApiHost : IDisposable
             builder.UseSetting("TSR_DB", "Host=unused");
             builder.UseSetting("TSR_FIREBASE_PROJECT_ID", "demo-tsr-test");
             builder.UseSetting("TSR_AUTH_EMULATOR_HOST", "localhost:9099");
+            builder.UseSetting("TSR_GOTENBERG_URL", "http://gotenberg.invalid:3000");
             builder.ConfigureServices(services => services.AddSingleton<IStartupFilter>(new CaptureFilter(record)));
         });
     }
+
+    /// <summary>The host's services, for a test that checks what the container resolves.</summary>
+    public IServiceProvider Services => factory.Services;
 
     /// <summary>Every route endpoint the app mapped.</summary>
     public IReadOnlyList<RouteEndpoint> Endpoints =>

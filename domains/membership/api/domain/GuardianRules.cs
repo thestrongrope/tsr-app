@@ -1,8 +1,11 @@
+using Tsr.Shared.Api;
 namespace Tsr.Membership.Api.Domain;
 
 /// <summary>The guardian link rules that need no database (PHP: models/guardians.php, routes/children.php).</summary>
 internal static class GuardianRules
 {
+    public const int MaxPendingInvites = 5;
+    public const int InviteExpiryDays = 7;
     public const string InvalidLink = "Invalid relationship or self-link not allowed";
     public const string InviteNotFound = "Invite not found";
     public const string InviteUsed = "This link has expired or has already been used";

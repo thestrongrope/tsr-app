@@ -2,6 +2,12 @@
   <!-- content: Quran, articles, lectures, books. Depends on no other domain. -->
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Markdig" />
+    <PackageReference Include="YamlDotNet" />
     <ProjectReference Include="../../../shared/api/Tsr.Shared.Api.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Slices and value objects are internal; the database tests may see them. -->
+    <InternalsVisibleTo Include="Tsr.Db.Tests" />
   </ItemGroup>
 </Project>

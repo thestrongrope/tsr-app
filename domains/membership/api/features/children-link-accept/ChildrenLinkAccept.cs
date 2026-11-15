@@ -32,8 +32,6 @@ internal static class ChildrenLinkAcceptEndpoint
 
 internal sealed class ChildrenLinkAcceptHandler(MembershipContext db, Permissions permissions, UserDirectory users, TimeProvider clock)
 {
-    private const string ManageParents = "parents:manage";
-
     public async Task<IResult> HandleAsync(Caller? caller, string code, HttpRequest request, CancellationToken ct)
     {
         if (caller is null)
@@ -81,7 +79,7 @@ internal sealed class ChildrenLinkAcceptHandler(MembershipContext db, Permission
             return Invalid();
         }
 
-        var creatorToken = await TokenOfUserAsync(link.CreatedBy, ct);
+        var creatorToken = await GuardianChecks.TokenOfUserAsync(users, link.CreatedBy, ct);
         if (creatorToken == caller.Token || GuardianRules.Relationship(typed) is not { } relationship)
         {
             return Invalid();
@@ -116,7 +114,8 @@ internal sealed class ChildrenLinkAcceptHandler(MembershipContext db, Permission
             return Problem.Detail(StatusCodes.Status410Gone, GuardianRules.InviteUsed);
         }
 
-        if (await RemovedByChildBlocksAsync(caller.Token, link, childUserId, ct))
+        var creator = new Caller(link.CreatedBy, await GuardianChecks.TokenOfUserAsync(users, link.CreatedBy, ct));
+        if (await GuardianChecks.RemovedByChildBlocksAsync(db, users, permissions, caller.Token, link.ChildToken, childUserId, creator, ct))
         {
             return Problem.Detail(StatusCodes.Status403Forbidden, GuardianRules.RemovedByChild);
         }
@@ -143,35 +142,6 @@ internal sealed class ChildrenLinkAcceptHandler(MembershipContext db, Permission
 
         await transaction.CommitAsync(ct);
         return Results.Json(new JsonObject { ["child_token"] = link.ChildToken, ["relationship"] = relationship, ["status"] = "active" });
-    }
-
-    // A parent the child ended returns only through an invite from someone who manages parents for the child's gender (PHP: revokedByChildBlocks).
-    private async Task<bool> RemovedByChildBlocksAsync(int parentToken, UserGuardian link, int childUserId, CancellationToken ct)
-    {
-        var revokers = await db.UserGuardians.AsNoTracking()
-            .Where(g => g.ParentToken == parentToken && g.ChildToken == link.ChildToken && g.Status == "revoked" && g.RevokedBy != null)
-            .Select(g => g.RevokedBy!.Value)
-            .Distinct()
-            .Take(UserDirectory.MaxBatch)
-            .ToListAsync(ct);
-        var endedByChild = (await users.ByIdsAsync(revokers, ct)).Any(u => u.Token == link.ChildToken);
-        if (!endedByChild)
-        {
-            return false;
-        }
-
-        var gender = await db.MemberProfiles.AsNoTracking().Where(p => p.UserId == childUserId).Select(p => p.Gender).FirstOrDefaultAsync(ct);
-        var creatorToken = await TokenOfUserAsync(link.CreatedBy, ct);
-        var creator = new Caller(link.CreatedBy, creatorToken);
-        var target = AccessTarget.ForGender((int)PhpValue.IntOfText(gender ?? string.Empty));
-        return !await permissions.CanAsync(creator, ManageParents, target, ct);
-    }
-
-    // PHP's tokenOfUser(): the user's token, 0 when there is no such user.
-    private async Task<int> TokenOfUserAsync(int userId, CancellationToken ct)
-    {
-        var found = await users.ByIdsAsync([userId], ct);
-        return found.Count == 0 ? 0 : found[0].Token;
     }
 
     private static IResult Invalid() => Problem.Detail(StatusCodes.Status422UnprocessableEntity, GuardianRules.InvalidLink);

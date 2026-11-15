@@ -62,6 +62,13 @@
   <Folder Name="/domains/platform/site/">
     <Project Path="domains/platform/site/Tsr.Platform.Site.csproj" />
   </Folder>
+  <Folder Name="/domains/search/" />
+  <Folder Name="/domains/search/api/">
+    <Project Path="domains/search/api/Tsr.Search.Api.csproj" />
+  </Folder>
+  <Folder Name="/domains/search/api/tests/">
+    <Project Path="domains/search/api/tests/Tsr.Search.Api.Tests.csproj" />
+  </Folder>
   <Folder Name="/hosts/" />
   <Folder Name="/hosts/api/">
     <Project Path="hosts/api/Tsr.Host.Api.csproj" />

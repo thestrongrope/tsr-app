@@ -1,0 +1,752 @@
+openapi: 3.1.0
+info:
+  title: TSR assessment
+  version: 0.1.0
+  description: |
+    The assessment domain's actions (batch A1: a member takes a quiz and reads scores; batch A2: a teacher or class admin manages a class's quizzes and the copy pickers). Behaviour: tests/ (run against any base URL).
+    Forward compatible: a store-live app keeps calling these, so add fields and routes freely but
+    never remove or change one without the release process. Every error body is {"detail": "..."}.
+    Every route signs the caller in with PHP's member-creating sign-in (api_authenticate(true)).
+servers:
+  - url: http://localhost:8088
+    description: Local dev stack (gateway)
+paths:
+  /mcq/quizzes/{quiz_id}:
+    get:
+      operationId: getQuiz
+      summary: One quiz the caller may see, with their own attempt
+      description: |
+        Permission quizzes:take (403), then the member's gender must be a number (400 "User gender not set; update profile first"), then the quiz must be published and of a class the caller is a current
+        student of (404 "Quiz not found"; a deactivated quiz is visible). No question and no answer. Slice: features/quiz-detail/QuizDetail.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: quiz_id, in: path, required: true, schema: {type: string}, description: "PHP (int) cast: 5abc is 5, abc is 0"}
+      responses:
+        "200":
+          description: The quiz
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuizDetail"
+        "400":
+          $ref: "#/components/responses/Problem"
+        "401":
+          $ref: "#/components/responses/Problem"
+        "403":
+          $ref: "#/components/responses/Problem"
+        "404":
+          $ref: "#/components/responses/Problem"
+  /mcq/quizzes/{quiz_id}/questions:
+    get:
+      operationId: listQuizQuestions
+      summary: A page of the quiz's questions with shuffled options
+      description: |
+        quizzes:take (403), gender (400), then 409 "Quiz already attempted. Cannot retake." when the caller's score is above 0 (a score of 0 does not block: PHP's asymmetry with submit),
+        404 "Quiz not found" unless visible (as getQuiz), 409 "This quiz is not currently available" when deactivated. page (min 1) and pageSize (1 to 100, default 20) read as PHP's (int).
+        Options: the non-blank options plus "I don't know", in random order. Never says which is correct. Slice: features/quiz-questions/QuizQuestions.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: quiz_id, in: path, required: true, schema: {type: string}}
+        - {name: page, in: query, schema: {type: string}}
+        - {name: pageSize, in: query, schema: {type: string}}
+      responses:
+        "200":
+          description: "{total, page, pageSize, items: [{id, text, isArabic, options}]}"
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+  /mcq/quizzes/{quiz_id}/my-score:
+    get:
+      operationId: getMyQuizScore
+      summary: The caller's own answers to a quiz and the result
+      description: |
+        quizzes:take (403), gender (400), 404 "Quiz not found" unless visible (as getQuiz), 404 "No attempt found" without a response of the caller. `selected` is always 0. percent is a float over the question count
+        (the integer 0 when the quiz has no questions). Slice: features/quiz-my-score/QuizMyScore.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: quiz_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: "{total, answered, correct, percent, responses: [{questionId, questionText, selected, selectedText, correctText, isCorrect}]}"
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /mcq/quizzes/{quiz_id}/responses:
+    post:
+      operationId: submitQuizAnswers
+      summary: Submit the caller's answers; the server scores them
+      description: |
+        Body {responses: [{questionId, selectedText, option?}]}, one per question. Order of checks: quizzes:take (403), gender (400), already answered (409 "Already attempted"), visible (404 "Quiz not found"),
+        deactivated (409 "This quiz is not currently available"), no questions (400), invalid JSON (422), empty responses (400), missing or extra ids (400 with detail {missing: [...], extra: [...]}), answer text over 1000 characters (400).
+        Scoring compares the selected text with the right option, trimmed and case-insensitively. Two simultaneous submissions: one 200, the rest 409 "You have already submitted this quiz". Event assessment.quiz_answered {quizId, classId, token}.
+        Slice: features/quiz-submit/QuizSubmit.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: quiz_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: "{total, answered, correct, percent, responses: [{questionId, questionText, selected, selectedText, correctText, isCorrect}]}"
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /mcq/by-code/{code}:
+    get:
+      operationId: resolveQuizCode
+      summary: What opening an MCQ link does for the caller
+      description: |
+        quizzes:take (403); no gender check. 200 {state, quizId}: state is not_found, not_eligible, not_released, attempted, open or closed (see the slice header); quizId only for open and attempted.
+        Slice: features/quiz-by-code/QuizByCode.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: code, in: path, required: true, schema: {type: string}, description: "1 to 32 ASCII letters and digits, else not_found"}
+      responses:
+        "200":
+          description: "{state, quizId}"
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+  /mcq/open:
+    get:
+      operationId: listOpenQuizzes
+      summary: The quizzes the caller may attempt now, across their classes
+      description: |
+        quizzes:take (403); no gender check. Published, not deactivated, caller a current student of the class, no response of the caller; newest first; at most 20. 200 {items: [{id, code, name, topic, classCode}]}.
+        Slice: features/open-quizzes/OpenQuizzes.cs.
+      security:
+        - memberToken: []
+      responses:
+        "200":
+          description: "{items: [...]}"
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}/mcq/quizzes:
+    get:
+      operationId: listClassQuizzes
+      summary: A class's published quizzes with the caller's own attempt
+      description: |
+        quizzes:take on the class (403 for anyone who is not a current student of an active class), gender (400), enrolment (404 "Class not found or not enrolled"). page (min 1), pageSize (1 to 100, default 20).
+        200 {total, page, pageSize, hasNext, items: [{id, code, name, topic, classId, publishedAt, questionCount, attempted, score, total, percent}]}; score, total, percent null before an attempt.
+        Slice: features/class-quizzes/ClassQuizzes.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+        - {name: page, in: query, schema: {type: string}}
+        - {name: pageSize, in: query, schema: {type: string}}
+      responses:
+        "200":
+          description: The page
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}/my-scores:
+    get:
+      operationId: listMyClassScores
+      summary: The quizzes of a class the caller answered, with their score
+      description: |
+        quiz-scores:read (403), gender (400), a current student of the class (404 "Class not found or not enrolled"). start_date and end_date bound each response's own time, read as MariaDB reads a date
+        (an unreadable start bounds nothing, an unreadable end lists nothing). 200 a bare array [{quizId, quizName, topic, attemptedAt, score, total, percent}], newest attempt first.
+        Slice: features/class-my-scores/ClassMyScores.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+        - {name: start_date, in: query, schema: {type: string}}
+        - {name: end_date, in: query, schema: {type: string}}
+      responses:
+        "200":
+          description: The scores
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /me/children/{child_token}/classes/{class_id}/scores:
+    get:
+      operationId: listChildClassScores
+      summary: A linked child's quiz scores in a class
+      description: |
+        children-performance:read (403); no gender check; 404 "Child or class not found" unless the caller has an active guardian link to the child and the child has any enrolment row in the class (removed too).
+        start_date and end_date as for my-scores. 200 a bare array [{quiz_id, quiz_name, score, total_questions, percentage (one decimal), attempted_on (Y-m-d H:i:s)}], newest attempt first.
+        Slice: features/child-scores/ChildScores.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: child_token, in: path, required: true, schema: {type: string}}
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+        - {name: start_date, in: query, schema: {type: string}}
+        - {name: end_date, in: query, schema: {type: string}}
+      responses:
+        "200":
+          description: The scores
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /standard-mcqs/sources:
+    get:
+      operationId: standardMcqSources
+      summary: The languages and levels the standard MCQs can be updated for
+      description: |
+        Permission standard-mcqs:update (403). Static lists; an id is the position plus one. Slice: features/standard-mcq-sources/StandardMcqSources.cs.
+      security:
+        - memberToken: []
+      responses:
+        "200":
+          description: "{languages: [{id, name}], levels: [{id, name}]}"
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+  /standard-mcqs/update:
+    post:
+      operationId: standardMcqUpdate
+      summary: Replace the standard MCQs of the chosen languages and levels from the source sheet
+      description: |
+        Permission standard-mcqs:update (403). Body {languages: [id], levels: [id]}: each a non-empty list of whole numbers from 1 (422 "Choose at least one in languages", "languages must be a list of ids"; at most 20 ids, 422 "Too many ids in languages").
+        409 "An update is already running. Try again in a minute." while another update runs. Answers {results: [{language_id, level_id, language, level, status: updated|failed, quizzes?, reason?}]}, one per pair;
+        a sheet that cannot be read changes nothing for any pair. Slice: features/standard-mcq-update/StandardMcqUpdate.cs.
+      security:
+        - memberToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [languages, levels]
+              properties:
+                languages: {type: array, items: {type: integer, minimum: 1}}
+                levels: {type: array, items: {type: integer, minimum: 1}}
+      responses:
+        "200":
+          description: The result of each pair
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /admin/quiz:
+    get:
+      operationId: adminQuiz
+      summary: The quiz competition overview
+      description: |
+        Permission quiz:admin (403) first.
+        Answers {settings, quiz_day, download, eligibility[], gates{generate, mega, mega_student}, winners{episodes[], mega, mega_student}, activity{...}, can_reset}. No sheet ids, no token lists, no replaced winners. Slice: features/admin-quiz/AdminQuiz.cs.
+      security:
+        - memberToken: []
+      responses:
+        "200":
+          description: See the description
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+  /admin/quiz/settings/refresh:
+    post:
+      operationId: adminQuizSettingsRefresh
+      summary: Read the settings sheet
+      description: |
+        Permission quiz:admin (403) first. A change holds the quiz admin lock: 409 "Another quiz admin action is running. Try again in a moment.".
+        Reads tabs Technical and Functional of the settings sheet (setting TSR_QUIZ_SETTINGS_SHEET_ID) and saves the settings; 502 "The settings sheet could not be read. The settings are unchanged." when it cannot be read. A move from a not-live mode to a live one writes
+        the inbox copy and queues the push rows (nothing is sent). Answers {outcome, message, changed, settings}. Slice: features/admin-quiz-settings-refresh/AdminQuizSettingsRefresh.cs.
+      security:
+        - memberToken: []
+      responses:
+        "200":
+          description: See the description
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "502": {$ref: "#/components/responses/Problem"}
+  /admin/quiz/download:
+    post:
+      operationId: adminQuizDownload
+      summary: Download the episodes responses and rebuild the scoreboard
+      description: |
+        Permission quiz:admin (403) first. A change holds the quiz admin lock: 409 "Another quiz admin action is running. Try again in a moment.".
+        409 until the settings were loaded; 502 "Episode N could not be read from the sheet. Nothing was changed.". Answers {outcome, message, changed, quiz_day, submissions[{episode, submissions}]}. Slice: features/admin-quiz-download/AdminQuizDownload.cs.
+      security:
+        - memberToken: []
+      responses:
+        "200":
+          description: See the description
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "502": {$ref: "#/components/responses/Problem"}
+  /admin/quiz/winners/generate:
+    post:
+      operationId: adminQuizWinnersGenerate
+      summary: Draw winners that have none
+      description: |
+        Permission quiz:admin (403) first. A change holds the quiz admin lock: 409 "Another quiz admin action is running. Try again in a moment.".
+        Body {kind}: 422 "Unknown kind."; 409 settings not loaded; 404 "This quiz has no <kind> draw." (a Grand quiz offers grand, a Mega quiz daily, mega, mega_student); 409 with the reason when nothing could be drawn.
+        Answers {outcome: complete|incomplete, message, changed, drawn, missing, episodes[{episode|null, prize, drawn, missing}]}. Slice: features/admin-quiz-winners-generate/AdminQuizWinnersGenerate.cs.
+      security:
+        - memberToken: []
+  /classes/{class_id}/mcq/manage:
+    get:
+      operationId: listManagedQuizzes
+      summary: A class's quizzes (drafts and deactivated too) for the member who manages them
+      description: |
+        Active class (404 "Class not found"), then mcqs:manage on the class (403 "You do not have permission to manage MCQs for this class": the class teacher, a current class admin student, a super admin). page (min 1), pageSize (1 to 50, default 20).
+        200 {total, page, pageSize, hasNext, items: [{id, code, name, topic, classId, createdAt, publishedAt, deactivatedAt, restrictToClass, questionCount, submittedCount, link}]}, newest first; link null until published.
+        Slice: features/manage-list/ManageList.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+        - {name: page, in: query, schema: {type: string}}
+        - {name: pageSize, in: query, schema: {type: string}}
+      responses:
+        "200":
+          description: The page
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}/mcq/topics:
+    get:
+      operationId: listManagedTopics
+      summary: The distinct topics a class's quizzes use
+      description: |
+        As the manage list (404 then 403 mcqs:manage). 200 a bare array of text, ordered, trimmed, blank ones left out. Slice: features/manage-topics/ManageTopics.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: The topics
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}/mcq/standard:
+    get:
+      operationId: listStandardMcqs
+      summary: The standard MCQs a class may copy, by topic then subject
+      description: |
+        As the manage list (404 then 403 mcqs:manage). Standard MCQs of the class's level and language with at least one question, in the order of their code.
+        200 {class: {code, languageId}, topics: [{topic, subjects: [{subject, quizzes: [{id, code, topic, subject, lesson, name, questionCount, copied}]}]}]}.
+        PHP quirks copied: copied is true for any quiz of the class made from it (a deactivated one too); questionCount is multiplied by the number of such quizzes; languageId is 1 for a class no standard MCQ fits. Slice: features/manage-standard/ManageStandard.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: The standard MCQs
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /mcq/manage/{quiz_id}:
+    get:
+      operationId: getManagedQuiz
+      summary: A quiz and all its questions WITH the answer, for editing
+      description: |
+        Quiz found (404 "Quiz not found"), its class active (404 "Class not found"), mcqs:manage on the class (403). THE ANSWER KEY IS ON THIS WIRE (the correct answer is `answer`; the other options option2 to option5), so it is reached only by the
+        class teacher, a current class admin student and a super admin. 200 {id, code, name, topic, classId, classCode, className, restrictToClass, publishedAt, deactivatedAt, link, questions: [{id, question, answer, option2..option5}]}.
+        Slice: features/manage-quiz/ManageQuiz.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: quiz_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: The quiz
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+    put:
+      operationId: updateManagedQuiz
+      summary: Save a quiz's name, topic and restriction and REPLACE its questions
+      description: |
+        As the get (404, 404, 403), then body (422 "Invalid JSON body") and the rules: name and topic required (trimmed), each row needs a question and an answer (422 "Question N needs both a question and an answer"; a row blank in both is skipped);
+        a text over 300 (name, topic) or 1000 (question, option) characters, a NUL byte, or more than 500 rows is 422. `questions` missing deletes every question (PHP). restrictToClass is left alone when absent.
+        200 {id, questionCount}. After the body rules: a quiz with at least one answer (online response or offline submission) is refused, 409 "This quiz has answers and can no longer be edited", with no write and no event (a deliberate difference from PHP, which replaced the questions and orphaned the answers; owner's decision, 12 Nov 2026). Event assessment.quiz_updated.
+        Slice: features/manage-update/ManageUpdate.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: quiz_id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [kind]
+              properties:
+                kind: {type: string, enum: [daily, grand, mega, mega_student]}
+      responses:
+        "200":
+          description: See the description
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /admin/quiz/winners/regenerate:
+    post:
+      operationId: adminQuizWinnersRegenerate
+      summary: Draw again, archiving the replaced winners
+      description: |
+        Permission quiz:admin (403) first. A change holds the quiz admin lock: 409 "Another quiz admin action is running. Try again in a moment.".
+        Body {kind}: 422 "Unknown kind."; 409 settings not loaded; 404 "This quiz has no <kind> draw." (a Grand quiz offers grand, a Mega quiz daily, mega, mega_student); 409 with the reason when nothing could be drawn.
+        Answers {outcome: complete|incomplete, message, changed, drawn, missing, episodes[{episode|null, prize, drawn, missing}]}. Slice: features/admin-quiz-winners-regenerate/AdminQuizWinnersRegenerate.cs.
+      security:
+        - memberToken: []
+      requestBody:
+        required: true
+              properties:
+                name: {type: string}
+                topic: {type: string}
+                restrictToClass: {type: integer}
+                questions:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      question: {type: string}
+                      answer: {type: string}
+                      option2: {type: string}
+                      option3: {type: string}
+                      option4: {type: string}
+                      option5: {type: string}
+      responses:
+        "200":
+          description: Saved
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /mcq/manage/{quiz_id}/deactivate:
+    post:
+      operationId: deactivateManagedQuiz
+      summary: Deactivate (default) or reactivate a quiz
+      description: |
+        As the get (404, 404, 403), then body (422 "Invalid JSON body"). `deactivate` is read as PHP's filter_var boolean: a missing or null value deactivates; anything but 1, true, on, yes reactivates.
+        200 {success, deactivated, deactivatedAt}. Event assessment.quiz_deactivated {quizId, classId, token, deactivated} only when the state changes. Slice: features/manage-deactivate/ManageDeactivate.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: quiz_id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [kind]
+              properties:
+                kind: {type: string, enum: [daily, grand, mega, mega_student]}
+      responses:
+        "200":
+          description: See the description
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /admin/quiz/publish:
+    post:
+      operationId: adminQuizPublish
+      summary: Write the scoreboard or winners into the public sheet (Mega quizzes)
+      description: |
+        Permission quiz:admin (403) first. A change holds the quiz admin lock: 409 "Another quiz admin action is running. Try again in a moment.".
+        Body {what: scoreboard|winners|mega|mega_student}: 422 "Unknown target."; 409 settings not loaded or no winner drawn; 404 "This quiz has nothing to publish from here." on a Grand quiz; 502 on a sheet failure.
+        Answers {outcome, message, changed, rows}. Slice: features/admin-quiz-publish/AdminQuizPublish.cs.
+              properties:
+                deactivate: {type: boolean}
+      responses:
+        "200":
+          description: Done
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /mcq/copy/classes:
+    get:
+      operationId: listCopyableClasses
+      summary: The classes the caller may copy quizzes from or to
+      description: |
+        mcqs:copy with no target (403 "You do not have permission to copy MCQs": not the class teacher or a class admin student). Active classes of each gender the caller may copy for (a coordinator: its assigned classes), ordered by gender, level order, id.
+        200 a bare array [{id, code, level, city, teacher}]. Slice: features/copy-classes/CopyClasses.cs.
+      security:
+        - memberToken: []
+      responses:
+        "200":
+          description: See the description
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "502": {$ref: "#/components/responses/Problem"}
+  /admin/quiz/reset:
+    post:
+      operationId: adminQuizReset
+      summary: Delete the cycle data
+      description: |
+        Permission quiz:admin (403) first. A change holds the quiz admin lock: 409 "Another quiz admin action is running. Try again in a moment.".
+        Then permission quiz:reset (403 "Deleting all quiz data needs the quiz reset permission."). Archives the winners, clears scoreboard, quiz day, timestamps, winners and participants; keeps the settings and the replaced-winners record.
+        Answers {outcome, message, changed}. Slice: features/admin-quiz-reset/AdminQuizReset.cs.
+      security:
+        - memberToken: []
+      responses:
+        "200":
+          description: See the description
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+          description: The classes
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+  /mcq/copy/classes/{class_id}/topics:
+    get:
+      operationId: listCopyTopics
+      summary: The topics of a class the caller may copy from
+      description: |
+        Active class (404), mcqs:copy on the class (403 "You do not have permission to copy MCQs from this class"). 200 a bare array of text as listManagedTopics. Slice: features/copy-topics/CopyTopics.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: The topics
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /mcq/copy/classes/{class_id}/quizzes:
+    get:
+      operationId: listCopyQuizzes
+      summary: The quizzes of a class and topic the caller may copy from
+      description: |
+        As the copy topics (404, 403), then topic (query, trimmed, 422 "topic is required"). The topic is matched with SQL LIKE ignoring case (% and _ are wildcards: PHP's quirk, copied). 200 a bare array [{id, name, createdAt}], newest first, at most 1000.
+        Slice: features/copy-quizzes/CopyQuizzes.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+        - {name: topic, in: query, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: The quizzes
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}/mcq:
+    post:
+      operationId: createQuiz
+      summary: A new empty quiz (a draft) in the class
+      description: |
+        Caller (401), class found and active (404 "Class not found"), mcqs:manage on the class (403), body (422 "Invalid JSON body"), name then topic (trimmed, required: 422 "name is required", "topic is required"; over 300 characters or a NUL byte: 422).
+        restrictToClass is 0 only when sent and (int) of it is 0, else 1. 201 {id}. Event assessment.quiz_created {quizId, classId, token, source: new}. Slice: features/manage-create/ManageCreate.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: {type: string}
+                topic: {type: string}
+                restrictToClass: {type: integer}
+      responses:
+        "201":
+          description: "{id}"
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /classes/{class_id}/mcq/standard/{mcq_id}/copy:
+    post:
+      operationId: copyStandardMcq
+      summary: A new quiz in the class made from a standard MCQ
+      description: |
+        Caller (401), class active (404), mcqs:manage on the class (403), standard MCQ found (404 "Standard MCQ not found"). The quiz carries the standard's code as mcq_code and its questions with the answer as option1. A second copy into the same class is accepted.
+        201 {success, id}. One transaction. Event assessment.quiz_created {source: standard}. Slice: features/manage-standard-copy/ManageStandardCopy.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: class_id, in: path, required: true, schema: {type: string}}
+        - {name: mcq_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "201":
+          description: "{success, id}"
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /mcq/manage/{quiz_id}/copy:
+    post:
+      operationId: copyManagedQuiz
+      summary: Copy a quiz and its questions into another class
+      description: |
+        Quiz found and its class active (404), mcqs:copy on the source class (403 "You do not have permission to copy MCQs between these classes"), body (422), targetClassId above 0 (422 "targetClassId is required"), target active (404), mcqs:copy on the target (403),
+        a quiz of the target with the same name and topic (409 "A quiz with the same name & topic already exists in target class"). 201 {success, id}; the copy is a draft with a new code and no mcq_code. Event assessment.quiz_created {source: copy}. Slice: features/manage-copy/ManageCopy.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: quiz_id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [targetClassId]
+              properties:
+                targetClassId: {type: integer}
+      responses:
+        "201":
+          description: "{success, id}"
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /mcq/manage/{quiz_id}/scores:
+    get:
+      operationId: listManagedQuizScores
+      summary: Every student who answered the quiz, with their correct count
+      description: |
+        As the get (404, 404, 403 "You do not have permission to manage MCQs for this class"). 200 {quiz: {id, name, topic, classCode}, total, items: [{name, submitted, correct, outof}]}, newest first, at most 5000.
+        Grouped by the student's name as PHP does (two students with one name are one row); outof is the number of responses. Slice: features/manage-scores/ManageScores.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: quiz_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: See the description
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /mcq/manage/{quiz_id}/offline:
+    get:
+      operationId: getOfflineEntry
+      summary: The questions (correct option marked) and the class's students, for entering paper answers
+      description: |
+        As the get (404, 404, 403). THE ANSWER KEY IS ON THIS WIRE. 200 {quiz: {id, name, topic, classCode, className}, questions: [{id, question, options: [{text, isCorrect}]}], students: [{token, name, isOffline, submitted}]}.
+        isOffline: the email ends in @thestrongrope.com. submitted: a row in spot_quiz_submissions (written only by the offline entry). Slice: features/manage-offline/ManageOffline.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: quiz_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: See the description
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+    post:
+      operationId: saveOfflineAnswers
+      summary: Record the answers students gave on paper, all or none
+      description: |
+        Body {students: [{token, correct: [questionId]}]}. As the get (404, 404, 403), then 422 (invalid JSON, "students is required", "each student needs a token and a correct list", more than 500 students or 5000 ids),
+        400 "Malformed response payload.", 403 "Student N is not enrolled in this class.", 400 "Question N does not belong to this quiz.", then 409 {detail, conflicts: [token]} when a student already has a submission (nothing written; no conflicts key when the unique index on the responses refused it).
+        200 {saved}. One transaction. Event assessment.offline_answers_recorded {quizId, classId, token, count}. Slice: features/manage-offline-save/ManageOfflineSave.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: quiz_id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [students]
+              properties:
+                students:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      token: {type: integer}
+                      correct: {type: array, items: {type: integer}}
+      responses:
+        "200":
+          description: "{saved}"
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /mcq/manage/{quiz_id}/sheet:
+    get:
+      operationId: getQuizSheet
+      summary: The printable question sheet as a PDF (A4 portrait), no answer marked
+      description: |
+        As the get (404, 404, 403). Fixes and stores the option order of every question that has none, then 404 "This MCQ has no questions" or 200 application/pdf, attachment MCQ_<code>.pdf. 503 when the PDF renderer is down.
+        Slice: features/manage-sheet/ManageSheet.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: quiz_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: The PDF
+          content:
+            application/pdf: {}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
+  /mcq/manage/{quiz_id}/publish:
+    post:
+      operationId: publishManagedQuiz
+      summary: Publish the quiz and queue a push to the class's students
+      description: |
+        As the get (404, 404, 403). Fixes the option orders, sets published_at and published_by (also on a quiz already published: no check), writes assessment.quiz_published {quizId, classId, token}, then queues one push per device of the class's current students
+        (dedupe key quiz-<id>), writes a notification and its inbox rows (best effort). 200 {success, publishedAt, deviceCount, successCount, failureCount}. Slice: features/manage-publish/ManagePublish.cs.
+      security:
+        - memberToken: []
+      parameters:
+        - {name: quiz_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: See the description
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+components:
+  securitySchemes:
+    memberToken:
+      type: http
+      scheme: bearer
+      bearerFormat: Firebase ID token
+  responses:
+    Problem:
+      description: |
+        An error. The body is always {"detail": "..."}
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [detail]
+            properties:
+              detail:
+                type: string
+  schemas:
+    QuizDetail:
+      type: object
+      required: [id, code, name, classId, questionCount, attempted]
+      properties:
+        id: {type: integer}
+        code: {type: string}
+        name: {type: string}
+        topic: {type: [string, "null"]}
+        classId: {type: integer}
+        publishedAt: {type: [string, "null"], description: "Y-m-dTH:i:s, no zone"}
+        questionCount: {type: integer}
+        attempted: {type: boolean}
+        score: {type: [integer, "null"], description: "the caller's correct answers; null before any answer"}

@@ -1,3 +1,4 @@
+using System.Data.Common;
 using Microsoft.EntityFrameworkCore;
 using Tsr.Access.Api.Domain;
 using Tsr.Shared.Api;
@@ -52,6 +53,29 @@ public sealed class Permissions
         return ResolveAsync(caller, ct);
     }
 
+    /// <summary>
+    /// As <see cref="ForUserAsync"/>, for the routes that show a member what they may do: a database failure is
+    /// <see cref="PermissionsUnavailableException"/> (PHP forUser), which those routes answer with 503 instead of an empty answer.
+    /// </summary>
+    internal async Task<UserAccess> ForUserOrUnavailableAsync(Caller caller, CancellationToken ct)
+    {
+        try
+        {
+            return await ResolveAsync(caller, ct);
+        }
+        // The PostgreSQL provider reports a transient failure (a lost connection, a command timeout) as an InvalidOperationException around the database exception.
+        catch (Exception e) when (e is DbException or InvalidOperationException { InnerException: DbException })
+        {
+            throw new PermissionsUnavailableException("Permissions storage is unreadable", e);
+        }
+    }
+
+    /// <summary>
+    /// Drops what this request resolved for the user, so the next question reads the database again. A handler that
+    /// changes a user's grants, role or rules calls it before it answers with that user's view (PHP reads live rows every time).
+    /// </summary>
+    internal void Forget(int userId) => _resolved.Remove(userId);
+
     internal async Task<bool> IsKnownAsync(string action, CancellationToken ct) =>
         AccessEngine.IsKnown(await CatalogAsync(ct), action);
 
@@ -105,18 +129,35 @@ public sealed class Permissions
 
     private async Task<UserAccess> LoadAsync(Caller caller, CancellationToken ct)
     {
-        var roleId = await RoleIdAsync(caller, ct);
-        var stored = await StoredNamesAsync(caller.UserId, roleId, ct);
+        var stored = await StoredAsync(caller, ct);
+        _catalog ??= stored.Catalog.Order(StringComparer.Ordinal).ToList();
         var memberships = await _classes.MembershipsAsync(caller.Token, ct);
-        var assigned = await AssignedClassesAsync(caller.Token, ct);
-        return AccessEngine.Resolve(new AccessInputs(await CatalogAsync(ct), roleId, stored, memberships, assigned));
+        IReadOnlyList<ClassFacts> assigned = stored.HasRules ? await AssignedClassesAsync(caller.Token, ct) : [];
+        return AccessEngine.Resolve(new AccessInputs(_catalog, stored.RoleId, stored.Names, memberships, assigned));
     }
 
-    // The role's grants and the user's live named grants (PHP: role_permissions union user_permissions).
-    private async Task<List<string>> StoredNamesAsync(int userId, int roleId, CancellationToken ct) =>
-        await _db.RolePermissions.AsNoTracking().Where(g => g.RoleId == roleId).Select(g => g.Permission)
-            .Union(_db.UserPermissions.AsNoTracking().Where(g => g.UserId == userId && g.RevokedAt == null).Select(g => g.Permission))
+    /// <summary>What access itself stores about one user, read in one command because every signed-in request pays for it.</summary>
+    internal sealed record StoredAccess(int RoleId, string[] Catalog, string[] Names, bool HasRules);
+
+    // The role, the catalog, the role's grants with the user's live named grants (PHP: role_permissions union
+    // user_permissions), and whether the user holds a live class access rule (few do; their rules are read after).
+    private async Task<StoredAccess> StoredAsync(Caller caller, CancellationToken ct)
+    {
+        var rows = await _db.Database
+            .SqlQuery<StoredAccess>($"""
+                with r as (select coalesce((select roleid from access.user_roles where user_id = {caller.UserId}), 0)::int as roleid)
+                select r.roleid as "RoleId",
+                       array(select name::text from access.permissions) as "Catalog",
+                       array(select g.permission::text from (
+                           select permission from access.role_permissions where roleid = r.roleid
+                           union
+                           select permission from access.user_permissions where user_id = {caller.UserId} and revoked_at is null) g) as "Names",
+                       exists(select 1 from access.class_access_rules where token = {caller.Token} and revoked_at is null) as "HasRules"
+                from r
+                """)
             .ToListAsync(ct);
+        return rows[0];
+    }
 
     private async Task<IReadOnlyList<ClassFacts>> AssignedClassesAsync(int token, CancellationToken ct)
     {
