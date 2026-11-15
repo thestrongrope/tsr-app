@@ -71,8 +71,7 @@ Capability document to create: `domains/content/capabilities/library-reads.md` (
 Members and guests open the app's Library to read articles, browse by category and tag, see publications and the latest
 videos. Every one of those reads goes to the website, which is a separate system from the one this project now builds.
 Store-live app builds have the website's address and answer shape built in, so the reads must keep answering exactly as
-today while their home changes. Today an unpublished article can also be fetched by anyone who knows its address; only the
-fact that drafts are kept off the server hides them.
+today while their home changes.
 
 ### Outcome
 - Every Library read a supported app build makes gets from tsr-app the answer it gets today (measured: LIB-Q1). The
