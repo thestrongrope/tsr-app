@@ -16,6 +16,10 @@ using Tsr.Shared.Api;
 var builder = WebApplication.CreateBuilder(args);
 HostLogging.AddDefaults(builder.Configuration);
 
+// The server's own cap on a request body, for a route that forgets the bounded reader (shared/api/RequestBodies.cs). Twice the slices' limit, so a
+// body between the two still gets the slice's 413 with its detail. Production has no proxy of its own that caps the body.
+builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 2L * RequestBodies.MaxBytes);
+
 var connectionString = builder.Configuration["TSR_DB"]
     ?? throw new InvalidOperationException("TSR_DB is not set. Locally it comes from docker-compose.dev.yml.");
 
