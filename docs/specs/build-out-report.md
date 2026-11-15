@@ -239,7 +239,7 @@ synthetic user rows in the parity database.
   `reports:read` holder; the leaderboard's row scope is the reports one.
 - The waiting list shows a coordinator every waiting person of their gender (reversed to PHP's rule on 14 Nov; an
   automated review flagged it as wider exposure of contact details, and the owner's decision stands).
-- Deactivated classes and transfer history are stricter than PHP (a separate decision of 11 Nov).
+- Deactivated classes and transfer history follow PHP's scope since 15 Nov (the right is the only gate; the stricter rule of 11 Nov is withdrawn).
 - Search: a teacher hit is re-checked for existence only, not current gender or teaching status.
 - The WhatsApp routes forward the notifier's own error text.
 
@@ -264,7 +264,7 @@ synthetic user rows in the parity database.
 
 ## 8. Decisions waiting on the owner
 
-1. Answered 14 Nov: deactivated classes and transfer history follow PHP's scope (to be built).
+1. Answered 14 Nov, built 15 Nov: deactivated classes and transfer history follow PHP's scope.
 2. Website port: does production use lecture search by meaning; which small pages are kept? (Decap CMS: unused.)
 3. Library details that were assumed: how soon a published article must appear (the worker ticks every 5 minutes),
    the oldest supported app build (17), and whether a future-dated article stays visible as today.

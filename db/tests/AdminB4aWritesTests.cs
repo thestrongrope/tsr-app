@@ -307,9 +307,9 @@ public sealed class AdminB4aWritesTests
         Assert.That(await MembershipTestKit.CountAsync("platform.outbox"), Is.EqualTo(0));
     }
 
-    /// <summary>Decided 11 Nov 2026, stricter than PHP: the transfer history and the deactivated-classes screen are limited to the assigned classes like the other admin class lists.</summary>
+    /// <summary>As PHP (the owner's decision of 14 Nov 2026 withdrew the stricter rule of 11 Nov): the right is the only gate, so a coordinator limited to assigned classes still sees every transfer and every closed class.</summary>
     [Test]
-    public async Task A_coordinator_holding_a_named_grant_sees_history_and_closed_classes_of_the_assigned_classes_only()
+    public async Task A_coordinator_holding_a_named_grant_sees_the_whole_history_and_every_closed_class_whatever_is_assigned()
     {
         const int Coordinator = 901303;
         var coordinator = await MembershipTestKit.AddMemberAsync(Coordinator, "B4 Coordinator", "2");
@@ -326,13 +326,13 @@ public sealed class AdminB4aWritesTests
 
         var history = await kit.SendAsync(Coordinator, HttpMethod.Get, "/admin/transfers/history");
         Assert.That(history.Status, Is.EqualTo(HttpStatusCode.OK), history.Body);
-        Assert.That(history.Json!["total"]!.GetValue<int>(), Is.EqualTo(1));
-        Assert.That(history.Json!["items"]!.AsArray().Single()!["studentToken"]!.GetValue<int>(), Is.EqualTo(901312));
+        Assert.That(history.Json!["total"]!.GetValue<int>(), Is.EqualTo(2));
+        Assert.That(history.Json!["items"]!.AsArray().Select(i => i!["studentToken"]!.GetValue<int>()), Is.EquivalentTo((int[])[901311, 901312]));
 
         var closed = await kit.SendAsync(Coordinator, HttpMethod.Get, "/admin/deactivated-classes");
         Assert.That(closed.Status, Is.EqualTo(HttpStatusCode.OK), closed.Body);
-        Assert.That(closed.Json!["deactivated"]!.AsArray(), Is.Empty);
-        Assert.That(closed.Json!["log"]!.AsArray(), Is.Empty);
+        Assert.That(closed.Json!["deactivated"]!.AsArray(), Has.Count.EqualTo(1));
+        Assert.That(closed.Json!["log"]!.AsArray(), Has.Count.EqualTo(1));
 
         var all = await kit.SendAsync(Admin, HttpMethod.Get, "/admin/deactivated-classes");
         Assert.That(all.Json!["deactivated"]!.AsArray(), Has.Count.EqualTo(1), "the super admin still sees the closed class");

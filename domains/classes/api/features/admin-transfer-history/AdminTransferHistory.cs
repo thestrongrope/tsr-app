@@ -64,10 +64,7 @@ internal static class AdminTransferHistorySlice
             return Results.Json(new Body(0, page, pageSize, [])); // PostgreSQL text cannot hold a NUL byte, so nothing matches.
         }
 
-        // Stricter than PHP (decided 11 Nov 2026): a caller limited to assigned classes sees the moves out of or into those classes only.
-        var assigned = await ClassListing.AssignedAsync(permissions, caller, ct);
-        var limited = assigned is not null;
-        var ids = assigned?.ToArray() ?? [];
+        // As PHP: the permission is the only gate; a caller limited to assigned classes still sees every move (owner's decision, 14 Nov 2026).
         var like = "%" + q + "%";
         var offset = (Math.Min(page, MaxPage) - 1) * pageSize;
 
@@ -79,8 +76,7 @@ internal static class AdminTransferHistorySlice
                 join classes.classes fc on fc.id = st.from_class_id
                 join classes.classes tc on tc.id = st.to_class_id
                 join membership.v_members ab on ab.token = st.transferred_by
-                where (not {limited} or st.from_class_id = any({ids}) or st.to_class_id = any({ids}))
-                  and ({q} = '' or u.name like {like}::citext or st.token_no::text = {q} or fc.code like {like}::citext or tc.code like {like}::citext
+                where ({q} = '' or u.name like {like}::citext or st.token_no::text = {q} or fc.code like {like}::citext or tc.code like {like}::citext
                    or st.reason like {like}::citext or ab.name like {like}::citext)
                 """)
             .ToListAsync(ct))[0];
@@ -93,8 +89,7 @@ internal static class AdminTransferHistorySlice
                 join classes.classes fc on fc.id = st.from_class_id
                 join classes.classes tc on tc.id = st.to_class_id
                 join membership.v_members ab on ab.token = st.transferred_by
-                where (not {limited} or st.from_class_id = any({ids}) or st.to_class_id = any({ids}))
-                  and ({q} = '' or u.name like {like}::citext or st.token_no::text = {q} or fc.code like {like}::citext or tc.code like {like}::citext
+                where ({q} = '' or u.name like {like}::citext or st.token_no::text = {q} or fc.code like {like}::citext or tc.code like {like}::citext
                    or st.reason like {like}::citext or ab.name like {like}::citext)
                 order by st.transferred_at desc, st.id desc
                 limit {pageSize} offset {offset}
