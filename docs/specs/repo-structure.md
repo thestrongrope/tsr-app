@@ -256,6 +256,17 @@ sends its paths there. No code moves; it is a production change, agreed first.
   the outbox, `outbound_messages`, `schema_migrations`, `admin_access_log`. Target: PostgreSQL with
   one schema and one DbContext per domain, and EF migrations holding all schema and base data in
   this public repo. The private repo keeps member data and prod config only.
+- **How a database gets its data (decided 15 Nov 2026).** This repository sets up the database and nothing more:
+  1. **Schema and base data: the migrations.** Rows the product cannot run without (`access.permissions`,
+     `access.role_permissions`, `membership.interest_options`, `platform.lookups`) are created by the EF migrations,
+     so a synthetic and a real database start the same.
+  2. **Synthetic data: `db/synthetic/`**, public. It is all a contributor needs: every build, test and contract run
+     works with it alone.
+  3. **Real data: loaded separately**, by its owner, from outside this repository. `tools/data-load/` is the loading
+     script; it holds no data and no connection details.
+
+  The dependency runs one way: a real-data load depends on this repository's schema at a named version; nothing here
+  depends on real data or on where it is kept.
 
 #### 3.4 `tools/`, `.claude/` and `docs/`
 
