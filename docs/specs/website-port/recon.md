@@ -27,9 +27,7 @@ Points the csv cannot say in one cell:
 - **Path collision.** tsr-web serves an HTML page at `/articles`. tsr-app's gateway serves JSON at `/articles`
   (`hosts/gateway/default.conf:34`). They can only share a host if one moves.
 - **Trailing slash.** Today's URLs have none (`/articles/{slug}`). The site spike writes `/articles/{slug}/index.html`.
-- **Two unauthenticated holes.** `GET /api/articles?includeUnpublished=true` lists drafts (`web/src/app/api/articles/route.ts`).
-  `GET /api/v1/articles/{slug}` and `GET /api/articles/{slug}` do not check status (`article-service.ts:102-131`).
-  Production is safe only because the 548 drafts are gitignored and so never reach the image.
+- **Draft handling.** The port never copies a draft (LIB-R12, LIB-Q3). Findings about the present website are tracked in its own repository.
 - **`/api/v1/taxonomies/categories/{slug}/articles`** has a Dart method and no caller.
 - **`/wp-json`** is not served by tsr-web. See section 2.
 

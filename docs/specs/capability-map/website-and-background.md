@@ -44,7 +44,7 @@ Read on 15 Nov 2026 from two other repositories (code, compose files and docs on
 | API | Search articles | `GET /api/v1/search` | Dynamic, rate limited (60 a minute per client by default) | Search index (Elasticsearch), Fuse.js fallback | Logs an anonymous search event. |
 | API | Search or browse lectures | `GET /api/v1/lectures/search` | Dynamic, rate limited | Search index; embedding service (optional) | BM25, fuzzy retry, optional rank fusion with vectors. |
 | API | Record an anonymous search-click event | `POST /api/v1/events` | Dynamic, rate limited, strict validation | Writes to the analytics index | No IP, cookie or user agent stored. |
-| API (legacy) | List articles, old shape | `GET /api/articles` | Dynamic | Content files | `includeUnpublished=true` returns drafts without any check. |
+| API (legacy) | List articles, old shape | `GET /api/articles` | Dynamic | Content files | Legacy; no caller found. |
 | API (legacy) | Get one article, old shape | `GET /api/articles/{slug}` | Dynamic | Content files | Plain JSON, no envelope. |
 | Admin | Rebuild the articles search index | `POST /api/admin/reindex` | Dynamic, shared secret header | Content files to search index | By hand after a deploy; 503 if secret unset. |
 | Admin | Rebuild the lectures search index | `POST /api/admin/reindex-lectures` | Dynamic, shared secret header | `content/lectures/lectures.ndjson` to search index | Required after every deploy that changes lectures. |

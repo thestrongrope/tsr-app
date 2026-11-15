@@ -86,7 +86,7 @@ contract and database tests with fakes at outside services, never a real send.
 1. **The web app is mostly a second front end, not a second product.** Of its 86 capabilities, 66 have a route in the mobile API; 20 do not clearly (8 "no", 9 "unsure", 3 "partly"), and most of those are small (sign out, page-view counting, the API reference). The real features without a route are about six, listed under switch-off 2. Replacing the web app is mainly a Flutter Web job, not an API job.
 2. **Flutter Web is the largest unknown now.** Nothing was built; the inventory lists what cannot work as written.
 3. **`quiz_info` is outside the route catalog** and the store builds depend on it (confirmed in the app's code).
-4. **12 PHP pages look dead**, and the website's old `/api/articles?includeUnpublished=true` returns drafts without a check.
+4. **12 PHP pages look dead.**
 5. **Three documents in tsr-account are stale** (the app's features and roles, the parity document, the roadmap). The three inventories here replace them as the current picture.
 
 ## Not verified
