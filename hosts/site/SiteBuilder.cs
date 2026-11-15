@@ -50,6 +50,40 @@ public static class SiteBuilder
         return "<!doctype html>\n" + html;
     }
 
+    /// <summary>
+    /// Empties <paramref name="outDir"/> and keeps the folder itself (creating it when missing): in production it is a mounted volume,
+    /// which can be emptied but not deleted.
+    /// </summary>
+    public static void Clear(string outDir)
+    {
+        var root = Directory.CreateDirectory(outDir);
+        foreach (var entry in root.EnumerateFileSystemInfos())
+        {
+            if (entry is DirectoryInfo folder)
+            {
+                folder.Delete(recursive: true);
+            }
+            else
+            {
+                entry.Delete();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Writes a robots.txt that asks every crawler to stay out, when <paramref name="noCrawl"/> (the setting TSR_SITE_NO_CRAWL) is "true".
+    /// Any other value writes nothing, so a site built by hand is as it was.
+    /// </summary>
+    public static async Task WriteRobotsAsync(string outDir, string? noCrawl, CancellationToken ct)
+    {
+        if (!string.Equals(noCrawl, "true", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        await File.WriteAllTextAsync(Path.Combine(outDir, "robots.txt"), "User-agent: *\nDisallow: /\n", ct);
+    }
+
     /// <summary>Writes page.Path/index.html under <paramref name="outDir"/>, refusing any path outside it.</summary>
     public static async Task WriteAsync(string outDir, SitePage page, string html, CancellationToken ct)
     {
