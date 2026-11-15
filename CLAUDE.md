@@ -40,6 +40,7 @@ read it before editing.
 | Plumbing every domain uses (DB, outbox, HTTP client, site API reader) | `shared/api/`, `shared/app/`, `shared/site/` | the file you need; no rules live here |
 | A table or migration | the domain's `api/<Context>Context.cs` and `api/Migrations/` (add: `dotnet ef migrations add <Name> --context <Domain>Context --project domains/<d>/api --startup-project hosts/api --output-dir Migrations -- --TSR_DB=Host=unused --TSR_FIREBASE_PROJECT_ID=demo-design --environment=Development`; the generated files need no edit) | `docs/specs/initial-build/phase-0-design.md` |
 | Synthetic data | `db/synthetic/seed.sql` | |
+| How a database gets its data | migrations create the schema and base data; then the synthetic seed, or a separate load of real data | `docs/specs/repo-structure.md` section 3.3 |
 
 The whole API surface is listed in the **route catalog**, `docs/specs/initial-build/operations.csv` (method, path, domain, auth kind, state); the tests in
 `hosts/api/tests` fail when it and the code disagree. Which domain owns what: `domains/CLAUDE.md`. What is built and last measured: `docs/status.md`.
