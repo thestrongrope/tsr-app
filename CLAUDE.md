@@ -34,7 +34,7 @@ read it before editing.
 | What a domain is called, its actions and events | `domains/<context>/spec/` | `glossary.md`, `api.yaml`; events in the domain's `CLAUDE.md` |
 | A new feature or change: spec, plan, verification | GitHub issue (spec), draft PR description (plan) | `spec-driven-development` skill; templates in `.github/` and `docs/templates/` |
 | API startup, module list, middleware | `hosts/api/` | `Program.cs`, `Modules.cs` |
-| The gateway (per path: PHP or the new API) | `hosts/gateway/` | `default.conf` |
+| The gateway of the dev and test stacks (per path: PHP or the new API; production has none) | `hosts/gateway/` | `default.conf` |
 | The Flutter shell | `hosts/app/` | `lib/main.dart` |
 | The static site generator | `hosts/site/` | `SiteModules.cs`, `Program.cs`; a domain's pages are in `domains/<context>/site/` |
 | Plumbing every domain uses (DB, outbox, HTTP client, site API reader) | `shared/api/`, `shared/app/`, `shared/site/` | the file you need; no rules live here |

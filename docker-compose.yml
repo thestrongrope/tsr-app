@@ -3,10 +3,11 @@
 #
 # What it must never hold (hosts/api/tests/ProductionStackTests.cs fails the build otherwise):
 #   - test members or the sign-in test double of the local stacks;
-#   - a published port: only the gateway is reached from outside, through the deployment tool's proxy;
+#   - a published port: only the api is reached from outside, through the deployment tool's proxy (Traefik);
+#   - a proxy of its own: the route table of hosts/gateway is for the dev and test stacks;
 #   - a secret's value: every secret is a ${NAME} the deployment tool supplies, and a required one stops the start when it is missing.
 #
-# Start order: db healthy, then db-role (one-off), then migrate (one-off), then api, workers and gateway.
+# Start order: db healthy, then db-role (one-off), then migrate (one-off), then api and workers.
 # The database lives in the volume db-data. Removing that volume removes every member's data.
 
 services:
@@ -97,6 +98,8 @@ services:
       retries: 12
       start_period: 60s
 
+  # The only service reached from outside: the deployment tool attaches the host name to it, port 8080. It answers unknown paths itself
+  # and reads the caller's address from the proxy's X-Forwarded-For (shared/api/ClientAddress.cs).
   api:
     build:
       context: .
@@ -137,20 +140,6 @@ services:
         condition: service_completed_successfully
       elasticsearch:
         condition: service_healthy
-
-  # The only service reached from outside: the deployment tool attaches the host name to it, port 8080.
-  gateway:
-    build:
-      context: hosts/gateway
-    restart: unless-stopped
-    depends_on:
-      - api
-    healthcheck:
-      # Alpine ships BusyBox wget only: no curl, no --spider.
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/gateway-health"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
 
 volumes:
   db-data:
