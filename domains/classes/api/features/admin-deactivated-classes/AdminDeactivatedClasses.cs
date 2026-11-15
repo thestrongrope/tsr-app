@@ -45,10 +45,7 @@ internal static class AdminDeactivatedClassesSlice
             return refusal;
         }
 
-        // Stricter than PHP (decided 11 Nov 2026): a caller limited to assigned classes sees those classes only, here and in the log.
-        var assigned = await ClassListing.AssignedAsync(permissions, caller, ct);
-        var limited = assigned is not null;
-        var ids = assigned?.ToArray() ?? [];
+        // As PHP: the permission is the only gate; a caller limited to assigned classes still sees every closed class and the whole log (owner's decision, 14 Nov 2026).
         var closed = await db.Database
             .SqlQuery<DeactivationView.ClosedClass>($"""
                 select c.id as "Id", c.code as "Code", cl.name as "Level", c.gender as "Gender", t.name as "Teacher", a.details::text as "Details",
@@ -65,7 +62,7 @@ internal static class AdminDeactivatedClassesSlice
                     order by al.performed_at desc, al.id desc
                     limit 1) a on true
                 left join membership.v_members pu on pu.token = a.performed_by
-                where c.status = 'I' and (not {limited} or c.id = any({ids}))
+                where c.status = 'I'
                 order by coalesce(a.performed_at, c.deleted_at) desc nulls last, c.id desc
                 limit {MaxClasses}
                 """)
@@ -78,7 +75,7 @@ internal static class AdminDeactivatedClassesSlice
                 left join classes.classes c on c.id = a.class_id
                 left join classes.class_levels cl on cl.id = c.class_level_id
                 left join membership.v_members u on u.token = a.performed_by
-                where a.action = 'deactivated' and (not {limited} or a.class_id = any({ids}))
+                where a.action = 'deactivated'
                 order by a.performed_at desc, a.id desc
                 limit {LogLimit}
                 """)
