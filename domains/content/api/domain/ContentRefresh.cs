@@ -23,7 +23,7 @@ internal sealed record RefreshOutcome(RefreshResult Result, string? Cause = null
 /// <summary>
 /// One refresh of content's copy of the published content files (LIB-R20 to LIB-R24). The files are the source; the three tables are replaced in one transaction,
 /// so a reader sees the last complete set or the new one. A read that fails, finds no published article, or finds fewer than half of the last count keeps the last set and records why.
-/// One worker instance is the supported setup (root CLAUDE.md): two ticks at once are not guarded against here.
+/// One worker instance is the supported setup (docs/testing.md): two ticks at once are not guarded against here.
 /// </summary>
 internal static partial class ContentRefresh
 {
