@@ -1,0 +1,157 @@
+# The PRODUCTION stack. The deployment tool (Dokploy) builds and runs it from this file; see docs/deployment.md.
+# Never run it on a developer's machine with real settings. For local work use docker-compose.dev.yml (tools/dev-stack.sh, tools/test-stack.sh).
+#
+# What it must never hold (hosts/api/tests/ProductionStackTests.cs fails the build otherwise):
+#   - test members or the sign-in test double of the local stacks;
+#   - a published port: only the gateway is reached from outside, through the deployment tool's proxy;
+#   - a secret's value: every secret is a ${NAME} the deployment tool supplies, and a required one stops the start when it is missing.
+#
+# Start order: db healthy, then db-role (one-off), then migrate (one-off), then api, workers and gateway.
+# The database lives in the volume db-data. Removing that volume removes every member's data.
+
+services:
+  db:
+    image: postgres:18
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: tsr
+      POSTGRES_USER: tsr
+      POSTGRES_PASSWORD: ${TSR_DB_OWNER_PASSWORD:?TSR_DB_OWNER_PASSWORD is not set}
+    volumes:
+      # postgres:18 keeps its data in a versioned folder below /var/lib/postgresql.
+      - db-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "tsr", "-d", "tsr"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # One-off: the API's limited role (no superuser, no DDL). Created when missing; its password is set at every start, so a changed
+  # setting takes effect. psql reads the password from the environment (\getenv), so it is never an argument and no file is mounted.
+  # The migrate job grants this role the domain schemas (shared/api/DomainContexts.cs).
+  db-role:
+    image: postgres:18
+    restart: "no"
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        psql -v ON_ERROR_STOP=1 -h db -U tsr -d tsr <<'SQL'
+        \getenv pw TSR_APP_DB_PASSWORD
+        SELECT 'CREATE ROLE tsr_app LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS'
+          WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'tsr_app') \gexec
+        SELECT format('ALTER ROLE tsr_app PASSWORD %L', :'pw') \gexec
+        SQL
+    environment:
+      PGPASSWORD: ${TSR_DB_OWNER_PASSWORD:?TSR_DB_OWNER_PASSWORD is not set}
+      TSR_APP_DB_PASSWORD: ${TSR_APP_DB_PASSWORD:?TSR_APP_DB_PASSWORD is not set}
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # One-off: the API image run with --migrate applies every domain's migrations that are not applied yet, as the owner role.
+  migrate:
+    build:
+      context: .
+      dockerfile: hosts/api/Dockerfile
+    restart: "no"
+    command: ["--migrate"]
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      TSR_DB: "Host=db;Port=5432;Database=tsr;Username=tsr;Password=${TSR_DB_OWNER_PASSWORD:?TSR_DB_OWNER_PASSWORD is not set}"
+    depends_on:
+      db-role:
+        condition: service_completed_successfully
+
+  # HTML to PDF for the report downloads. Only the api reaches it. The image ships curl (verified with docker run for the dev stack).
+  gotenberg:
+    image: gotenberg/gotenberg:8
+    restart: unless-stopped
+    # One render may take as long as the API waits for it (60 s); the image's own default is 30 s.
+    command: ["gotenberg", "--api-timeout=60s"]
+    environment:
+      # The report HTML references nothing outside itself: Chromium may fetch no address at all.
+      CHROMIUM_DENY_PRIVATE_IPS: "true"
+      CHROMIUM_DENY_PUBLIC_IPS: "true"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "--max-time", "3", "http://127.0.0.1:3000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  elasticsearch:
+    image: elastic/elasticsearch:9.2.3
+    restart: unless-stopped
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "true"
+      ELASTIC_PASSWORD: ${TSR_ELASTICSEARCH_PASSWORD:?TSR_ELASTICSEARCH_PASSWORD is not set}
+      ES_JAVA_OPTS: -Xms512m -Xmx512m
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+    healthcheck:
+      # The official image ships curl. $$ is a literal $ for the container's shell.
+      test: ["CMD-SHELL", "curl -fsS -u elastic:$$ELASTIC_PASSWORD http://localhost:9200/_cluster/health >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+
+  api:
+    build:
+      context: .
+      dockerfile: hosts/api/Dockerfile
+    restart: unless-stopped
+    environment: &api-environment
+      ASPNETCORE_ENVIRONMENT: Production
+      TSR_DB: "Host=db;Port=5432;Database=tsr;Username=tsr_app;Password=${TSR_APP_DB_PASSWORD:?TSR_APP_DB_PASSWORD is not set}"
+      TSR_FIREBASE_PROJECT_ID: ${TSR_FIREBASE_PROJECT_ID:?TSR_FIREBASE_PROJECT_ID is not set}
+      TSR_GOTENBERG_URL: http://gotenberg:3000
+      TSR_ELASTICSEARCH_URL: http://elasticsearch:9200
+      TSR_ELASTICSEARCH_PASSWORD: ${TSR_ELASTICSEARCH_PASSWORD:?TSR_ELASTICSEARCH_PASSWORD is not set}
+      # Optional. Empty: no push, no account deletion at Firebase, no sheet refresh (each answers as its slice documents).
+      TSR_GOOGLE_SERVICE_ACCOUNT_B64: ${TSR_GOOGLE_SERVICE_ACCOUNT_B64:-}
+      TSR_PUBLIC_WEB_BASE: ${TSR_PUBLIC_WEB_BASE:-}
+      TSR_QUIZ_SETTINGS_SHEET_ID: ${TSR_QUIZ_SETTINGS_SHEET_ID:-}
+      TSR_YOUTUBE_CHANNEL_ID: ${TSR_YOUTUBE_CHANNEL_ID:-}
+      TSR_NOTIFIER_URL: ${TSR_NOTIFIER_URL:-}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      gotenberg:
+        condition: service_healthy
+
+  # The API image in its second run mode: it runs the workers named in TSR_WORKERS. Empty (the default) runs none, so a deploy alone
+  # sends nothing outward. Naming a sending worker (push-drain, class-schedules) is a decision made in the deployment tool's settings.
+  workers:
+    build:
+      context: .
+      dockerfile: hosts/api/Dockerfile
+    restart: unless-stopped
+    command: ["--workers"]
+    environment:
+      <<: *api-environment
+      TSR_WORKERS: ${TSR_WORKERS:-}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      elasticsearch:
+        condition: service_healthy
+
+  # The only service reached from outside: the deployment tool attaches the host name to it, port 8080.
+  gateway:
+    build:
+      context: hosts/gateway
+    restart: unless-stopped
+    depends_on:
+      - api
+    healthcheck:
+      # Alpine ships BusyBox wget only: no curl, no --spider.
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/gateway-health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  db-data:
+  es-data:
