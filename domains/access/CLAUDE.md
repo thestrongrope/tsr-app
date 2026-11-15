@@ -2,9 +2,11 @@
 
 AuthZ: what a caller may do, and in which scope. Parity first: PHP's `PermissionsModel` is copied as it behaves,
 quirks included (facts: `docs/specs/initial-build/phase-2-permissions-recon.md`, `permission-map.csv`; notes and gaps:
-`phase-2a-notes.md`). Capability: `capabilities/permissions.md`.
+`phase-2a-notes.md`). Capability: `capabilities/permissions.md` (requirements PERM-R1 to R25, each with its test).
 
 ## Status
+
+Every operation is built (no `api/Planned.cs`). Each slice's header comment names its route; shapes: `spec/api.yaml`.
 
 | Part | State |
 |---|---|
@@ -13,17 +15,21 @@ quirks included (facts: `docs/specs/initial-build/phase-2-permissions-recon.md`,
 | User roles (`access.user_roles`), named grants, class access rules (tables) | built; written only by the ten admin routes below |
 | Class access rule matching (`RuleMatcher`) | built, unit tested; has no classes to match until `classes` exists |
 | Port `IClassScopes` (default `NoClasses`) | built; `classes` supplies the real one (`ClassFacts` also carries code and name, for the class access screens) |
-| Routes `GET /me/permissions`, `GET /me/permissions/{permission}`, `GET /user/permissions` | built; Hurl contract proven identical on PHP for version 4. `GET /me/permissions` is now PHP's version 5 (`navigation`, `revision`, ETag and 304, 503 when unreadable): database tested, and its Hurl file passes on PHP and on the new API (12 Nov 2026). The header `X-Permissions-Revision` on signed-in responses: built, database tested, Hurl cases not yet run |
-| Grant routes (`permissions:manage`): member search, member view, grant, revoke; class access routes (`class-access:manage`): member search, member view, options, preview, grant a rule, revoke a rule | built and proven (slices `admin-permission-*`, `class-access-*`); Hurl `spec/tests/admin-permission-*.hurl`, `class-access-*.hurl` through `tools/contract-grants.sh test\|parity`, database tests `db/tests/TestGrantsTests.cs`; notes `docs/specs/initial-build/lane-access-notes.md`, `test-grants-notes.md` |
+| Read routes `GET /me/permissions` (PHP's version 5), `GET /me/permissions/{permission}`, `GET /user/permissions` | built (slices `me-permissions`, `me-permission`, `user-permissions`) |
+| Grant routes (`permissions:manage`): member search, member view, grant, revoke; class access routes (`class-access:manage`): member search, member view, options, preview, grant a rule, revoke a rule | built (slices `admin-permission-*`, `class-access-*`); notes `docs/specs/initial-build/lane-access-notes.md`, `test-grants-notes.md` |
+| Header `X-Permissions-Revision` on signed-in responses | built, database tested, Hurl cases not yet run |
 
 ## Owns
 
 - Schema `access`: `roles`, `permissions`, `role_permissions`, `user_permissions` (named grants), `user_roles` (one row per
   user whose role is not 0; `user_id` is a plain id, no foreign key to identity), `class_access_rules` and `class_access_rule_conditions`.
 - The three constant sets (`api/domain/PermissionSets.cs`: member 21, own 8, taught 2).
-- Dependencies: none (`AccessModule.Dependencies`); the admin routes read `membership.v_members`, `identity.v_users` and `classes.v_class_levels` in SQL only (published views), and classes through the port. Every other domain lists `access`. The one thing flowing the
-  other way is the port `IClassScopes`, which `classes` implements: it is the only interface between domains that
-  would otherwise form a cycle. Do not add another.
+
+## Dependencies
+
+None (`AccessModule.Dependencies`); the admin routes read `membership.v_members`, `identity.v_users` and `classes.v_class_levels` in SQL only (published views), and classes through the port. Every other domain lists `access`. The one thing flowing the
+other way is the port `IClassScopes`, which `classes` implements: it is the only interface between domains that
+would otherwise form a cycle. Do not add another.
 
 ## How a check works
 
@@ -40,27 +46,26 @@ as PHP does (`Permissions.ForUserOrUnavailableAsync`, the route filter `AnswersU
 
 ## The answer of GET /me/permissions (version 5)
 
-`navigation` (`classes`, `manage`) and `revision` are pure rules in `api/domain/PermissionsSnapshot.cs`. The revision is PHP's
-value for the same answer (sha256 of the key-sorted compact JSON of navigation, permissions, scopes and version, first 16 hex;
-`issued_at` is not in it), so it changes exactly when the answer does. It is sent as the ETag with `Cache-Control: private, no-cache`
-and `Vary: Authorization`; `If-None-Match` naming it is 304.
+`navigation`, `revision`, the ETag and the 304: capability PERM-R12 and R18 to R22, decision PERM-D5; the pure rules are in
+`api/domain/PermissionsSnapshot.cs`. The revision must stay PHP's value for the same answer: the gateway sends some paths to PHP and some here.
 
 ## The header X-Permissions-Revision (every domain's signed-in responses)
 
 `api/PermissionsRevisionHeader.cs`, middleware the host adds with `app.UsePermissionsRevision()` right after `app.UseIdentity()`
-(the rule is here; the host has that one line). As PHP (`lib/auth.php` `api_authenticate`, `lib/permissions_snapshot.php`): it runs
-when the sign-in has passed and before the route, so the header is on every answer of such a request (200, 304, a download, and
-the route's own 403, 404, 409, 422, 503), for a member being deleted on the routes they may still call, and for the member a
-create route has just made. The value is the member's revision BEFORE the route runs: a request that changes the caller's own
-permissions still carries the old one, the next request the new one. No header: a request refused at sign-in (401, `User not found`,
-`Registration incomplete`, `Account deletion pending`, recently deleted, a `precheck:` refusal), a route without `RequireMember`
-(public reads, `/health`, `/auth/debug-token`), and permissions that cannot be loaded (logged as a warning; the request goes on).
-Cost: the request's one resolution, 2 commands (PHP: 7): one on access's tables (role, catalog, stored names, whether a live class
-access rule exists: `Permissions.StoredAsync`) and one through the port (`IClassScopes.MembershipsAsync`); a member with class access
-rules pays 4 more (rules, conditions, active classes and their tags). Pinned by `db/tests/PermissionsRevisionHeaderTests.cs`. Paid on every signed-in request and kept by `Permissions`, so the route's own
-checks read nothing again; a route that checks no permission pays it only for the header, as in PHP. Because that resolution is
-kept, a route that changes what its caller holds and then asks `Permissions` about the caller must call `Permissions.Forget` first
-(the grant routes do). An unhandled error (500) has no header. Tests: `db/tests/PermissionsRevisionHeaderTests.cs`.
+(the rule is here; the host has that one line). What it promises: capability PERM-R23 to R25, PERM-D6, PERM-Q3. What an agent must know beyond that:
+
+- No header: a request refused at sign-in (401, `User not found`,
+  `Registration incomplete`, `Account deletion pending`, recently deleted, a `precheck:` refusal), a route without `RequireMember`
+  (public reads, `/health`, `/auth/debug-token`), and permissions that cannot be loaded (logged as a warning; the request goes on). An unhandled error (500) has no header.
+- Cost: the request's one resolution, 2 commands (PHP: 7): one on access's tables (role, catalog, stored names, whether a live class
+  access rule exists: `Permissions.StoredAsync`) and one through the port (`IClassScopes.MembershipsAsync`); a member with class access
+  rules pays 4 more (rules, conditions, active classes and their tags). Paid on every signed-in request and kept by `Permissions`, so the route's own
+  checks read nothing again; a route that checks no permission pays it only for the header, as in PHP.
+- Because that resolution is
+  kept, a route that changes what its caller holds and then asks `Permissions` about the caller must call `Permissions.Forget` first
+  (the grant routes do).
+
+Tests: `db/tests/PermissionsRevisionHeaderTests.cs`.
 
 ## Quirks kept on purpose (each has a test named Quirk)
 
@@ -69,11 +74,10 @@ when the class is inactive, even with scope `all`; the legacy `/user/permissions
 grants their pages. Not in access: token 1001 is always an eligible teacher (`classes.php`, a classes rule) and
 `users.gender` holding `'1'` and `'Male'` (membership owns it; the admin routes read it from `membership.v_members` and map it with `AdminMembers.GenderOf`).
 
-## Stricter than PHP, on purpose (owner decision, 12 Nov 2026)
+## Stricter than PHP, on purpose (owner decision)
 
-A grant to oneself is 422 (`admin-permission-grant`). Class access: only a super admin (role 1) adds a rule to, or removes one from, a super admin or gender admin (roles 1, 3, 4), and a rule is removed only by who granted it
-(`class_access_rules.granted_by`) or a super admin; both 403 `You do not have permission to do that` (`ClassAccessOperator.GuardAsync`, `RevokeGuardAsync`), checked again inside the member lock. Hurl cases that pin PHP's
-looseness are in `*-php-only.hurl`, the new rules in `*-new-api.hurl` (`admin-permission-self`, `class-access-peers`, `class-access-revoke`). `tools/contract-grants.sh` runs the `*-php-only.hurl` files on PHP only and the `*-new-api.hurl` files on the new API only.
+Three rules, capability PERM-R15 to R17 and PERM-D4: a grant to oneself is 422 (`admin-permission-grant`); only a super admin changes the class access rules of a super admin or gender admin; a rule is removed only by who granted it or a super admin (`ClassAccessOperator.GuardAsync`, `RevokeGuardAsync`). Hurl cases that pin PHP's
+looseness are in `*-php-only.hurl`, the new rules in `*-new-api.hurl` (`admin-permission-self`, `class-access-peers`, `class-access-revoke`); `tools/contract-grants.sh` runs each kind on its own side only.
 
 ## Known open difference
 
@@ -92,14 +96,16 @@ also treats `Zürich` and `Zurich` as equal. Not built; settle it when `classes`
 | Tables, migrations | `api/AccessContext.cs`, `api/Migrations/` |
 | The grant and class access rules | `api/domain/GrantRules.cs`, `ClassAccessRules.cs` (no database), `ClassAccessStore.cs`, `ClassAccessOperator.cs`, `MemberLock.cs` |
 | Words, contract, behaviour | `spec/glossary.md`, `spec/api.yaml`, `spec/tests/*.hurl` |
+| Database tests | `db/tests/AccessTests.cs`, `TestGrantsTests.cs`, `PermissionsRevisionHeaderTests.cs` |
 
 ## Checks
 
 ```
 dotnet test domains/access/api/tests       # rules, no database
-dotnet test db/tests                       # catalog, stored roles and grants, the three routes (Docker)
-tools/access-contract.sh dev               # Hurl contract on the dev stack
+dotnet test db/tests                       # catalog, stored roles and grants, the routes (Docker)
+tools/access-contract.sh test              # Hurl contract on the test stack (never dev: it may hold real data)
 tools/access-contract.sh parity            # the same files on PHP (parity stack up, tools/parity-php/README.md)
+tools/contract-grants.sh test              # the grant and class access routes (spec/tests/admin-permission-*.hurl, class-access-*.hurl); also parity
 ```
 
 ## Advisory locks
@@ -118,7 +124,3 @@ tools/access-contract.sh parity            # the same files on PHP (parity stack
 | `access.class_access_rule_revoked` | ruleId, token, revokedBy | POST /admin/class-access/rules/{id}/revoke |
 
 Consumed: none. A write drops the member's cached answers (`Permissions.Forget`) before it answers with their refreshed view; the class access version is not stored (the member's role id and a fingerprint of their live rule ids).
-
-## Placeholders
-
-None left: every operation of this domain is built.
