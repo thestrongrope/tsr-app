@@ -12,7 +12,7 @@ public sealed partial class ProductionStackTests
     private static readonly string[] RequiredSettings =
         ["TSR_DB_OWNER_PASSWORD", "TSR_APP_DB_PASSWORD", "TSR_ELASTICSEARCH_PASSWORD", "TSR_FIREBASE_PROJECT_ID"];
 
-    private static readonly string[] LongRunningServices = ["db", "gotenberg", "elasticsearch", "api", "workers", "gateway"];
+    private static readonly string[] LongRunningServices = ["db", "gotenberg", "elasticsearch", "api", "workers"];
 
     /// <summary>The file without its comments: a comment may name what the stack must not contain.</summary>
     private static readonly string Stack = string.Join(
@@ -50,6 +50,11 @@ public sealed partial class ProductionStackTests
             Assert.That(Stack, Does.Not.Contain("local-only"));
         });
     }
+
+    /// <summary>The server's proxy reaches the API itself; the nginx gateway of the dev and test stacks has no job in production.</summary>
+    [Test]
+    public void No_second_proxy() =>
+        Assert.That(Stack, Does.Not.Match(@"(?m)^  gateway:").And.Not.Contain("nginx"));
 
     [Test]
     public void No_port_is_published() =>

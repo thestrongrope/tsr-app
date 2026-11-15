@@ -10,13 +10,13 @@ and runs the file. It holds no secret and publishes no port; `hosts/api/tests/Pr
 | `db` | PostgreSQL 18; data in the volume `db-data` | always |
 | `db-role` | creates the API's limited role `tsr_app` and sets its password | once per start |
 | `migrate` | the API image with `--migrate`: applies the migrations not applied yet | once per start |
-| `api` | the API | always |
+| `api` | the API; port 8080 | always |
 | `workers` | the API image with `--workers`: runs the workers named in `TSR_WORKERS` | always |
 | `gotenberg` | PDF rendering for report downloads | always |
 | `elasticsearch` | the search index; data in the volume `es-data` | always |
-| `gateway` | nginx with the route table (`hosts/gateway/default.conf`) built in; port 8080 | always |
 
-Only `gateway` is reached from outside. Attach the host name to it in the deployment tool, on port 8080.
+Only `api` is reached from outside. Attach the host name to it in the deployment tool, on port 8080. The server's proxy (Traefik) is the
+only proxy: the nginx gateway in `hosts/gateway/` belongs to the dev and test stacks.
 
 ## Settings
 
