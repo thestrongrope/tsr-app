@@ -33,7 +33,7 @@ internal static class ReportThisWeekSlice
 
     private sealed record AttendanceRow(int ClassId, long Present, long Marked);
 
-    private sealed record TeacherRow(int Token, string? Gender, string? Mobile);
+    private sealed record TeacherRow(int Token, string? Gender, string? Mobile, string? Country);
 
     public static IEndpointRouteBuilder MapReportThisWeek(this IEndpointRouteBuilder routes)
     {
@@ -167,7 +167,7 @@ internal static class ReportThisWeekSlice
 
         var rows = await db.Database
             .SqlQuery<TeacherRow>($"""
-                select m.token as "Token", m.gender::text as "Gender", m.mobile::text as "Mobile" from membership.v_members m
+                select m.token as "Token", m.gender::text as "Gender", m.mobile::text as "Mobile", m.country::text as "Country" from membership.v_members m
                 where m.token = any({tokens}) order by m.user_id
                 """)
             .ToListAsync(ct);
@@ -193,7 +193,8 @@ internal static class ReportThisWeekSlice
                 continue;
             }
 
-            var mobile = rows.LastOrDefault(r => r.Token == token && !string.IsNullOrEmpty(r.Mobile))?.Mobile;
+            // In full, with the teacher's own country code; one that cannot be completed is left out, as a teacher with no number is.
+            var mobile = rows.Where(r => r.Token == token).Select(r => DialableNumber.Of(r.Mobile, r.Country)).LastOrDefault(number => number.Length > 0);
             if (mobile is not null)
             {
                 mobiles[token] = mobile;

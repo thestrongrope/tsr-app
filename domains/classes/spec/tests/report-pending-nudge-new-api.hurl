@@ -11,8 +11,8 @@ HTTP 200
 [Asserts]
 jsonpath "$.teacherToken" == 921012
 jsonpath "$.teacher" == "R2 Member 921012"
-jsonpath "$.title" == "Reminder from the class coordination team"
-jsonpath "$.body" == "Assalamu Alaikum. Please complete the following for your classes:\n• R2-G-103: 1 MCQ to conduct\nJazakallah khair."
+jsonpath "$.title" == "Pending C Form Reminder"
+jsonpath "$.body" == "Salaamun Alaikum\n\nClass Number: R2-G-103\nPending MCQ(s): 1\n\nTSR CC Team"
 jsonpath "$.alreadyReminded" == false
 jsonpath "$.lastReminded" matches /^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}$/
 jsonpath "$.sent" == true

@@ -1849,7 +1849,7 @@ paths:
       operationId: reportThisWeek
       summary: The class coordinator's review of the last completed week
       description: |
-        reports:read for the gender (403). Answers {gender, week{from, to}, summary{met, of, formsMissing, attendance (float or null), flagged}, stages{cform, conduction, attendance, alignment, met, attended}}; every row is {classId, code, level, teacher, teacherToken, teacherMobile, detail, action (message, call or null), quiet[{subject, weeks}]}. teacherMobile only for a teacher the caller may look up (teachers:lookup), null otherwise and in the met and attended lists. Slice: features/report-this-week/ReportThisWeek.cs.
+        reports:read for the gender (403). Answers {gender, week{from, to}, summary{met, of, formsMissing, attendance (float or null), flagged}, stages{cform, conduction, attendance, alignment, met, attended}}; every row is {classId, code, level, teacher, teacherToken, teacherMobile, detail, action (message, call or null), quiet[{subject, weeks}]}. teacherMobile only for a teacher the caller may look up (teachers:lookup), null otherwise and in the met and attended lists; it is the saved number in full, a plus then digits, completed with the calling code of the teacher's own country when saved without one, and null when it cannot be completed (too short, or no code and an unknown country). Slice: features/report-this-week/ReportThisWeek.cs.
       security:
         - memberToken: []
       parameters:
