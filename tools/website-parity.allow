@@ -5,7 +5,7 @@
 
 # Intended (decided before the port)
 /api/v1/articles/* | data.rawContent | Not sent: the unsanitised Markdown of the file (owner's decision, 13 Nov 2026); the app does not read it.
-/api/v1/articles/* | data.content | The HTML differs in form only: Markdig and remark write entities and white space differently, and raw HTML is dropped. The text a reader sees is compared separately as data.content(text), and its link targets as data.content(links); neither is allowed.
+/api/v1/articles/* | data.content | The HTML differs in form: Markdig and remark write entities and white space differently, raw HTML is dropped, and a footnote, a pipe table or a bare web address is rendered here and left as source text there (LIB-D18, 16 Nov 2026). The text a reader sees is compared separately as data.content(text), and its link targets as data.content(links); neither is allowed.
 /api/v1/youtube* | data.videos[*].title | XML entities of the feed are decoded on the new side; the website sends them still escaped.
 /api/v1/youtube* | data.videos[*].description | XML entities of the feed are decoded on the new side; the website sends them still escaped.
 /api/v1/youtube* | data.videos[*].intro | The first 200 characters of the description, so the same decoding shows here.

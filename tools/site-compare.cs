@@ -16,7 +16,8 @@
 //
 // Bounds: at most 60 requests in all (--max lowers it), one a second at most, 20 seconds each, a plain User-Agent.
 // tools/site-compare.allow lists the known differences, one a line: page | kind | reason; * in the page stands for any
-// text. Kinds: status, title, heading, intro, list-missing, list-extra, list-title, list-order, main-text.
+// text. Kinds: status, title, heading, intro, list-missing, list-extra, list-title, list-order, main-text, and
+// reference-comma (the main text differs only by a comma after a page or volume reference).
 // A difference no line allows is printed and fails the run. Allowed ones are counted and named in the summary.
 // Exit code: 0 no unallowed difference, 1 at least one, 2 a wrong call or a side that did not answer.
 // Nothing is written anywhere.
@@ -177,7 +178,13 @@ internal static partial class Compare
         Add(differences, page, "title", Title(present), Title(generated));
         var presentText = MainText(present);
         var generatedText = MainText(generated);
-        if (presentText != generatedText)
+        if (presentText != generatedText && ReferenceComma().Replace(presentText, "$1") == ReferenceComma().Replace(generatedText, "$1"))
+        {
+            // The only difference is a comma after a page or volume reference: its own kind, so the allow list can accept it
+            // without accepting any other difference in the main text.
+            differences.Add(new Difference(page, "reference-comma", "a comma after a reference that the other side lacks", "the same text without it"));
+        }
+        else if (presentText != generatedText)
         {
             var at = Enumerable.Range(0, Math.Min(presentText.Length, generatedText.Length)).FirstOrDefault(i => presentText[i] != generatedText[i], Math.Min(presentText.Length, generatedText.Length));
             differences.Add(new Difference(page, "main-text", $"[{presentText.Length} characters] at {at}: {Around(presentText, at)}", $"[{generatedText.Length} characters] at {at}: {Around(generatedText, at)}"));
@@ -285,6 +292,10 @@ internal static partial class Compare
     /// <summary>The text a reader sees, on one line: tags removed, entities decoded, runs of white space made one space.</summary>
     private static string Text(string html) =>
         WhiteSpace().Replace(WebUtility.HtmlDecode(Tag().Replace(NotText().Replace(html, string.Empty), string.Empty)), " ").Trim();
+
+    /// <summary>A page or volume reference followed by a comma, in text with its white space removed ("p.201,").</summary>
+    [GeneratedRegex(@"((?:vol|p)\.\d+),")]
+    private static partial Regex ReferenceComma();
 
     private static string MainText(string html) =>
         WhiteSpace().Replace(Text(MainTag().Match(html).Groups["text"].Value), string.Empty);

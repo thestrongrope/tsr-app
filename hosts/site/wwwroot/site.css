@@ -39,6 +39,7 @@
     --color-black: #000;
     --color-white: #fff;
     --spacing: 0.25rem;
+    --container-xs: 20rem;
     --container-sm: 24rem;
     --container-2xl: 42rem;
     --container-4xl: 56rem;
@@ -226,6 +227,23 @@
   }
 }
 @layer utilities {
+  .invisible {
+    visibility: hidden;
+  }
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border-width: 0;
+  }
+  .absolute {
+    position: absolute;
+  }
   .fixed {
     position: fixed;
   }
@@ -244,8 +262,17 @@
   .top-0 {
     top: 0px;
   }
+  .top-full {
+    top: 100%;
+  }
+  .bottom-full {
+    bottom: 100%;
+  }
   .left-0 {
     left: 0px;
+  }
+  .left-1\/2 {
+    left: calc(1 / 2 * 100%);
   }
   .z-10 {
     z-index: 10;
@@ -261,6 +288,24 @@
   }
   .clear-both {
     clear: both;
+  }
+  .container {
+    width: 100%;
+    @media (width >= 40rem) {
+      max-width: 40rem;
+    }
+    @media (width >= 48rem) {
+      max-width: 48rem;
+    }
+    @media (width >= 64rem) {
+      max-width: 64rem;
+    }
+    @media (width >= 80rem) {
+      max-width: 80rem;
+    }
+    @media (width >= 96rem) {
+      max-width: 96rem;
+    }
   }
   .mx-auto {
     margin-inline: auto;
@@ -352,6 +397,9 @@
   .inline-block {
     display: inline-block;
   }
+  .table {
+    display: table;
+  }
   .h-4 {
     height: calc(var(--spacing) * 4);
   }
@@ -409,11 +457,21 @@
   .max-w-sm {
     max-width: var(--container-sm);
   }
+  .max-w-xs {
+    max-width: var(--container-xs);
+  }
+  .min-w-full {
+    min-width: 100%;
+  }
   .flex-1 {
     flex: 1;
   }
   .shrink-0 {
     flex-shrink: 0;
+  }
+  .-translate-x-1\/2 {
+    --tw-translate-x: calc(calc(1 / 2 * 100%) * -1);
+    translate: var(--tw-translate-x) var(--tw-translate-y);
   }
   .-translate-x-full {
     --tw-translate-x: -100%;
@@ -498,6 +556,16 @@
     margin-block-start: calc(calc(var(--spacing) * 4) * var(--tw-space-y-reverse));
     margin-block-end: calc(calc(var(--spacing) * 4) * calc(1 - var(--tw-space-y-reverse)));
   }
+  :where(.divide-y > :not(:last-child)) {
+    --tw-divide-y-reverse: 0;
+    border-bottom-style: var(--tw-border-style);
+    border-top-style: var(--tw-border-style);
+    border-top-width: calc(1px * var(--tw-divide-y-reverse));
+    border-bottom-width: calc(1px * calc(1 - var(--tw-divide-y-reverse)));
+  }
+  :where(.divide-gray-200 > :not(:last-child)) {
+    border-color: var(--color-gray-200);
+  }
   .overflow-hidden {
     overflow: hidden;
   }
@@ -533,6 +601,10 @@
     border-style: var(--tw-border-style);
     border-width: 1px;
   }
+  .border-4 {
+    border-style: var(--tw-border-style);
+    border-width: 4px;
+  }
   .border-t {
     border-top-style: var(--tw-border-style);
     border-top-width: 1px;
@@ -554,6 +626,12 @@
   .border-gray-300 {
     border-color: var(--color-gray-300);
   }
+  .border-transparent {
+    border-color: transparent;
+  }
+  .border-t-gray-900 {
+    border-top-color: var(--color-gray-900);
+  }
   .bg-black\/50 {
     background-color: color-mix(in srgb, #000 50%, transparent);
     @supports (color: color-mix(in lab, red, red)) {
@@ -571,6 +649,9 @@
   }
   .bg-gray-200 {
     background-color: var(--color-gray-200);
+  }
+  .bg-gray-900 {
+    background-color: var(--color-gray-900);
   }
   .bg-purple-100 {
     background-color: var(--color-purple-100);
@@ -674,6 +755,9 @@
   .text-center {
     text-align: center;
   }
+  .text-left {
+    text-align: left;
+  }
   .text-right {
     text-align: right;
   }
@@ -740,6 +824,9 @@
     --tw-tracking: var(--tracking-wider);
     letter-spacing: var(--tracking-wider);
   }
+  .whitespace-normal {
+    white-space: normal;
+  }
   .text-blue-600 {
     color: var(--color-blue-600);
   }
@@ -769,6 +856,9 @@
   }
   .text-transparent {
     color: transparent;
+  }
+  .text-white {
+    color: var(--color-white);
   }
   .uppercase {
     text-transform: uppercase;
@@ -817,6 +907,9 @@
     transition-timing-function: var(--ease-in-out);
   }
   @media (hover: hover) {
+    :is(:where(.group):hover .group-hover\:visible) {
+      visibility: visible;
+    }
     :is(:where(.group):hover .group-hover\:text-blue-600) {
       color: var(--color-blue-600);
     }
@@ -893,6 +986,9 @@
   .dark\:hidden:is(.dark *) {
     display: none;
   }
+  :where(.dark\:divide-gray-700:is(.dark *) > :not(:last-child)) {
+    border-color: var(--color-gray-700);
+  }
   .dark\:border-blue-400:is(.dark *) {
     border-color: var(--color-blue-400);
   }
@@ -901,6 +997,9 @@
   }
   .dark\:border-gray-800:is(.dark *) {
     border-color: var(--color-gray-800);
+  }
+  .dark\:border-t-gray-100:is(.dark *) {
+    border-top-color: var(--color-gray-100);
   }
   .dark\:bg-blue-900\/20:is(.dark *) {
     background-color: color-mix(in srgb, oklch(37.9% 0.146 265.522) 20%, transparent);
@@ -913,6 +1012,9 @@
     @supports (color: color-mix(in lab, red, red)) {
       background-color: color-mix(in oklab, var(--color-blue-900) 30%, transparent);
     }
+  }
+  .dark\:bg-gray-100:is(.dark *) {
+    background-color: var(--color-gray-100);
   }
   .dark\:bg-gray-800:is(.dark *) {
     background-color: var(--color-gray-800);
@@ -959,6 +1061,9 @@
   }
   .dark\:text-gray-400:is(.dark *) {
     color: var(--color-gray-400);
+  }
+  .dark\:text-gray-900:is(.dark *) {
+    color: var(--color-gray-900);
   }
   .dark\:text-purple-300:is(.dark *) {
     color: var(--color-purple-300);
@@ -1175,6 +1280,11 @@ p:has([lang="ar"]), p[lang="ar"], div:has([lang="ar"]), div[lang="ar"] {
   inherits: false;
   initial-value: 0;
 }
+@property --tw-divide-y-reverse {
+  syntax: "*";
+  inherits: false;
+  initial-value: 0;
+}
 @property --tw-border-style {
   syntax: "*";
   inherits: false;
@@ -1319,6 +1429,7 @@ p:has([lang="ar"]), p[lang="ar"], div:has([lang="ar"]), div[lang="ar"] {
       --tw-skew-x: initial;
       --tw-skew-y: initial;
       --tw-space-y-reverse: 0;
+      --tw-divide-y-reverse: 0;
       --tw-border-style: solid;
       --tw-gradient-position: initial;
       --tw-gradient-from: #0000;

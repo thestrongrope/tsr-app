@@ -23,6 +23,8 @@ Classes of `p`, `h1` to `h3`, `ul`, `ol`, `li`, `blockquote`, `pre`, `code` (inl
 own "Reading Time: N minutes" line.
 
 ### What cannot be reproduced from the API's HTML (decision needed)
+**Since changed:** the table, footnote and bare address rows below are reproduced now; see "Footnotes, tables and bare links" at the end.
+
 Counted over the present site's 501 published article files (counts only, no text read into this repo):
 
 | Feature of the present site's rendering | Published articles using it | On the generated page |
@@ -190,3 +192,37 @@ related excerpts are not entity-decoded; the three logo images carry no licence 
 - `hosts/site/Program.cs` still defaults to the dev stack when `TSR_BASE_URL` is unset.
 - The PR's task boxes are not ticked: I was told not to write to GitHub.
 - No capability document exists for the public site; none was written.
+
+## Footnotes, tables and bare links (16 Nov 2026, after the first comparison)
+
+Decided by the owner: the API renders footnotes, pipe tables and bare web addresses (LIB-D18 in
+`domains/content/capabilities/library-reads.md`), and the site shows them in the present website's markup
+(`domains/content/site/ArticleBody.cs`). The refresh hash covers the stored HTML, so the next refresh after a deploy
+renders every stored article again. Two comparison differences were allowed in `tools/site-compare.allow`
+(the comma after a page reference, the percent-encoded slug).
+
+| Check | Result |
+|---|---|
+| `dotnet build TsrApp.slnx` | 0 warnings, 0 errors |
+| `dotnet test hosts/site/tests` | 337 passed |
+| `dotnet test hosts/api/tests` | 117 passed |
+| `dotnet test db/tests` | 1362 passed |
+| Hurl (`v1-article.hurl` case 2, changed) | NOT run: it needs a stack with the synthetic content, and lane 5 holds the website's. The same HTML is asserted in process by `db/tests` (`ContentRefreshTests`, `ContentFilesTests`) |
+| Lane 5 rebuilt from this worktree | the refresh rendered the 501 stored articles again: 9 hold footnotes, 1 a table |
+| Site generated from lane 5 | 504 pages; no body stopped the build |
+| `tools/site-compare.cs` against https://thestrongrope.com, 59 pages | list 501 on each side; 46 equal, 13 allowed (11 reference-comma, 2 status), 0 not allowed. The footnote difference of the first run is gone |
+| The hover text and a table in a browser; the app on the new HTML | not looked at |
+
+Fixed after the independent quality and security reviews, each test first:
+- A note's text is written at each of its references, so a page could grow to hundreds of megabytes: what is written has the
+  same 2,000,000 character bound as what is read (`A_body_that_its_hover_texts_grow_past_the_bound_stops_the_build`).
+- A footnote number is ASCII digits only (`A_footnote_number_in_digits_of_another_script_stops_the_build`).
+- The notes are read once for a body, not once for each reference (24,000 references took 13.8 seconds). No test: timing only.
+
+Not fixed, for a later change:
+- A bare `ftp:` or `tel:` address becomes a link with an empty address, not plain text; a bare `mailto:` address is linked.
+- The hover text is empty for a note that starts with a list, code or raw HTML; a note that no text refers to leaves an
+  empty "Footnotes" section; a note that refers to another shows that note's number in its hover text.
+- Older than this change: a form feed or another control character in an article stops the whole site build, and so does
+  the reading-time pattern's 2 second limit (`hosts/site/Program.cs` does not catch it).
+- `site.css` holds `.container` and `.table`, which no markup uses.

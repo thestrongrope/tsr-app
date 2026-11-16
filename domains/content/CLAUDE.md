@@ -79,7 +79,7 @@ None is required: the API starts without them.
 | The `/api/v1/` answer shape, ETag, 304, number clamps | `api/domain/V1.cs` |
 | The fields of an article in a list | `api/domain/ArticleListItem.cs` |
 | Reading the content files, their bounds and failures | `api/domain/ContentFiles.cs`, `FrontMatter.cs` |
-| Markdown to safe HTML, reading time | `api/domain/ArticleHtml.cs` |
+| Markdown to safe HTML (CommonMark with footnotes, pipe tables and bare web addresses as links, LIB-D18), reading time | `api/domain/ArticleHtml.cs` |
 | One refresh, the half rule, the hash | `api/domain/ContentRefresh.cs` |
 | The feed reader and the 30 minute copy | `api/domain/LatestVideos.cs` |
 | Database-backed tests | `db/tests/V1*Tests.cs`, `ContentRefreshTests.cs`, `ContentFilesTests.cs`, `LatestVideosTests.cs`, `YouTubeFeedTests.cs`, `LibraryReadsSchemaTests.cs` |
