@@ -207,7 +207,7 @@ renders every stored article again. Two comparison differences were allowed in `
 | `dotnet test hosts/site/tests` | 337 passed |
 | `dotnet test hosts/api/tests` | 117 passed |
 | `dotnet test db/tests` | 1362 passed |
-| Hurl (`v1-article.hurl` case 2, changed) | NOT run: it needs a stack with the synthetic content, and lane 5 holds the website's. The same HTML is asserted in process by `db/tests` (`ContentRefreshTests`, `ContentFilesTests`) |
+| Hurl, `TSR_STACK=6 tools/contract-website.sh test` on a new lane with the synthetic content (`v1-article.hurl` case 2 changed) | 6 files, 97 requests, 0 failed |
 | Lane 5 rebuilt from this worktree | the refresh rendered the 501 stored articles again: 9 hold footnotes, 1 a table |
 | Site generated from lane 5 | 504 pages; no body stopped the build |
 | `tools/site-compare.cs` against https://thestrongrope.com, 59 pages | list 501 on each side; 46 equal, 13 allowed (11 reference-comma, 2 status), 0 not allowed. The footnote difference of the first run is gone |
