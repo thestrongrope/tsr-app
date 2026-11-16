@@ -1,0 +1,6 @@
+# The known differences between the present website and the generated static site, read by tools/site-compare.cs.
+# One a line: page | kind | reason. A * in the page stands for any text. Kinds: status, title, heading, intro,
+# list-missing, list-extra, list-title, list-order, main-text.
+# Only a difference that was seen in a run, understood and accepted belongs here; anything else is a finding to decide on.
+# Empty: the first run on matching content (16 Nov 2026, 59 pages: 45 equal, 14 different) found three kinds of difference
+# that wait for the owner's decision (issue 38), so none is allowed yet.

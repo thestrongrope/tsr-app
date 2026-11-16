@@ -1,37 +1,164 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 using Tsr.Shared.Site;
 
 namespace Tsr.Content.Site;
 
-/// <summary>content's pages on the static site: the article list and one page per article.</summary>
+/// <summary>
+/// content's pages on the static site: the article list and one page per article, read from the public Library routes
+/// under /api/v1/ (capabilities/library-reads.md). Those routes hold published articles only, so no draft can reach a page.
+/// </summary>
 public static partial class ContentSite
 {
-    /// <summary>A slug becomes a folder on disk, so only safe characters pass (no '/', no '..').</summary>
-    [GeneratedRegex("^[a-z0-9]+(-[a-z0-9]+)*$")]
-    private static partial Regex SafeSlug();
+    private const string SiteName = "The Strong Rope";
+
+    /// <summary>The most the list route gives in one answer.</summary>
+    private const int PageSize = 100;
+
+    /// <summary>Bound on the list (MUST 2): 200 answers of 100 are the 20,000 files one refresh of the API reads at most.</summary>
+    private const int MaxListPages = 200;
+
+    /// <summary>The present website shows four related articles; the API sends five.</summary>
+    private const int RelatedShown = 4;
+
+    /// <summary>A slug as a content file writes it: lower-case letters, digits and percent-encoded bytes, in parts joined by '-'.</summary>
+    [GeneratedRegex("^(?:[a-z0-9]|%[0-9a-f]{2})+(?:-(?:[a-z0-9]|%[0-9a-f]{2})+)*$")]
+    private static partial Regex WrittenSlug();
+
+    /// <summary>
+    /// A slug becomes a folder on disk, so only letters, marks, digits and punctuation outside ASCII (a title's Arabic comma) pass,
+    /// in parts joined by '-'. No ASCII punctuation at all: no '/', no '\', no '.', no '%', no space.
+    /// </summary>
+    [GeneratedRegex(@"^(?:[\p{L}\p{M}\p{N}]|[\p{P}-[\x00-\x7F]])+(?:-(?:[\p{L}\p{M}\p{N}]|[\p{P}-[\x00-\x7F]])+)*$")]
+    private static partial Regex SafeFolder();
 
     public static async Task<IReadOnlyList<SitePage>> PagesAsync(SiteApi api, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(api);
-        var list = await api.GetAsync<ArticleList>("/articles", ct);
+        var summaries = await ReadListAsync(api, ct);
+        var categories = (await ReadCategoriesAsync(api, ct)).ToDictionary(c => c.Slug!, StringComparer.Ordinal);
 
         var pages = new List<SitePage>
         {
-            new("/articles/", "Articles", typeof(ArticleIndexPage),
-                new Dictionary<string, object?> { ["Articles"] = list.Articles }, NavTitle: "Articles"),
+            new("/articles/", SiteName, typeof(ArticleIndexPage),
+                new Dictionary<string, object?> { ["Articles"] = summaries, ["Categories"] = categories }, NavTitle: "Articles"),
         };
 
-        foreach (var article in list.Articles)
+        foreach (var summary in summaries)
         {
-            if (!SafeSlug().IsMatch(article.Slug))
-            {
-                throw new SiteBuildException($"Article slug '{article.Slug}' is not a safe path; the site is not built.");
-            }
-
-            pages.Add(new SitePage($"/articles/{article.Slug}/", article.Title, typeof(ArticlePage),
-                new Dictionary<string, object?> { ["Article"] = article }));
+            var article = await ReadArticleAsync(api, summary.Slug!, ct);
+            var title = TitleText.Decode(article.Title);
+            pages.Add(new SitePage($"/articles/{Folder(article.Slug!)}/",$"{title} | {SiteName}", typeof(ArticlePage),
+                new Dictionary<string, object?>
+                {
+                    ["Article"] = article,
+                    ["Categories"] = categories,
+                    ["Related"] = article.RelatedArticles!.Take(RelatedShown).ToList(),
+                },
+                Description: article.Excerpt ?? $"Read \"{title}\" on {SiteName}"));
         }
 
         return pages;
+    }
+
+    /// <summary>
+    /// The frame's menu, as tsr-web's Navigation.tsx and HamburgerMenu.tsx build it: every category without a parent, in the
+    /// API's order, each with those of its children that hold at least one published article.
+    /// </summary>
+    public static async Task<IReadOnlyList<MenuCategory>> MenuAsync(SiteApi api, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(api);
+        var categories = await ReadCategoriesAsync(api, ct);
+        return categories
+            .Where(category => string.IsNullOrEmpty(category.Parent))
+            .Select(parent => new MenuCategory(parent.Slug!, TitleText.Decode(parent.Title), categories
+                .Where(child => child.Parent == parent.Slug && child.ArticleCount > 0)
+                .Select(child => new MenuCategory(child.Slug!, TitleText.Decode(child.Title), []))
+                .ToList()))
+            .ToList();
+    }
+
+    /// <summary>"N minutes", as tsr-web's article page writes the reading time.</summary>
+    public static string ReadingTime(int minutes) =>
+        minutes == 1 ? "1 minute" : minutes.ToString(CultureInfo.InvariantCulture) + " minutes";
+
+    private static async Task<IReadOnlyList<ArticleSummary>> ReadListAsync(SiteApi api, CancellationToken ct)
+    {
+        var summaries = new List<ArticleSummary>();
+        for (var page = 0; page < MaxListPages; page++)
+        {
+            var path = string.Create(CultureInfo.InvariantCulture, $"/api/v1/articles?limit={PageSize}&offset={page * PageSize}");
+            var answer = await api.GetAsync<V1Answer<List<ArticleSummary>>>(path, ct);
+            var data = Data(answer, path);
+            foreach (var summary in data)
+            {
+                Require(summary.Slug is not null && summary.Title is not null, path, "an article without a slug or a title");
+                Folder(summary.Slug!);
+                summaries.Add(summary);
+            }
+
+            Require(answer.Pagination is not null, path, "no pagination");
+            if (!answer.Pagination!.HasMore)
+            {
+                return summaries;
+            }
+        }
+
+        throw new SiteBuildException($"The article list did not end after {MaxListPages} answers; the site is not built.");
+    }
+
+    private static async Task<IReadOnlyList<Category>> ReadCategoriesAsync(SiteApi api, CancellationToken ct)
+    {
+        const string path = "/api/v1/taxonomies/categories?hierarchical=false";
+        var categories = Data(await api.GetAsync<V1Answer<List<Category>>>(path, ct), path);
+        Require(categories.All(c => c.Slug is not null && c.Title is not null), path, "a category without a slug or a title");
+        return categories;
+    }
+
+    private static async Task<Article> ReadArticleAsync(SiteApi api, string slug, CancellationToken ct)
+    {
+        var path = "/api/v1/articles/" + slug;
+        var article = Data(await api.GetAsync<V1Answer<Article>>(path, ct), path);
+        Require(article.Slug == slug, path, "another article's slug");
+        Require(article.Title is not null && article.Content is not null, path, "no title or no content");
+        Require(article.Categories is not null && article.Tags is not null && article.RelatedArticles is not null, path, "no categories, tags or related articles");
+        foreach (var related in article.RelatedArticles!)
+        {
+            Require(related.Slug is not null && related.Title is not null, path, "a related article without a slug or a title");
+            Folder(related.Slug!);
+        }
+
+        return article;
+    }
+
+    private static T Data<T>(V1Answer<T> answer, string path)
+        where T : class
+    {
+        Require(answer.Success && answer.Data is not null, path, "no data");
+        return answer.Data!;
+    }
+
+    private static void Require(bool condition, string path, string problem)
+    {
+        if (!condition)
+        {
+            throw new SiteBuildException($"GET {path} returned {problem}; the site is not built.");
+        }
+    }
+
+    /// <summary>
+    /// The folder an article is written to: its slug with every percent-encoded byte decoded, because the server decodes the
+    /// address a browser sends before it looks for the folder. Links keep the slug as written. A slug that is not written
+    /// as a slug, or whose decoded text is not a safe folder name, stops the build.
+    /// </summary>
+    private static string Folder(string slug)
+    {
+        var folder = WrittenSlug().IsMatch(slug) ? Uri.UnescapeDataString(slug) : string.Empty;
+        if (!SafeFolder().IsMatch(folder))
+        {
+            throw new SiteBuildException($"Article slug '{slug}' is not a safe path; the site is not built.");
+        }
+
+        return folder;
     }
 }

@@ -163,8 +163,12 @@ services:
 
   # Serves the generated pages, read-only, with the image's own settings: it forwards nothing. The deployment tool attaches the site's
   # host name to it, port 80. Until the first build has written a home page it answers 403 and is reported unhealthy.
+  # Its image is the stock server with one setting baked in (hosts/site/Dockerfile.server): an unknown address answers 404
+  # with the site's own not-found page. Nothing is mounted but the pages.
   site:
-    image: nginx:1.27-alpine
+    build:
+      context: hosts/site
+      dockerfile: Dockerfile.server
     restart: unless-stopped
     volumes:
       # nocopy: the volume must not start with the image's own welcome page.

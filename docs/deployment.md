@@ -15,7 +15,7 @@ and runs the file. It holds no secret and publishes no port; `hosts/api/tests/Pr
 | `gotenberg` | PDF rendering for report downloads | always |
 | `elasticsearch` | the search index; data in the volume `es-data` | always |
 | `site-build` | the static site generator (`hosts/site`): reads the API, writes the pages into the volume `site-data` | once per start; retried up to five times while the API is not ready |
-| `site` | nginx serving `site-data`, read-only; port 80. It forwards nothing | always |
+| `site` | nginx serving `site-data`, read-only; port 80. It forwards nothing. Its image is the stock one with one setting baked in (`hosts/site/Dockerfile.server`): an address the site does not publish answers 404 with the site's own `404.html` | always |
 
 Two services are reached from outside. Attach the API's host name to `api`, port 8080, and the site's host name to `site`, port 80. The server's proxy (Traefik) is the
 only proxy: the nginx gateway in `hosts/gateway/` belongs to the dev and test stacks.

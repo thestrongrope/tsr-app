@@ -1,14 +1,135 @@
-@* One article. The body is plain text (spec/glossary.md); Razor escapes it, so it can never inject HTML. *@
-<article>
-    <h1>@Article.Title</h1>
-    <p><time datetime="@Article.PublishedAt.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)">@Article.PublishedAt.ToString("d MMMM yyyy", CultureInfo.InvariantCulture)</time></p>
-    @foreach (var paragraph in Article.Paragraphs())
+@* One article: the markup and classes of tsr-web's app/articles/[slug]/page.tsx, word for word.
+   The body is the only unescaped text, and it comes through ArticleBody.Render. *@
+<main class="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 dark:from-gray-950 dark:to-gray-900">
+    <div class="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 py-8">
+        <div class="max-w-4xl mx-auto px-8">
+            <div class="flex items-center gap-2 mb-4 text-sm text-gray-600 dark:text-gray-400 flex-wrap">
+                <a href="/articles/" class="hover:text-blue-600 dark:hover:text-blue-400 transition-colors">All Articles</a>
+                @if (_parent is not null)
+                {
+                    <span>›</span>
+                    <a href="@CategoryAddress(_parent)" class="hover:text-blue-600 dark:hover:text-blue-400 transition-colors">@TitleText.Decode(_parent.Title)</a>
+                }
+                @if (_primary is not null)
+                {
+                    <span>›</span>
+                    <a href="@CategoryAddress(_primary)" class="hover:text-blue-600 dark:hover:text-blue-400 transition-colors">@TitleText.Decode(_primary.Title)</a>
+                }
+                <span>›</span>
+                <span class="text-gray-900 dark:text-gray-100 font-medium line-clamp-1 @RightAligned(_title)" style="@Direction(_title)">@_title</span>
+            </div>
+
+            <h1 class="text-4xl md:text-5xl font-bold text-gray-900 dark:text-gray-100 mb-4 @RightAligned(_title)" style="@Direction(_title)">@_title</h1>
+
+            <div class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 mb-3">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span>Reading Time: @ContentSite.ReadingTime(Article.ReadingTime)</span>
+            </div>
+
+            @if (_categories.Count > 0)
+            {
+                <div class="flex items-center gap-2 flex-wrap relative z-10">
+                    @if (_parent is not null)
+                    {
+                        <a href="@CategoryAddress(_parent)" class="px-3 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full text-sm font-medium hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors cursor-pointer">@TitleText.Decode(_parent.Title)</a>
+                    }
+                    @foreach (var category in _categories)
+                    {
+                        <a href="@CategoryAddress(category)" class="px-3 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded-full text-sm font-medium hover:bg-purple-200 dark:hover:bg-purple-900/50 transition-colors cursor-pointer">@TitleText.Decode(category.Title)</a>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+
+    <article class="max-w-4xl mx-auto px-8 py-6">
+        <div class="space-y-4">
+            @((MarkupString)ArticleBody.Render(Article.Content!))
+        </div>
+
+        @if (Article.Tags!.Count > 0)
+        {
+            <div class="mt-12 pt-8 border-t border-gray-200 dark:border-gray-800">
+                <h3 class="text-lg font-semibold mb-4 text-gray-900 dark:text-gray-100">Tags</h3>
+                <div class="flex flex-wrap gap-2">
+                    @foreach (var tag in Article.Tags)
+                    {
+                        <a href="/articles/?tag=@Uri.EscapeDataString(tag)" class="bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 px-3 py-1 rounded-full text-sm hover:bg-blue-100 dark:hover:bg-blue-900/30 hover:text-blue-700 dark:hover:text-blue-300 transition-colors cursor-pointer">@tag</a>
+                    }
+                </div>
+            </div>
+        }
+    </article>
+
+    @if (Related.Count > 0)
     {
-        <p>@paragraph</p>
+        <section class="max-w-4xl mx-auto px-8 pb-12">
+            <div class="border-t border-gray-200 dark:border-gray-800 pt-10">
+                <h2 class="text-2xl font-bold mb-6 text-gray-900 dark:text-gray-100">Related Articles</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    @foreach (var post in Related)
+                    {
+                        var relatedTitle = TitleText.Decode(post.Title);
+                        var relatedCategory = Find(post.Categories?.FirstOrDefault());
+                        var relatedParent = Find(relatedCategory?.Parent);
+                        <a href="/articles/@post.Slug/" class="group block p-5 bg-white dark:bg-gray-900 rounded-xl shadow-md border border-gray-200 dark:border-gray-800 hover:shadow-xl hover:scale-[1.02] transition-all duration-300">
+                            @if (relatedCategory is not null)
+                            {
+                                <div class="@RightAligned(relatedTitle) mb-3 text-xs text-gray-500 dark:text-gray-400 flex items-center gap-2 flex-wrap justify-start" style="@Direction(relatedTitle)">
+                                    @if (relatedParent is not null)
+                                    {
+                                        <span class="px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-md font-medium">@TitleText.Decode(relatedParent.Title)</span>
+                                    }
+                                    <span class="px-2 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded-md font-medium">@TitleText.Decode(relatedCategory.Title)</span>
+                                </div>
+                            }
+
+                            <h3 class="text-base font-bold mb-2 line-clamp-2 text-gray-900 dark:text-gray-100 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors @RightAligned(relatedTitle)" style="@Direction(relatedTitle)">@relatedTitle</h3>
+
+                            @if (post.Excerpt is not null)
+                            {
+                                <p class="text-sm text-gray-600 dark:text-gray-400 line-clamp-3 @RightAligned(relatedTitle)" style="@Direction(relatedTitle)">@post.Excerpt</p>
+                            }
+                        </a>
+                    }
+                </div>
+            </div>
+        </section>
     }
-</article>
+</main>
 
 @code {
+    private string _title = string.Empty;
+    private IReadOnlyList<Category> _categories = [];
+    private Category? _primary;
+    private Category? _parent;
+
     [Parameter, EditorRequired]
     public Article Article { get; set; } = default!;
+
+    /// <summary>Every category by its slug, to show a title for a slug and to find a parent.</summary>
+    [Parameter, EditorRequired]
+    public IReadOnlyDictionary<string, Category> Categories { get; set; } = default!;
+
+    [Parameter, EditorRequired]
+    public IReadOnlyList<ArticleSummary> Related { get; set; } = default!;
+
+    protected override void OnParametersSet()
+    {
+        _title = TitleText.Decode(Article.Title);
+        _categories = Article.Categories!.Select(Find).OfType<Category>().ToList();
+        _primary = _categories.FirstOrDefault();
+        _parent = Find(_primary?.Parent);
+    }
+
+    private Category? Find(string? slug) =>
+        slug is not null && Categories.TryGetValue(slug, out var category) ? category : null;
+
+    private static string CategoryAddress(Category category) => "/articles/?category=" + Uri.EscapeDataString(category.Slug!);
+
+    private static string? RightAligned(string title) => TitleText.IsRightToLeft(title) ? "text-right" : null;
+
+    private static string? Direction(string title) => TitleText.IsRightToLeft(title) ? "direction: rtl" : null;
 }

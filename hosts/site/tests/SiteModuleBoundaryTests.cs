@@ -40,7 +40,7 @@ public sealed class SiteModuleBoundaryTests
         Assert.That(pages.Any(p => p.Path != "/"), Is.True);
         foreach (var page in pages)
         {
-            var html = await SiteBuilder.RenderAsync(page, pages.Where(p => p.NavTitle is not null).ToList());
+            var html = await SiteBuilder.RenderAsync(page, []);
             Assert.That(html, Does.StartWith("<!doctype html>"));
         }
     }
