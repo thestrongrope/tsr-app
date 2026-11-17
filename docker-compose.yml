@@ -118,6 +118,8 @@ services:
       TSR_QUIZ_SETTINGS_SHEET_ID: ${TSR_QUIZ_SETTINGS_SHEET_ID:-}
       TSR_YOUTUBE_CHANNEL_ID: ${TSR_YOUTUBE_CHANNEL_ID:-}
       TSR_NOTIFIER_URL: ${TSR_NOTIFIER_URL:-}
+      # The browser origins that may call the API (a web build of the app), comma-separated. Empty allows none.
+      TSR_CORS_ORIGINS: ${TSR_CORS_ORIGINS:-}
     depends_on:
       migrate:
         condition: service_completed_successfully

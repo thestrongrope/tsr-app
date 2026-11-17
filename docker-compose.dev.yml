@@ -118,6 +118,8 @@ services:
       # The content files the Library reads are copied from (content's content-refresh worker reads this directory; empty, the default, reads nothing),
       # and the channel whose public feed GET /api/v1/youtube reads (empty: no outside call, an empty list).
       TSR_CONTENT_DIR: ${TSR_CONTENT_DIR:-}
+      # The browser origins that may call the API (a web build of the app), comma-separated. Empty, the default, allows none.
+      TSR_CORS_ORIGINS: ${TSR_CORS_ORIGINS:-}
     volumes:
       - ./domains/platform/spec/tests/app_versions.synthetic.json:/etc/tsr/app_versions.json:ro
       # Read-only. The synthetic set unless TSR_CONTENT_SRC names another directory (the website's own content files, for a parity run).
