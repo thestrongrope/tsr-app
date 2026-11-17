@@ -42,5 +42,7 @@ Folders appear with their first real file; the full planned layout is in
 
 ## Licence
 
+Copyright (C) 2026 The Strong Rope.
+
 The code in this repository is licensed under the GNU Affero General Public License, version 3: see [LICENSE](LICENSE).
 If you run a modified copy as a network service, you must offer its source to the people who use it.
