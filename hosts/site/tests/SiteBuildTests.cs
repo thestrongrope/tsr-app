@@ -113,7 +113,7 @@ public sealed partial class SiteBuildTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(pages.Select(p => p.Path), Is.EqualTo(new[] { "/articles/", ArticleAddress, "/articles/another-synthetic-article/", "/tsr-publications/", "/about/", "/donate/" }));
+            Assert.That(pages.Select(p => p.Path), Is.EqualTo(new[] { "/", "/articles/", ArticleAddress, "/articles/another-synthetic-article/", "/tsr-publications/", "/about/", "/donate/" }));
             Assert.That(fake.Asked.Count(a => a.StartsWith(FakeApi.ListPath + "?", StringComparison.Ordinal)), Is.EqualTo(2));
         });
     }
@@ -233,7 +233,7 @@ public sealed partial class SiteBuildTests
     public async Task A_page_path_outside_the_output_folder_is_refused()
     {
         var root = Path.Combine(Path.GetTempPath(), "tsr-site-test-" + Guid.NewGuid().ToString("N"));
-        var page = new SitePage("/../outside/", "x", typeof(HomePage), new Dictionary<string, object?>());
+        var page = new SitePage("/../outside/", "x", typeof(NotFoundPage), new Dictionary<string, object?>());
 
         await Assert.ThrowsAsync<SiteBuildException>(() => SiteBuilder.WriteAsync(root, page, "<p>x</p>", CancellationToken.None));
         Assert.That(Directory.Exists(Path.Combine(root, "..", "outside")), Is.False);

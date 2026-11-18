@@ -7,7 +7,7 @@ using Tsr.Shared.Site;
 namespace Tsr.Content.Site;
 
 /// <summary>One entry of the filter panel: a category that holds published articles, with its children that do.</summary>
-public sealed record FilterCategory(string Slug, string Title, int Count, IReadOnlyList<FilterCategory> Children);
+public sealed record FilterCategory(string Slug, string Title, int Count, IReadOnlyList<FilterCategory> Children, string? Description = null);
 
 /// <summary>
 /// The rules of the article list's filters, as tsr-web's ArticlesList.tsx and CategoryFilter.tsx have them. They are applied
@@ -57,7 +57,15 @@ public static partial class ArticleFilters
     /// an article; counted here over the articles, by the slug itself (a parent does not count its children's articles). An
     /// entry without an article of its own is left out, and so is the whole of a parent without one.
     /// </summary>
-    public static IReadOnlyList<FilterCategory> Panel(IReadOnlyList<Category> categories, IReadOnlyList<ArticleSummary> articles)
+    public static IReadOnlyList<FilterCategory> Panel(IReadOnlyList<Category> categories, IReadOnlyList<ArticleSummary> articles) =>
+        Cards(categories, articles).Where(parent => parent.Count > 0).ToList();
+
+    /// <summary>
+    /// The home page's category cards (app/page.tsx): the same tree and counts as <see cref="Panel"/>, but every parent is kept,
+    /// also one without an article of its own (it shows 0, and its children that hold an article). Children without an
+    /// article are left out. Each entry carries its description.
+    /// </summary>
+    public static IReadOnlyList<FilterCategory> Cards(IReadOnlyList<Category> categories, IReadOnlyList<ArticleSummary> articles)
     {
         ArgumentNullException.ThrowIfNull(categories);
         ArgumentNullException.ThrowIfNull(articles);
@@ -68,13 +76,16 @@ public static partial class ArticleFilters
         }
 
         return categories
-            .Where(category => string.IsNullOrEmpty(category.Parent) && counts.GetValueOrDefault(category.Slug!) > 0)
-            .Select(parent => new FilterCategory(parent.Slug!, TitleText.Decode(parent.Title), counts[parent.Slug!], categories
+            .Where(category => string.IsNullOrEmpty(category.Parent))
+            .Select(parent => new FilterCategory(parent.Slug!, TitleText.Decode(parent.Title), counts.GetValueOrDefault(parent.Slug!), categories
                 .Where(child => child.Parent == parent.Slug && counts.GetValueOrDefault(child.Slug!) > 0)
-                .Select(child => new FilterCategory(child.Slug!, TitleText.Decode(child.Title), counts[child.Slug!], []))
-                .ToList()))
+                .Select(child => new FilterCategory(child.Slug!, TitleText.Decode(child.Title), counts[child.Slug!], [], Described(child)))
+                .ToList(), Described(parent)))
             .ToList();
     }
+
+    private static string? Described(Category category) =>
+        string.IsNullOrEmpty(category.Description) ? null : TitleText.Decode(category.Description);
 
     private sealed record CategoryInfo(string Title, string? Parent, string? Description, string? Chip);
 
@@ -95,8 +106,7 @@ public static partial class ArticleFilters
         foreach (var category in categories)
         {
             var parentTitle = category.Parent is not null && titles.TryGetValue(category.Parent, out var title) ? title : null;
-            var description = string.IsNullOrEmpty(category.Description) ? null : TitleText.Decode(category.Description);
-            data.Categories[category.Slug!] = new CategoryInfo(titles[category.Slug!], parentTitle, description, inPanel.Contains(category.Slug!) ? titles[category.Slug!] : null);
+            data.Categories[category.Slug!] = new CategoryInfo(titles[category.Slug!], parentTitle, Described(category), inPanel.Contains(category.Slug!) ? titles[category.Slug!] : null);
         }
 
         foreach (var tag in articles.SelectMany(article => article.Tags ?? []))

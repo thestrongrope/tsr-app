@@ -22,10 +22,6 @@ public static class SiteBuilder
             pages.AddRange(await module.Pages(api, ct));
         }
 
-        var nav = pages.Where(p => p.NavTitle is not null).ToList();
-        pages.Insert(0, new SitePage("/", "The Strong Rope", typeof(HomePage),
-            new Dictionary<string, object?> { ["Nav"] = nav }));
-
         var duplicate = pages.GroupBy(p => p.Path, StringComparer.Ordinal).FirstOrDefault(g => g.Count() > 1);
         if (duplicate is not null)
         {

@@ -126,7 +126,7 @@ public sealed partial class AboutDonateTests
     [Test]
     public async Task TC_SITE_R22_02_A_missing_qr_image_stops_the_build_and_names_the_file()
     {
-        var pages = await PagesAsync();
+        var pages = (await PagesAsync()).Where(p => p.Path == "/donate/");
         var empty = Directory.CreateTempSubdirectory("tsr-site-test-").FullName;
 
         var failure = Assert.Throws<SiteBuildException>(() => SiteBuilder.RequireFiles(pages, empty));

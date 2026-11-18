@@ -73,6 +73,14 @@ internal sealed class FakeApi(IReadOnlyDictionary<string, (HttpStatusCode Status
         "meta":{"version":"1.0"},"pagination":{"total":7,"limit":7,"offset":0,"hasMore":false}}
         """;
 
+    public const string VideosPath = "/api/v1/youtube";
+
+    /// <summary>What every test stack sends: no video (TSR_YOUTUBE_CHANNEL_ID is empty there).</summary>
+    public const string NoVideosJson = """
+        {"success":true,"data":{"videos":[],"meta":{"total":0,"channelId":"","channelName":"","channelUrl":"","lastUpdated":"2026-11-18T00:00:00.000Z","cacheHit":false}},
+        "meta":{"version":"1.0"},"pagination":{"total":0,"limit":6,"offset":0,"hasMore":false}}
+        """;
+
     public static readonly (string Path, HttpStatusCode Status, string Json)[] HealthyAnswers =
     [
         ("/health", HttpStatusCode.OK, HealthJson),
@@ -81,6 +89,7 @@ internal sealed class FakeApi(IReadOnlyDictionary<string, (HttpStatusCode Status
         (ArticlePath, HttpStatusCode.OK, ArticleJson),
         (OtherArticlePath, HttpStatusCode.OK, OtherArticleJson),
         (PublicationsPath, HttpStatusCode.OK, PublicationsJson),
+        (VideosPath, HttpStatusCode.OK, NoVideosJson),
     ];
 
     /// <summary>The addresses asked, in order, with their query.</summary>

@@ -16,6 +16,10 @@ public static partial class ContentSite
     /// <summary>The Donate page's QR image, as its site address. It is a file of the site host (hosts/site/wwwroot).</summary>
     public const string DonateQrImage = "/images/donate-qr.jpeg";
 
+    /// <summary>The home page's three endorsement photos, as site addresses. They are files of the site host (hosts/site/wwwroot).</summary>
+    public static readonly IReadOnlyList<string> HomePhotos =
+        ["/uploads/naba-accreditation.png", "/uploads/maulana-zeeshan-haider-zaidi.jpg", "/uploads/kazim-sahab.png"];
+
     /// <summary>The most the list route gives in one answer.</summary>
     private const int PageSize = 100;
 
@@ -43,8 +47,11 @@ public static partial class ContentSite
         var categoryList = await ReadCategoriesAsync(api, ct);
         var categories = categoryList.ToDictionary(c => c.Slug!, StringComparer.Ordinal);
 
+        var videos = Home.Videos(await ReadVideosAsync(api, ct), Home.VideosPath);
+
         var pages = new List<SitePage>
         {
+            HomePage(summaries, categoryList, videos),
             new("/articles/", SiteName, typeof(ArticleIndexPage),
                 new Dictionary<string, object?>
                 {
@@ -52,8 +59,7 @@ public static partial class ContentSite
                     ["Categories"] = categories,
                     ["Panel"] = ArticleFilters.Panel(categoryList, summaries),
                     ["FilterData"] = ArticleFilters.DataJson(categoryList, summaries),
-                },
-                NavTitle: "Articles"),
+                }),
         };
 
         foreach (var summary in summaries)
@@ -74,6 +80,18 @@ public static partial class ContentSite
         pages.AddRange(FixedPages());
         return pages;
     }
+
+    /// <summary>The home page at the root, with the title and description of the present website's layout.tsx.</summary>
+    private static SitePage HomePage(IReadOnlyList<ArticleSummary> summaries, IReadOnlyList<Category> categories, IReadOnlyList<HomeVideo> videos) =>
+        new("/", SiteName, typeof(HomePage),
+            new Dictionary<string, object?>
+            {
+                ["Latest"] = Home.Latest(summaries, categories),
+                ["Cards"] = ArticleFilters.Cards(categories, summaries),
+                ["Videos"] = videos,
+            },
+            Description: "The Path of the Ahle Bait (a.s.)",
+            Files: HomePhotos);
 
     /// <summary>The publications page, with the title and description of the present website's pages/tsr-publications.md.</summary>
     private static SitePage PublicationsPage(IReadOnlyList<Publication> publications) =>
@@ -149,6 +167,10 @@ public static partial class ContentSite
         Require(categories.All(c => c.Slug is not null && c.Title is not null), path, "a category without a slug or a title");
         return categories;
     }
+
+    /// <summary>The latest videos (spec/api.yaml): the route never fails and sends an empty list when it has none.</summary>
+    private static async Task<VideosData> ReadVideosAsync(SiteApi api, CancellationToken ct) =>
+        Data(await api.GetAsync<V1Answer<VideosData>>(Home.VideosPath, ct), Home.VideosPath);
 
     private static async Task<Article> ReadArticleAsync(SiteApi api, string slug, CancellationToken ct)
     {
