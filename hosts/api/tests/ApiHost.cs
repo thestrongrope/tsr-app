@@ -18,7 +18,8 @@ internal sealed class ApiHost : IDisposable
     private readonly ConcurrentDictionary<string, string?> resolved = new();
     private readonly WebApplicationFactory<Program> factory;
 
-    public ApiHost()
+    /// <param name="settings">Settings on top of the ones every test needs, for a test of one optional setting.</param>
+    public ApiHost(IReadOnlyDictionary<string, string>? settings = null)
     {
         var record = resolved;
         factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
@@ -27,6 +28,11 @@ internal sealed class ApiHost : IDisposable
             builder.UseSetting("TSR_FIREBASE_PROJECT_ID", "demo-tsr-test");
             builder.UseSetting("TSR_AUTH_EMULATOR_HOST", "localhost:9099");
             builder.UseSetting("TSR_GOTENBERG_URL", "http://gotenberg.invalid:3000");
+            foreach (var (name, value) in settings ?? new Dictionary<string, string>())
+            {
+                builder.UseSetting(name, value);
+            }
+
             builder.ConfigureServices(services => services.AddSingleton<IStartupFilter>(new CaptureFilter(record)));
         });
     }
@@ -44,6 +50,19 @@ internal sealed class ApiHost : IDisposable
         using var request = new HttpRequestMessage(new HttpMethod(method), path);
         using var response = await client.SendAsync(request);
         return ((int)response.StatusCode, await response.Content.ReadAsStringAsync());
+    }
+
+    /// <summary>A request with headers, for a test that reads the response's headers. The caller disposes the response.</summary>
+    public async Task<HttpResponseMessage> SendAsync(string method, string path, IReadOnlyDictionary<string, string> headers)
+    {
+        using var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(new HttpMethod(method), path);
+        foreach (var (name, value) in headers)
+        {
+            request.Headers.TryAddWithoutValidation(name, value);
+        }
+
+        return await client.SendAsync(request);
     }
 
     /// <summary>The pattern the last <paramref name="method"/> request to <paramref name="path"/> resolved to, or null for none.</summary>

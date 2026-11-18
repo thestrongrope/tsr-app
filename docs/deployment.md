@@ -33,6 +33,7 @@ Set these in the deployment tool. A missing required setting stops the start and
 | `TSR_WORKERS` | no | comma-separated worker names. Empty runs none: a deploy alone sends nothing. `push-drain` and `class-schedules` send to members' phones |
 | `TSR_GOOGLE_SERVICE_ACCOUNT_B64` | no | a service account key in base64: push, Firebase account deletion, sheet reads |
 | `TSR_PUBLIC_WEB_BASE` | no | the base of share links |
+| `TSR_CORS_ORIGINS` | no | the browser origins that may call the API, comma-separated (for a web build of the app, e.g. `https://app.thestrongrope.com`). Empty allows none. An entry with a path, a trailing slash or a wildcard stops the start |
 | `TSR_QUIZ_SETTINGS_SHEET_ID`, `TSR_YOUTUBE_CHANNEL_ID`, `TSR_NOTIFIER_URL` | no | each empty switches its feature off |
 
 Not wired yet: the app-version catalog file (`TSR_APP_VERSIONS_FILE`; without it the version check allows every build) and the

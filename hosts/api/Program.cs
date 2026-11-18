@@ -40,6 +40,9 @@ HostServices.AddDomains(builder.Services, builder.Environment, builder.Configura
 // Only in the worker run mode, and only the workers TSR_WORKERS names; an unknown name stops the start here.
 var enabledWorkers = WorkerMode.Register(builder.Services, workerMode, builder.Configuration[WorkerMode.Setting]);
 
+// The browser origins that may call the API (hosts/api/CorsSetting.cs). None listed, the default: no CORS middleware at all.
+var corsEnabled = CorsSetting.Register(builder.Services, builder.Configuration[CorsSetting.Name]);
+
 var app = builder.Build();
 
 // One-off migrate job (docker-compose.dev.yml "migrate", a Dokploy job in production): apply every
@@ -60,6 +63,14 @@ if (workerMode)
 }
 
 app.UseRouterErrors();
+
+// Before sign-in: a browser's preflight request carries no token, and a refusal (401) must carry the permission too, or the page
+// cannot read why it was refused.
+if (corsEnabled)
+{
+    app.UseCors();
+}
+
 app.UseRouting();
 app.UseIdentity();
 app.UsePermissionsRevision();
