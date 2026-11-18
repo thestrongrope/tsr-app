@@ -19,6 +19,7 @@ var api = new SiteApi(http);
 try
 {
     var pages = await SiteBuilder.CollectAsync(SiteModules.All, api, cancel.Token);
+    SiteBuilder.RequireFiles(pages, SiteBuilder.StaticFilesFolder);
     var menu = await ContentSite.MenuAsync(api, cancel.Token);
     // The whole site is written to a folder of its own first. Only a finished site replaces the pages built before, so an
     // API that is down, a body that cannot be rendered or the time limit leaves the old pages in place.

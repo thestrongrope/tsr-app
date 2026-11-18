@@ -9,13 +9,18 @@ namespace Tsr.Shared.Site;
 /// <param name="Title">The whole text of the page's &lt;title&gt;.</param>
 /// <param name="NavTitle">Shown in the home page's list of links when set; most pages leave it null.</param>
 /// <param name="Description">The page's meta description; null gives the site's own.</param>
+/// <param name="Files">
+/// Static files the page shows, each as its site address (e.g. "/images/donate-qr.jpeg"). The host stops the build when one
+/// is not among its static files, so a page is never published with a broken image.
+/// </param>
 public sealed record SitePage(
     string Path,
     string Title,
     Type Component,
     IReadOnlyDictionary<string, object?> Parameters,
     string? NavTitle = null,
-    string? Description = null);
+    string? Description = null,
+    IReadOnlyList<string>? Files = null);
 
 /// <summary>
 /// One category in the frame's menu, as a domain hands it to the site host. A parent is always listed; the domain leaves out

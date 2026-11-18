@@ -1,0 +1,42 @@
+@* The Donate page: the markup, classes and text of tsr-web's app/donate/page.tsx. The QR image is
+   hosts/site/wwwroot/images/donate-qr.jpeg (ContentSite.DonateQrImage); the build stops when it is missing. The owner
+   confirmed on 18 Nov 2026 that the image and the bank details, public on the present website, may be in this repository. *@
+<main class="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-gray-950 dark:to-gray-900 py-12 px-4 sm:px-6 lg:px-8">
+  <div class="max-w-2xl mx-auto">
+    <div class="text-center mb-12">
+      <h1 class="text-4xl md:text-5xl font-bold bg-gradient-to-r from-purple-600 to-blue-600 dark:from-purple-400 dark:to-blue-400 bg-clip-text text-transparent">Donate</h1>
+    </div>
+    <div class="bg-white dark:bg-gray-900 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-800 p-8 mb-12 text-center">
+      <div class="mb-6">
+        <img src="@ContentSite.DonateQrImage" alt="QR code for donations to Strong Rope Foundation" width="300" height="370" class="mx-auto rounded-xl shadow-lg border-4 border-gray-100 dark:border-gray-800">
+      </div>
+      <p class="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2">Scan the QR code to donate</p>
+      <p class="text-sm text-gray-500 dark:text-gray-400">Or use the bank details below for a direct transfer.</p>
+    </div>
+    <div class="bg-white dark:bg-gray-900 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-800 p-8">
+      <h2 class="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-8 text-center">Bank Transfer Details</h2>
+
+      <div class="space-y-6">
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between p-6 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/40 dark:to-indigo-950/40 rounded-xl border-l-4 border-blue-500">
+          <span class="text-lg font-semibold text-gray-700 dark:text-gray-400">Account Name</span>
+          <span class="text-xl font-bold text-gray-900 dark:text-gray-100">Strong Rope Foundation</span>
+        </div>
+
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between p-6 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950/40 dark:to-emerald-950/40 rounded-xl border-l-4 border-green-500">
+          <span class="text-lg font-semibold text-gray-700 dark:text-gray-400">Account Number</span>
+          <span class="text-xl font-mono font-bold text-gray-900 dark:text-gray-100">50200068349952</span>
+        </div>
+
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between p-6 bg-gradient-to-r from-purple-50 to-violet-50 dark:from-purple-950/40 dark:to-violet-950/40 rounded-xl border-l-4 border-purple-500">
+          <span class="text-lg font-semibold text-gray-700 dark:text-gray-400">IFSC Code</span>
+          <span class="text-xl font-mono font-bold text-gray-900 dark:text-gray-100">HDFC0000016</span>
+        </div>
+
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between p-6 bg-gradient-to-r from-orange-50 to-amber-50 dark:from-orange-950/40 dark:to-amber-950/40 rounded-xl border-l-4 border-orange-500">
+          <span class="text-lg font-semibold text-gray-700 dark:text-gray-400">Branch</span>
+          <span class="text-xl font-bold text-gray-900 dark:text-gray-100">Pali Hill, Bandra</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
