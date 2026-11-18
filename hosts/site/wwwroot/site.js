@@ -17,9 +17,92 @@
     return count === 1 ? '1 publication available' : count + ' publications available';
   }
 
-  // Outside a browser (hosts/site/tests/js) the file only hands over the two functions above.
+  // The article list's filters. Which category and tag slugs a card holds, the tree and the counts were decided when the site
+  // was built (domains/content/site/ArticleFilters.cs); the functions here read the address and compare.
+  var defaultDescription = 'Explore our collection of articles on the path of the Ahle Bait (a.s.)';
+
+  function has(object, key) {
+    return Object.prototype.hasOwnProperty.call(object, key);
+  }
+
+  // The present website's slugify (ArticlesList.tsx): the form every tag is compared in.
+  function slugify(text) {
+    return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+  }
+
+  // ?category= and ?tag=: the first value of each, decoded; empty when absent or empty.
+  function readFilter(search) {
+    var params = new URLSearchParams(search);
+    return { category: params.get('category') || '', tag: params.get('tag') || '' };
+  }
+
+  // A card's categories and tags are "|a|b|" lists; a filter that is set must match, both when both are set.
+  function matchesFilter(categories, tags, filter) {
+    if (filter.category && (filter.category.indexOf('|') !== -1 || categories.indexOf('|' + filter.category + '|') === -1)) {
+      return false;
+    }
+    return !filter.tag || tags.indexOf('|' + slugify(filter.tag) + '|') !== -1;
+  }
+
+  // The heading and the line under it. A tag wins over a category. An unknown category is headed by its slug.
+  function headingFor(filter, data) {
+    if (filter.tag) {
+      var name = has(data.tags, slugify(filter.tag)) ? data.tags[slugify(filter.tag)] : filter.tag;
+      return {
+        parent: '',
+        title: 'Articles tagged \u201C' + name + '\u201D',
+        description: 'Showing all articles with the tag "' + name + '"',
+      };
+    }
+    if (!filter.category) {
+      return { parent: '', title: 'All Articles', description: defaultDescription };
+    }
+    var category = has(data.categories, filter.category) ? data.categories[filter.category] : {};
+    return {
+      parent: category.parent || '',
+      title: category.title || filter.category,
+      description: category.description || defaultDescription,
+    };
+  }
+
+  // The chip beside "Filter by Category": the title of a category the panel lists, else the slug, as the present site does.
+  function chipTitle(category, data) {
+    return has(data.categories, category) && data.categories[category].chip ? data.categories[category].chip : category;
+  }
+
+  // The present website's box for a filter that finds no article.
+  function noMatchText(filter) {
+    var title = 'No articles found';
+    title += filter.category ? ' in this category' : '';
+    title += filter.tag ? ' with tag "' + filter.tag + '"' : '';
+    var hint = filter.tag ? 'Try selecting a different tag' : filter.category ? 'Try selecting a different category' : '';
+    return { title: title, hint: hint };
+  }
+
+  // A panel link is the current category, the parent of it (children is that parent's "|a|b|" list), or neither.
+  function linkState(category, slug, children) {
+    if (!category) {
+      return 'none';
+    }
+    if (category === slug) {
+      return 'current';
+    }
+    return category.indexOf('|') === -1 && children.indexOf('|' + category + '|') !== -1 ? 'ancestor' : 'none';
+  }
+
+  // Outside a browser (hosts/site/tests/js) the file only hands over the functions above.
   if (typeof document === 'undefined') {
-    module.exports = { matchesSearch: matchesSearch, countLabel: countLabel };
+    module.exports = {
+      matchesSearch: matchesSearch,
+      countLabel: countLabel,
+      slugify: slugify,
+      readFilter: readFilter,
+      matchesFilter: matchesFilter,
+      headingFor: headingFor,
+      chipTitle: chipTitle,
+      noMatchText: noMatchText,
+      linkState: linkState,
+    };
     return;
   }
 
@@ -97,6 +180,107 @@
   var publications = document.querySelector('[data-publications]');
   if (publications) {
     setUpPublications(publications);
+  }
+
+  // The article list (domains/content/site/ArticleIndexPage.razor) is written whole. With ?category= or ?tag= this hides the
+  // cards that do not match, words the heading, marks the active link and closes the panel; nothing is asked of the server.
+  function setUpArticleFilters(page) {
+    var filter = readFilter(location.search);
+    var filtered = filter.category !== '' || filter.tag !== '';
+    var data = JSON.parse(page.getAttribute('data-article-filters'));
+    var shown = 0;
+
+    page.querySelectorAll('[data-categories]').forEach(function (card) {
+      var match = matchesFilter(card.getAttribute('data-categories'), card.getAttribute('data-tags'), filter);
+      if (match) {
+        card.classList.remove('hidden');
+        shown += 1;
+      } else {
+        card.classList.add('hidden');
+      }
+    });
+
+    if (filtered) {
+      var heading = headingFor(filter, data);
+      var title = page.querySelector('[data-filter-heading]');
+      title.textContent = '';
+      if (heading.parent) {
+        var parent = document.createElement('span');
+        parent.className = page.getAttribute('data-parent-class');
+        parent.textContent = heading.parent + ' / ';
+        title.appendChild(parent);
+      }
+      title.appendChild(document.createTextNode(heading.title));
+      page.querySelector('[data-filter-description]').textContent = heading.description;
+      page.querySelector('[data-filter-reset]').hidden = false;
+    }
+
+    var none = page.querySelector('[data-filter-none]');
+    if (none && filtered && shown === 0) {
+      var words = noMatchText(filter);
+      page.querySelector('[data-filter-none-title]').textContent = words.title;
+      page.querySelector('[data-filter-none-hint]').textContent = words.hint;
+      none.hidden = false;
+    }
+
+    var toggle = page.querySelector('[data-filter-toggle]');
+    if (!toggle) {
+      return;
+    }
+
+    var body = page.querySelector('[data-filter-body]');
+    var arrow = page.querySelector('[data-filter-arrow]');
+    function setPanel(open) {
+      body.hidden = !open;
+      arrow.classList.toggle('rotate-180', open);
+      toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }
+    toggle.addEventListener('click', function () {
+      setPanel(body.hidden);
+    });
+    setPanel(!filtered);
+
+    if (filter.category) {
+      var categoryChip = page.querySelector('[data-filter-chip="category"]');
+      categoryChip.textContent = chipTitle(filter.category, data);
+      categoryChip.hidden = false;
+    }
+    if (filter.tag) {
+      var tagChip = page.querySelector('[data-filter-chip="tag"]');
+      tagChip.textContent = 'Tag: ' + filter.tag;
+      tagChip.hidden = false;
+    }
+
+    page.querySelectorAll('[data-filter-link]').forEach(function (link) {
+      var state = link.hasAttribute('data-filter-all')
+        ? (filtered ? 'none' : 'current')
+        : linkState(filter.category, link.getAttribute('data-category'), link.getAttribute('data-children'));
+      link.className = link.getAttribute('data-' + state + '-class');
+    });
+
+    // Each parent's subcategories are closed until its arrow opens them.
+    page.querySelectorAll('[data-subcategory-toggle]').forEach(function (button) {
+      var slug = button.getAttribute('data-subcategory-toggle');
+      var list = page.querySelector('[data-subcategories="' + slug + '"]');
+      var icon = button.querySelector('svg');
+      var state = linkState(filter.category, slug, button.getAttribute('data-children'));
+      button.className = button.getAttribute(state === 'none' ? 'data-none-class' : 'data-active-class');
+      function setList(open) {
+        list.hidden = !open;
+        icon.classList.toggle('rotate-180', open);
+        button.setAttribute('aria-label', open ? 'Collapse subcategories' : 'Expand subcategories');
+      }
+      button.addEventListener('click', function () {
+        setList(list.hidden);
+      });
+      button.hidden = false;
+      setList(false);
+    });
+  }
+
+  var articleList = document.querySelector('[data-article-list]');
+  if (articleList) {
+    setUpArticleFilters(articleList);
   }
 
   var panel = document.querySelector('[data-menu-panel]');
