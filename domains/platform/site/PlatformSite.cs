@@ -15,7 +15,7 @@ public static class PlatformSite
         return
         [
             new SitePage("/status/", "Status | The Strong Rope", typeof(StatusPage),
-                new Dictionary<string, object?> { ["Health"] = health }, NavTitle: "Status"),
+                new Dictionary<string, object?> { ["Health"] = health }),
         ];
     }
 }

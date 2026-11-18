@@ -13,7 +13,7 @@ public sealed record V1Answer<T>(bool Success, T? Data, V1Pagination? Pagination
 public sealed record V1Pagination(bool HasMore);
 
 /// <summary>An article as a list, or another article's related list, sends it.</summary>
-public sealed record ArticleSummary(string? Slug, string? Title, string? Excerpt, IReadOnlyList<string>? Categories, IReadOnlyList<string>? Tags = null);
+public sealed record ArticleSummary(string? Slug, string? Title, string? Excerpt, IReadOnlyList<string>? Categories, IReadOnlyList<string>? Tags = null, string? PublishedDate = null);
 
 /// <summary>One article as GET /api/v1/articles/{slug} sends it. <see cref="Content"/> is HTML (rendered and made safe by the API).</summary>
 public sealed record Article(

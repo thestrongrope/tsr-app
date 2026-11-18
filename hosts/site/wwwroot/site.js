@@ -1,4 +1,4 @@
-// The site's one script: the theme switch, the publications page and the menu. No framework and no other script.
+// The site's one script: the theme switch, the publications page, the article list's filters, the home page's category cards and the menu. No framework and no other script.
 // It only adds and removes classes the stylesheet already has (hosts/site/tests/StylesheetTests.cs reads the
 // classList calls below, and the class lists the publications page hands over in its data- attributes), and it keeps what the present website keeps: localStorage key "theme", "light" or "dark".
 (function () {
@@ -277,6 +277,32 @@
       setList(false);
     });
   }
+
+  // The home page's category cards (domains/content/site/HomePage.razor) write every card's subcategories open and their toggle
+  // button hidden. Here: show the buttons and close the lists, as the present website starts; a button opens and closes its own
+  // card, and a card is independent of the others.
+  function setUpHomeCategories() {
+    document.querySelectorAll('[data-category-card]').forEach(function (card) {
+      var button = card.querySelector('[data-category-card-toggle]');
+      var list = card.querySelector('[data-category-card-list]');
+      if (!button || !list) {
+        return;
+      }
+      var arrow = button.querySelector('svg');
+      function setOpen(open) {
+        list.hidden = !open;
+        arrow.classList.toggle('rotate-180', open);
+        button.setAttribute('aria-label', open ? 'Collapse' : 'Expand');
+      }
+      button.addEventListener('click', function () {
+        setOpen(list.hidden);
+      });
+      button.hidden = false;
+      setOpen(false);
+    });
+  }
+
+  setUpHomeCategories();
 
   var articleList = document.querySelector('[data-article-list]');
   if (articleList) {

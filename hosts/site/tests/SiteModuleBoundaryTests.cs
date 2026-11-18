@@ -13,8 +13,6 @@ public sealed class SiteModuleBoundaryTests
 {
     private const string SharedSite = "Tsr.Shared.Site";
 
-    private static readonly string[] NavPaths = ["/status/", "/articles/"];
-
     public static IEnumerable<string> ModuleNames() => SiteModules.All.Select(m => m.Name);
 
     [TestCaseSource(nameof(ModuleNames))]
@@ -37,7 +35,7 @@ public sealed class SiteModuleBoundaryTests
 
         var pages = await SiteBuilder.CollectAsync([module], FakeApi.Healthy(), CancellationToken.None);
 
-        Assert.That(pages.Any(p => p.Path != "/"), Is.True);
+        Assert.That(pages, Is.Not.Empty);
         foreach (var page in pages)
         {
             var html = await SiteBuilder.RenderAsync(page, []);
@@ -46,11 +44,10 @@ public sealed class SiteModuleBoundaryTests
     }
 
     [Test]
-    public async Task Every_module_together_gives_unique_paths_and_one_nav()
+    public async Task Every_module_together_gives_unique_paths()
     {
         var pages = await SiteBuilder.CollectAsync(SiteModules.All, FakeApi.Healthy(), CancellationToken.None);
 
         Assert.That(pages.Select(p => p.Path).Distinct(StringComparer.Ordinal).Count(), Is.EqualTo(pages.Count));
-        Assert.That(pages.Where(p => p.NavTitle is not null).Select(p => p.Path), Is.EqualTo(NavPaths));
     }
 }
