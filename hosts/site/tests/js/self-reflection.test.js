@@ -206,13 +206,14 @@ test('TC-SITE-R64-03 no option of one question is the same word as another optio
   }
 });
 
-test('TC-SITE-R64-04 what is written is the present site\'s shape: option words of the page\'s language, one key, a time', () => {
+test('TC-SITE-R64-04 what is written is the present site\'s shape: option words, one key, a time', () => {
   var form = reflection.parseStored(saved(), options);
   var written = reflection.toStored(form, options[1], '2026-11-18T11:00:00.000Z');
   assert.deepEqual(Object.keys(written), [
     'section1Checks', 'section1Reflection', 'section2Choices', 'section2Reflection', 'section3Answers', 'section4Traits',
     'section4Reflection', 'section5Choice', 'section5Other', 'section5Plan', 'covenant', 'lastUpdated']);
-  assert.deepEqual(written.section2Choices, ['کوشش', null, 'انا', null, 'ہدف تک']);
+  // The saved answers were given in English: the words stay as stored (TC-SITE-R64-06 covers the change of an answer).
+  assert.deepEqual(written.section2Choices, ['Effort', null, 'Ego', null, 'Purpose']);
   assert.equal(written.section5Choice, 5);
   assert.equal(written.lastUpdated, '2026-11-18T11:00:00.000Z');
   assert.equal(reflection.STORAGE_KEY, 'tsr-self-reflection');
@@ -282,6 +283,8 @@ test('TC-SITE-R64-05 saving writes the form under the key, and loading it again 
   form.covenant = 'I commit';
   assert.equal(reflection.saveForm(function () { return storage; }, form, options[2], '2026-11-18T12:00:00.000Z'), true);
   assert.deepEqual(Object.keys(memory), ['tsr-self-reflection']);
+  // Loading keeps the words the answers were stored in (here the Gujarati ones the page wrote).
+  form.choiceWords = form.choices.map(function (at, q) { return options[2][q][at]; });
   assert.deepEqual(reflection.loadForm(function () { return storage; }, options), form);
 });
 
@@ -302,4 +305,55 @@ test('TC-SITE-R66-01 the script asks for nothing after the page has loaded', () 
   ['fetch', 'XMLHttpRequest', 'sendBeacon', 'WebSocket', 'EventSource', 'import(', 'importScripts', 'document.cookie', '.submit('].forEach(function (name) {
     assert.ok(!script.includes(name), name);
   });
+});
+
+test('TC-SITE-R64-06 (M2) a section 2 answer keeps the words it was stored in unless the reader changes that answer', () => {
+  var english = saved({ section2Choices: ['Effort', 'Alone', 'Ego', 'Repent', 'Purpose'] });
+  var form = reflection.parseStored(english, options);
+  form.reflection1 = 'changed on the Urdu page';
+  assert.deepEqual(reflection.toStored(form, options[1], 'now').section2Choices, ['Effort', 'Alone', 'Ego', 'Repent', 'Purpose']);
+  reflection.chooseOption(form, 1, 0);
+  assert.deepEqual(reflection.toStored(form, options[1], 'now').section2Choices, ['Effort', 'جب کوئی دیکھ رہا ہو', 'Ego', 'Repent', 'Purpose']);
+  reflection.chooseOption(form, 1, 0);
+  assert.deepEqual(reflection.toStored(form, options[1], 'now').section2Choices, ['Effort', null, 'Ego', 'Repent', 'Purpose']);
+  assert.deepEqual(form.choices, [1, null, 1, 0, 0]);
+});
+
+test('TC-SITE-R64-07 (M2) a reader who chooses an answer on a page writes that page\'s words', () => {
+  var form = reflection.emptyForm();
+  reflection.chooseOption(form, 0, 1);
+  assert.deepEqual(reflection.toStored(form, options[2], 'now').section2Choices, ['મહેનત', null, null, null, null]);
+});
+
+test('TC-SITE-R65-02 (L1) a change of the page\'s key in another tab is the page\'s new state', () => {
+  var key = reflection.STORAGE_KEY;
+  var removed = reflection.formAfterStorageEvent({ key: key, newValue: null }, options);
+  assert.deepEqual(removed, reflection.emptyForm());
+  var cleared = reflection.formAfterStorageEvent({ key: null, newValue: null }, options);
+  assert.deepEqual(cleared, reflection.emptyForm());
+  var changed = reflection.formAfterStorageEvent({ key: key, newValue: saved() }, options);
+  assert.equal(changed.reflection1, 'one');
+  assert.deepEqual(changed.choices, [1, null, 1, null, 0]);
+});
+
+test('TC-SITE-R65-03 (L1) a change of any other key leaves the page\'s state alone', () => {
+  assert.equal(reflection.formAfterStorageEvent({ key: 'theme', newValue: 'dark' }, options), null);
+});
+
+test('TC-SITE-R68-06 (m3) stored data that is discarded is reported once, with no answer in the message; no data and good data are not', () => {
+  function reasons(text) {
+    var told = [];
+    reflection.parseStored(text, options, function (reason) { told.push(reason); });
+    return told;
+  }
+  assert.equal(reasons(null).length, 0);
+  assert.equal(reasons(saved()).length, 0);
+  assert.equal(reasons('{not json').length, 1);
+  assert.equal(reasons('[]').length, 1);
+  assert.equal(reasons(saved({ section1Reflection: 'secret words', section5Choice: 6 })).length, 1);
+  assert.ok(!reasons(saved({ section1Reflection: 'secret words', section5Choice: 6 }))[0].includes('secret'));
+  var told = [];
+  var broken = function () { throw new Error('denied'); };
+  reflection.loadForm(broken, options, function (reason) { told.push(reason); });
+  assert.equal(told.length, 1);
 });

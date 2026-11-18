@@ -11,12 +11,14 @@
   var TOTAL_MAX = 19;
   var LEVELS = ['weak', 'inconsistent', 'strong'];
 
-  // The form as the script holds it: section 2 as positions, the rest as the present site stores it.
+  // The form as the script holds it: section 2 as positions (choiceWords keeps the words an answer was stored in, until the reader changes
+  // that answer), the rest as the present site stores it.
   function emptyForm() {
     return {
       checks: [null, null, null, null, null, null],
       reflection1: '',
       choices: [null, null, null, null, null],
+      choiceWords: [null, null, null, null, null],
       reflection2: '',
       answers3: ['', '', '', ''],
       traits: [null, null, null, null, null],
@@ -121,14 +123,20 @@
   }
 
   // Stored text to a form. Anything that is not a form of the present site's shape gives the empty form; it never throws.
-  function parseStored(text, optionLists) {
+  // onDiscard, when given, is called with a reason (never with an answer) when stored text is thrown away; no stored text is not a discard.
+  function parseStored(text, optionLists, onDiscard) {
+    var discard = function (reason) {
+      if (onDiscard) onDiscard(reason);
+      return emptyForm();
+    };
+    if (text === null || text === undefined) return emptyForm();
     var data;
     try {
       data = JSON.parse(text);
     } catch (e) {
-      return emptyForm();
+      return discard('the stored answers are not JSON');
     }
-    if (data === null || typeof data !== 'object' || Array.isArray(data)) return emptyForm();
+    if (data === null || typeof data !== 'object' || Array.isArray(data)) return discard('the stored answers are not a form');
 
     var form = emptyForm();
     var checks = readList(data.section1Checks, 6, function (v) { return v === null || typeof v === 'boolean'; });
@@ -146,10 +154,15 @@
     var choice = data.section5Choice;
     var textsOk = Object.keys(texts).every(function (key) { return texts[key] === undefined || texts[key] === null || isText(texts[key]); });
     var choiceOk = choice === undefined || choice === null || (Number.isInteger(choice) && choice >= 0 && choice <= 5);
-    if (checks === undefined || choices === undefined || answers3 === undefined || traits === undefined || !textsOk || !choiceOk) return emptyForm();
+    if (checks === undefined || choices === undefined || answers3 === undefined || traits === undefined || !textsOk || !choiceOk) {
+      return discard('the stored answers have a field of the wrong type or length');
+    }
 
     if (checks) form.checks = checks;
-    if (choices) form.choices = choices.map(function (words, q) { return positionOf(q, words, optionLists); });
+    if (choices) {
+      form.choices = choices.map(function (words, q) { return positionOf(q, words, optionLists); });
+      form.choiceWords = choices.map(function (words, q) { return form.choices[q] === null ? null : words; });
+    }
     if (answers3) form.answers3 = answers3;
     if (traits) form.traits = traits;
     Object.keys(texts).forEach(function (key) {
@@ -159,12 +172,24 @@
     return form;
   }
 
-  // The form as the present site stores it: section 2 as the words of the options of this page's language.
+  // The words of a section 2 answer: the words it was stored in while the reader has not changed it, else this page's language's words.
+  function wordsOf(form, q, pageOptions) {
+    if (form.choices[q] === null) return null;
+    return form.choiceWords[q] !== null ? form.choiceWords[q] : pageOptions[q][form.choices[q]];
+  }
+
+  // The reader chooses (or, choosing it again, clears) an option of question q: the answer is theirs now, in this page's words.
+  function chooseOption(form, q, position) {
+    form.choices[q] = form.choices[q] === position ? null : position;
+    form.choiceWords[q] = null;
+  }
+
+  // The form as the present site stores it: section 2 as words (see wordsOf).
   function toStored(form, optionLists, now) {
     return {
       section1Checks: form.checks,
       section1Reflection: form.reflection1,
-      section2Choices: form.choices.map(function (at, q) { return at === null ? null : optionLists[q][at]; }),
+      section2Choices: form.choices.map(function (at, q) { return wordsOf(form, q, optionLists); }),
       section2Reflection: form.reflection2,
       section3Answers: form.answers3,
       section4Traits: form.traits,
@@ -179,12 +204,22 @@
 
   // The three functions below take a function that returns the storage, and call it inside their try: a browser with site data blocked
   // throws when window.localStorage is touched at all. Storage that cannot be read starts the form empty.
-  function loadForm(getStorage, optionLists) {
+  function loadForm(getStorage, optionLists, onDiscard) {
+    var text;
     try {
-      return parseStored(getStorage().getItem(STORAGE_KEY), optionLists);
+      text = getStorage().getItem(STORAGE_KEY);
     } catch (e) {
+      if (onDiscard) onDiscard('the browser would not give the stored answers');
       return emptyForm();
     }
+    return parseStored(text, optionLists, onDiscard);
+  }
+
+  // The page's new state when another page changes the browser's storage (the "storage" event: key and newValue; key null means the
+  // whole storage was cleared); null when the change is not to this page's key. A removed value is an empty form, never the old answers.
+  function formAfterStorageEvent(event, optionLists) {
+    if (event.key !== null && event.key !== STORAGE_KEY) return null;
+    return parseStored(event.key === null ? null : event.newValue, optionLists);
   }
 
   // True when the form was written; false when the browser refused (full, blocked): the form still works for this visit.
@@ -218,6 +253,8 @@
       summarize: summarize,
       parseStored: parseStored,
       toStored: toStored,
+      chooseOption: chooseOption,
+      formAfterStorageEvent: formAfterStorageEvent,
       loadForm: loadForm,
       saveForm: saveForm,
       clearForm: clearForm,
@@ -235,7 +272,11 @@
     return window.localStorage;
   }
 
-  var form = loadForm(storage, optionLists);
+  function warn(reason) {
+    console.warn('self-reflection.js: ' + reason + '; the form starts empty');
+  }
+
+  var form = loadForm(storage, optionLists, warn);
 
   function all(selector) {
     return page.querySelectorAll(selector);
@@ -255,7 +296,7 @@
     var add = classes(element, on ? 'data-on-class' : 'data-off-class');
     remove.forEach(function (name) { element.classList.remove(name); });
     add.forEach(function (name) { element.classList.add(name); });
-    if (element.hasAttribute('aria-pressed') || element.tagName === 'BUTTON') {
+    if (element.tagName === 'BUTTON') {
       element.setAttribute('aria-pressed', on ? 'true' : 'false');
     }
   }
@@ -343,7 +384,7 @@
     if (button.hasAttribute('data-sr-check')) {
       toggleIn(form.checks, Number(button.getAttribute('data-sr-check')), button.getAttribute('data-sr-value') === 'yes');
     } else if (button.hasAttribute('data-sr-option')) {
-      toggleIn(form.choices, Number(button.getAttribute('data-sr-option')), Number(button.getAttribute('data-sr-position')));
+      chooseOption(form, Number(button.getAttribute('data-sr-option')), Number(button.getAttribute('data-sr-position')));
     } else if (button.hasAttribute('data-sr-trait')) {
       toggleIn(form.traits, Number(button.getAttribute('data-sr-trait')), button.getAttribute('data-sr-level'));
     } else if (button.hasAttribute('data-sr-step')) {
@@ -385,11 +426,30 @@
     refresh();
   }
 
+  // Another copy of the page (a tab, or this page back from the back/forward cache) may have reset or changed the answers: what is
+  // stored is the state, and the old in-memory answers are never written back over it.
+  function takeState(next) {
+    form = next;
+    fillFields();
+    refresh();
+  }
+
+  function onStorage(event) {
+    var next = formAfterStorageEvent(event, optionLists);
+    if (next !== null) takeState(next);
+  }
+
+  function onPageShow(event) {
+    if (event.persisted) takeState(loadForm(storage, optionLists, warn));
+  }
+
   fillFields();
   refresh();
   each('[data-sr-needs-script]', function (element) { element.hidden = false; });
   page.addEventListener('click', onClick);
   page.addEventListener('input', onInput);
   page.addEventListener('focusin', onFocus);
+  window.addEventListener('storage', onStorage);
+  window.addEventListener('pageshow', onPageShow);
   each('[data-sr-reset]', function (button) { button.addEventListener('click', onReset); });
 })();

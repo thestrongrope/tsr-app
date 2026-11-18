@@ -161,6 +161,12 @@ public static class SiteBuilder
     {
         ArgumentNullException.ThrowIfNull(pages);
         var root = Path.GetFullPath(staticFolder) + Path.DirectorySeparatorChar;
+        foreach (var page in pages)
+        {
+            RequireSitePath(page, nameof(SitePage.Script), page.Script);
+            RequireSitePath(page, nameof(SitePage.RefreshTo), page.RefreshTo);
+        }
+
         var needed = pages.SelectMany(page => (page.Files ?? []).Append(page.Script).OfType<string>().Select(file => (Page: page.Path, File: file)));
         foreach (var (page, file) in needed)
         {
@@ -170,6 +176,14 @@ public static class SiteBuilder
             {
                 throw new SiteBuildException($"The file {file} that the page {page} shows is missing from {staticFolder}; the site is not built.");
             }
+        }
+    }
+
+    private static void RequireSitePath(SitePage page, string field, string? address)
+    {
+        if (address is not null && !SitePaths.IsSitePath(address))
+        {
+            throw new SiteBuildException($"The {field} of the page {page.Path} is not a path on this site (one '/' and then a character that is not '/' or a backslash, no white space); the site is not built.");
         }
     }
 

@@ -243,16 +243,12 @@ public static partial class ContentSite
     }
 
     /// <summary>
-    /// An address a page may link to: an absolute https address, or a site path (one leading '/', then not '/' or a backslash). Neither may
-    /// hold a backslash, a control character or white space: a browser reads a backslash as '/' and drops tabs and line breaks, so
-    /// a backslash after the first '/', or a tab between two, would name another site.
+    /// An address a page may link to: an absolute https address, or a site path (<see cref="SitePaths.IsSitePath"/>). An https address may not
+    /// hold a backslash, a control character or white space either.
     /// </summary>
     private static bool IsAddress(string address) =>
-        address.All(c => c != '\\' && !char.IsControl(c) && !char.IsWhiteSpace(c))
-        && (IsSitePath(address) || IsHttps(address));
-
-    private static bool IsSitePath(string address) =>
-        address.Length >= 2 && address[0] == '/' && address[1] != '/';
+        SitePaths.IsSitePath(address)
+        || (SitePaths.IsPlain(address) && IsHttps(address));
 
     private static bool IsHttps(string address) =>
         address.StartsWith("https://", StringComparison.Ordinal)

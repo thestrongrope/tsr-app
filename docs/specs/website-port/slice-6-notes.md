@@ -1,6 +1,6 @@
 # Website port, slice 6: implementer's notes (18 Nov 2026)
 
-Issue #74 (part of #38): the Self-reflection pages. Uncommitted on `feature/74-self-reflection`. No plan exists: the test names are the test cases (SITE-R60 to R69).
+Issue #74 (part of #38): the Self-reflection pages. On `feature/74-self-reflection` (committed; the review fixes are in `slice-6-review-answers.md`). No plan exists: the test names are the test cases (SITE-R60 to R69).
 
 ## What was built
 - `domains/content/site/self-reflection.json` (embedded resource): the three languages of `translations.ts`. `SelfReflection.cs`: typed model, section names (the page's regex), the sticky cut at 15 characters, the option lists for the script, the class sets, the four pages. `SelfReflectionPage.razor` (one component, `Language` parameter) and `SelfReflectionEntryPage.razor`. Registered in `ContentSite.PagesAsync`; no API call.

@@ -326,6 +326,45 @@ public sealed partial class SelfReflectionTests
         Directory.Delete(folder, recursive: true);
     }
 
+    [TestCase("//host/x.js")]
+    [TestCase("/\\host")]
+    [TestCase("https://host/x.js")]
+    [TestCase("javascript:alert(1)")]
+    [TestCase("/")]
+    [TestCase("/a b.js")]
+    [TestCase("/a\tb.js")]
+    [TestCase("/a\\b.js")]
+    [TestCase("")]
+    public void TC_SITE_R67_03_A_script_or_refresh_that_is_not_a_path_on_this_site_stops_the_build_and_names_the_page_and_the_field(string value)
+    {
+        var folder = Directory.CreateTempSubdirectory("tsr-site-test-").FullName;
+        File.WriteAllText(Path.Combine(folder, "site.js"), "x");
+        var asScript = new SitePage("/x/", "X", typeof(NotFoundPage), new Dictionary<string, object?>(), Script: value);
+        var asRefresh = new SitePage("/y/", "Y", typeof(NotFoundPage), new Dictionary<string, object?>(), RefreshTo: value);
+
+        var script = Assert.Throws<SiteBuildException>(() => SiteBuilder.RequireFiles([asScript], folder));
+        var refresh = Assert.Throws<SiteBuildException>(() => SiteBuilder.RequireFiles([asRefresh], folder));
+
+        Assert.That(script!.Message, Does.Contain("/x/").And.Contain("Script"));
+        Assert.That(refresh!.Message, Does.Contain("/y/").And.Contain("RefreshTo"));
+        Directory.Delete(folder, recursive: true);
+    }
+
+    [TestCase("/self-reflection/en/")]
+    [TestCase("/site.js")]
+    [TestCase("/a/b.js")]
+    public void TC_SITE_R67_04_A_path_on_this_site_is_accepted_for_the_script_and_the_refresh(string value)
+    {
+        var folder = Directory.CreateTempSubdirectory("tsr-site-test-").FullName;
+        Directory.CreateDirectory(Path.Combine(folder, "a"));
+        File.WriteAllText(Path.Combine(folder, "site.js"), "x");
+        File.WriteAllText(Path.Combine(folder, "a", "b.js"), "x");
+        var refresh = new SitePage("/y/", "Y", typeof(NotFoundPage), new Dictionary<string, object?>(), RefreshTo: value);
+
+        Assert.DoesNotThrow(() => SiteBuilder.RequireFiles([refresh], folder));
+        Directory.Delete(folder, recursive: true);
+    }
+
     [TestCase("en")]
     [TestCase("ur")]
     [TestCase("gu")]
