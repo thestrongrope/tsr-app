@@ -88,6 +88,7 @@ None is required: the API starts without them.
 | The article list's filters on the static site (`?category=`, `?tag=`; each card's categories and tags, the panel's tree and counts and the heading data are built in `site/ArticleFilters.cs`; the script only compares and hides) | `site/ArticleFilters.cs`, `site/ArticleIndexPage.razor` |
 | The publications page of the static site (`/tsr-publications/`; the tabs, their order and the sort are `site/Publication.cs`, the script's part is in `hosts/site/wwwroot/site.js`) | `site/PublicationsPage.razor` |
 | The home page of the static site (`/`: the five newest articles, the category cards, the six videos; the rules are `site/Home.cs`, the cards are `ArticleFilters.Cards`, the card toggle is in `hosts/site/wwwroot/site.js`) | `site/HomePage.razor` |
+| The Self-reflection pages of the static site (`/self-reflection/en`, `/ur`, `/gu` and the entry; the words are `site/self-reflection.json`, the rules of what is written are `site/SelfReflection.cs`; scoring and storage are pure functions in `hosts/site/wwwroot/self-reflection.js`) | `site/SelfReflectionPage.razor` |
 | Tables | schema `content` in `api/ContentContext.cs`, migrations in `api/Migrations/`: `published_articles`, `categories`, `publications`, `refresh_state` (the Library copy); `articles` (the stub); `holy_quran` |
 
 Slugs, categories and tags of the Library copy are case-sensitive `text`, the written exception to "every text column

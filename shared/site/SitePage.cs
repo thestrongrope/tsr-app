@@ -12,13 +12,20 @@ namespace Tsr.Shared.Site;
 /// Static files the page shows, each as its site address (e.g. "/images/donate-qr.jpeg"). The host stops the build when one
 /// is not among its static files, so a page is never published with a broken image.
 /// </param>
+/// <param name="Script">
+/// A script of the host's static files that only this page loads, after site.js (e.g. "/self-reflection.js"). Checked like <paramref name="Files"/>:
+/// a missing file stops the build.
+/// </param>
+/// <param name="RefreshTo">Site path the page sends the reader to at once, written as a refresh in the head (the static server has no redirect rules).</param>
 public sealed record SitePage(
     string Path,
     string Title,
     Type Component,
     IReadOnlyDictionary<string, object?> Parameters,
     string? Description = null,
-    IReadOnlyList<string>? Files = null);
+    IReadOnlyList<string>? Files = null,
+    string? Script = null,
+    string? RefreshTo = null);
 
 /// <summary>
 /// One category in the frame's menu, as a domain hands it to the site host. A parent is always listed; the domain leaves out

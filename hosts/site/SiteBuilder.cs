@@ -154,14 +154,14 @@ public static class SiteBuilder
     }
 
     /// <summary>
-    /// Stops the build when a file a page says it shows (<see cref="SitePage.Files"/>, a site address such as "/images/x.jpeg")
+    /// Stops the build when a file a page says it shows (<see cref="SitePage.Files"/>, a site address such as "/images/x.jpeg", or its <see cref="SitePage.Script"/>)
     /// is not in <paramref name="staticFolder"/>, naming the file and the page: a page is never published with a broken image.
     /// </summary>
     public static void RequireFiles(IEnumerable<SitePage> pages, string staticFolder)
     {
         ArgumentNullException.ThrowIfNull(pages);
         var root = Path.GetFullPath(staticFolder) + Path.DirectorySeparatorChar;
-        var needed = pages.SelectMany(page => (page.Files ?? []).Select(file => (Page: page.Path, File: file)));
+        var needed = pages.SelectMany(page => (page.Files ?? []).Append(page.Script).OfType<string>().Select(file => (Page: page.Path, File: file)));
         foreach (var (page, file) in needed)
         {
             var path = Path.GetFullPath(Path.Combine(root, file.TrimStart('/')));

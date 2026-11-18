@@ -1,5 +1,5 @@
 /* The source of hosts/site/wwwroot/site.css. Compile it with tools/site-css.sh (Tailwind v4) after any change here or to a
-   class in a .razor file, in ArticleBody.cs or in site.js, and commit the result: the server build has no Tailwind.
+   class in a .razor file, in ArticleBody.cs, SelfReflection.cs or in site.js or self-reflection.js, and commit the result: the server build has no Tailwind.
    hosts/site/tests/StylesheetTests.cs fails when a class in use has no rule in the committed file.
 
    Everything below the font rules is the present website's web/src/app/globals.css, kept as it is. */
@@ -8,9 +8,11 @@
 /* Only these files hold class names. */
 @source "./*.razor";
 @source "./wwwroot/site.js";
+@source "./wwwroot/self-reflection.js";
 @source "../../domains/content/site/*.razor";
 @source "../../domains/platform/site/*.razor";
 @source "../../domains/content/site/ArticleBody.cs";
+@source "../../domains/content/site/SelfReflection.cs";
 
 /* The present site's tailwind.config.ts says darkMode: 'class'; this is what Tailwind v4 makes of it. */
 @custom-variant dark (&:is(.dark *));

@@ -1,0 +1,300 @@
+@* The Self-reflection page in one language: the markup, classes and words of tsr-web's app/self-reflection/[lang]/page.tsx and translations.ts.
+   The whole form is written, so it shows with scripts off. What needs the script (the numbers, the sticky bar, the weakest section) is written
+   hidden; /self-reflection.js shows it, scores, and keeps the answers in the browser. The script reads data-sr-* attributes and swaps the
+   data-on-class and data-off-class sets; it holds no sentence. *@
+@{
+    var t = SelfReflection.Translations[Language];
+    var rtl = t.Dir == "rtl";
+    var align = rtl ? SelfReflection.AlignRtl : SelfReflection.AlignLtr;
+    var names = new[] { t.Section1.Title, t.Section2.Title, t.Section4.Title, t.Section5.Title }.Select(SelfReflection.SectionName).ToArray();
+    string[] tiers = [t.Sticky.Conscious, t.Sticky.Sincere, t.Sticky.Misaligned, t.Sticky.Wakeup];
+    string[] levelKeys = ["weak", "inconsistent", "strong"];
+    string[] levelNames = [t.Section4.Levels.Weak, t.Section4.Levels.Inconsistent, t.Section4.Levels.Strong];
+}
+<main class="min-h-screen bg-gray-50 dark:bg-gray-900 pt-8 pb-24 px-4" dir="@t.Dir" lang="@Language" data-self-reflection
+      data-options-all="@SelfReflection.OptionLists()" data-options-current="@SelfReflection.Languages.ToList().IndexOf(Language)" data-confirm-reset="@SelfReflection.ConfirmReset">
+  <div class="max-w-3xl mx-auto">
+    <div class="@LanguageRowClass(rtl)">
+      <span class="text-sm text-gray-500 dark:text-gray-400 self-center">@t.LanguageSelect:</span>
+      <a href="/self-reflection/en/" class="px-3 py-1 rounded text-sm @LinkClass("en")" aria-current="@CurrentPage("en")">English</a>
+      <a href="/self-reflection/ur/" class="px-3 py-1 rounded text-sm @LinkClass("ur")" aria-current="@CurrentPage("ur")">اردو</a>
+      <a href="/self-reflection/gu/" class="px-3 py-1 rounded text-sm @LinkClass("gu")" aria-current="@CurrentPage("gu")">ગુજરાતી</a>
+    </div>
+
+    <header class="text-center p-6 md:p-10 bg-gradient-to-br from-emerald-700 to-emerald-600 text-white rounded-2xl mb-8 shadow-xl">
+      <h1 class="text-xl md:text-2xl font-semibold tracking-wide">@t.Title</h1>
+      <button type="button" data-sr-reset class="mt-4 px-4 py-2 text-sm bg-white/20 hover:bg-white/30 rounded-lg transition-colors">@t.ResetButton</button>
+    </header>
+
+    <div class="bg-gradient-to-r from-amber-50 to-yellow-50 dark:from-amber-900/30 dark:to-yellow-900/30 border-l-4 border-amber-500 p-5 rounded-r-xl mb-8 text-gray-700 dark:text-gray-300">
+      <strong class="text-emerald-700 dark:text-emerald-400">@t.Notice.Line1</strong><br />
+      <strong class="text-emerald-700 dark:text-emerald-400">@t.Notice.Line2</strong>
+      <p class="mt-2 text-sm">@t.Notice.NotSaved</p>
+    </div>
+
+    <noscript>
+      <div class="bg-amber-50 dark:bg-amber-900/30 rounded-lg p-4 mb-8 text-gray-700 dark:text-gray-300">The scores need scripts: turn scripts on in your browser to see them and to keep your answers.</div>
+    </noscript>
+
+    <div class="bg-white dark:bg-gray-800 p-6 rounded-xl mb-8 border border-gray-200 dark:border-gray-700">
+      <h2 class="text-emerald-700 dark:text-emerald-400 text-lg font-semibold mb-4">@t.Instructions.Title</h2>
+      <ul class="space-y-2 text-gray-700 dark:text-gray-300">
+        @foreach (var item in t.Instructions.Items)
+        {
+          <li class="@ItemPad(rtl) relative">
+            <span class="text-amber-500 font-bold absolute @Bullet(rtl)">•</span>
+            @if (item.Bold is not null)
+            {
+              var parts = item.Text.Split("{bold}");
+              <span>@parts[0]<strong>@item.Bold</strong>@parts[1]</span>
+            }
+            else
+            {
+              @item.Text
+            }
+          </li>
+        }
+      </ul>
+    </div>
+
+    <section data-sr-section="1" class="bg-white dark:bg-gray-800 rounded-2xl p-6 md:p-8 mb-6 shadow-md border border-gray-200 dark:border-gray-700">
+      <div class="flex flex-wrap items-center justify-between gap-4 mb-4 pb-3 border-b-2 border-gray-200 dark:border-gray-700">
+        <h2 class="text-emerald-700 dark:text-emerald-400 text-xl font-semibold">@t.Section1.Title</h2>
+        @Badge(0)
+      </div>
+      <p class="text-gray-500 dark:text-gray-400 italic text-sm mb-5">@t.Section1.Subtitle</p>
+      <div class="space-y-3 my-5">
+        @for (var index = 0; index < t.Section1.Questions.Count; index++)
+        {
+          var row = index;
+          <div class="flex flex-col sm:flex-row sm:items-center gap-3 p-4 bg-gray-100 dark:bg-gray-700 rounded-lg">
+            <span class="flex-1 text-gray-700 dark:text-gray-300">@t.Section1.Questions[row]</span>
+            <div class="flex gap-2">
+              <button type="button" data-sr-check="@row" data-sr-value="yes" data-on-class="@SelfReflection.CheckOn" data-off-class="@SelfReflection.CheckOff"
+                      class="px-4 py-2 rounded-full text-sm font-medium transition-all @SelfReflection.CheckOff">@t.Section1.Yes</button>
+              <button type="button" data-sr-check="@row" data-sr-value="no" data-on-class="@SelfReflection.CheckOn" data-off-class="@SelfReflection.CheckOff"
+                      class="px-4 py-2 rounded-full text-sm font-medium transition-all @SelfReflection.CheckOff">@t.Section1.No</button>
+            </div>
+          </div>
+        }
+      </div>
+      <p class="text-xs text-gray-500 dark:text-gray-400 mb-4">@t.Section1.ScoringNote</p>
+      @Reflection("reflection1", 2, t.Section1.Reflection, t.Section1.ReflectionPlaceholder)
+    </section>
+
+    <section data-sr-section="2" class="bg-white dark:bg-gray-800 rounded-2xl p-6 md:p-8 mb-6 shadow-md border border-gray-200 dark:border-gray-700">
+      <div class="flex flex-wrap items-center justify-between gap-4 mb-4 pb-3 border-b-2 border-gray-200 dark:border-gray-700">
+        <h2 class="text-emerald-700 dark:text-emerald-400 text-xl font-semibold">@t.Section2.Title</h2>
+        @Badge(1)
+      </div>
+      <p class="text-gray-500 dark:text-gray-400 italic text-sm mb-5">@t.Section2.Subtitle</p>
+      <div class="space-y-4 my-5">
+        @for (var question = 0; question < t.Section2.Questions.Count; question++)
+        {
+          var q = question;
+          <div class="flex flex-col gap-3 p-4 bg-gray-100 dark:bg-gray-700 rounded-lg">
+            <label class="font-medium text-gray-700 dark:text-gray-300">@t.Section2.Questions[q].Label</label>
+            <div class="flex flex-wrap gap-2">
+              @for (var position = 0; position < t.Section2.Questions[q].Options.Count; position++)
+              {
+                var at = position;
+                <button type="button" data-sr-option="@q" data-sr-position="@at" data-on-class="@SelfReflection.ChoiceOn" data-off-class="@SelfReflection.ChoiceOff"
+                        class="px-4 py-2 border-2 rounded-full cursor-pointer transition-all text-sm @SelfReflection.ChoiceOff">@t.Section2.Questions[q].Options[at]</button>
+              }
+            </div>
+          </div>
+        }
+      </div>
+      <p class="text-xs text-gray-500 dark:text-gray-400 mb-4">@t.Section2.ScoringNote</p>
+      @Reflection("reflection2", 2, t.Section2.Reflection, t.Section2.ReflectionPlaceholder)
+    </section>
+
+    <section data-sr-section="3" class="bg-white dark:bg-gray-800 rounded-2xl p-6 md:p-8 mb-6 shadow-md border border-gray-200 dark:border-gray-700">
+      <div class="mb-4 pb-3 border-b-2 border-gray-200 dark:border-gray-700">
+        <h2 class="text-emerald-700 dark:text-emerald-400 text-xl font-semibold">@t.Section3.Title</h2>
+        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">@t.Section3.Subtitle</p>
+      </div>
+      <p class="text-gray-500 dark:text-gray-400 italic text-sm mb-5">@t.Section3.Instruction</p>
+      <div class="space-y-4 my-5">
+        @for (var index = 0; index < t.Section3.Questions.Count; index++)
+        {
+          var row = index;
+          <div class="bg-gray-100 dark:bg-gray-700 rounded-lg p-4">
+            <label class="text-gray-700 dark:text-gray-300 font-medium">@(row + 1). @t.Section3.Questions[row].Label</label>
+            <input type="text" data-sr-field="answers3" data-sr-index="@row" placeholder="@t.Section3.Questions[row].Placeholder" dir="@t.Dir"
+                   class="w-full mt-2 p-3 border-2 border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:border-emerald-500">
+          </div>
+        }
+      </div>
+    </section>
+
+    <section data-sr-section="4" class="bg-white dark:bg-gray-800 rounded-2xl p-6 md:p-8 mb-6 shadow-md border border-gray-200 dark:border-gray-700">
+      <div class="flex flex-wrap items-center justify-between gap-4 mb-4 pb-3 border-b-2 border-gray-200 dark:border-gray-700">
+        <h2 class="text-emerald-700 dark:text-emerald-400 text-xl font-semibold">@t.Section4.Title</h2>
+        @Badge(2)
+      </div>
+      <p class="text-gray-500 dark:text-gray-400 italic text-sm mb-5">@t.Section4.Subtitle</p>
+      <div class="space-y-3 my-5">
+        @for (var index = 0; index < t.Section4.Traits.Count; index++)
+        {
+          var row = index;
+          <div class="bg-gray-100 dark:bg-gray-700 rounded-lg p-4">
+            <div class="font-medium text-gray-700 dark:text-gray-300 mb-3">@t.Section4.Traits[row]</div>
+            <div class="flex gap-2">
+              @for (var level = 0; level < levelKeys.Length; level++)
+              {
+                var which = level;
+                <button type="button" data-sr-trait="@row" data-sr-level="@levelKeys[which]" data-on-class="@SelfReflection.ChoiceOn" data-off-class="@SelfReflection.ChoiceOff"
+                        class="flex-1 px-3 py-2 border-2 rounded-lg cursor-pointer transition-all text-sm @SelfReflection.ChoiceOff">@levelNames[which]</button>
+              }
+            </div>
+          </div>
+        }
+      </div>
+      <p class="text-xs text-gray-500 dark:text-gray-400 mb-4">@t.Section4.ScoringNote</p>
+      @Reflection("reflection4", 2, t.Section4.Reflection, t.Section4.ReflectionPlaceholder)
+    </section>
+
+    <section data-sr-section="5" class="bg-white dark:bg-gray-800 rounded-2xl p-6 md:p-8 mb-6 shadow-md border border-gray-200 dark:border-gray-700">
+      <div class="flex flex-wrap items-center justify-between gap-4 mb-4 pb-3 border-b-2 border-gray-200 dark:border-gray-700">
+        <h2 class="text-emerald-700 dark:text-emerald-400 text-xl font-semibold">@t.Section5.Title</h2>
+        @Badge(3)
+      </div>
+      <p class="text-gray-500 dark:text-gray-400 italic text-sm mb-5">@t.Section5.Subtitle</p>
+      <div class="space-y-3 my-5">
+        @for (var index = 0; index < t.Section5.Options.Count; index++)
+        {
+          var step = index;
+          <button type="button" data-sr-step="@step" data-sr-row="@step" data-on-class="@SelfReflection.StepOn" data-off-class="@SelfReflection.StepOff"
+                  class="flex items-center gap-3 p-4 rounded-lg cursor-pointer transition-colors w-full @align @SelfReflection.StepOff">
+            <div data-sr-radio="@step" data-on-class="@SelfReflection.RadioOn" data-off-class="@SelfReflection.RadioOff"
+                 class="w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 @SelfReflection.RadioOff"><div data-sr-dot="@step" hidden class="w-2 h-2 rounded-full bg-white"></div></div>
+            <span class="text-gray-700 dark:text-gray-300">@t.Section5.Options[step]</span>
+          </button>
+        }
+        <div data-sr-row="5" data-on-class="@SelfReflection.StepOn" data-off-class="@SelfReflection.OtherOff"
+             class="flex items-center gap-3 p-4 rounded-lg transition-colors @SelfReflection.OtherOff">
+          <button type="button" data-sr-step="5" data-sr-radio="5" data-on-class="@SelfReflection.RadioOn" data-off-class="@SelfReflection.RadioOff"
+                  class="w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 @SelfReflection.RadioOff"><div data-sr-dot="5" hidden class="w-2 h-2 rounded-full bg-white"></div></button>
+          <span class="text-gray-700 dark:text-gray-300">@t.Section5.Other</span>
+          <input type="text" data-sr-field="other" placeholder="@t.Section5.OtherPlaceholder" dir="@t.Dir"
+                 class="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-sm focus:outline-none focus:border-emerald-500">
+        </div>
+      </div>
+      <div class="mt-5 bg-gray-100 dark:bg-gray-700 rounded-lg p-4">
+        <label class="font-medium text-gray-700 dark:text-gray-300">@t.Section5.PlanLabel</label>
+        <textarea rows="3" data-sr-field="plan" placeholder="@t.Section5.PlanPlaceholder" dir="@t.Dir"
+                  class="w-full mt-2 p-3 border-2 border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 resize-y focus:outline-none focus:border-emerald-500"></textarea>
+      </div>
+      <p class="text-xs text-gray-500 dark:text-gray-400 mt-4">@t.Section5.ScoringNote</p>
+    </section>
+
+    <section data-sr-section="6" class="bg-gradient-to-br from-gray-100 to-emerald-50 dark:from-gray-800 dark:to-emerald-900/30 rounded-2xl p-6 md:p-8 mb-6 shadow-md border-2 border-emerald-500">
+      <div class="mb-4 pb-3 border-b-2 border-gray-200 dark:border-gray-700">
+        <h2 class="text-emerald-700 dark:text-emerald-400 text-xl font-semibold">@t.Section6.Title</h2>
+        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">@t.Section6.Subtitle</p>
+      </div>
+      <p class="text-gray-500 dark:text-gray-400 italic text-sm mb-5">@t.Section6.Instruction</p>
+      <p class="text-lg text-emerald-700 dark:text-emerald-400 font-medium text-center mb-4">@t.Section6.Prompt</p>
+      <textarea rows="4" data-sr-field="covenant" placeholder="@t.Section6.Placeholder" dir="@t.Dir"
+                class="w-full p-3 border-2 border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 resize-y focus:outline-none focus:border-emerald-500"></textarea>
+    </section>
+
+    <section class="bg-gradient-to-br from-emerald-700 to-emerald-600 text-white text-center rounded-2xl p-8 md:p-10 mb-6 shadow-xl">
+      <h2 class="text-white text-xl font-semibold pb-4 mb-6 border-b-2 border-white/30">@t.Score.Title</h2>
+      <div class="text-5xl md:text-6xl font-bold my-5" data-sr-needs-script hidden><span data-sr-total>0.0</span> <span class="text-2xl font-normal opacity-80">/ 19</span></div>
+      <div class="space-y-3 my-6 text-left max-w-md mx-auto">
+        @for (var index = 0; index < t.Score.Ranges.Count; index++)
+        {
+          var range = index;
+          <div data-sr-range="@range" data-on-class="@SelfReflection.RangeOn" data-off-class="@SelfReflection.RangeOff" class="p-3 rounded-lg text-sm @SelfReflection.RangeOff"><strong class="text-amber-400">@(t.Score.Ranges[range].Range):</strong> @t.Score.Ranges[range].Label</div>
+        }
+      </div>
+      <div class="bg-white/10 p-5 rounded-lg mt-6 border border-dashed border-white/30">
+        <p class="mb-2">👉 @t.Score.Important</p>
+        <p data-sr-needs-script hidden>👉 @for (var index = 0; index < names.Length; index++)
+          {
+            var section = index;
+            <span data-sr-weakest="@section" hidden>@t.Score.FocusArea <strong class="text-amber-400">@names[section]</strong> (<span data-sr-weakest-score>0</span>/@Maxima[section])</span>
+          }
+        </p>
+      </div>
+    </section>
+
+    <section class="bg-amber-50 dark:bg-amber-900/30 rounded-2xl p-6 md:p-8 mb-6 shadow-md border-2 border-amber-500">
+      <h2 class="text-amber-600 dark:text-amber-400 text-xl font-semibold mb-4">@t.ReviewRule.Title</h2>
+      <p class="text-gray-700 dark:text-gray-300">@t.ReviewRule.Text</p>
+      <blockquote class="text-lg font-medium text-emerald-700 dark:text-emerald-400 text-center p-5 bg-white dark:bg-gray-800 rounded-lg mt-4">@t.ReviewRule.Quote</blockquote>
+    </section>
+
+    <section class="bg-white dark:bg-gray-800 rounded-2xl p-8 md:p-10 mb-6 text-center shadow-md border border-gray-200 dark:border-gray-700">
+      <h2 class="text-emerald-700 dark:text-emerald-400 text-xl font-semibold mb-6">@t.FinalReminder.Title</h2>
+      <ul class="space-y-3 my-5 text-gray-700 dark:text-gray-300">
+        @foreach (var item in t.FinalReminder.Items)
+        {
+          <li>@item</li>
+        }
+        <li><span class="text-lg text-emerald-700 dark:text-emerald-400 font-semibold">@t.FinalReminder.Arabic</span> @t.FinalReminder.ArabicMeaning</li>
+      </ul>
+    </section>
+  </div>
+
+  <div class="fixed bottom-0 left-0 right-0 bg-gradient-to-r from-emerald-700 to-emerald-600 text-white shadow-lg z-50" data-sr-needs-script hidden>
+    <div class="max-w-3xl mx-auto px-4 py-3">
+      <div class="flex items-center justify-between gap-4">
+        <div class="flex items-center gap-3">
+          <div class="text-2xl md:text-3xl font-bold"><span data-sr-total>0.0</span><span class="text-sm md:text-base font-normal opacity-80">/19</span></div>
+          <div class="hidden sm:block text-xs opacity-80" data-sr-tier-box>
+            @for (var index = 0; index < tiers.Length; index++)
+            {
+              var tier = index;
+              <span data-sr-tier="@tier" hidden>@tiers[tier]</span>
+            }
+          </div>
+        </div>
+        <div class="flex-1 max-w-[200px]">
+          <div class="h-2 bg-white/20 rounded-full overflow-hidden"><div data-sr-bar class="h-full bg-amber-400 rounded-full transition-all duration-300"></div></div>
+          <div class="text-xs text-center mt-1 opacity-80" data-sr-percent>0%</div>
+        </div>
+        <div class="@StickyAlign(rtl) text-xs">
+          <div class="opacity-80">@t.Sticky.Focus</div>
+          @for (var index = 0; index < names.Length; index++)
+          {
+            var section = index;
+            <div data-sr-focus="@section" hidden class="font-medium text-amber-400 truncate max-w-[80px] md:max-w-none">@SelfReflection.StickyName(names[section])</div>
+          }
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+@code {
+    /// <summary>The language of the page: en, ur or gu.</summary>
+    [Parameter, EditorRequired]
+    public string Language { get; set; } = default!;
+
+    private static string LanguageRowClass(bool rtl) => rtl ? "flex justify-end mb-4 gap-2 " + SelfReflection.RowReverse : "flex justify-end mb-4 gap-2";
+
+    private static string ItemPad(bool rtl) => rtl ? SelfReflection.ItemPadRtl : SelfReflection.ItemPadLtr;
+
+    private static string Bullet(bool rtl) => rtl ? SelfReflection.BulletRtl : SelfReflection.BulletLtr;
+
+    /// <summary>The sticky bar's focus block sits on the opposite side to the text (page.tsx).</summary>
+    private static string StickyAlign(bool rtl) => rtl ? SelfReflection.AlignLtr : SelfReflection.AlignRtl;
+
+    private string LinkClass(string code) => code == Language ? SelfReflection.LinkOn : SelfReflection.LinkOff;
+
+    private string? CurrentPage(string code) => code == Language ? "page" : null;
+
+    private RenderFragment Badge(int section) => @<div class="inline-flex items-center gap-2 px-4 py-2 bg-emerald-700 text-white rounded-full text-sm font-medium" data-sr-badge="@section" data-sr-needs-script hidden><span class="bg-white text-emerald-700 px-2 py-0.5 rounded font-bold" data-sr-badge-value>0</span><span>/ @Maxima[section]</span></div>;
+
+    private static readonly int[] Maxima = [6, 5, 5, 3];
+
+    private RenderFragment Reflection(string field, int rows, string prompt, string placeholder) => @<div class="bg-amber-50 dark:bg-amber-900/30 rounded-lg p-4">
+        <span class="text-amber-500 mr-2">👉</span>
+        <span class="text-gray-700 dark:text-gray-300">@prompt</span>
+        <textarea rows="@rows" data-sr-field="@field" placeholder="@placeholder" dir="@SelfReflection.Translations[Language].Dir"
+                  class="w-full mt-3 p-3 border-2 border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 resize-y focus:outline-none focus:border-emerald-500"></textarea>
+    </div>;
+}

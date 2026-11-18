@@ -1,5 +1,7 @@
+@using System.Net
 @* The one page frame, as tsr-web's app/layout.tsx: head, header, the page (which writes its own <main>), footer.
-   Two scripts only: the before-paint theme snippet, word for word from layout.tsx, and /site.js. No analytics. *@
+   Two scripts only: the before-paint theme snippet, word for word from layout.tsx, and /site.js; a page that names one more
+   (SitePage.Script) gets it after site.js. No analytics. *@
 <html lang="en">
 <head>
     <meta charset="utf-8">
@@ -10,6 +12,10 @@
     <link rel="shortcut icon" href="/favicon.ico">
     <link rel="apple-touch-icon" href="/icon.png">
     <link rel="stylesheet" href="/site.css">
+    @if (Page.RefreshTo is not null)
+    {
+        <meta http-equiv="refresh" content="0; url=@Page.RefreshTo">
+    }
     @BeforePaint
 </head>
 <body>
@@ -17,6 +23,7 @@
     <DynamicComponent Type="Page.Component" Parameters="ToMutable(Page.Parameters)" />
     <Footer />
     @SiteScript
+    @PageScript
 </body>
 </html>
 
@@ -29,6 +36,10 @@
         "<script>(function(){try{if(localStorage.getItem('theme')==='dark'){document.documentElement.classList.add('dark');}}catch(e){/* no storage: fall back to the light default */}})();</script>");
 
     private static readonly MarkupString SiteScript = new("<script src=\"/site.js\" defer></script>");
+
+    private MarkupString PageScript => Page.Script is null
+        ? default
+        : new MarkupString($"<script src=\"{WebUtility.HtmlEncode(Page.Script)}\" defer></script>");
 
     [Parameter, EditorRequired]
     public SitePage Page { get; set; } = default!;

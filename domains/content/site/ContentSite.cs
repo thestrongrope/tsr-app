@@ -8,7 +8,7 @@ namespace Tsr.Content.Site;
 /// content's pages on the static site: the article list and one page per article, read from the public Library routes
 /// under /api/v1/ (capabilities/library-reads.md). Those routes hold published articles only, so no draft can reach a page.
 /// The home page also reads the categories and the video route; the publications page reads the publications route. The About
-/// and Donate pages are fixed text and read nothing. Every address and slug that goes into a page is checked here, and an answer
+/// and Donate pages are fixed text and read nothing; so are the Self-reflection pages (SelfReflection.cs). Every address and slug that goes into a page is checked here, and an answer
 /// the pages cannot show stops the build (a video the home page cannot link is the one exception: it is left out with a warning).
 /// </summary>
 public static partial class ContentSite
@@ -88,6 +88,7 @@ public static partial class ContentSite
 
         pages.Add(PublicationsPage(await ReadPublicationsAsync(api, ct)));
         pages.AddRange(FixedPages());
+        pages.AddRange(SelfReflection.Pages());
         return pages;
     }
 
