@@ -7,10 +7,14 @@ namespace Tsr.Content.Site;
 /// <summary>
 /// content's pages on the static site: the article list and one page per article, read from the public Library routes
 /// under /api/v1/ (capabilities/library-reads.md). Those routes hold published articles only, so no draft can reach a page.
+/// The About and Donate pages are fixed text and read nothing.
 /// </summary>
 public static partial class ContentSite
 {
     private const string SiteName = "The Strong Rope";
+
+    /// <summary>The Donate page's QR image, as its site address. It is a file of the site host (hosts/site/wwwroot).</summary>
+    public const string DonateQrImage = "/images/donate-qr.jpeg";
 
     /// <summary>The most the list route gives in one answer.</summary>
     private const int PageSize = 100;
@@ -58,7 +62,22 @@ public static partial class ContentSite
                 Description: article.Excerpt ?? $"Read \"{title}\" on {SiteName}"));
         }
 
+        pages.AddRange(FixedPages());
         return pages;
+    }
+
+    /// <summary>The pages whose text is fixed in their components, with the titles and descriptions of the present website.</summary>
+    private static SitePage[] FixedPages()
+    {
+        var none = new Dictionary<string, object?>();
+        return
+        [
+            new SitePage("/about/", $"About Us | {SiteName}", typeof(AboutPage), none,
+                Description: "Learn about The Strong Rope - a cultural, religious, and social organization promoting the teachings of the Holy Quran and Ahlul Bait."),
+            new SitePage("/donate/", $"Donate | {SiteName}", typeof(DonatePage), none,
+                Description: "Donate to The Strong Rope. Scan the QR code, or use the bank details on this page for a direct transfer.",
+                Files: [DonateQrImage]),
+        ];
     }
 
     /// <summary>

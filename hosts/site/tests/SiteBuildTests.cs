@@ -113,7 +113,7 @@ public sealed partial class SiteBuildTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(pages.Select(p => p.Path), Is.EqualTo(new[] { "/articles/", ArticleAddress, "/articles/another-synthetic-article/" }));
+            Assert.That(pages.Select(p => p.Path), Is.EqualTo(new[] { "/articles/", ArticleAddress, "/articles/another-synthetic-article/", "/about/", "/donate/" }));
             Assert.That(fake.Asked.Count(a => a.StartsWith(FakeApi.ListPath + "?", StringComparison.Ordinal)), Is.EqualTo(2));
         });
     }
