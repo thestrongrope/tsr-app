@@ -85,6 +85,7 @@ None is required: the API starts without them.
 | Database-backed tests | `db/tests/V1*Tests.cs`, `ContentRefreshTests.cs`, `ContentFilesTests.cs`, `LatestVideosTests.cs`, `YouTubeFeedTests.cs`, `LibraryReadsSchemaTests.cs` |
 | The synthetic content files (12 published, 2 drafts) | `db/synthetic/content/` (its `README.md` maps files to cases) |
 | The article list and article pages of the static site (read from the `/api/v1/` routes, in the present website's markup; the body's rules are `site/ArticleBody.cs`) | `site/` |
+| The publications page of the static site (`/tsr-publications/`; the tabs, their order and the sort are `site/Publication.cs`, the script's part is in `hosts/site/wwwroot/site.js`) | `site/PublicationsPage.razor` |
 | Tables | schema `content` in `api/ContentContext.cs`, migrations in `api/Migrations/`: `published_articles`, `categories`, `publications`, `refresh_state` (the Library copy); `articles` (the stub); `holy_quran` |
 
 Slugs, categories and tags of the Library copy are case-sensitive `text`, the written exception to "every text column

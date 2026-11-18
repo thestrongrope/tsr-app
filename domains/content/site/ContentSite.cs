@@ -7,7 +7,7 @@ namespace Tsr.Content.Site;
 /// <summary>
 /// content's pages on the static site: the article list and one page per article, read from the public Library routes
 /// under /api/v1/ (capabilities/library-reads.md). Those routes hold published articles only, so no draft can reach a page.
-/// The About and Donate pages are fixed text and read nothing.
+/// The publications page reads the publications route. The About and Donate pages are fixed text and read nothing.
 /// </summary>
 public static partial class ContentSite
 {
@@ -62,9 +62,16 @@ public static partial class ContentSite
                 Description: article.Excerpt ?? $"Read \"{title}\" on {SiteName}"));
         }
 
+        pages.Add(PublicationsPage(await ReadPublicationsAsync(api, ct)));
         pages.AddRange(FixedPages());
         return pages;
     }
+
+    /// <summary>The publications page, with the title and description of the present website's pages/tsr-publications.md.</summary>
+    private static SitePage PublicationsPage(IReadOnlyList<Publication> publications) =>
+        new("/tsr-publications/", $"TSR Publications - {SiteName}", typeof(PublicationsPage),
+            new Dictionary<string, object?> { ["Groups"] = Publications.Groups(publications) },
+            Description: "Download the latest publications from The Strong Rope, including Quran resources and study materials in multiple languages.");
 
     /// <summary>The pages whose text is fixed in their components, with the titles and descriptions of the present website.</summary>
     private static SitePage[] FixedPages()
@@ -149,6 +156,24 @@ public static partial class ContentSite
 
         return article;
     }
+
+    /// <summary>Every publication, in one answer: the route does not page (spec/api.yaml).</summary>
+    private static async Task<IReadOnlyList<Publication>> ReadPublicationsAsync(SiteApi api, CancellationToken ct)
+    {
+        const string path = "/api/v1/publications";
+        var publications = Data(await api.GetAsync<V1Answer<List<Publication>>>(path, ct), path);
+        Require(publications.All(p => p.Title is not null), path, "a publication without a title");
+        Require(publications.All(p => p.File is not null || p.ReadOnlineUrl is not null), path, "a publication with neither a file nor a read-online address");
+        Require(publications.All(p => IsAddress(p.File) && IsAddress(p.ReadOnlineUrl)), path, "a publication whose address is not a site or web address");
+        return publications;
+    }
+
+    /// <summary>An address a page may link to, as the contract words it: relative to the website (one leading '/') or http(s). None is fine.</summary>
+    private static bool IsAddress(string? address) =>
+        address is null
+        || (address.StartsWith('/') && !address.StartsWith("//", StringComparison.Ordinal))
+        || address.StartsWith("https://", StringComparison.Ordinal)
+        || address.StartsWith("http://", StringComparison.Ordinal);
 
     private static T Data<T>(V1Answer<T> answer, string path)
         where T : class
