@@ -87,6 +87,14 @@ jsonpath "$.data.relatedArticles[2].slug" == "term-planner-for-next-year"
 jsonpath "$.data.relatedArticles[3].slug" == "choosing-a-quiet-hour"
 jsonpath "$.data.relatedArticles[4].slug" == "every-table-tells-a-story"
 jsonpath "$.data.relatedArticles[?(@.slug == 'working-draft-on-revision-cycles')]" not exists
+# LIB-D18: its pipe table, its footnote and its bare web address are rendered; the note's reference sits in a table cell.
+jsonpath "$.data.content" contains "<table>"
+jsonpath "$.data.content" contains "<th>Block</th>"
+jsonpath "$.data.content" contains "<td>Review<a id=\"fnref:1\" href=\"#fn:1\" class=\"footnote-ref\"><sup>1</sup></a></td>"
+jsonpath "$.data.content" contains "<div class=\"footnotes\">"
+jsonpath "$.data.content" contains "<li id=\"fn:1\">"
+jsonpath "$.data.content" contains "<a href=\"https://example.invalid/zorvath-timetable\">https://example.invalid/zorvath-timetable</a>"
+jsonpath "$.data.readingTime" == 1
 
 # 3. TC-LIB-R10-02: the 199 character slug opens
 GET {{base_url}}/api/v1/articles/keeping-long-titles-readable-when-a-heading-runs-past-the-edge-of-the-page-and-the-reader-still-needs-to-find-the-one-idea-that-matters-most-in-a-crowded-set-of-lesson-notes-written-across-a-full-ter

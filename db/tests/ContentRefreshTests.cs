@@ -569,6 +569,8 @@ public sealed class ContentRefreshTests
         Assert.That(rawHtml["body_markdown"], Does.Contain("<script").And.Contain("onerror=").And.Contain("javascript:"));
         Assert.That(rawHtml["body_html"], Does.Contain("<h2>Rows and columns</h2>").And.Contain("<a href=\"\">"));
         Assert.That(rawHtml["body_html"], Does.Not.Contain("<script").And.Not.Contain("onerror=").And.Not.Contain("javascript:").And.Not.Contain("<div").And.Not.Contain("<table"));
+        var timetable = await ArticleAsync("the-zorvath-timetable");
+        Assert.That(timetable["body_html"], Does.Contain("<table>").And.Contain("<div class=\"footnotes\">").And.Contain("<a href=\"https://example.invalid/zorvath-timetable\">"));
         Assert.That(await TestDatabase.ScalarAsync<long>("select count(*) from content.categories where parent_slug is null", TestDatabase.OwnerConnection), Is.EqualTo(3));
         Assert.That(
             await TestDatabase.ScalarAsync<string>("select string_agg(coalesce(language, '-'), ',' order by position) from content.publications", TestDatabase.OwnerConnection),

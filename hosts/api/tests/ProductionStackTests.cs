@@ -59,6 +59,25 @@ public sealed partial class ProductionStackTests
     public void No_second_proxy() =>
         Assert.That(Stack, Does.Not.Match(@"(?m)^  gateway:").And.Not.Contain("hosts/gateway").And.Not.Contain("conf.d"));
 
+    /// <summary>
+    /// TC-SITE-R15-01, the text half: the site's server is built from hosts/site/Dockerfile.server, whose one setting answers an
+    /// unknown address with the site's own not-found page. The other half runs inside that file's "selftest" build stage.
+    /// </summary>
+    [Test]
+    public void The_site_server_answers_an_unknown_address_with_the_site_s_own_page()
+    {
+        var site = Regex.Match(Stack, @"(?ms)^  site:\n(?<body>.*?)(?=^  \S|\z)").Groups["body"].Value;
+        var server = File.ReadAllText(Path.Combine(RouteCatalog.RepoRoot(), "hosts", "site", "Dockerfile.server"));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(site, Does.Contain("context: hosts/site").And.Contain("dockerfile: Dockerfile.server"));
+            Assert.That(site, Does.Not.Contain("image:"));
+            Assert.That(server, Does.Contain("error_page 404 /404.html;"));
+            Assert.That(server, Does.Not.Contain("proxy_pass"));
+        });
+    }
+
     [Test]
     public void The_site_tells_search_engines_not_to_crawl_it() =>
         Assert.That(Stack, Does.Contain("TSR_SITE_NO_CRAWL: \"true\""));

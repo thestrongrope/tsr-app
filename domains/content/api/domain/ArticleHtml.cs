@@ -10,12 +10,15 @@ internal static partial class ArticleHtml
 {
     private const int WordsAMinute = 200;
 
-    // Plain CommonMark, no extension: tsr-web's API renders with remark().use(html) (web/src/lib/markdown.ts:87-89), which has no GitHub-flavoured Markdown.
-    private static readonly MarkdownPipeline Pipeline = new MarkdownPipelineBuilder().Build();
+    // CommonMark and exactly three features of GitHub-flavoured Markdown, the ones the present website's pages show (LIB-D18):
+    // footnotes, pipe tables and a bare web address as a link. Nothing else is on: strikethrough and task lists stay as written.
+    // tsr-web's own API renders plain CommonMark (web/src/lib/markdown.ts:87-89), so for an article that uses one of the three
+    // this HTML differs from that API's.
+    private static readonly MarkdownPipeline Pipeline = new MarkdownPipelineBuilder().UseFootnotes().UsePipeTables().UseAutoLinks().Build();
 
     /// <summary>
     /// The article's HTML, safe to put in a page: remark-html sanitises by default, so here raw HTML in the Markdown is dropped (the text between inline tags stays)
-    /// and a link or image address that could run script gets an empty address (<see cref="IsSafeAddress"/>).
+    /// and a link or image address that could run script gets an empty address (<see cref="IsSafeAddress"/>), in a table cell and in a footnote as anywhere else.
     /// Throws <see cref="ArgumentException"/> when Markdig finds the text nested past its depth limit; the caller turns that into a failure.
     /// </summary>
     public static string ToHtml(string markdown)
@@ -62,16 +65,25 @@ internal static partial class ArticleHtml
             case HtmlInline inline:
                 inline.Remove();
                 break;
+            case LinkInline { IsAutoLink: true, Url: not null } found when !IsSafeAddress(found.Url):
+                // Markdig also links a bare ftp: or tel: address, and shows a tel: one without its scheme: back to the text as written.
+                found.ReplaceBy(Unlinked(found.Url), copyChildren: false);
+                break;
             case LinkInline link when !IsSafeAddress(link.Url):
                 link.Url = string.Empty;
                 break;
             case AutolinkInline { IsEmail: false } bare when !IsSafeAddress(bare.Url):
-                // A bare link shows its own address as its text: the text stays, the address goes.
-                var unlinked = new LinkInline { Url = string.Empty };
-                unlinked.AppendChild(new LiteralInline(bare.Url));
-                bare.ReplaceBy(unlinked);
+                bare.ReplaceBy(Unlinked(bare.Url));
                 break;
         }
+    }
+
+    /// <summary>A bare link shows its own address as its text: the text stays, the address goes.</summary>
+    private static LinkInline Unlinked(string address)
+    {
+        var unlinked = new LinkInline { Url = string.Empty };
+        unlinked.AppendChild(new LiteralInline(address));
+        return unlinked;
     }
 
     /// <summary>

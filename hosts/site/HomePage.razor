@@ -1,11 +1,16 @@
-@* The site's front page, owned by the host: it only links to what the domains contribute. *@
-<h1>The Strong Rope</h1>
-<ul>
-    @foreach (var item in Nav)
-    {
-        <li><a href="@item.Path">@item.NavTitle</a></li>
-    }
-</ul>
+@* The site's front page, owned by the host: it only links to what the domains contribute. The present website's home
+   page is not ported yet. *@
+<main class="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 dark:from-gray-950 dark:to-gray-900">
+    <div class="max-w-4xl mx-auto px-8 py-12">
+        <h1 class="text-4xl md:text-5xl font-bold text-gray-900 dark:text-gray-100 mb-4">The Strong Rope</h1>
+        <ul class="list-disc list-outside ml-6 text-gray-900 dark:text-gray-100 mb-4 space-y-2">
+            @foreach (var item in Nav)
+            {
+                <li><a href="@item.Path" class="text-blue-600 dark:text-blue-400 hover:underline">@item.NavTitle</a></li>
+            }
+        </ul>
+    </div>
+</main>
 
 @code {
     [Parameter, EditorRequired]

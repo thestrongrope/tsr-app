@@ -14,7 +14,7 @@ public static class PlatformSite
         var health = await api.GetAsync<Health>("/health", ct);
         return
         [
-            new SitePage("/status/", "Status", typeof(StatusPage),
+            new SitePage("/status/", "Status | The Strong Rope", typeof(StatusPage),
                 new Dictionary<string, object?> { ["Health"] = health }, NavTitle: "Status"),
         ];
     }

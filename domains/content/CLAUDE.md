@@ -2,7 +2,7 @@
 
 Quran, recitation, articles, lectures, books. **Status: partial (2026-11-13).** Built: the app's Library reads (six public
 routes under `/api/v1/`, the `content-refresh` worker; capability `capabilities/library-reads.md`), `GET /holy-quran`,
-and the stub `GET /articles` kept as the example of a domain with `site/` pages. Lectures, books and search of the
+and the stub `GET /articles`, which nothing reads any more (the static site reads the `/api/v1/` routes; removing the stub is a separate change). Lectures, books and search of the
 content are planned (`domains/CLAUDE.md`).
 
 ## Status
@@ -39,7 +39,7 @@ Each is marked `security: []` in `spec/api.yaml`. Why each is public, and why it
 | `GET /api/v1/taxonomies/tags` | the same | tags and counts come from `published_articles` only |
 | `GET /api/v1/publications` | the same | it reads `content.publications`, the entries of the public publications page that have a link |
 | `GET /api/v1/youtube` | the same; the home screen shows it to guests | it sends what the channel's public feed lists; no database |
-| `GET /articles` (stub) | the public site lists articles | the published rule is in the query of `ListPublishedArticles` |
+| `GET /articles` (stub) | it was the site spike's list; no reader today | the published rule is in the query of `ListPublishedArticles` |
 
 The six `/api/v1/` routes answer in the website's shape, `{success, data, meta, pagination}`, and fail as
 `{success: false, error: {code, message}, meta}` (`api/domain/V1.cs`): the named exception to the `{"detail"}` rule
@@ -79,12 +79,12 @@ None is required: the API starts without them.
 | The `/api/v1/` answer shape, ETag, 304, number clamps | `api/domain/V1.cs` |
 | The fields of an article in a list | `api/domain/ArticleListItem.cs` |
 | Reading the content files, their bounds and failures | `api/domain/ContentFiles.cs`, `FrontMatter.cs` |
-| Markdown to safe HTML, reading time | `api/domain/ArticleHtml.cs` |
+| Markdown to safe HTML (CommonMark with footnotes, pipe tables and bare web addresses as links, LIB-D18), reading time | `api/domain/ArticleHtml.cs` |
 | One refresh, the half rule, the hash | `api/domain/ContentRefresh.cs` |
 | The feed reader and the 30 minute copy | `api/domain/LatestVideos.cs` |
 | Database-backed tests | `db/tests/V1*Tests.cs`, `ContentRefreshTests.cs`, `ContentFilesTests.cs`, `LatestVideosTests.cs`, `YouTubeFeedTests.cs`, `LibraryReadsSchemaTests.cs` |
 | The synthetic content files (12 published, 2 drafts) | `db/synthetic/content/` (its `README.md` maps files to cases) |
-| The stub's pages on the static site | `site/` |
+| The article list and article pages of the static site (read from the `/api/v1/` routes, in the present website's markup; the body's rules are `site/ArticleBody.cs`) | `site/` |
 | Tables | schema `content` in `api/ContentContext.cs`, migrations in `api/Migrations/`: `published_articles`, `categories`, `publications`, `refresh_state` (the Library copy); `articles` (the stub); `holy_quran` |
 
 Slugs, categories and tags of the Library copy are case-sensitive `text`, the written exception to "every text column

@@ -1,0 +1,82 @@
+@* The menu button and its side panel: tsr-web's components/HamburgerMenu.tsx, classes word for word. There the panel
+   is drawn by React state; here everything is in the page and site.js adds and removes the same classes
+   ("hidden", "translate-x-0", "-translate-x-full", "rotate-180"). *@
+<button type="button" data-menu-toggle class="p-2 rounded-lg bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 transition-colors" aria-label="Menu" aria-expanded="false">
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6 text-gray-700 dark:text-gray-200">
+        <path data-menu-icon stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+        <path data-menu-icon class="hidden" stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+    </svg>
+</button>
+
+<div data-menu-overlay class="fixed inset-0 bg-black/50 z-40 hidden"></div>
+
+<div data-menu-panel class="fixed top-0 left-0 h-full w-80 bg-white dark:bg-gray-900 shadow-2xl z-50 transform transition-transform duration-300 ease-in-out -translate-x-full">
+    <div class="flex flex-col h-full">
+        <div class="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-800">
+            <h2 class="text-lg font-bold text-gray-900 dark:text-gray-100">Menu</h2>
+            <button type="button" data-menu-close class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" aria-label="Close menu">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+        </div>
+
+        <div class="flex-1 overflow-y-auto p-4">
+            <div class="mb-6 space-y-1">
+                @foreach (var (address, text) in QuickLinks)
+                {
+                    <a href="@address" class="block px-4 py-3 text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-gray-800 hover:text-blue-600 dark:hover:text-blue-400 rounded-lg transition-colors font-medium">@text</a>
+                }
+            </div>
+
+            <div>
+                <h3 class="px-4 mb-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Categories</h3>
+                @foreach (var category in Categories)
+                {
+                    <div class="mb-1">
+                        <div class="flex items-center">
+                            <a href="@CategoryAddress(category)" class="flex-1 px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-gray-800 hover:text-blue-600 dark:hover:text-blue-400 rounded-lg transition-colors">@category.Title</a>
+                            @if (category.Subcategories.Count > 0)
+                            {
+                                <button type="button" data-category-toggle="@category.Slug" class="p-2 text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors" aria-label="Expand">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4 transition-transform">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                                    </svg>
+                                </button>
+                            }
+                        </div>
+
+                        @if (category.Subcategories.Count > 0)
+                        {
+                            <div data-subcategories="@category.Slug" class="ml-4 mt-1 space-y-1 hidden">
+                                @foreach (var child in category.Subcategories)
+                                {
+                                    <a href="@CategoryAddress(child)" class="block px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:bg-blue-50 dark:hover:bg-gray-800 hover:text-blue-600 dark:hover:text-blue-400 rounded-lg transition-colors">↳ @child.Title</a>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    /// <summary>The fixed links of HamburgerMenu.tsx, in its order. A page not ported yet answers the site's not-found page.</summary>
+    private static readonly (string Address, string Text)[] QuickLinks =
+    [
+        ("/articles/", "All Articles"),
+        ("/lectures", "Lectures"),
+        ("/accreditation", "Accreditation"),
+        ("/tsr-publications", "Publications"),
+        ("/self-reflection", "Self-Reflection"),
+        ("/about", "About Us"),
+        ("/donate", "Donate"),
+    ];
+
+    [Parameter, EditorRequired]
+    public IReadOnlyList<MenuCategory> Categories { get; set; } = default!;
+
+    private static string CategoryAddress(MenuCategory category) => "/articles/?category=" + Uri.EscapeDataString(category.Slug);
+}
