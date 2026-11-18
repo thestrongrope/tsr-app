@@ -33,3 +33,25 @@ Tests are in `hosts/site/tests` (C#) and `hosts/site/tests/js/site.test.js` (Nod
 3. L1 as decided allows only `https:` absolute addresses. The API contract also allows `http:`; a real `http:` publication address now stops the build.
 4. `tools/site-css.sh` was not needed: no class changed (`StylesheetTests` pass).
 5. The C# tests that need a new signature failed to compile first; the behaviour tests (L1, L2, video) were not run red one by one. The Node tests were run red first.
+
+## The browser run and the comparison (18 Nov 2026, after the fixes)
+
+Lane 5 was started from this branch with the present website's published content (501 articles, 38 publications); the
+site was generated from it (507 pages) and served from `build/site`. This answers quality finding 1.
+
+| Check | Result |
+|---|---|
+| Home | renders; the three photos load; a category card opens and closes; no script error. No video section: every test stack reads no feed |
+| Publications | 4 tabs (English 30, Hindi 2, Multilingual 3, Urdu 3); a tab click shows only its group; typing narrows it and "No matches" shows for none; "more" opens and closes a summary |
+| Article list filters | `?category=imamate` shows 82 with the heading "Beliefs (Aqaid) / Imamate" and the parent marked; `?tag=Ahle%20Bait` shows 125; an unknown category shows no card and the "No articles found" box |
+| A hostile `?tag=` value (a quote, a bracket, an `<img onerror>`) | shown as text in the heading; nothing injected; no script error |
+| About, Donate | render; the QR image loads; the menu opens with the three links; the theme switch works |
+| `tools/site-compare.cs` against https://thestrongrope.com, 59 pages | list 501 on each side; 46 equal, 13 allowed (11 reference-comma, 2 status), 0 not allowed |
+| Title and main text against the live pages, by a one-off script | `/about` and `/donate`: equal, word for word. `/tsr-publications`: equal, plus the other languages' groups, which are in the page by design (SITE-R35). `/`: equal, plus the subcategories (open with scripts off, by design), minus Latest Videos (the lane sends none) |
+
+Not checked: the pages with scripts switched off in a real browser; narrow (phone) widths; the dark theme on the new
+pages; the Latest Videos section with a real feed. `tools/site-compare.cs` does not cover the new page kinds yet.
+
+Found on the way: the production API answers `/api/v1/youtube` with no video, because `docker-compose.yml` passes
+`TSR_YOUTUBE_CHANNEL_ID` empty unless the deployment tool sets it, and empty means "read no feed". The home page in
+production has no Latest Videos section until that setting names the channel.
