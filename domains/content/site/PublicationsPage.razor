@@ -1,0 +1,153 @@
+@* The publications, one group per language: the markup and classes of tsr-web's app/tsr-publications/page.tsx and
+   components/PublicationsTabs.tsx. Every group is written, so a reader without scripts sees every publication. What only
+   works with the script (the tabs, the search box, "more") is written hidden; site.js shows it, then shows one group at a
+   time. The script finds its elements by the data- attributes and reads a tab's two looks from the tab list. *@
+<main class="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 dark:from-gray-950 dark:to-gray-900">
+  <section class="max-w-7xl mx-auto px-4 py-12 space-y-10">
+    <header class="text-center space-y-4">
+      <h1 class="text-4xl md:text-5xl font-bold text-gray-900 dark:text-gray-100">Publications</h1>
+      <p class="text-lg text-gray-700 dark:text-gray-300 max-w-3xl mx-auto">Browse our collection of books and downloadable resources</p>
+    </header>
+
+    <div class="bg-white dark:bg-gray-900 rounded-3xl shadow-xl border border-gray-200 dark:border-gray-800 p-6 md:p-10">
+      <div class="mb-6">
+        <p class="text-sm text-gray-600 dark:text-gray-400">@Publications.Count(Groups.Sum(group => group.Items.Count)) across @Publications.Counted(Groups.Count, "language")</p>
+      </div>
+      @if (Groups.Count == 0)
+      {
+        <div class="py-20 text-center text-gray-600 dark:text-gray-400">No publications available at the moment.</div>
+      }
+      else
+      {
+        <div class="space-y-6" data-publications>
+          <div class="flex flex-wrap gap-2" role="tablist" aria-label="Filter publications by language"
+               data-active-class="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition-colors bg-blue-600 text-white shadow-lg shadow-blue-500/30"
+               data-inactive-class="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition-colors bg-gray-100 text-gray-700 hover:bg-blue-100 hover:text-blue-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-blue-900/40 dark:hover:text-blue-200"
+               data-count-active-class="rounded-full px-2 py-0.5 text-xs bg-white/20 text-white"
+               data-count-inactive-class="rounded-full px-2 py-0.5 text-xs bg-white text-gray-600 dark:bg-gray-700 dark:text-gray-200" hidden>
+            @foreach (var group in Groups)
+            {
+              var active = group == Groups[0];
+              <button type="button" role="tab" aria-selected="@(active ? "true" : "false")" data-publications-tab="@group.Language" class="@TabClass(active)">
+                <span>@group.Language</span>
+                <span class="@TabCountClass(active)">@Publications.Count(group.Items.Count)</span>
+              </button>
+            }
+          </div>
+
+          <div class="relative" data-publications-search hidden>
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 dark:text-gray-500 pointer-events-none">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+            </svg>
+            <input type="text" placeholder="Search publications..." class="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 pl-10 pr-4 py-2.5 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+          </div>
+
+          @foreach (var group in Groups)
+          {
+            <div class="space-y-4" role="tabpanel" data-publications-panel="@group.Language">
+              <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+                <h3 class="text-2xl font-semibold text-gray-900 dark:text-gray-100">@group.Language</h3>
+                <p class="text-sm text-gray-600 dark:text-gray-400" data-publications-count>@Publications.Count(group.Items.Count) available</p>
+              </div>
+
+              <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                @foreach (var publication in group.Items)
+                {
+                  var title = publication.Title!;
+                  <article data-search-text="@title" class="h-full flex flex-col justify-between rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 shadow-sm hover:shadow-xl transition-shadow duration-300 overflow-hidden">
+                    <div class="p-6 space-y-4">
+                      <div class="flex items-start justify-between gap-3">
+                        <h4 class="text-lg font-semibold text-gray-900 dark:text-gray-100 @Publications.RightAligned(title)" style="@Publications.Direction(title)" lang="@Publications.Lang(title, publication.Language)">@title</h4>
+                        @if (!string.IsNullOrEmpty(publication.Type))
+                        {
+                          <span class="inline-flex items-center rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 px-3 py-1 text-xs font-semibold whitespace-nowrap">@publication.Type</span>
+                        }
+                      </div>
+                      @if (!string.IsNullOrEmpty(publication.Summary))
+                      {
+                        var summary = publication.Summary;
+                        <div class="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
+                          <p data-summary class="@Publications.RightAligned(summary)" style="@Publications.Direction(summary)" lang="@Publications.Lang(summary, publication.Language)">@summary</p>
+                          <button type="button" data-summary-toggle hidden class="mt-1 text-xs font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300">more</button>
+                        </div>
+                      }
+                      <dl class="grid grid-cols-1 gap-2 text-sm text-gray-600 dark:text-gray-300">
+                        @if (publication.File is not null)
+                        {
+                          <div class="flex items-center justify-between gap-3">
+                            <dt class="font-medium text-gray-500 dark:text-gray-400">File size</dt>
+                            <dd class="text-right">@Publications.Detail(publication.Size)</dd>
+                          </div>
+                        }
+                        <div class="flex items-center justify-between gap-3">
+                          <dt class="font-medium text-gray-500 dark:text-gray-400">Updated</dt>
+                          <dd class="text-right">@Publications.Detail(publication.Updated)</dd>
+                        </div>
+                      </dl>
+                    </div>
+                    <div class="px-6 pb-6 flex flex-col gap-2">
+                      @if (publication.File is not null && publication.DownloadOnly)
+                      {
+                        <a href="@publication.File" download class="inline-flex w-full items-center justify-center gap-2 rounded-xl font-semibold px-4 py-3 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-900 bg-blue-600 hover:bg-blue-700 focus-visible:ring-blue-500 text-white">
+                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                          </svg>
+                          Download PDF
+                        </a>
+                      }
+                      @if (publication.File is not null && !publication.DownloadOnly)
+                      {
+                        <div class="flex gap-2">
+                          <a href="@publication.File" target="_blank" rel="noopener noreferrer" class="inline-flex flex-1 items-center justify-center gap-2 rounded-xl font-semibold px-4 py-3 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-900 bg-blue-600 hover:bg-blue-700 focus-visible:ring-blue-500 text-white">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
+                              <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                            </svg>
+                            Read
+                          </a>
+                          <a href="@publication.File" download class="inline-flex items-center justify-center gap-2 rounded-xl font-semibold px-4 py-3 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-900 bg-gray-200 hover:bg-gray-300 dark:bg-gray-800 dark:hover:bg-gray-700 focus-visible:ring-gray-500 text-gray-700 dark:text-gray-200" title="Download PDF">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
+                              <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                            </svg>
+                          </a>
+                        </div>
+                      }
+                      @if (publication.ReadOnlineUrl is not null)
+                      {
+                        <a href="@publication.ReadOnlineUrl" class="inline-flex w-full items-center justify-center gap-2 rounded-xl font-semibold px-4 py-3 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-900 bg-amber-600 hover:bg-amber-700 focus-visible:ring-amber-500 text-white">
+                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
+                          </svg>
+                          Read Online
+                        </a>
+                      }
+                    </div>
+                  </article>
+                }
+              </div>
+            </div>
+          }
+        </div>
+      }
+    </div>
+  </section>
+</main>
+
+@code {
+    /// <summary>The tabs, in order, none of them empty (Publications.Groups).</summary>
+    [Parameter, EditorRequired]
+    public IReadOnlyList<PublicationGroup> Groups { get; set; } = default!;
+
+    // The two looks of a tab and of the count inside it. The same words stand in the tab list's data- attributes, where
+    // the script reads them and hosts/site/tests/StylesheetTests.cs finds them.
+    private const string Tab = "inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition-colors ";
+
+    private const string TabCount = "rounded-full px-2 py-0.5 text-xs ";
+
+    private static string TabClass(bool active) => Tab + (active
+        ? "bg-blue-600 text-white shadow-lg shadow-blue-500/30"
+        : "bg-gray-100 text-gray-700 hover:bg-blue-100 hover:text-blue-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-blue-900/40 dark:hover:text-blue-200");
+
+    private static string TabCountClass(bool active) => TabCount + (active
+        ? "bg-white/20 text-white"
+        : "bg-white text-gray-600 dark:bg-gray-700 dark:text-gray-200");
+}

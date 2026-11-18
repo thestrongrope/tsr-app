@@ -51,6 +51,28 @@ internal sealed class FakeApi(IReadOnlyDictionary<string, (HttpStatusCode Status
         "meta":{"version":"1.0"}}
         """;
 
+    public const string PublicationsPath = "/api/v1/publications";
+
+    /// <summary>Seven synthetic publications in five languages, out of order, one of them without a language.</summary>
+    public const string PublicationsJson = """
+        {"success":true,"data":[
+        {"title":"Zeta guide","summary":"A synthetic summary of the zeta guide.","type":"PDF","size":"1 MB","updated":"Jun 26, 2025",
+         "language":"English","file":"/downloads/synthetic/zeta-guide.pdf","downloadOnly":false},
+        {"title":"قرآن کی مصنوعی کتاب","summary":"ایک مصنوعی خلاصہ","type":"PDF","updated":"Mar 19, 2024",
+         "language":"Urdu","file":"/downloads/synthetic/urdu-book.pdf","downloadOnly":true},
+        {"title":"beta notes","type":"PDF","size":"2 MB","updated":"Jan 02, 2025",
+         "language":" English ","file":"/downloads/synthetic/beta-notes.pdf","downloadOnly":false},
+        {"title":"A synthetic web book","type":"Web","updated":"Feb 03, 2025",
+         "language":"Hindi","readOnlineUrl":"/a-synthetic-web-book","downloadOnly":false},
+        {"title":"Alpha <guide>","summary":"Both a file & a page.","type":"PDF","size":"3 MB","updated":"Apr 04, 2025",
+         "language":"English","file":"/downloads/synthetic/alpha-guide.pdf","readOnlineUrl":"/alpha-guide-toc","downloadOnly":false},
+        {"title":"A synthetic Bengali book","type":"PDF","size":"4 MB","language":"Bengali",
+         "file":"https://files.example.invalid/bengali-book.pdf","downloadOnly":false},
+        {"title":"A book of no language","type":"PDF","size":"5 MB","updated":"May 05, 2025",
+         "file":"/downloads/synthetic/no-language.pdf","downloadOnly":false}],
+        "meta":{"version":"1.0"},"pagination":{"total":7,"limit":7,"offset":0,"hasMore":false}}
+        """;
+
     public static readonly (string Path, HttpStatusCode Status, string Json)[] HealthyAnswers =
     [
         ("/health", HttpStatusCode.OK, HealthJson),
@@ -58,6 +80,7 @@ internal sealed class FakeApi(IReadOnlyDictionary<string, (HttpStatusCode Status
         (CategoriesPath, HttpStatusCode.OK, CategoriesJson),
         (ArticlePath, HttpStatusCode.OK, ArticleJson),
         (OtherArticlePath, HttpStatusCode.OK, OtherArticleJson),
+        (PublicationsPath, HttpStatusCode.OK, PublicationsJson),
     ];
 
     /// <summary>The addresses asked, in order, with their query.</summary>
