@@ -36,6 +36,8 @@ public sealed class SiteModuleBoundaryTests
         var pages = await SiteBuilder.CollectAsync([module], FakeApi.Healthy(), CancellationToken.None);
 
         Assert.That(pages, Is.Not.Empty);
+        // The root belongs to content (the home page, SITE-R54): no other module may claim it, and content must.
+        Assert.That(pages.Any(p => p.Path == "/"), Is.EqualTo(name == "content"), name + " and the root");
         foreach (var page in pages)
         {
             var html = await SiteBuilder.RenderAsync(page, []);

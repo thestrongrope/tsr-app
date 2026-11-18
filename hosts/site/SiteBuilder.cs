@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Tsr.Content.Site;
 using Tsr.Shared.Site;
 
 namespace Tsr.Host.Site;
@@ -29,6 +30,38 @@ public static class SiteBuilder
         }
 
         return pages;
+    }
+
+    /// <summary>
+    /// The whole build: collects the pages, stops when a file a page shows is missing, renders every page into a folder of its own
+    /// and only then replaces <paramref name="outDir"/>, so an API that is down, a body that cannot be rendered, a missing file or the
+    /// time limit leaves the pages built before in place. Returns the number of pages.
+    /// </summary>
+    public static async Task<int> BuildAsync(
+        IEnumerable<SiteModuleInfo> modules, SiteApi api, string outDir, string? noCrawl, CancellationToken ct)
+    {
+        var pages = await CollectAsync(modules, api, ct);
+        RequireFiles(pages, StaticFilesFolder);
+        var menu = await ContentSite.MenuAsync(api, ct);
+        var finished = Directory.CreateTempSubdirectory("tsr-site-").FullName;
+        try
+        {
+            foreach (var page in pages)
+            {
+                await WriteAsync(finished, page, await RenderAsync(page, menu), ct);
+            }
+
+            await WriteNotFoundAsync(finished, menu, ct);
+            CopyStaticFiles(StaticFilesFolder, finished);
+            await WriteRobotsAsync(finished, noCrawl, ct);
+            Replace(finished, outDir);
+        }
+        finally
+        {
+            Directory.Delete(finished, recursive: true);
+        }
+
+        return pages.Count;
     }
 
     /// <summary>The page inside the frame. <paramref name="menu"/> is the frame's list of categories (ContentSite.MenuAsync).</summary>

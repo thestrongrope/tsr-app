@@ -19,12 +19,10 @@
       }
       else
       {
-        <div class="space-y-6" data-publications>
+        <div class="space-y-6" data-publications data-count-none="@Publications.NoMatches" data-count-one="@Publications.OneAvailable" data-count-many="@Publications.ManyAvailable">
           <div class="flex flex-wrap gap-2" role="tablist" aria-label="Filter publications by language"
-               data-active-class="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition-colors bg-blue-600 text-white shadow-lg shadow-blue-500/30"
-               data-inactive-class="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition-colors bg-gray-100 text-gray-700 hover:bg-blue-100 hover:text-blue-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-blue-900/40 dark:hover:text-blue-200"
-               data-count-active-class="rounded-full px-2 py-0.5 text-xs bg-white/20 text-white"
-               data-count-inactive-class="rounded-full px-2 py-0.5 text-xs bg-white text-gray-600 dark:bg-gray-700 dark:text-gray-200" hidden>
+               data-active-class="@TabClass(true)" data-inactive-class="@TabClass(false)"
+               data-count-active-class="@TabCountClass(true)" data-count-inactive-class="@TabCountClass(false)" hidden>
             @foreach (var group in Groups)
             {
               var active = group == Groups[0];
@@ -47,7 +45,7 @@
             <div class="space-y-4" role="tabpanel" data-publications-panel="@group.Language">
               <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
                 <h3 class="text-2xl font-semibold text-gray-900 dark:text-gray-100">@group.Language</h3>
-                <p class="text-sm text-gray-600 dark:text-gray-400" data-publications-count>@Publications.Count(group.Items.Count) available</p>
+                <p class="text-sm text-gray-600 dark:text-gray-400" data-publications-count>@Publications.Available(group.Items.Count)</p>
               </div>
 
               <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
@@ -68,7 +66,7 @@
                         var summary = publication.Summary;
                         <div class="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
                           <p data-summary class="@Publications.RightAligned(summary)" style="@Publications.Direction(summary)" lang="@Publications.Lang(summary, publication.Language)">@summary</p>
-                          <button type="button" data-summary-toggle hidden class="mt-1 text-xs font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300">more</button>
+                          <button type="button" data-summary-toggle data-less-label="show less" hidden class="mt-1 text-xs font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300">more</button>
                         </div>
                       }
                       <dl class="grid grid-cols-1 gap-2 text-sm text-gray-600 dark:text-gray-300">
@@ -137,8 +135,8 @@
     [Parameter, EditorRequired]
     public IReadOnlyList<PublicationGroup> Groups { get; set; } = default!;
 
-    // The two looks of a tab and of the count inside it. The same words stand in the tab list's data- attributes, where
-    // the script reads them and hosts/site/tests/StylesheetTests.cs finds them.
+    // The two looks of a tab and of the count inside it: written once here, on each tab and in the tab list's data- attributes,
+    // where the script reads them for the tab it chooses and hosts/site/tests/StylesheetTests.cs finds them.
     private const string Tab = "inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition-colors ";
 
     private const string TabCount = "rounded-full px-2 py-0.5 text-xs ";

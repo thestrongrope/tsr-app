@@ -48,8 +48,20 @@ public static class Publications
             .ToList();
     }
 
+    /// <summary>The line above a tab when the search finds nothing. The script shows it, with the next two, from the page's data- attributes.</summary>
+    public const string NoMatches = "No matches";
+
+    /// <summary>The line above a tab for one publication.</summary>
+    public const string OneAvailable = "1 publication available";
+
+    /// <summary>The line above a tab for any other number; "{count}" is where the script puts it.</summary>
+    public const string ManyAvailable = "{count} publications available";
+
     /// <summary>"1 publication", "3 publications".</summary>
     public static string Count(int count) => Counted(count, "publication");
+
+    /// <summary>"1 publication available", "3 publications available": the line above a tab before any search.</summary>
+    public static string Available(int count) => Count(count) + " available";
 
     /// <summary>"1 language", "3 languages".</summary>
     public static string Counted(int count, string noun) =>

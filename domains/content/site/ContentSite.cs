@@ -7,7 +7,9 @@ namespace Tsr.Content.Site;
 /// <summary>
 /// content's pages on the static site: the article list and one page per article, read from the public Library routes
 /// under /api/v1/ (capabilities/library-reads.md). Those routes hold published articles only, so no draft can reach a page.
-/// The publications page reads the publications route. The About and Donate pages are fixed text and read nothing.
+/// The home page also reads the categories and the video route; the publications page reads the publications route. The About
+/// and Donate pages are fixed text and read nothing. Every address and slug that goes into a page is checked here, and an answer
+/// the pages cannot show stops the build (a video the home page cannot link is the one exception: it is left out with a warning).
 /// </summary>
 public static partial class ContentSite
 {
@@ -40,6 +42,14 @@ public static partial class ContentSite
     [GeneratedRegex(@"^(?:[\p{L}\p{M}\p{N}]|[\p{P}-[\x00-\x7F]])+(?:-(?:[\p{L}\p{M}\p{N}]|[\p{P}-[\x00-\x7F]])+)*$")]
     private static partial Regex SafeFolder();
 
+    /// <summary>
+    /// A category slug as the present site's category files are named: lower-case letters and digits in parts joined by single dashes.
+    /// The API accepts any file name that is one path segment (spec/api.yaml), so this is stricter on purpose: a slug goes into
+    /// a link's query and into the script's selectors, and every real slug has this form.
+    /// </summary>
+    [GeneratedRegex("^[a-z0-9]+(?:-[a-z0-9]+)*$")]
+    private static partial Regex CategorySlug();
+
     public static async Task<IReadOnlyList<SitePage>> PagesAsync(SiteApi api, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(api);
@@ -47,7 +57,7 @@ public static partial class ContentSite
         var categoryList = await ReadCategoriesAsync(api, ct);
         var categories = categoryList.ToDictionary(c => c.Slug!, StringComparer.Ordinal);
 
-        var videos = Home.Videos(await ReadVideosAsync(api, ct), Home.VideosPath);
+        var videos = Home.Videos(await ReadVideosAsync(api, ct), Home.VideosPath, Console.Error.WriteLine);
 
         var pages = new List<SitePage>
         {
@@ -57,7 +67,7 @@ public static partial class ContentSite
                 {
                     ["Articles"] = summaries,
                     ["Categories"] = categories,
-                    ["Panel"] = ArticleFilters.Panel(categoryList, summaries),
+                    ["Panel"] = ArticleFilters.Panel(categoryList),
                     ["FilterData"] = ArticleFilters.DataJson(categoryList, summaries),
                 }),
         };
@@ -87,7 +97,7 @@ public static partial class ContentSite
             new Dictionary<string, object?>
             {
                 ["Latest"] = Home.Latest(summaries, categories),
-                ["Cards"] = ArticleFilters.Cards(categories, summaries),
+                ["Cards"] = ArticleFilters.Cards(categories),
                 ["Videos"] = videos,
             },
             Description: "The Path of the Ahle Bait (a.s.)",
@@ -165,7 +175,25 @@ public static partial class ContentSite
         const string path = "/api/v1/taxonomies/categories?hierarchical=false";
         var categories = Data(await api.GetAsync<V1Answer<List<Category>>>(path, ct), path);
         Require(categories.All(c => c.Slug is not null && c.Title is not null), path, "a category without a slug or a title");
+        foreach (var category in categories)
+        {
+            RequireCategorySlug(category.Slug!, null);
+            if (!string.IsNullOrEmpty(category.Parent))
+            {
+                RequireCategorySlug(category.Parent, category.Slug);
+            }
+        }
+
         return categories;
+    }
+
+    private static void RequireCategorySlug(string slug, string? childOf)
+    {
+        if (!CategorySlug().IsMatch(slug))
+        {
+            var where = childOf is null ? string.Empty : $" (the parent of '{childOf}')";
+            throw new SiteBuildException($"Category slug '{slug}'{where} is not lower-case letters, digits and single dashes; the site is not built.");
+        }
     }
 
     /// <summary>The latest videos (spec/api.yaml): the route never fails and sends an empty list when it has none.</summary>
@@ -195,16 +223,41 @@ public static partial class ContentSite
         var publications = Data(await api.GetAsync<V1Answer<List<Publication>>>(path, ct), path);
         Require(publications.All(p => p.Title is not null), path, "a publication without a title");
         Require(publications.All(p => p.File is not null || p.ReadOnlineUrl is not null), path, "a publication with neither a file nor a read-online address");
-        Require(publications.All(p => IsAddress(p.File) && IsAddress(p.ReadOnlineUrl)), path, "a publication whose address is not a site or web address");
+        foreach (var publication in publications)
+        {
+            RequireAddress(publication, "file", publication.File, path);
+            RequireAddress(publication, "readOnlineUrl", publication.ReadOnlineUrl, path);
+        }
+
         return publications;
     }
 
-    /// <summary>An address a page may link to, as the contract words it: relative to the website (one leading '/') or http(s). None is fine.</summary>
-    private static bool IsAddress(string? address) =>
-        address is null
-        || (address.StartsWith('/') && !address.StartsWith("//", StringComparison.Ordinal))
-        || address.StartsWith("https://", StringComparison.Ordinal)
-        || address.StartsWith("http://", StringComparison.Ordinal);
+    private static void RequireAddress(Publication publication, string field, string? address, string path)
+    {
+        if (address is not null && !IsAddress(address))
+        {
+            throw new SiteBuildException(
+                $"GET {path} returned the publication '{publication.Title}' with a '{field}' that is not a site or web address (an https address, or a path of one '/' and then a character that is not '/' or a backslash); the site is not built.");
+        }
+    }
+
+    /// <summary>
+    /// An address a page may link to: an absolute https address, or a site path (one leading '/', then not '/' or a backslash). Neither may
+    /// hold a backslash, a control character or white space: a browser reads a backslash as '/' and drops tabs and line breaks, so
+    /// a backslash after the first '/', or a tab between two, would name another site.
+    /// </summary>
+    private static bool IsAddress(string address) =>
+        address.All(c => c != '\\' && !char.IsControl(c) && !char.IsWhiteSpace(c))
+        && (IsSitePath(address) || IsHttps(address));
+
+    private static bool IsSitePath(string address) =>
+        address.Length >= 2 && address[0] == '/' && address[1] != '/';
+
+    private static bool IsHttps(string address) =>
+        address.StartsWith("https://", StringComparison.Ordinal)
+        && Uri.TryCreate(address, UriKind.Absolute, out var uri)
+        && uri.Scheme == Uri.UriSchemeHttps
+        && uri.Host.Length > 0;
 
     private static T Data<T>(V1Answer<T> answer, string path)
         where T : class

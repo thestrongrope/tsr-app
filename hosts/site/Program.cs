@@ -1,4 +1,3 @@
-using Tsr.Content.Site;
 using Tsr.Host.Site;
 using Tsr.Shared.Site;
 
@@ -18,31 +17,8 @@ var api = new SiteApi(http);
 
 try
 {
-    var pages = await SiteBuilder.CollectAsync(SiteModules.All, api, cancel.Token);
-    SiteBuilder.RequireFiles(pages, SiteBuilder.StaticFilesFolder);
-    var menu = await ContentSite.MenuAsync(api, cancel.Token);
-    // The whole site is written to a folder of its own first. Only a finished site replaces the pages built before, so an
-    // API that is down, a body that cannot be rendered or the time limit leaves the old pages in place.
-    var finished = Directory.CreateTempSubdirectory("tsr-site-").FullName;
-    try
-    {
-        foreach (var page in pages)
-        {
-            var html = await SiteBuilder.RenderAsync(page, menu);
-            await SiteBuilder.WriteAsync(finished, page, html, cancel.Token);
-        }
-
-        await SiteBuilder.WriteNotFoundAsync(finished, menu, cancel.Token);
-        SiteBuilder.CopyStaticFiles(SiteBuilder.StaticFilesFolder, finished);
-        await SiteBuilder.WriteRobotsAsync(finished, Environment.GetEnvironmentVariable("TSR_SITE_NO_CRAWL"), cancel.Token);
-        SiteBuilder.Replace(finished, outDir);
-    }
-    finally
-    {
-        Directory.Delete(finished, recursive: true);
-    }
-
-    Console.WriteLine($"site: {pages.Count} pages from {baseUrl} written to {Path.GetFullPath(outDir)}");
+    var count = await SiteBuilder.BuildAsync(SiteModules.All, api, outDir, Environment.GetEnvironmentVariable("TSR_SITE_NO_CRAWL"), cancel.Token);
+    Console.WriteLine($"site: {count} pages from {baseUrl} written to {Path.GetFullPath(outDir)}");
     return 0;
 }
 catch (Exception e) when (e is SiteBuildException or HttpRequestException or TaskCanceledException)
