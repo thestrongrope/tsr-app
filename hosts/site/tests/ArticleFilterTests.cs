@@ -17,17 +17,17 @@ public sealed partial class ArticleFilterTests
 {
     private const string Address = "/articles/";
 
-    /// <summary>The articleCount values are wrong on purpose: the page counts the articles itself, as the present site does.</summary>
+    /// <summary>The articleCount values are the route's: published articles filed under the slug itself (spec/api.yaml), as ListJson holds them.</summary>
     private const string CategoriesJson = """
         {"success":true,"data":[
-        {"slug":"foundations","title":"Foundations &amp; Basics","order":1,"articleCount":99},
-        {"slug":"core-terms","title":"Core Terms","description":"About core terms.","order":4,"parent":"foundations","articleCount":0},
-        {"slug":"empty-child","title":"Empty Child","order":5,"parent":"foundations","articleCount":7},
-        {"slug":"solo","title":"Solo","order":6,"articleCount":0},
-        {"slug":"other-child","title":"Other Child","order":7,"parent":"solo","articleCount":0},
-        {"slug":"unused-parent","title":"Unused Parent","order":8,"articleCount":5},
+        {"slug":"foundations","title":"Foundations &amp; Basics","order":1,"articleCount":1},
+        {"slug":"core-terms","title":"Core Terms","description":"About core terms.","order":4,"parent":"foundations","articleCount":1},
+        {"slug":"empty-child","title":"Empty Child","order":5,"parent":"foundations","articleCount":0},
+        {"slug":"solo","title":"Solo","order":6,"articleCount":1},
+        {"slug":"other-child","title":"Other Child","order":7,"parent":"solo","articleCount":1},
+        {"slug":"unused-parent","title":"Unused Parent","order":8,"articleCount":0},
         {"slug":"ghost-parent","title":"Ghost Parent","order":9,"articleCount":0},
-        {"slug":"ghost-child","title":"Ghost Child","order":10,"parent":"ghost-parent","articleCount":0}],
+        {"slug":"ghost-child","title":"Ghost Child","order":10,"parent":"ghost-parent","articleCount":1}],
         "meta":{"version":"1.0"}}
         """;
 
@@ -195,14 +195,14 @@ public sealed partial class ArticleFilterTests
     }
 
     [Test]
-    public void TC_SITE_R42_01_The_panel_counts_published_articles_itself_by_the_slug_alone_and_leaves_out_empty_entries()
+    public void TC_SITE_R42_01_The_panel_shows_the_route_s_article_counts_and_leaves_out_empty_entries()
     {
-        var panel = ArticleFilters.Panel(Categories(CategoriesJson), Articles(ListJson));
+        var panel = ArticleFilters.Panel(Categories(CategoriesJson));
 
         Assert.Multiple(() =>
         {
             // Parents in the API's order; a parent without an article of its own is left out with its children (ghost-parent);
-            // a child without one is left out (empty-child); the route's articleCount is not used.
+            // a child without one is left out (empty-child).
             Assert.That(panel.Select(p => (p.Slug, p.Count)), Is.EqualTo(ParentCounts));
             Assert.That(panel[0].Children.Select(c => (c.Slug, c.Title, c.Count)), Is.EqualTo(CoreChild));
             Assert.That(panel[0].Title, Is.EqualTo("Foundations & Basics"));
@@ -211,14 +211,18 @@ public sealed partial class ArticleFilterTests
     }
 
     [Test]
-    public void TC_SITE_R42_02_A_parent_counts_only_the_articles_that_carry_its_own_slug()
+    public void TC_SITE_R42_02_A_count_is_the_route_s_articleCount_and_the_site_does_not_recount()
     {
-        var panel = ArticleFilters.Panel(
-            Categories(CategoriesJson),
-            [Summary("a", ["core-terms"], []), Summary("b", ["foundations", "core-terms"], [])]);
+        var categories = new List<Category>
+        {
+            new("parent", "Parent", null, 7),
+            new("child", "Child", "parent", 3),
+        };
 
-        Assert.That(panel.Single().Count, Is.EqualTo(1));
-        Assert.That(panel.Single().Children.Single().Count, Is.EqualTo(2));
+        var panel = ArticleFilters.Panel(categories);
+
+        Assert.That(panel.Single().Count, Is.EqualTo(7));
+        Assert.That(panel.Single().Children.Single().Count, Is.EqualTo(3));
     }
 
     [Test]
@@ -310,5 +314,99 @@ public sealed partial class ArticleFilterTests
         var thrown = Assert.Throws<SiteBuildException>(() => ArticleFilters.Tokens(["a|b"]));
 
         Assert.That(thrown!.Message, Does.Contain("|"));
+    }
+
+    [Test]
+    public async Task TC_SITE_R43_05_The_page_holds_every_word_the_script_shows_and_writes_the_unfiltered_ones_from_the_same_text()
+    {
+        var html = await RenderAsync();
+        var texts = Filters(html).GetProperty("texts");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(texts.GetProperty("allArticles").GetString(), Is.EqualTo("All Articles"));
+            Assert.That(texts.GetProperty("defaultDescription").GetString(), Is.EqualTo("Explore our collection of articles on the path of the Ahle Bait (a.s.)"));
+            Assert.That(texts.GetProperty("tagTitle").GetString(), Is.EqualTo("Articles tagged \u201C{name}\u201D"));
+            Assert.That(texts.GetProperty("tagDescription").GetString(), Is.EqualTo("Showing all articles with the tag \"{name}\""));
+            Assert.That(texts.GetProperty("tagChip").GetString(), Is.EqualTo("Tag: {name}"));
+            Assert.That(texts.GetProperty("noneTitle").GetString(), Is.EqualTo("No articles found"));
+            Assert.That(texts.GetProperty("noneInCategory").GetString(), Is.EqualTo(" in this category"));
+            Assert.That(texts.GetProperty("noneWithTag").GetString(), Is.EqualTo(" with tag \"{name}\""));
+            Assert.That(texts.GetProperty("hintTag").GetString(), Is.EqualTo("Try selecting a different tag"));
+            Assert.That(texts.GetProperty("hintCategory").GetString(), Is.EqualTo("Try selecting a different category"));
+            Assert.That(html, Does.Contain(">" + texts.GetProperty("allArticles").GetString() + "</h1>"));
+            Assert.That(html, Does.Contain(">" + texts.GetProperty("defaultDescription").GetString() + "</p>"));
+        });
+    }
+
+    [TestCase("Explore our collection")]
+    [TestCase("Articles tagged")]
+    [TestCase("Showing all articles")]
+    [TestCase("No articles found")]
+    [TestCase("Try selecting")]
+    [TestCase("All Articles")]
+    [TestCase("publications available")]
+    [TestCase("No matches")]
+    [TestCase("show less")]
+    public async Task TC_SITE_R44_02_The_script_holds_no_sentence_a_reader_sees(string sentence)
+    {
+        var script = await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "wwwroot", "site.js"));
+
+        Assert.That(script, Does.Not.Contain(sentence));
+    }
+
+    [Test]
+    public async Task TC_SITE_R44_03_The_script_builds_no_selector_from_a_value_without_escaping_it()
+    {
+        var lines = await File.ReadAllLinesAsync(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "wwwroot", "site.js"));
+
+        var unescaped = lines.Where(line => line.Contains("querySelector", StringComparison.Ordinal) && line.Contains("' +", StringComparison.Ordinal)
+            && !line.Contains("CSS.escape(", StringComparison.Ordinal)).ToList();
+
+        Assert.That(unescaped, Is.Empty);
+    }
+
+    [TestCase("good-slug")]
+    [TestCase("imam-ali")]
+    [TestCase("a1-b2-3")]
+    public async Task TC_SITE_R45_01_A_category_slug_of_lower_case_letters_digits_and_dashes_builds(string slug)
+    {
+        var json = $$$"""{"success":true,"data":[{"slug":"{{{slug}}}","title":"T","order":1,"articleCount":0}],"meta":{"version":"1.0"}}""";
+
+        var html = await RenderAsync(Api(categoriesJson: json));
+
+        Assert.That(html, Does.Contain("data-article-list"));
+    }
+
+    [TestCase("a\\\"b")]
+    [TestCase("a]b")]
+    [TestCase("a&b")]
+    [TestCase("a#b")]
+    [TestCase("a b")]
+    [TestCase("a/b")]
+    [TestCase("A-b")]
+    [TestCase("a_b")]
+    [TestCase("-a")]
+    [TestCase("a-")]
+    [TestCase("a--b")]
+    [TestCase("")]
+    [TestCase("ا")]
+    public async Task TC_SITE_R45_02_A_category_slug_outside_that_form_stops_the_build_and_names_the_category(string slug)
+    {
+        var json = $$$"""{"success":true,"data":[{"slug":{{{JsonSerializer.Serialize(slug)}}},"title":"The odd one","order":1,"articleCount":0}],"meta":{"version":"1.0"}}""";
+
+        var failure = await Assert.ThrowsAsync<SiteBuildException>(() => RenderAsync(Api(categoriesJson: json)));
+
+        Assert.That(failure!.Message, Does.Contain("Category slug").And.Contain(slug));
+    }
+
+    [Test]
+    public async Task TC_SITE_R45_03_A_parent_naming_a_slug_outside_that_form_stops_the_build()
+    {
+        var json = """{"success":true,"data":[{"slug":"fine","title":"T","order":1,"parent":"a\"b","articleCount":0}],"meta":{"version":"1.0"}}""";
+
+        var failure = await Assert.ThrowsAsync<SiteBuildException>(() => RenderAsync(Api(categoriesJson: json)));
+
+        Assert.That(failure!.Message, Does.Contain("Category slug"));
     }
 }

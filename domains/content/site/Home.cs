@@ -15,7 +15,7 @@ public sealed record VideoThumbnail(string? Url);
 /// <summary>One of the latest articles as the home page shows it: its first category's title and its date, each only when known.</summary>
 public sealed record HomeArticle(string Slug, string Title, string? Category, string? Date);
 
-/// <summary>One video as the home page shows it. <see cref="Thumbnail"/> is an https address or null.</summary>
+/// <summary>One video as the home page shows it. <see cref="Thumbnail"/> is an https address on YouTube's image hosts or null.</summary>
 public sealed record HomeVideo(string VideoId, string Title, string? Description, string? Date, string? Views, string? Thumbnail);
 
 /// <summary>The rules of the home page's data, as tsr-web's app/page.tsx has them. The page itself only writes what is handed to it.</summary>
@@ -34,6 +34,12 @@ public static partial class Home
     public const string ChannelUrl = "https://www.youtube.com/@TheStrongRope";
 
     private const string NoDate = "Invalid Date";
+
+    /// <summary>The hosts of YouTube's video images: the one the route's own fallback uses (V1Videos), and the numbered ones of the channel feed.</summary>
+    private static readonly HashSet<string> ImageHosts = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "i.ytimg.com", "i1.ytimg.com", "i2.ytimg.com", "i3.ytimg.com", "i4.ytimg.com",
+    };
 
     /// <summary>A video id as YouTube writes it. It is put into an address, so nothing else is allowed.</summary>
     [GeneratedRegex("^[A-Za-z0-9_-]{1,32}$")]
@@ -60,21 +66,24 @@ public static partial class Home
     }
 
     /// <summary>
-    /// The videos for the page. A video without an id of YouTube's form or a title, or with a thumbnail that is not an https address,
-    /// stops the build (the id and the thumbnail go into the page's addresses). No video gives an empty list: the page has no section.
+    /// The videos for the page. A video without an id of YouTube's form or a title, or whose thumbnail is not an https address on
+    /// YouTube's image hosts, is left out and <paramref name="warn"/> is given one line naming the reason (the id and the thumbnail go
+    /// into the page's addresses, and one odd entry of an outside feed must not stop the site). No video left gives an empty list:
+    /// the page has no section.
     /// </summary>
-    public static IReadOnlyList<HomeVideo> Videos(VideosData data, string path)
+    public static IReadOnlyList<HomeVideo> Videos(VideosData data, string path, Action<string> warn)
     {
         ArgumentNullException.ThrowIfNull(data);
+        ArgumentNullException.ThrowIfNull(warn);
         var videos = new List<HomeVideo>();
         foreach (var video in (data.Videos ?? []).Take(VideosShown))
         {
             var thumbnail = video.Thumbnail?.Url;
-            var safe = video.VideoId is not null && VideoId().IsMatch(video.VideoId) && !string.IsNullOrWhiteSpace(video.Title)
-                && (string.IsNullOrEmpty(thumbnail) || thumbnail.StartsWith("https://", StringComparison.Ordinal));
-            if (!safe)
+            var problem = ProblemWith(video, thumbnail);
+            if (problem is not null)
             {
-                throw new SiteBuildException($"GET {path} returned a video without a usable id, title or thumbnail; the site is not built.");
+                warn($"site: warning: GET {path} returned a video left out of the home page: {problem}.");
+                continue;
             }
 
             videos.Add(new HomeVideo(
@@ -88,4 +97,25 @@ public static partial class Home
 
         return videos;
     }
+
+    private static string? ProblemWith(Video video, string? thumbnail)
+    {
+        if (video.VideoId is null || !VideoId().IsMatch(video.VideoId))
+        {
+            return "no usable video id";
+        }
+
+        if (string.IsNullOrWhiteSpace(video.Title))
+        {
+            return "no title";
+        }
+
+        return string.IsNullOrEmpty(thumbnail) || IsYouTubeImage(thumbnail) ? null : "a thumbnail that is not an https address on YouTube's image hosts";
+    }
+
+    private static bool IsYouTubeImage(string thumbnail) =>
+        Uri.TryCreate(thumbnail, UriKind.Absolute, out var uri)
+        && uri.Scheme == Uri.UriSchemeHttps
+        && uri.UserInfo.Length == 0
+        && ImageHosts.Contains(uri.Host);
 }

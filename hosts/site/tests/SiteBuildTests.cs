@@ -328,6 +328,46 @@ public sealed partial class SiteBuildTests
         Directory.Delete(root);
     }
 
+    [Test]
+    public async Task TC_SITE_R22_04_The_composed_build_stops_on_a_file_a_page_needs_and_writes_nothing()
+    {
+        var page = new SitePage("/x/", "X", typeof(NotFoundPage), new Dictionary<string, object?>(), Files: ["/images/no-such-file-for-test.jpeg"]);
+        var module = new SiteModuleInfo("x", (_, _) => Task.FromResult<IReadOnlyList<SitePage>>([page]), typeof(NotFoundPage).Assembly);
+        var outDir = Path.Combine(Path.GetTempPath(), "tsr-site-test-" + Guid.NewGuid().ToString("N"));
+
+        var failure = await Assert.ThrowsAsync<SiteBuildException>(() =>
+            SiteBuilder.BuildAsync([module], FakeApi.Healthy(), outDir, null, CancellationToken.None));
+
+        Assert.That(failure!.Message, Does.Contain("no-such-file-for-test.jpeg"));
+        Assert.That(Directory.Exists(outDir), Is.False);
+    }
+
+    [Test]
+    public async Task TC_SITE_R22_05_The_composed_build_writes_every_page_and_the_not_found_page()
+    {
+        var outDir = Directory.CreateTempSubdirectory("tsr-site-test-").FullName;
+
+        var count = await SiteBuilder.BuildAsync(SiteModules.All, FakeApi.Healthy(), outDir, null, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(count, Is.GreaterThan(1));
+            Assert.That(File.Exists(Path.Combine(outDir, "index.html")), Is.True);
+            Assert.That(File.Exists(Path.Combine(outDir, "donate", "index.html")), Is.True);
+            Assert.That(File.Exists(Path.Combine(outDir, "404.html")), Is.True);
+            Assert.That(File.Exists(Path.Combine(outDir, "site.js")), Is.True);
+        });
+        Directory.Delete(outDir, recursive: true);
+    }
+
+    [Test]
+    public async Task TC_SITE_R22_06_The_program_builds_through_the_composed_build()
+    {
+        var program = await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "Program.cs"));
+
+        Assert.That(program, Does.Contain("SiteBuilder.BuildAsync("));
+    }
+
     [TestCase("true", true)]
     [TestCase("TRUE", true)]
     [TestCase("false", false)]

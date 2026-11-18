@@ -41,14 +41,14 @@ public sealed partial class HomePageTests
         "meta":{"version":"1.0"},"pagination":{"total":6,"limit":100,"offset":0,"hasMore":false}}
         """;
 
-    /// <summary>The API's own counts are wrong on purpose: the page counts the articles, as the present site does.</summary>
+    /// <summary>The route's counts (published articles filed under the slug itself), as ListJson holds them.</summary>
     private const string CategoriesJson = """
         {"success":true,"data":[
-        {"slug":"foundations","title":"Foundations &amp; Basics","description":"The basics of the faith.","order":1,"articleCount":99},
-        {"slug":"core-terms","title":"Core Terms","order":2,"parent":"foundations","articleCount":0},
-        {"slug":"empty-child","title":"Empty Child","order":3,"parent":"foundations","articleCount":9},
+        {"slug":"foundations","title":"Foundations &amp; Basics","description":"The basics of the faith.","order":1,"articleCount":3},
+        {"slug":"core-terms","title":"Core Terms","order":2,"parent":"foundations","articleCount":1},
+        {"slug":"empty-child","title":"Empty Child","order":3,"parent":"foundations","articleCount":0},
         {"slug":"history","title":"History","order":4,"articleCount":0},
-        {"slug":"early-history","title":"Early History","order":5,"parent":"history","articleCount":0}],
+        {"slug":"early-history","title":"Early History","order":5,"parent":"history","articleCount":1}],
         "meta":{"version":"1.0"}}
         """;
 
@@ -71,13 +71,13 @@ public sealed partial class HomePageTests
 
     private static readonly string[] AllSlugs = [.. FiveSlugs, "sixth"];
 
-    private static SiteApi Api(string videos, out FakeApi fake, string list = ListJson) => FakeApi.With(
+    private static SiteApi Api(string videos, out FakeApi fake, string list = ListJson, string categories = CategoriesJson) => FakeApi.With(
         out fake,
         FakeApi.HealthyAnswers
             .Select(a => a.Path switch
             {
                 FakeApi.ListPath => (a.Path, HttpStatusCode.OK, list),
-                FakeApi.CategoriesPath => (a.Path, HttpStatusCode.OK, CategoriesJson),
+                FakeApi.CategoriesPath => (a.Path, HttpStatusCode.OK, categories),
                 FakeApi.VideosPath => (a.Path, HttpStatusCode.OK, videos),
                 _ => a,
             })
@@ -268,8 +268,8 @@ public sealed partial class HomePageTests
     [Test]
     public async Task TC_SITE_R51_02_A_card_without_a_child_that_has_an_article_has_no_toggle_and_no_list()
     {
-        var json = ListJson.Replace("\"early-history\",", string.Empty, StringComparison.Ordinal);
-        var api = Api(FakeApi.NoVideosJson, out _, json);
+        var categories = CategoriesJson.Replace("\"parent\":\"history\",\"articleCount\":1", "\"parent\":\"history\",\"articleCount\":0", StringComparison.Ordinal);
+        var api = Api(FakeApi.NoVideosJson, out _, ListJson, categories);
         var pages = await SiteBuilder.CollectAsync(SiteModules.All, api, CancellationToken.None);
         var html = await SiteBuilder.RenderAsync(pages.Single(p => p.Path == Address), []);
 
@@ -280,6 +280,14 @@ public sealed partial class HomePageTests
             Assert.That(history, Does.Not.Contain("data-category-card-toggle"));
             Assert.That(history, Does.Not.Contain("data-category-card-list"));
         });
+    }
+
+    [Test]
+    public async Task TC_SITE_R52_02_The_article_search_form_is_marked_for_the_script_that_trims_the_text()
+    {
+        var html = await RenderAsync(FakeApi.NoVideosJson);
+
+        Assert.That(html, Does.Contain("<form action=\"/articles/\" method=\"get\" class=\"relative\" data-article-search>"));
     }
 
     [Test]
@@ -340,15 +348,62 @@ public sealed partial class HomePageTests
         });
     }
 
-    [TestCase("\"videoId\":\"AAAAAAAAAAA\"", "\"videoId\":\"A\\\"><script>\"")]
-    [TestCase("\"videoId\":\"AAAAAAAAAAA\"", "\"videoId\":\"\"")]
-    [TestCase("\"url\":\"https://i.ytimg.com/vi/AAAAAAAAAAA/hqdefault.jpg\"", "\"url\":\"javascript:alert(1)\"")]
-    [TestCase("\"title\":\"Second video\"", "\"title\":null")]
-    public async Task TC_SITE_R53_03_A_video_that_cannot_be_linked_safely_stops_the_build(string from, string to)
+    [TestCase("\"videoId\":\"AAAAAAAAAAA\"", "\"videoId\":\"A\\\"><script>\"", "video id")]
+    [TestCase("\"videoId\":\"AAAAAAAAAAA\"", "\"videoId\":\"\"", "video id")]
+    [TestCase("\"url\":\"https://i.ytimg.com/vi/AAAAAAAAAAA/hqdefault.jpg\"", "\"url\":\"javascript:alert(1)\"", "thumbnail")]
+    [TestCase("\"url\":\"https://i.ytimg.com/vi/AAAAAAAAAAA/hqdefault.jpg\"", "\"url\":\"https://tracker.example.invalid/a.jpg\"", "thumbnail")]
+    [TestCase("\"url\":\"https://i.ytimg.com/vi/AAAAAAAAAAA/hqdefault.jpg\"", "\"url\":\"https://i.ytimg.com@tracker.example.invalid/a.jpg\"", "thumbnail")]
+    [TestCase("\"url\":\"https://i.ytimg.com/vi/AAAAAAAAAAA/hqdefault.jpg\"", "\"url\":\"http://i.ytimg.com/vi/AAAAAAAAAAA/hqdefault.jpg\"", "thumbnail")]
+    [TestCase("\"title\":\"First <video> & more\"", "\"title\":null", "title")]
+    public async Task TC_SITE_R53_03_A_video_that_cannot_be_linked_safely_is_left_out_with_a_warning_naming_the_reason(string from, string to, string reason)
     {
         var api = Api(VideosJson.Replace(from, to, StringComparison.Ordinal), out _);
+        var warnings = new StringWriter();
+        var before = Console.Error;
+        Console.SetError(warnings);
+        try
+        {
+            var pages = await SiteBuilder.CollectAsync(SiteModules.All, api, CancellationToken.None);
+            var html = await SiteBuilder.RenderAsync(pages.Single(p => p.Path == Address), []);
+            Assert.That(Regex.Count(html, "href=\"https://www.youtube.com/watch\\?v="), Is.EqualTo(1));
+        }
+        finally
+        {
+            Console.SetError(before);
+        }
 
-        await Assert.ThrowsAsync<SiteBuildException>(() => SiteBuilder.CollectAsync(SiteModules.All, api, CancellationToken.None));
+        Assert.That(warnings.ToString(), Does.Contain("warning").And.Contain(reason).And.Contain(FakeApi.VideosPath));
+    }
+
+    [Test]
+    public async Task TC_SITE_R53_05_When_no_video_is_usable_the_section_is_left_out_as_for_an_empty_list()
+    {
+        var onlyBad = VideosJson.Replace("\"videoId\":\"AAAAAAAAAAA\"", "\"videoId\":\"\"", StringComparison.Ordinal)
+            .Replace("\"title\":\"Second video\"", "\"title\":null", StringComparison.Ordinal);
+        var before = Console.Error;
+        Console.SetError(TextWriter.Null);
+        try
+        {
+            var html = await RenderAsync(onlyBad);
+
+            Assert.That(html, Does.Not.Contain("Latest Videos"));
+        }
+        finally
+        {
+            Console.SetError(before);
+        }
+    }
+
+    [TestCase("https://i.ytimg.com/vi/x/hqdefault.jpg")]
+    [TestCase("https://i1.ytimg.com/vi/x/hqdefault.jpg")]
+    [TestCase("https://i4.ytimg.com/vi/x/hqdefault.jpg")]
+    public void TC_SITE_R53_06_The_thumbnail_hosts_of_youtube_s_images_are_allowed(string url)
+    {
+        var data = new VideosData([new Video("AAAAAAAAAAA", "T", null, null, null, new VideoThumbnail(url))]);
+
+        var videos = Home.Videos(data, FakeApi.VideosPath, _ => Assert.Fail("no warning expected"));
+
+        Assert.That(videos.Single().Thumbnail, Is.EqualTo(url));
     }
 
     [Test]

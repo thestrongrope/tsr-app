@@ -1,4 +1,4 @@
-// The two functions of hosts/site/wwwroot/site.js that decide something without the page: run with
+// The functions of hosts/site/wwwroot/site.js that decide something without the page: run with
 //   node --test hosts/site/tests/js/
 // Node's own test runner: no package, no build step. site.js hands them over when it is loaded outside a browser.
 'use strict';
@@ -21,10 +21,14 @@ test('TC-SITE-R33-03 spaces around what was typed are not searched for, and an e
   assert.equal(site.matchesSearch('Holy Quran', 'holy  quran'), false);
 });
 
-test('TC-SITE-R33-04 the line above a tab counts the publications shown, as the present site words it', () => {
-  assert.equal(site.countLabel(0), 'No matches');
-  assert.equal(site.countLabel(1), '1 publication available');
-  assert.equal(site.countLabel(12), '12 publications available');
+// The words are the page's (domains/content/site/Publication.cs writes them into the page); the script only picks one and fills in the number.
+var countWords = { none: 'No matches', one: '1 publication available', many: '{count} publications available' };
+
+test('TC-SITE-R33-04 the line above a tab counts the publications shown, in the words the page holds', () => {
+  assert.equal(site.countLabel(0, countWords), 'No matches');
+  assert.equal(site.countLabel(1, countWords), '1 publication available');
+  assert.equal(site.countLabel(12, countWords), '12 publications available');
+  assert.equal(site.countLabel(3, { none: 'n', one: 'o', many: 'Alle {count}' }), 'Alle 3');
 });
 
 // The article list's filters (issue 67, SITE-R40 to R44). The rules of which cards and which words are the build's
@@ -81,7 +85,22 @@ test('TC-SITE-R41-07 a category and a tag together must both match', () => {
   assert.equal(site.matchesFilter('|b|', '|x|', filter), false);
 });
 
+// The words of the article list, as the page writes them into data-article-filters (domains/content/site/ArticleFilters.cs).
+var texts = {
+  allArticles: 'All Articles',
+  defaultDescription: 'Explore our collection of articles on the path of the Ahle Bait (a.s.)',
+  tagTitle: 'Articles tagged \u201C{name}\u201D',
+  tagDescription: 'Showing all articles with the tag "{name}"',
+  tagChip: 'Tag: {name}',
+  noneTitle: 'No articles found',
+  noneInCategory: ' in this category',
+  noneWithTag: ' with tag "{name}"',
+  hintTag: 'Try selecting a different tag',
+  hintCategory: 'Try selecting a different category',
+};
+
 var data = {
+  texts: texts,
   categories: {
     'core-terms': { title: 'Core Terms', parent: 'Foundations', description: 'About core terms.', chip: 'Core Terms' },
     foundations: { title: 'Foundations' },
@@ -125,16 +144,16 @@ test('TC-SITE-R43-03 an unknown category is headed by its slug and gets the defa
   assert.equal(site.headingFor({ category: '', tag: 'toString' }, data).title, 'Articles tagged “toString”');
 });
 
-test('TC-SITE-R43-04 the nothing-found words are the present site\'s: category, tag, or both', () => {
-  assert.deepEqual(site.noMatchText({ category: 'a', tag: '' }), {
+test('TC-SITE-R43-04 the nothing-found words are the page\'s, put together for a category, a tag, or both', () => {
+  assert.deepEqual(site.noMatchText({ category: 'a', tag: '' }, texts), {
     title: 'No articles found in this category',
     hint: 'Try selecting a different category',
   });
-  assert.deepEqual(site.noMatchText({ category: '', tag: 'x y' }), {
+  assert.deepEqual(site.noMatchText({ category: '', tag: 'x y' }, texts), {
     title: 'No articles found with tag "x y"',
     hint: 'Try selecting a different tag',
   });
-  assert.deepEqual(site.noMatchText({ category: 'a', tag: 'x' }), {
+  assert.deepEqual(site.noMatchText({ category: 'a', tag: 'x' }, texts), {
     title: 'No articles found in this category with tag "x"',
     hint: 'Try selecting a different tag',
   });
@@ -153,4 +172,34 @@ test('TC-SITE-R42-06 the chip names a category the panel lists, else shows the s
   assert.equal(site.chipTitle('foundations', data), 'foundations');
   assert.equal(site.chipTitle('nope', data), 'nope');
   assert.equal(site.chipTitle('constructor', data), 'constructor');
+});
+
+test('TC-SITE-R43-05 every word comes from the page: other words in the data give other headings', () => {
+  var other = JSON.parse(JSON.stringify(data));
+  other.texts.defaultDescription = 'Standard';
+  other.texts.tagTitle = 'T {name}';
+  other.texts.tagChip = 'C {name}';
+  assert.equal(site.headingFor({ category: 'foundations', tag: '' }, other).description, 'Standard');
+  assert.equal(site.headingFor({ category: '', tag: 'sample tag' }, other).title, 'T Sample Tag');
+  assert.equal(site.fill('C {name}', '$& x'), 'C $& x');
+});
+
+test('TC-SITE-R52-02 a search is its trimmed text in q, and an empty one goes to the list without q', () => {
+  assert.equal(site.searchTarget('/articles/', '  ahl bait  '), '/articles/?q=ahl+bait');
+  assert.equal(site.searchTarget('/articles/', 'a&b=c'), '/articles/?q=a%26b%3Dc');
+  assert.equal(site.searchTarget('/articles/', ''), '/articles/');
+  assert.equal(site.searchTarget('/articles/', '   \t '), '/articles/');
+});
+
+test('TC-SITE-R50-03 a part of the page that throws is reported by name and the parts after it still run', () => {
+  var ran = [];
+  var reports = [];
+  var report = function (name, error) {
+    reports.push(name + ': ' + error.message);
+  };
+  site.attempt('first', function () { ran.push('first'); }, report);
+  site.attempt('second', function () { throw new Error('boom'); }, report);
+  site.attempt('third', function () { ran.push('third'); }, report);
+  assert.deepEqual(ran, ['first', 'third']);
+  assert.deepEqual(reports, ['second: boom']);
 });

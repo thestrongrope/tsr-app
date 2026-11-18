@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using Tsr.Content.Site;
 using Tsr.Shared.Site;
@@ -145,6 +146,43 @@ public sealed partial class PublicationsTests
         Assert.That(failure!.Message, Does.Contain(FakeApi.PublicationsPath).And.Contain(problem));
     }
 
+    [TestCase("/\\host/x.pdf")]
+    [TestCase("/\t/host/x.pdf")]
+    [TestCase("/\n/host/x.pdf")]
+    [TestCase("/ x.pdf")]
+    [TestCase("/")]
+    [TestCase("//host/x.pdf")]
+    [TestCase("javascript:alert(1)")]
+    [TestCase("http://files.example.invalid/x.pdf")]
+    [TestCase("https:///x.pdf")]
+    [TestCase("https://host/\\x.pdf")]
+    [TestCase(" https://files.example.invalid/x.pdf")]
+    [TestCase("x.pdf")]
+    public async Task TC_SITE_R30_06_An_address_that_is_not_an_https_address_or_a_site_path_stops_the_build_and_names_the_publication_and_field(string address)
+    {
+        foreach (var field in new[] { "file", "readOnlineUrl" })
+        {
+            var publication = "{\"title\":\"Named book\",\"" + field + "\":" + JsonSerializer.Serialize(address) + ",\"downloadOnly\":false}";
+
+            var failure = await Assert.ThrowsAsync<SiteBuildException>(() => RenderAsync(WithPublications(publication)));
+
+            Assert.That(failure!.Message, Does.Contain("Named book").And.Contain("'" + field + "'").And.Contain(FakeApi.PublicationsPath));
+        }
+    }
+
+    [TestCase("/downloads/synthetic/x.pdf")]
+    [TestCase("/a-synthetic-web-book")]
+    [TestCase("/x/y?z=1#top")]
+    [TestCase("https://files.example.invalid/x.pdf")]
+    public async Task TC_SITE_R30_07_An_https_address_or_a_site_path_is_linked_as_sent(string address)
+    {
+        var publication = "{\"title\":\"Named book\",\"file\":" + JsonSerializer.Serialize(address) + ",\"downloadOnly\":true}";
+
+        var html = await RenderAsync(WithPublications(publication));
+
+        Assert.That(html, Does.Contain("href=\"" + WebUtility.HtmlEncode(address) + "\""));
+    }
+
     [Test]
     public async Task TC_SITE_R30_05_A_failed_answer_stops_the_build()
     {
@@ -233,6 +271,40 @@ public sealed partial class PublicationsTests
     }
 
     [Test]
+    public async Task TC_SITE_R33_08_The_page_holds_the_words_the_script_shows_for_the_count_and_the_summary_toggle()
+    {
+        var html = await RenderAsync();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(html, Does.Contain("data-count-none=\"No matches\""));
+            Assert.That(html, Does.Contain("data-count-one=\"1 publication available\""));
+            Assert.That(html, Does.Contain("data-count-many=\"{count} publications available\""));
+            Assert.That(html, Does.Contain("data-less-label=\"show less\""));
+            Assert.That(html, Does.Contain(">3 publications available</p>"));
+        });
+    }
+
+    [Test]
+    public async Task TC_SITE_R32_02_A_tab_looks_the_same_before_and_after_the_first_click()
+    {
+        var html = await RenderAsync();
+        string Value(string name) => WebUtility.HtmlDecode(Regex.Match(html, name + "=\"(?<v>[^\"]*)\"").Groups["v"].Value);
+        var tabs = Regex.Matches(html, "<button type=\"button\" role=\"tab\" aria-selected=\"(?<selected>true|false)\"[^>]*class=\"(?<class>[^\"]*)\">\\s*<span>[^<]*</span>\\s*<span class=\"(?<count>[^\"]*)\">");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(tabs, Is.Not.Empty);
+            foreach (Match tab in tabs)
+            {
+                var chosen = tab.Groups["selected"].Value == "true";
+                Assert.That(tab.Groups["class"].Value, Is.EqualTo(Value(chosen ? "data-active-class" : "data-inactive-class")));
+                Assert.That(tab.Groups["count"].Value, Is.EqualTo(Value(chosen ? "data-count-active-class" : "data-count-inactive-class")));
+            }
+        });
+    }
+
+    [Test]
     public async Task TC_SITE_R33_01_The_search_box_is_on_the_page_and_every_publication_carries_the_text_it_is_searched_by()
     {
         var html = await RenderAsync();
@@ -256,7 +328,7 @@ public sealed partial class PublicationsTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(zeta, Does.Match(@"<p data-summary>A synthetic summary of the zeta guide.</p>\s*<button type=""button"" data-summary-toggle hidden(="""")? class=""[^""]*"">more</button>"));
+            Assert.That(zeta, Does.Match(@"<p data-summary>A synthetic summary of the zeta guide.</p>\s*<button type=""button"" data-summary-toggle data-less-label=""show less"" hidden(="""")? class=""[^""]*"">more</button>"));
             // The two-line cut is the script's: without it the whole summary is read.
             Assert.That(html, Does.Not.Contain("class=\"line-clamp-2\""));
             Assert.That(Regex.Count(html, "data-summary-toggle"), Is.EqualTo(3));

@@ -3,12 +3,13 @@
    Written for a reader without scripts: every card, "All Articles" over them, the panel open. What a filter shows (the
    reset link, the nothing-found box, the chips) is written hidden. site.js reads ?category= and ?tag=, hides the cards that
    do not match (each card's data-categories and data-tags, written when the site was built), words the heading from
-   data-article-filters and marks the active link; each link's other looks are in its data- attributes. *@
+   data-article-filters (which holds every sentence it shows, ArticleFilters.cs) and marks the active link; each link's other
+   looks are in its data- attributes. *@
 <main class="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 dark:from-gray-950 dark:to-gray-900" data-article-list data-article-filters="@FilterData" data-parent-class="text-3xl opacity-70">
     <div class="max-w-7xl mx-auto px-4 py-12">
         <div class="mb-12 text-center">
-            <h1 class="text-5xl font-bold mb-4 bg-gradient-to-r from-blue-600 to-purple-600 dark:from-blue-400 dark:to-purple-400 bg-clip-text text-transparent" data-filter-heading>All Articles</h1>
-            <p class="text-lg text-gray-600 dark:text-gray-300 max-w-2xl mx-auto" data-filter-description>Explore our collection of articles on the path of the Ahle Bait (a.s.)</p>
+            <h1 class="text-5xl font-bold mb-4 bg-gradient-to-r from-blue-600 to-purple-600 dark:from-blue-400 dark:to-purple-400 bg-clip-text text-transparent" data-filter-heading>@ArticleFilters.AllArticles</h1>
+            <p class="text-lg text-gray-600 dark:text-gray-300 max-w-2xl mx-auto" data-filter-description>@ArticleFilters.DefaultDescription</p>
             <div class="mt-4" data-filter-reset hidden>
                 <a href="/articles/" class="inline-flex items-center gap-2 text-blue-600 dark:text-blue-400 hover:underline">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
