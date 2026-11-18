@@ -13,7 +13,7 @@ public sealed record V1Answer<T>(bool Success, T? Data, V1Pagination? Pagination
 public sealed record V1Pagination(bool HasMore);
 
 /// <summary>An article as a list, or another article's related list, sends it.</summary>
-public sealed record ArticleSummary(string? Slug, string? Title, string? Excerpt, IReadOnlyList<string>? Categories);
+public sealed record ArticleSummary(string? Slug, string? Title, string? Excerpt, IReadOnlyList<string>? Categories, IReadOnlyList<string>? Tags = null);
 
 /// <summary>One article as GET /api/v1/articles/{slug} sends it. <see cref="Content"/> is HTML (rendered and made safe by the API).</summary>
 public sealed record Article(
@@ -27,7 +27,7 @@ public sealed record Article(
     IReadOnlyList<ArticleSummary>? RelatedArticles);
 
 /// <summary>One category of the flat list (hierarchical=false): a child names its parent.</summary>
-public sealed record Category(string? Slug, string? Title, string? Parent, int ArticleCount);
+public sealed record Category(string? Slug, string? Title, string? Parent, int ArticleCount, string? Description = null);
 
 /// <summary>How the present website shows a title: its HTML entities decoded, right to left when it holds Arabic script.</summary>
 public static partial class TitleText

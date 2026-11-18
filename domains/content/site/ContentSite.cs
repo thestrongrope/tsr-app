@@ -40,12 +40,20 @@ public static partial class ContentSite
     {
         ArgumentNullException.ThrowIfNull(api);
         var summaries = await ReadListAsync(api, ct);
-        var categories = (await ReadCategoriesAsync(api, ct)).ToDictionary(c => c.Slug!, StringComparer.Ordinal);
+        var categoryList = await ReadCategoriesAsync(api, ct);
+        var categories = categoryList.ToDictionary(c => c.Slug!, StringComparer.Ordinal);
 
         var pages = new List<SitePage>
         {
             new("/articles/", SiteName, typeof(ArticleIndexPage),
-                new Dictionary<string, object?> { ["Articles"] = summaries, ["Categories"] = categories }, NavTitle: "Articles"),
+                new Dictionary<string, object?>
+                {
+                    ["Articles"] = summaries,
+                    ["Categories"] = categories,
+                    ["Panel"] = ArticleFilters.Panel(categoryList, summaries),
+                    ["FilterData"] = ArticleFilters.DataJson(categoryList, summaries),
+                },
+                NavTitle: "Articles"),
         };
 
         foreach (var summary in summaries)
@@ -119,6 +127,7 @@ public static partial class ContentSite
             foreach (var summary in data)
             {
                 Require(summary.Slug is not null && summary.Title is not null, path, "an article without a slug or a title");
+                Require(summary.Categories is not null && summary.Tags is not null, path, "an article without categories or tags");
                 Folder(summary.Slug!);
                 summaries.Add(summary);
             }
