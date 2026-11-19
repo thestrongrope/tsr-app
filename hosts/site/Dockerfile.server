@@ -1,0 +1,25 @@
+# The server of the generated pages (docker-compose.yml "site"): the stock nginx image with ONE setting changed, baked in
+# so the production stack mounts no configuration (hosts/api/tests/ProductionStackTests.cs, No_second_proxy). The setting:
+# an address the site does not publish answers 404 with the site's own page, /404.html, which the generator writes.
+# It forwards nothing. Build context: hosts/site.
+#
+# Prove it without starting the stack (docs/testing.md):
+#   docker build -f hosts/site/Dockerfile.server --target selftest hosts/site
+
+FROM nginx:1.27-alpine AS server
+# The stock file has this line commented out. The grep fails the build if a new image version words it differently.
+RUN sed -i 's|^ *#error_page  404  */404.html;|    error_page 404 /404.html;|' /etc/nginx/conf.d/default.conf \
+ && grep -q '^    error_page 404 /404.html;$' /etc/nginx/conf.d/default.conf \
+ && nginx -t
+
+# Never run and never shipped: serves a stand-in page inside the build and asks for an unknown address.
+FROM server AS selftest
+RUN echo 'stand-in not-found page' > /usr/share/nginx/html/404.html \
+ && nginx \
+ && sleep 1 \
+ && printf 'GET /no-such-address HTTP/1.0\r\nHost: localhost\r\n\r\n' | nc 127.0.0.1 80 > /tmp/answer \
+ && grep -q '^HTTP/1.1 404' /tmp/answer \
+ && grep -q 'stand-in not-found page' /tmp/answer \
+ && printf 'GET /articles/x/ HTTP/1.0\r\nHost: localhost\r\n\r\n' | nc 127.0.0.1 80 | grep -q '^HTTP/1.1 404'
+
+FROM server

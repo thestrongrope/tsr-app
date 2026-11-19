@@ -322,13 +322,65 @@ public sealed class ContentFilesTests
         Assert.That(ArticleHtml.ReadingMinutes(string.Join(" \n\t", Enumerable.Repeat("word", words)) + ending), Is.EqualTo(minutes));
 
     [Test]
-    public void Markdown_becomes_plain_commonmark_html_without_the_github_extensions()
+    public void Strikethrough_and_task_lists_of_github_markdown_stay_as_written()
     {
-        var html = ArticleHtml.ToHtml("## Heading\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n~~gone~~\n\n- [x] done\n\nSee https://example.invalid/page now.\n");
+        var html = ArticleHtml.ToHtml("## Heading\n\n~~gone~~\n\n- [x] done\n");
 
-        Assert.That(html, Does.Contain("<h2>Heading</h2>"));
-        Assert.That(html, Does.Contain("| 1 | 2 |").And.Contain("~~gone~~").And.Contain("<li>[x] done</li>"));
-        Assert.That(html, Does.Not.Contain("<table").And.Not.Contain("<del").And.Not.Contain("checkbox").And.Not.Contain("<a "));
+        Assert.That(html, Is.EqualTo("<h2>Heading</h2>\n<p>~~gone~~</p>\n<ul>\n<li>[x] done</li>\n</ul>\n"));
+    }
+
+    [Test]
+    public void A_footnote_becomes_a_numbered_reference_and_a_list_of_notes_at_the_end()
+    {
+        var html = ArticleHtml.ToHtml("A claim[^1] in a line.\n\n[^1]: The *source* of the claim.\n");
+
+        Assert.That(html, Is.EqualTo(
+            "<p>A claim<a id=\"fnref:1\" href=\"#fn:1\" class=\"footnote-ref\"><sup>1</sup></a> in a line.</p>\n"
+            + "<div class=\"footnotes\">\n<hr />\n<ol>\n<li id=\"fn:1\">\n"
+            + "<p>The <em>source</em> of the claim.<a href=\"#fnref:1\" class=\"footnote-back-ref\">&#8617;</a></p>\n"
+            + "</li>\n</ol>\n</div>\n"));
+    }
+
+    [Test]
+    public void A_pipe_table_becomes_a_table()
+    {
+        var html = ArticleHtml.ToHtml("| Day | Topic |\n|---|---|\n| One | Terms |\n");
+
+        Assert.That(html, Is.EqualTo(
+            "<table>\n<thead>\n<tr>\n<th>Day</th>\n<th>Topic</th>\n</tr>\n</thead>\n"
+            + "<tbody>\n<tr>\n<td>One</td>\n<td>Terms</td>\n</tr>\n</tbody>\n</table>\n"));
+    }
+
+    [TestCase("See https://example.invalid/page now.", "See <a href=\"https://example.invalid/page\">https://example.invalid/page</a> now.")]
+    [TestCase("See http://example.invalid/a?b=1 now.", "See <a href=\"http://example.invalid/a?b=1\">http://example.invalid/a?b=1</a> now.")]
+    [TestCase("See www.example.invalid now.", "See <a href=\"http://www.example.invalid\">www.example.invalid</a> now.")]
+    public void A_bare_web_address_becomes_a_link(string markdown, string html) =>
+        Assert.That(ArticleHtml.ToHtml(markdown), Is.EqualTo("<p>" + html + "</p>\n"));
+
+    [Test]
+    public void A_bare_address_with_another_scheme_in_a_table_cell_keeps_its_text_and_has_no_address()
+    {
+        var html = ArticleHtml.ToHtml(
+            "| Cell |\n|---|\n| ftp://example.invalid/f |\n| tel:+15550100 |\n| <javascript:alert(1)> |\n| [x](javascript:alert(2)) ![y](data:image/png;base64,AAAA) |\n");
+
+        Assert.That(html, Does.Contain("<td><a href=\"\">ftp://example.invalid/f</a></td>"));
+        Assert.That(html, Does.Contain("<td><a href=\"\">tel:+15550100</a></td>"));
+        Assert.That(html, Does.Contain("<td><a href=\"\">javascript:alert(1)</a></td>"));
+        Assert.That(html, Does.Contain("<td><a href=\"\">x</a> <img src=\"\" alt=\"y\" /></td>"));
+        Assert.That(html, Does.Not.Match("(href|src)=\"[^\"]"));
+    }
+
+    [Test]
+    public void Raw_html_in_a_footnote_or_a_table_cell_is_dropped()
+    {
+        var html = ArticleHtml.ToHtml(
+            "Text[^1].\n\n| Cell |\n|---|\n| in <span onclick=\"run()\">a cell</span> <script>alert(1)</script> |\n\n"
+            + "[^1]: A note <b onmouseover=\"run()\">bold</b> <script>alert(2)</script> [x](javascript:alert(3)).\n\n    <div onclick=\"run()\">block</div>\n");
+
+        Assert.That(html, Does.Contain("<td>in a cell alert(1)</td>"));
+        // The dropped block was the note's last: the link back, which Markdig had put after it, stays in a paragraph of its own.
+        Assert.That(html, Does.Contain("<li id=\"fn:1\">\n<p>A note bold alert(2) <a href=\"\">x</a>.</p>\n<p><a href=\"#fnref:1\" class=\"footnote-back-ref\">&#8617;</a></p>\n</li>"));
+        Assert.That(html, Does.Not.Contain("<script").And.Not.Contain("<span").And.Not.Contain("<b ").And.Not.Contain("<div on").And.Not.Contain("run()").And.Not.Contain("javascript:"));
     }
 
     [Test]

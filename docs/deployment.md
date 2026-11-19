@@ -15,7 +15,7 @@ and runs the file. It holds no secret and publishes no port; `hosts/api/tests/Pr
 | `gotenberg` | PDF rendering for report downloads | always |
 | `elasticsearch` | the search index; data in the volume `es-data` | always |
 | `site-build` | the static site generator (`hosts/site`): reads the API, writes the pages into the volume `site-data` | once per start; retried up to five times while the API is not ready |
-| `site` | nginx serving `site-data`, read-only; port 80. It forwards nothing | always |
+| `site` | nginx serving `site-data`, read-only; port 80. It forwards nothing. Its image is the stock one with one setting baked in (`hosts/site/Dockerfile.server`): an address the site does not publish answers 404 with the site's own `404.html` | always |
 
 Two services are reached from outside. Attach the API's host name to `api`, port 8080, and the site's host name to `site`, port 80. The server's proxy (Traefik) is the
 only proxy: the nginx gateway in `hosts/gateway/` belongs to the dev and test stacks.
@@ -33,6 +33,7 @@ Set these in the deployment tool. A missing required setting stops the start and
 | `TSR_WORKERS` | no | comma-separated worker names. Empty runs none: a deploy alone sends nothing. `push-drain` and `class-schedules` send to members' phones |
 | `TSR_GOOGLE_SERVICE_ACCOUNT_B64` | no | a service account key in base64: push, Firebase account deletion, sheet reads |
 | `TSR_PUBLIC_WEB_BASE` | no | the base of share links |
+| `TSR_CORS_ORIGINS` | no | the browser origins that may call the API, comma-separated (for a web build of the app, e.g. `https://app.thestrongrope.com`). Empty allows none. An entry with a path, a trailing slash or a wildcard stops the start |
 | `TSR_QUIZ_SETTINGS_SHEET_ID`, `TSR_YOUTUBE_CHANNEL_ID`, `TSR_NOTIFIER_URL` | no | each empty switches its feature off |
 
 Not wired yet: the app-version catalog file (`TSR_APP_VERSIONS_FILE`; without it the version check allows every build) and the

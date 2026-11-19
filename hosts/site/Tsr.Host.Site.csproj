@@ -9,6 +9,11 @@
     <None Remove="tests/**" />
   </ItemGroup>
   <ItemGroup>
+    <!-- The stylesheet, the script, the fonts and the images: copied beside the program, which copies them into the site. -->
+    <Content Remove="wwwroot/**" />
+    <None Include="wwwroot/**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <ProjectReference Include="../../shared/site/Tsr.Shared.Site.csproj" />
     <ProjectReference Include="../../domains/platform/site/Tsr.Platform.Site.csproj" />

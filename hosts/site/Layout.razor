@@ -1,34 +1,52 @@
-@* The one page frame: head, navigation, footer. Domain pages render inside <main>. No JavaScript. *@
+@using System.Net
+@* The one page frame, as tsr-web's app/layout.tsx: head, header, the page (which writes its own <main>), footer.
+   Two scripts only: the before-paint theme snippet, word for word from layout.tsx, and /site.js; a page that names one more
+   (SitePage.Script) gets it after site.js. No analytics. *@
 <html lang="en">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>@Page.Title · The Strong Rope</title>
+    <title>@Page.Title</title>
+    <meta name="description" content="@(Page.Description ?? DefaultDescription)">
+    <link rel="icon" href="/icon.png">
+    <link rel="shortcut icon" href="/favicon.ico">
+    <link rel="apple-touch-icon" href="/icon.png">
     <link rel="stylesheet" href="/site.css">
+    @if (Page.RefreshTo is not null)
+    {
+        <meta http-equiv="refresh" content="0; url=@Page.RefreshTo">
+    }
+    @BeforePaint
 </head>
 <body>
-    <header>
-        <a href="/">The Strong Rope</a>
-        <nav>
-            @foreach (var item in Nav)
-            {
-                <a href="@item.Path">@item.NavTitle</a>
-            }
-        </nav>
-    </header>
-    <main>
-        <DynamicComponent Type="Page.Component" Parameters="ToMutable(Page.Parameters)" />
-    </main>
-    <footer>Built from the TSR API. Synthetic data only.</footer>
+    <Navigation Menu="Menu" />
+    <DynamicComponent Type="Page.Component" Parameters="ToMutable(Page.Parameters)" />
+    <Footer />
+    @SiteScript
+    @PageScript
 </body>
 </html>
 
 @code {
+    private const string DefaultDescription = "The Path of the Ahle Bait (a.s.)";
+
+    // Razor refuses a script element written in a component, so the two are fixed texts of this file, never data.
+    // The first applies a saved dark preference before paint, so a visitor who chose dark never sees a light flash.
+    private static readonly MarkupString BeforePaint = new(
+        "<script>(function(){try{if(localStorage.getItem('theme')==='dark'){document.documentElement.classList.add('dark');}}catch(e){/* no storage: fall back to the light default */}})();</script>");
+
+    private static readonly MarkupString SiteScript = new("<script src=\"/site.js\" defer></script>");
+
+    private MarkupString PageScript => Page.Script is null
+        ? default
+        : new MarkupString($"<script src=\"{WebUtility.HtmlEncode(Page.Script)}\" defer></script>");
+
     [Parameter, EditorRequired]
     public SitePage Page { get; set; } = default!;
 
+    /// <summary>The categories of the menu, read from the API when the site was built.</summary>
     [Parameter, EditorRequired]
-    public IReadOnlyList<SitePage> Nav { get; set; } = default!;
+    public IReadOnlyList<MenuCategory> Menu { get; set; } = default!;
 
     private static Dictionary<string, object> ToMutable(IReadOnlyDictionary<string, object?> parameters) =>
         parameters.ToDictionary(p => p.Key, p => p.Value!);

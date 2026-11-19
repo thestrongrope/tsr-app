@@ -1,0 +1,614 @@
+{
+  "en": {
+    "dir": "ltr",
+    "title": "PERSONAL SELF-REFLECTION & WAITING SCORECARD",
+    "resetButton": "Reset All Answers",
+    "notice": {
+      "line1": "This sheet is not for teachers, parents, or friends.",
+      "line2": "It is between you, Allah, and Imam Mahdi (a.t.f.s.).",
+      "notSaved": "Your answers are not saved anywhere."
+    },
+    "instructions": {
+      "title": "HOW TO USE THIS SCORECARD",
+      "items": [
+        {
+          "bold": "honest",
+          "text": "Be {bold}, not harsh"
+        },
+        {
+          "bold": "calculated automatically",
+          "text": "Scores are {bold}"
+        },
+        {
+          "bold": "diagnostic",
+          "text": "This is {bold}, not a verdict"
+        },
+        {
+          "text": "Improvement matters more than totals"
+        }
+      ]
+    },
+    "section1": {
+      "title": "SECTION 1: BRUTAL HONESTY CHECK",
+      "subtitle": "For each statement, select Yes or No.",
+      "questions": [
+        "I believe the Imam (a.t.f.s.) is alive",
+        "I believe he is aware of my actions",
+        "I live most days as if that belief matters",
+        "I talk more about the Imam than I act for him",
+        "I have habits I know would disappoint him",
+        "I make excuses instead of fixing them"
+      ],
+      "yes": "Yes",
+      "no": "No",
+      "scoringNote": "First 3 questions: Yes = 1, No = 0. Last 3 questions are reverse scored: Yes = 0, No = 1.",
+      "reflection": "Which box made you uncomfortable? Why?",
+      "reflectionPlaceholder": "Write your reflection here..."
+    },
+    "section2": {
+      "title": "SECTION 2: WAITING OR WASTING?",
+      "subtitle": "Tap to select one option for each.",
+      "questions": [
+        {
+          "label": "Waiting is mostly:",
+          "options": [
+            "Words",
+            "Effort"
+          ]
+        },
+        {
+          "label": "Faith strongest when:",
+          "options": [
+            "Watched",
+            "Alone"
+          ]
+        },
+        {
+          "label": "Biggest struggle:",
+          "options": [
+            "Desire",
+            "Ego",
+            "Fear",
+            "Laziness"
+          ]
+        },
+        {
+          "label": "When I fall:",
+          "options": [
+            "Repent",
+            "Repeat"
+          ]
+        },
+        {
+          "label": "My phone pulls me toward:",
+          "options": [
+            "Purpose",
+            "Distraction"
+          ]
+        }
+      ],
+      "scoringNote": "Effort, Alone, Repent, Purpose = 1 each. Any honest struggle named = 1.",
+      "reflection": "One-sentence truth about my \"waiting\":",
+      "reflectionPlaceholder": "Write your reflection here..."
+    },
+    "section3": {
+      "title": "SECTION 3: IF THE IMAM APPEARED TONIGHT",
+      "subtitle": "Reflection only — not scored",
+      "instruction": "Answer without poetry. Be specific and honest.",
+      "questions": [
+        {
+          "label": "Habit I'd be ashamed of:",
+          "placeholder": "Be honest with yourself..."
+        },
+        {
+          "label": "Strength I could offer:",
+          "placeholder": "What can you contribute?"
+        },
+        {
+          "label": "Why he might not trust me yet:",
+          "placeholder": "Reflect deeply..."
+        },
+        {
+          "label": "Area I must fix first:",
+          "placeholder": "Your priority..."
+        }
+      ]
+    },
+    "section4": {
+      "title": "SECTION 4: CHARACTER TEST",
+      "subtitle": "Rate yourself honestly for each trait.",
+      "traits": [
+        "Honesty",
+        "Self-control",
+        "Prayer discipline",
+        "Respect for others",
+        "Speaking truth"
+      ],
+      "levels": {
+        "weak": "Weak",
+        "inconsistent": "Inconsistent",
+        "strong": "Strong"
+      },
+      "scoringNote": "Strong = 1, Inconsistent = 0.5, Weak = 0.",
+      "reflection": "Weakest trait to work on first:",
+      "reflectionPlaceholder": "Which trait needs the most attention?"
+    },
+    "section5": {
+      "title": "SECTION 5: ONE QUIET ACT OF SERVICE",
+      "subtitle": "Not public. Not announced. Choose what you commit to.",
+      "options": [
+        "Quit a private sin",
+        "Fix my prayer seriously",
+        "Control my tongue",
+        "Start one (more) class",
+        "Serve my community better"
+      ],
+      "other": "Other:",
+      "otherPlaceholder": "Specify...",
+      "planLabel": "Action plan (practical):",
+      "planPlaceholder": "What specific steps will you take? Be detailed...",
+      "scoringNote": "Choice selected = 1, Clear detailed plan (30+ chars) = 2, Brief plan = 1."
+    },
+    "section6": {
+      "title": "SECTION 6: COVENANT",
+      "subtitle": "Reflection only — not scored",
+      "instruction": "Write this yourself, from the heart.",
+      "prompt": "\"O Allah, until the appearance of my Imam, I commit to...\"",
+      "placeholder": "Write your personal covenant here..."
+    },
+    "score": {
+      "title": "YOUR SCORE",
+      "ranges": [
+        {
+          "range": "15-19",
+          "label": "Conscious waiting, needs consistency"
+        },
+        {
+          "range": "11-14",
+          "label": "Sincere but undisciplined"
+        },
+        {
+          "range": "6-10",
+          "label": "Faith present, habits misaligned"
+        },
+        {
+          "range": "Below 6",
+          "label": "Wake-up call, not a failure"
+        }
+      ],
+      "important": "The most important number is not the total.",
+      "focusArea": "Your focus area:"
+    },
+    "reviewRule": {
+      "title": "40-DAY REVIEW RULE",
+      "text": "Do not re-score everything. Ask only:",
+      "quote": "\"Did I fix the ONE thing I committed to?\""
+    },
+    "finalReminder": {
+      "title": "Final Reminder",
+      "items": [
+        "The Imam does not need perfect people",
+        "He needs honest, disciplined, reliable ones"
+      ],
+      "arabic": "اصلاح نفس",
+      "arabicMeaning": "is real waiting. Everything else is noise"
+    },
+    "sticky": {
+      "conscious": "Conscious waiting",
+      "sincere": "Sincere but undisciplined",
+      "misaligned": "Habits misaligned",
+      "wakeup": "Wake-up call",
+      "focus": "Focus:"
+    },
+    "languageSelect": "Language",
+    "loading": "Loading..."
+  },
+  "ur": {
+    "dir": "rtl",
+    "title": "خود آزمائی اور انتظار کا اسکور کارڈ",
+    "resetButton": "جوابات مٹاکر پھر سے شروع کریں",
+    "notice": {
+      "line1": "یہ اسکور کارڈ کسی اور کو بتانے لئے نہیں ہے۔",
+      "line2": "یہ صرف آپ کے، امام زمانہ (عج) کے اور اللہ کے درمیان ہے۔",
+      "notSaved": "آپ کے جوابات صرف آپ کے پاس محفوظ رہیں گے۔"
+    },
+    "instructions": {
+      "title": "اس اسکور کارڈ کا استعمال کیسے کریں:",
+      "items": [
+        {
+          "bold": "ایمانداری",
+          "text": "سختی نہیں بلکہ {bold} سے جواب دیں"
+        },
+        {
+          "bold": "خود بخود",
+          "text": "اسکور {bold} آ جائے گا"
+        },
+        {
+          "bold": "تجزیہ",
+          "text": "یہ صرف {bold} ہے، فیصلہ نہیں"
+        },
+        {
+          "text": "خود کی بہتری زیادہ اہم ہے، اسکور نہیں"
+        }
+      ]
+    },
+    "section1": {
+      "title": "سیکشن 1: سچائی کی جانچ",
+      "subtitle": "ہر جملہ کے لیے ہاں یا نہیں کا انتخاب کریں:",
+      "questions": [
+        "مجھے یقین ہے کہ امام (عج) زندہ ہیں",
+        "مجھے یقین ہے کہ وہ میرے اعمال سے باخبر ہیں",
+        "میں زیادہ تر وقت ایسے گذارتا ہوں جیسے یہ عقیدہ اہم ہے",
+        "میں امام (عج) کے بارے میں بات زیادہ کرتا ہوں، عمل کم",
+        "میری کچھ ایسی عادتیں ہیں جو امام (عج) کو ناراض کریں گی",
+        "میں ان عادتوں کو درست کرنے کی بجائے بہانے بناتا ہوں"
+      ],
+      "yes": "ہاں",
+      "no": "نہیں",
+      "scoringNote": "پہلے 3 سوالات: ہاں=1، نہیں=0۔ آخری 3: ہاں=0، نہیں=1۔",
+      "reflection": "کون سی بات آپ کو تکلیف دیتی ہے؟ کیوں؟",
+      "reflectionPlaceholder": "اپنا جواب یہاں لکھیں…"
+    },
+    "section2": {
+      "title": "سیکشن 2: انتظار یا وقت ضائع؟",
+      "subtitle": "ہر ایک کے لیے ایک آپشن چنیں۔",
+      "questions": [
+        {
+          "label": "انتظار زیادہ تر:",
+          "options": [
+            "باتیں",
+            "کوشش"
+          ]
+        },
+        {
+          "label": "ایمان مضبوط جب:",
+          "options": [
+            "جب کوئی دیکھ رہا ہو",
+            "جب اکیلا ہوں"
+          ]
+        },
+        {
+          "label": "سب سے بڑی جدوجہد:",
+          "options": [
+            "خواہش",
+            "انا",
+            "خوف",
+            "سستی"
+          ]
+        },
+        {
+          "label": "اگر کہیں لڑکھڑاؤں:",
+          "options": [
+            "توبہ",
+            "دہرانا"
+          ]
+        },
+        {
+          "label": "میرا فون مجھے لے جاتا ہے:",
+          "options": [
+            "ہدف تک",
+            "ہدف سے دور"
+          ]
+        }
+      ],
+      "scoringNote": "کوشش، اکیلا، توبہ، ہدف = 1۔ کوئی سچی جدوجہد بتائی = 1۔",
+      "reflection": "میرا \"انتظار\" ایک جملے میں:",
+      "reflectionPlaceholder": "اپنا جواب یہاں لکھیں…"
+    },
+    "section3": {
+      "title": "سیکشن 3: اگر امام (عج) آج رات آ جائیں",
+      "subtitle": "صرف غور و فکر، اسکور نہیں۔",
+      "instruction": "پوری ایمانداری سے جواب دیں۔ شاعری نہ کریں۔",
+      "questions": [
+        {
+          "label": "جس عادت پر شرم آئے گی:",
+          "placeholder": "اپنے ساتھ ایمانداری سے..."
+        },
+        {
+          "label": "ایک قابلیت جو میں پیش کر سکتا ہوں:",
+          "placeholder": "آپ کیا دے سکتے ہیں?"
+        },
+        {
+          "label": "امام (عج) ابھی مجھ پر بھروسہ کیوں نہیں کر سکتے:",
+          "placeholder": "گہرائی سے سوچیں..."
+        },
+        {
+          "label": "سب سے پہلے ٹھیک کروں گا:",
+          "placeholder": "آپ کی ترجیح..."
+        }
+      ]
+    },
+    "section4": {
+      "title": "سیکشن 4: کردار کا محاسبہ",
+      "subtitle": "ہر خصوصیت کے لیے ایمانداری سے انتخاب کریں۔",
+      "traits": [
+        "ایمانداری",
+        "خود پر قابو",
+        "اوّلِ وقت نماز کی پابندی",
+        "دوسروں کا احترام",
+        "سچ بولنا"
+      ],
+      "levels": {
+        "weak": "کمزور",
+        "inconsistent": "اوسط",
+        "strong": "مضبوط"
+      },
+      "scoringNote": "مضبوط=1، اوسط=0.5، کمزور=0۔",
+      "reflection": "سب سے پہلے کون سی کمزوری پر کام کرنا ہے:",
+      "reflectionPlaceholder": "کس خصوصیت پر سب سے زیادہ توجہ چاہیے؟"
+    },
+    "section5": {
+      "title": "سیکشن 5: ایک خاموش خدمت",
+      "subtitle": "عوامی نہ ہو۔ اعلان نہ کریں۔ وعدہ کریں۔",
+      "options": [
+        "ایک مخفی گناہ چھوڑنا",
+        "نماز کو سنجیدگی سے درست کرنا",
+        "زبان پر قابو رکھنا",
+        "کچھ لوگوں کو دینی تعلیم حاصل کرنے کی ترغیب دلانا",
+        "اپنی کمیونٹی کی بہتر خدمت"
+      ],
+      "other": "اس کے علاوہ کچھ اور:",
+      "otherPlaceholder": "وضاحت کریں...",
+      "planLabel": "عملی منصوبہ:",
+      "planPlaceholder": "آپ کون سے مخصوص اقدامات کریں گے؟ تفصیل سے...",
+      "scoringNote": "انتخاب = 1، واضح تفصیلی منصوبہ (30+ حروف) = 2، مختصر = 1۔"
+    },
+    "section6": {
+      "title": "سیکشن 6: عہد",
+      "subtitle": "صرف غور و فکر، اسکور نہیں",
+      "instruction": "یہ خود دل سے لکھیں۔",
+      "prompt": "\"اے اللہ، میرے امام کے ظہور تک، میرا یہ عہد ہے کہ...\"",
+      "placeholder": "اپنا ذاتی عہد یہاں لکھیں..."
+    },
+    "score": {
+      "title": "آپ کا اسکور",
+      "ranges": [
+        {
+          "range": "15-19",
+          "label": "باشعور انتظار، استقامت چاہیے"
+        },
+        {
+          "range": "11-14",
+          "label": "مخلص مگر بے ترتیب"
+        },
+        {
+          "range": "6-10",
+          "label": "ایمان ہے، عادتیں غلط"
+        },
+        {
+          "range": "6 سے کم",
+          "label": "بیداری کی پکار، ناکامی نہیں"
+        }
+      ],
+      "important": "سب سے اہم اسکور نہیں۔",
+      "focusArea": "آپ کی توجہ:"
+    },
+    "reviewRule": {
+      "title": "40 دن کا جائزہ اصول",
+      "text": "سب کچھ دوبارہ اسکور نہ کریں۔ صرف پوچھیں:",
+      "quote": "\"کیا میں نے وہ ایک چیز ٹھیک کی جس کا عہد کیا تھا؟\""
+    },
+    "finalReminder": {
+      "title": "آخری یاد دہانی",
+      "items": [
+        "امام (عج) کو کامل لوگوں کی ضرورت نہیں",
+        "انہیں ایماندار، منظم، قابل اعتماد لوگ چاہیے"
+      ],
+      "arabic": "اصلاحِ نفس",
+      "arabicMeaning": "ہی حقیقی انتظار ہے۔ باقی سب شور ہے۔"
+    },
+    "sticky": {
+      "conscious": "باشعور انتظار",
+      "sincere": "مخلص مگر بے ترتیب",
+      "misaligned": "عادتیں غلط",
+      "wakeup": "بیداری کی پکار",
+      "focus": "توجہ:"
+    },
+    "languageSelect": "زبان",
+    "loading": "لوڈ ہو رہا ہے..."
+  },
+  "gu": {
+    "dir": "ltr",
+    "title": "વ્યક્તિગત આત્મ-ચિંતન અને ઇન્તેઝારનું કાર્ડ",
+    "resetButton": "બધા જવાબો રીસેટ કરો",
+    "notice": {
+      "line1": "આ શીટ શિક્ષકો, માતા-પિતા કે મિત્રો માટે નથી.",
+      "line2": "આ તમારી, અલ્લાહ અને ઇમામ મહદી (અ.સ.) વચ્ચે છે.",
+      "notSaved": "તમારા જવાબો ક્યાંય સાચવવામાં આવતા નથી."
+    },
+    "instructions": {
+      "title": "આ કાર્ડનો ઉપયોગ કેવી રીતે કરવો",
+      "items": [
+        {
+          "bold": "પ્રામાણિક",
+          "text": "કઠોર નહીં, {bold} બનો"
+        },
+        {
+          "bold": "આપોઆપ",
+          "text": "સ્કોર {bold} ગણાય છે"
+        },
+        {
+          "bold": "નિદાન",
+          "text": "આ {bold} છે, ચુકાદો નહીં"
+        },
+        {
+          "text": "સુધારો કુલ કરતાં વધુ મહત્વનો છે"
+        }
+      ]
+    },
+    "section1": {
+      "title": "વિભાગ 1: કડક પ્રામાણિકતા ચકાસણી",
+      "subtitle": "દરેક નિવેદન માટે હા કે ના પસંદ કરો.",
+      "questions": [
+        "હું માનું છું કે ઇમામ (અ.સ.) જીવંત છે",
+        "હું માનું છું કે તેઓ મારી ક્રિયાઓથી વાકેફ છે",
+        "હું મોટાભાગના દિવસો એવી રીતે જીવું છું જાણે આ માન્યતા મહત્વની હોય",
+        "હું ઇમામ વિશે વાત વધુ કરું છું, કાર્ય ઓછું",
+        "મારી એવી આદતો છે જે તેમને નિરાશ કરશે",
+        "હું તેને સુધારવાને બદલે બહાના બનાવું છું"
+      ],
+      "yes": "હા",
+      "no": "ના",
+      "scoringNote": "પ્રથમ 3 પ્રશ્નો: હા = 1, ના = 0. છેલ્લા 3 ઉલટા છે: હા = 0, ના = 1.",
+      "reflection": "કયો ખાનો તમને અસ્વસ્થ કર્યો? શા માટે?",
+      "reflectionPlaceholder": "તમારું ચિંતન અહીં લખો..."
+    },
+    "section2": {
+      "title": "વિભાગ 2: ઇન્તેઝાર કે બરબાદી?",
+      "subtitle": "દરેક માટે એક વિકલ્પ પસંદ કરો.",
+      "questions": [
+        {
+          "label": "ઇન્તેઝાર મોટેભાગે:",
+          "options": [
+            "શબ્દો",
+            "મહેનત"
+          ]
+        },
+        {
+          "label": "ઈમાન મજબૂત જ્યારે:",
+          "options": [
+            "જોવાય",
+            "એકલા"
+          ]
+        },
+        {
+          "label": "સૌથી મોટો સંઘર્ષ:",
+          "options": [
+            "ઇચ્છા",
+            "અહંકાર",
+            "ડર",
+            "આળસ"
+          ]
+        },
+        {
+          "label": "જ્યારે હું પડું:",
+          "options": [
+            "તોબા",
+            "પુનરાવર્તન"
+          ]
+        },
+        {
+          "label": "મારો ફોન મને લઈ જાય:",
+          "options": [
+            "હેતુ",
+            "વિક્ષેપ"
+          ]
+        }
+      ],
+      "scoringNote": "મહેનત, એકલા, તોબા, હેતુ = 1 દરેક. કોઈપણ પ્રામાણિક સંઘર્ષ = 1.",
+      "reflection": "મારા \"ઇન્તેઝાર\" વિશે એક વાક્યની સત્યતા:",
+      "reflectionPlaceholder": "તમારું ચિંતન અહીં લખો..."
+    },
+    "section3": {
+      "title": "વિભાગ 3: જો ઇમામ આજે રાત્રે દેખાય",
+      "subtitle": "માત્ર ચિંતન — સ્કોર નથી",
+      "instruction": "કવિતા વિના જવાબ આપો. સ્પષ્ટ અને પ્રામાણિક રહો.",
+      "questions": [
+        {
+          "label": "જે આદત પર શરમ આવશે:",
+          "placeholder": "તમારી સાથે પ્રામાણિક રહો..."
+        },
+        {
+          "label": "હું કઈ તાકાત આપી શકું:",
+          "placeholder": "તમે શું આપી શકો?"
+        },
+        {
+          "label": "તેઓ હજુ મારા પર ભરોસો કેમ ન કરે:",
+          "placeholder": "ઊંડાણથી વિચારો..."
+        },
+        {
+          "label": "પહેલા કયો વિસ્તાર સુધારવો:",
+          "placeholder": "તમારી પ્રાથમિકતા..."
+        }
+      ]
+    },
+    "section4": {
+      "title": "વિભાગ 4: ચારિત્ર્ય કસોટી",
+      "subtitle": "દરેક લક્ષણ માટે પ્રામાણિકતાથી રેટ કરો.",
+      "traits": [
+        "પ્રામાણિકતા",
+        "આત્મ-નિયંત્રણ",
+        "નમાઝની નિયમિતતા",
+        "અન્યનો આદર",
+        "સત્ય બોલવું"
+      ],
+      "levels": {
+        "weak": "નબળું",
+        "inconsistent": "અસંગત",
+        "strong": "મજબૂત"
+      },
+      "scoringNote": "મજબૂત = 1, અસંગત = 0.5, નબળું = 0.",
+      "reflection": "પહેલા કામ કરવા માટે સૌથી નબળું લક્ષણ:",
+      "reflectionPlaceholder": "કયા લક્ષણ પર સૌથી વધુ ધ્યાન જોઈએ?"
+    },
+    "section5": {
+      "title": "વિભાગ 5: એક શાંત સેવા કાર્ય",
+      "subtitle": "જાહેર નહીં. જાહેરાત નહીં. તમારી પ્રતિબદ્ધતા પસંદ કરો.",
+      "options": [
+        "એક ખાનગી ગુનાહ છોડવો",
+        "નમાઝને ગંભીરતાથી સુધારવી",
+        "જીભ પર કાબૂ રાખવો",
+        "એક (વધુ) ક્લાસ શરૂ કરવો",
+        "મારા સમુદાયની વધુ સારી સેવા"
+      ],
+      "other": "અન્ય:",
+      "otherPlaceholder": "સ્પષ્ટ કરો...",
+      "planLabel": "વ્યવહારિક યોજના:",
+      "planPlaceholder": "તમે કયા ચોક્કસ પગલાં લેશો? વિગતવાર...",
+      "scoringNote": "પસંદગી = 1, સ્પષ્ટ વિગતવાર યોજના (30+ અક્ષરો) = 2, ટૂંકી = 1."
+    },
+    "section6": {
+      "title": "વિભાગ 6: વચન",
+      "subtitle": "માત્ર ચિંતન — સ્કોર નથી",
+      "instruction": "આ તમે જાતે દિલથી લખો.",
+      "prompt": "\"હે અલ્લાહ, મારા ઇમામના ઝુહૂર સુધી, હું વચન આપું છું...\"",
+      "placeholder": "તમારું વ્યક્તિગત વચન અહીં લખો..."
+    },
+    "score": {
+      "title": "તમારો સ્કોર",
+      "ranges": [
+        {
+          "range": "15-19",
+          "label": "જાગૃત ઇન્તેઝાર, સ્થિરતા જોઈએ"
+        },
+        {
+          "range": "11-14",
+          "label": "નિષ્ઠાવાન પણ અનિયમિત"
+        },
+        {
+          "range": "6-10",
+          "label": "ઈમાન છે, આદતો અસંગત"
+        },
+        {
+          "range": "6 થી નીચે",
+          "label": "જાગવાની પુકાર, નિષ્ફળતા નહીં"
+        }
+      ],
+      "important": "સૌથી મહત્વનો આંક કુલ નથી.",
+      "focusArea": "તમારો ધ્યાન વિસ્તાર:"
+    },
+    "reviewRule": {
+      "title": "40-દિવસનો સમીક્ષા નિયમ",
+      "text": "બધું ફરીથી સ્કોર ન કરો. માત્ર પૂછો:",
+      "quote": "\"શું મેં તે એક વસ્તુ સુધારી જેની પ્રતિબદ્ધતા આપી હતી?\""
+    },
+    "finalReminder": {
+      "title": "અંતિમ યાદ",
+      "items": [
+        "ઇમામને સંપૂર્ણ લોકોની જરૂર નથી",
+        "તેમને પ્રામાણિક, શિસ્તબદ્ધ, વિશ્વસનીય લોકો જોઈએ"
+      ],
+      "arabic": "اصلاح نفس",
+      "arabicMeaning": "સાચો ઇન્તેઝાર છે. બાકી બધું ઘોંઘાટ છે"
+    },
+    "sticky": {
+      "conscious": "જાગૃત ઇન્તેઝાર",
+      "sincere": "નિષ્ઠાવાન પણ અનિયમિત",
+      "misaligned": "આદતો અસંગત",
+      "wakeup": "જાગવાની પુકાર",
+      "focus": "ધ્યાન:"
+    },
+    "languageSelect": "ભાષા",
+    "loading": "લોડ થઈ રહ્યું છે..."
+  }
+}
