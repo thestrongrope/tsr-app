@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using Tsr.Content.Api.Domain;
 using Tsr.Content.Api.Features.HolyQuran;
 using Tsr.Content.Api.Features.ListPublishedArticles;
@@ -15,7 +17,7 @@ using Tsr.Shared.Api;
 namespace Tsr.Content.Api;
 
 /// <summary>content: Quran, articles, lectures, books. Registration and routes of the module.</summary>
-public static class ContentModule
+public static partial class ContentModule
 {
     /// <summary>Other domain modules this one may use (domains/CLAUDE.md rule 7). Public reads need no access check.</summary>
     public static readonly IReadOnlyList<string> Dependencies = [];
@@ -45,6 +47,40 @@ public static class ContentModule
 
         return services;
     }
+
+    /// <summary>
+    /// The one-off content load of a deploy (the run mode <c>--load-content</c>): one refresh over the directory <c>TSR_CONTENT_DIR</c> names. Returns true when the tables now hold the files or already did,
+    /// false when the last set was kept (the cause is logged as an error). Never throws for a bad directory; a database failure propagates.
+    /// </summary>
+    public static async Task<bool> LoadContentAsync(IServiceProvider services, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        var log = services.GetRequiredService<ILoggerFactory>().CreateLogger("Tsr.Content.Api.ContentLoad");
+        await using var scope = services.CreateAsyncScope();
+        var outcome = await ContentRefresh.TickAsync(
+            scope.ServiceProvider.GetRequiredService<ContentContext>(),
+            scope.ServiceProvider.GetRequiredService<IConfiguration>()[ContentRefreshWorker.DirectorySetting],
+            scope.ServiceProvider.GetRequiredService<TimeProvider>(),
+            log,
+            ct);
+        switch (outcome.Result)
+        {
+            case RefreshResult.Kept:
+                LogLoadFailed(log, outcome.Cause ?? "unknown");
+                return false;
+            case RefreshResult.Unchanged:
+                LogLoadUnchanged(log);
+                return true;
+            default:
+                return true;
+        }
+    }
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Content load failed, the last set is kept: {Cause}")]
+    private static partial void LogLoadFailed(ILogger logger, string cause);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Content load: the database already holds these files")]
+    private static partial void LogLoadUnchanged(ILogger logger);
 
     public static IEndpointRouteBuilder MapContent(this IEndpointRouteBuilder routes)
     {

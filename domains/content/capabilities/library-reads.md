@@ -24,8 +24,9 @@ ones into `content`'s tables and the reads answer from that copy.
 `HA` = `spec/tests/v1-articles.hurl`, `H1` = `v1-article.hurl`, `HC` = `v1-categories.hurl`, `HT` = `v1-tags.hurl`,
 `HP` = `v1-publications.hurl`, `HV` = `v1-videos.hurl` (case numbers are the numbered comments in each file);
 in `db/tests/`: `DA` = `V1ArticlesTests.cs`, `D1` = `V1ArticleTests.cs`, `DT` = `V1TaxonomiesTests.cs`,
-`DP` = `V1PublicationsTests.cs`, `DR` = `ContentRefreshTests.cs`, `DF` = `ContentFilesTests.cs`,
-`DV` = `LatestVideosTests.cs`, `DY` = `YouTubeFeedTests.cs`.
+`DP` = `V1PublicationsTests.cs`, `DR` = `ContentRefreshTests.cs`, `CL` = `ContentLoadTests.cs`, `DF` = `ContentFilesTests.cs`,
+`DV` = `LatestVideosTests.cs`, `DY` = `YouTubeFeedTests.cs`;
+in `api/tests/`: `GT` = `ContentGuardTests.cs`, `GR` = `RepositoryContentTests.cs`; `PI` = `tools/prove-content-import.sh` (cases numbered as printed).
 
 **All reads**
 
@@ -36,6 +37,20 @@ in `db/tests/`: `DA` = `V1ArticlesTests.cs`, `D1` = `V1ArticleTests.cs`, `DT` = 
 | LIB-R12 | The system SHALL never include an unpublished article in any list, count, related list or answer | a filter fault must not leak a draft | Must | Test: `DR` `A_draft_is_never_copied_and_appears_in_no_read`; `HA` case 1, `H1` case 1, `HC` case 1, `HT` case 1 (the fixture's two drafts would raise the counts) |
 | LIB-R19 | WHEN a supported app build sends a Library request THEN the system SHALL answer with every field that build reads, under the same name, of the same kind, in the shape `{success, data, meta, pagination}` | no app release can be required | Must | Test: the field assertions of case 1 of `HA`, `H1`, `HC`, `HT`, `HP`; `DV` `Videos_page_newest_first`, `A_video_s_fields_are_made_as_the_website_makes_them`. The app itself has not been run against these routes (section 9) |
 | LIB-R25 | WHERE a caller sends `If-None-Match` equal to the answer's `ETag`, or on the two article routes, with no `If-None-Match` sent, an `If-Modified-Since` not older than its `Last-Modified`, the system SHALL answer 304 with no body (LIB-D16). The videos route sends an `ETag` and never answers 304 | saves data on phones; the website's videos route never compares | Should | Test: `HA` cases 34 to 38; `H1` cases 16 to 22; `HC` cases 9 to 11; `HT` cases 3 to 5; `HP` cases 5 and 6; `HV` case 3; `DV` `The_videos_send_the_cache_headers_and_never_a_304` |
+
+**The published content in the repository** (the folder `content/`, filled by `tools/content-import.sh`, copied into the API image and loaded at each deploy)
+
+| ID | Requirement (EARS, one behaviour) | Rationale | Priority | Verification: method, location |
+|---|---|---|---|---|
+| LIB-R27 | The repository SHALL hold the published content the Library and the site read: every published article, every category, and the publications list | a deploy can only carry what the repository holds | Must | Test: `GR` `The_repository_content_has_no_problem`, `GT` `An_empty_folder_and_an_unexpected_file_are_problems`. Inspection: the article count of `content/articles` equals the website's published count, and its `categories` equal file for file (`diff -r`), done by hand at each import |
+| LIB-R28 | IF a file in the repository's published content is an article that is not published THEN the repository's checks SHALL fail and name the file | a draft in a public repository is published for good | Must | Test: `GT` `A_draft_is_a_problem_that_names_the_file` (the statuses `draft`, `Publish` and none) |
+| LIB-R29 | WHEN content is copied from the source into the repository THEN only published articles SHALL be copied | the source holds more drafts than published articles | Must | Test: `PI` cases 1 to 3 |
+| LIB-R30 | WHEN content has been copied from the source THEN the copy SHALL report how many files it copied and how many it left out | the person copying must see what was left out | Should | Test: `PI` case 1 |
+| LIB-R31 | IF a published article in the repository names a category the repository does not hold THEN the repository's checks SHALL fail and name the article and the category | otherwise the article silently drops out of its category | Should | Test: `GT` `A_category_without_a_file_is_a_problem_that_names_both` |
+| LIB-R32 | WHEN the production stack has been deployed THEN the Library SHALL answer with the content of the deployed version, with no step by hand after the deploy | production answered nothing | Must | Test: `ProductionStackTests` `The_stack_loads_the_image_s_content_at_each_deploy`; `CL` `A_load_copies_the_content_directory_and_reports_success`. Demonstration: the production stack from empty, `content-load` exits 0 and `GET /api/v1/articles?limit=1` answers the full count |
+| LIB-R33 | WHEN the production stack has been deployed THEN the public site SHALL show the content of the deployed version | a site built before the content is loaded is empty | Must | Test: `ProductionStackTests` `The_site_is_built_only_after_the_content_is_loaded`. Demonstration: the site's `/articles/` page lists articles |
+| LIB-R34 | IF the content of a deployed version cannot be loaded THEN the Library and the site SHALL keep serving the content they served before (nothing, where there was none) | a bad content change must not empty a live site | Must | Test: `CL` `A_load_that_fails_keeps_the_last_set_and_reports_failure`; the job exits 1, so `site-build` does not start |
+| LIB-R35 | IF the content of a deployed version cannot be loaded THEN the failure and its cause SHALL be visible in the deployment's logs | a failure nobody sees is found by a reader | Must | Test: `CL` `A_load_that_fails_logs_the_cause_as_an_error` |
 
 **GET /api/v1/articles**
 
@@ -131,7 +146,7 @@ website content. Nothing to erase on account deletion.
 | LIB-D7 | A percent-encoded slug opens: the path is matched against the decoded slug, and the answer's `slug` is the file's own text | the website never finds these articles; no live address changes |
 | LIB-D8 | The feed's text is sent decoded (the website sends it still XML-escaped) | the feed is read as XML, so the text is the text |
 | LIB-D9 | The videos are kept in memory, per process: one read of the feed is believed for 30 minutes, and the last good list is served when a read fails | the website's behaviour; no outside call per request |
-| LIB-D10 | PDFs stay outside the repository; the publications route only sends their links | 196 MB of files do not belong in this git |
+| LIB-D10 | PDFs stay outside the repository; the publications route only sends their links (a later part of the change that added `content/` brings the publication files) | 196 MB of files do not belong in this git |
 | LIB-D11 | Known faults of the website's answers are kept: a comma-joined filter matches nothing, every list item says `readingTime` 1, a missing `id` is 0, the videos' totals are the size of the slice taken (so `hasMore` is never true), related articles are filled up with articles that share nothing | each fix is its own later change |
 | LIB-D12 | The `ETag` is an MD5 over `data` and `pagination` only, never `meta` | `meta.timestamp` changes on every answer |
 | LIB-D13 | Slugs, categories and tags are case-sensitive `text` columns, the written exception to "every text column is citext" (`db/tests/SchemaGuardTests.cs`) | an address, a category and a tag match exactly on the website |
@@ -140,6 +155,7 @@ website content. Nothing to erase on account deletion.
 | LIB-D16 | A request that carries `If-None-Match` is judged by it alone; `If-Modified-Since` is read only when it is absent (RFC 9110 section 13.1.3). The website answers 304 when either matches | a cache that sends both must not keep an old copy of a corrected article whose date did not move |
 | LIB-D17 | The channel's id is in the code (a public id, as the website has it); the setting `TSR_YOUTUBE_CHANNEL_ID` names another, and set to nothing it turns the feed read off, which every test stack and the test host do | nothing secret; production needs no setting; no test calls the feed |
 | LIB-D18 | Markdown is rendered as CommonMark with three features of GitHub-flavoured Markdown and no other: footnotes (`[^1]` with `[^1]: text`), pipe tables, and a bare web address (`http://`, `https://`, `www.`) as a link. Strikethrough and task lists stay as written. A footnote is a numbered link in the text and a list in `<div class="footnotes">` at the end (`DF` `A_footnote_becomes_a_numbered_reference_and_a_list_of_notes_at_the_end`, `A_pipe_table_becomes_a_table`, `A_bare_web_address_becomes_a_link`, `Strikethrough_and_task_lists_of_github_markdown_stay_as_written`) | the website's pages show these three, and the static site is built from this HTML; the website's own API renders plain CommonMark, so `content` differs from it for an article that uses one |
+| LIB-D19 | The repository holds published content only; drafts stay in the source. The guard reads every article with the real reader (`api/tests/ContentGuard.cs`), so a file the reader would not publish fails it | a public repository cannot hold a draft |
 
 ## 9. Known limitations, gaps and open questions
 - **Test gaps:** LIB-R19 for the app itself: its website address is a constant, so its Library journeys have not run
@@ -155,7 +171,6 @@ website content. Nothing to erase on account deletion.
 - **Not verified against a real service:** the channel's feed in the automated tests (a fake at the boundary; the real
   feed was read once in the parity run).
 - **Limits:** no rate limit and no shared cache stand in front of these routes, and each request reads its tables.
-  The videos' copy is per process. `TSR_YOUTUBE_FEED_URL` is in no compose file. Where the content files come from in
-  production is not decided, and production is not wired.
+  The videos' copy is per process. `TSR_YOUTUBE_FEED_URL` is in no compose file. Where production gets the content files is not decided (the folder `content/` exists, but nothing reads it yet), and production is not wired.
 - **Open questions:** whether 10 minutes, 300 ms and "fewer than half" are the right numbers; whether a future-dated
   article should wait for its date; which app build is the floor for "supported".

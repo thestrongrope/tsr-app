@@ -10,11 +10,12 @@ and runs the file. It holds no secret and publishes no port; `hosts/api/tests/Pr
 | `db` | PostgreSQL 18; data in the volume `db-data` | always |
 | `db-role` | creates the API's limited role `tsr_app` and sets its password | once per start |
 | `migrate` | the API image with `--migrate`: applies the migrations not applied yet | once per start |
+| `content-load` | the API image with `--load-content`: copies the published content baked into the image (`/var/tsr/content`) into the database, then stops; exit 1 when it could not (the last set is kept) | once per start, after `migrate`; retried up to five times |
 | `api` | the API; port 8080 | always |
 | `workers` | the API image with `--workers`: runs the workers named in `TSR_WORKERS` | always |
 | `gotenberg` | PDF rendering for report downloads | always |
 | `elasticsearch` | the search index; data in the volume `es-data` | always |
-| `site-build` | the static site generator (`hosts/site`): reads the API, writes the pages into the volume `site-data` | once per start; retried up to five times while the API is not ready |
+| `site-build` | the static site generator (`hosts/site`): reads the API, writes the pages into the volume `site-data` | once per start, after `content-load` has succeeded and `api` has started; retried up to five times |
 | `site` | nginx serving `site-data`, read-only; port 80. It forwards nothing. Its image is the stock one with one setting baked in (`hosts/site/Dockerfile.server`): an address the site does not publish answers 404 with the site's own `404.html` | always |
 
 Two services are reached from outside. Attach the API's host name to `api`, port 8080, and the site's host name to `site`, port 80. The server's proxy (Traefik) is the
@@ -34,10 +35,11 @@ Set these in the deployment tool. A missing required setting stops the start and
 | `TSR_GOOGLE_SERVICE_ACCOUNT_B64` | no | a service account key in base64: push, Firebase account deletion, sheet reads |
 | `TSR_PUBLIC_WEB_BASE` | no | the base of share links |
 | `TSR_CORS_ORIGINS` | no | the browser origins that may call the API, comma-separated (for a web build of the app, e.g. `https://app.thestrongrope.com`). Empty allows none. An entry with a path, a trailing slash or a wildcard stops the start |
-| `TSR_QUIZ_SETTINGS_SHEET_ID`, `TSR_YOUTUBE_CHANNEL_ID`, `TSR_NOTIFIER_URL` | no | each empty switches its feature off |
+| `TSR_QUIZ_SETTINGS_SHEET_ID`, `TSR_NOTIFIER_URL` | no | each empty switches its feature off |
+| `TSR_YOUTUBE_CHANNEL_ID` | no | not in the stack: the API reads the channel in the code. Do not set it empty, that switches the Home videos off |
+| `TSR_CONTENT_DIR` | fixed | `/var/tsr/content` in `docker-compose.yml`: the published content copied into the image from `content/`. Not a setting to change |
 
-Not wired yet: the app-version catalog file (`TSR_APP_VERSIONS_FILE`; without it the version check allows every build) and the
-Library's content files (`TSR_CONTENT_DIR`; without it the Library copy reads nothing).
+Not wired yet: the app-version catalog file (`TSR_APP_VERSIONS_FILE`; without it the version check allows every build).
 
 ## First start and later starts
 
@@ -49,8 +51,8 @@ A later start keeps both volumes and applies only new migrations. **Removing the
 ## The static site
 
 The site is rebuilt at every start of the stack, from what the API answers at that moment. A build that fails keeps the pages built
-before. It writes a `robots.txt` that keeps crawlers out (`TSR_SITE_NO_CRAWL` in `docker-compose.yml`). A change of content does not
-rebuild it: redeploy, or start `site-build` again. Until the first build has finished, `site` answers 403 and is reported unhealthy.
+before. It writes a `robots.txt` that keeps crawlers out (`TSR_SITE_NO_CRAWL` in `docker-compose.yml`). It starts only after `content-load` has succeeded, so it is built from the content of the deployed version; when the load fails the pages built before stay.
+The content is part of the API image: a change of content reaches production only by a deploy. Until the first build has finished, `site` answers 403 and is reported unhealthy. A load that fails also makes the deploy command report a failure; `api`, `workers` and `site` still start on the new version and serve the content and pages they had.
 
 ## Not covered here
 

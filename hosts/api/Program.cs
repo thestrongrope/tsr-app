@@ -30,11 +30,14 @@ builder.Services.AddSingleton(TimeProvider.System);
 // verifier, so it runs in any environment. Normal start-up still fails closed outside Development.
 var migrating = args.Contains("--migrate");
 
+// The one-off content load (docker-compose.yml "content-load"): copy the content files at TSR_CONTENT_DIR into the database, then exit; no routes. --migrate wins if both are given.
+var loadingContent = args.Contains("--load-content") && !migrating;
+
 // The worker run mode (hosts/api/WorkerMode.cs): background workers named in TSR_WORKERS, no API routes. It loads the same modules as the API, so it needs the same settings. Put --workers LAST on a command line:
 // the command line reader takes the argument after a bare switch as its value.
-var workerMode = args.Contains("--workers") && !migrating;
+var workerMode = args.Contains("--workers") && !migrating && !loadingContent;
 
-var mode = migrating ? RunMode.Migrate : workerMode ? RunMode.Workers : RunMode.Api;
+var mode = migrating ? RunMode.Migrate : loadingContent ? RunMode.LoadContent : workerMode ? RunMode.Workers : RunMode.Api;
 HostServices.AddDomains(builder.Services, builder.Environment, builder.Configuration, mode);
 
 // Only in the worker run mode, and only the workers TSR_WORKERS names; an unknown name stops the start here.
@@ -50,6 +53,21 @@ var app = builder.Build();
 if (migrating)
 {
     await app.Services.MigrateDatabasesAsync(CancellationToken.None);
+    return;
+}
+
+// Content load: one refresh, bounded to 5 minutes. Exit 0 when the tables now hold the files (or already did), 1 when the last set was kept.
+if (loadingContent)
+{
+    using var loadTimeout = new CancellationTokenSource(TimeSpan.FromMinutes(5));
+    if (!await ContentModule.LoadContentAsync(app.Services, loadTimeout.Token))
+    {
+        Environment.ExitCode = 1;
+    }
+
+    // The console logger writes from a queue: disposing the host flushes it, so the line that says why a load failed is not lost.
+    await app.DisposeAsync();
+
     return;
 }
 

@@ -45,7 +45,9 @@ The six `/api/v1/` routes answer in the website's shape, `{success, data, meta, 
 `{success: false, error: {code, message}, meta}` (`api/domain/V1.cs`): the named exception to the `{"detail"}` rule
 (root `CLAUDE.md` rule 7). Map a new one with `V1.MapGet`, so an unexpected failure is answered in that shape too.
 
-## The worker: `content-refresh`
+## The worker: `content-refresh`, and the job `content-load`
+
+Production runs no timer: the one-off job `content-load` (the API image with `--load-content`, `ContentModule.LoadContentAsync`) runs one tick at each deploy over the content baked into the image at `/var/tsr/content`, logs a kept set as an error and exits 1 (Docker retries five times; `site-build` waits for it). The worker below is for the dev and test stacks.
 
 `api/workers/ContentRefreshWorker.cs`, run only in the mode `--workers` with `content-refresh` in `TSR_WORKERS`: one
 refresh at start, then every 5 minutes. A tick (`api/domain/ContentRefresh.cs`) reads the directory `TSR_CONTENT_DIR`
@@ -59,7 +61,7 @@ outward. One worker instance is the supported setup.
 
 | Setting | Read by | Meaning |
 |---|---|---|
-| `TSR_CONTENT_DIR` | the worker, each tick | The content directory inside the container. Unset, empty or missing: every tick keeps the last set with cause `no content directory`. The compose files mount the files read-only at `/var/tsr/content`; the default test stack sets this to that path, the dev stack leaves it empty |
+| `TSR_CONTENT_DIR` | the worker, each tick; `content-load` |  The content directory inside the container. Unset, empty or missing: every tick keeps the last set with cause `no content directory`. The compose files mount the files read-only at `/var/tsr/content`; the default test stack sets this to that path, the dev stack leaves it empty; production sets it to the copy in the image (`hosts/api/Dockerfile`) |
 | `TSR_CONTENT_SRC` | `docker-compose.dev.yml` only, never the code | The host directory mounted at `/var/tsr/content`. Default `./db/synthetic/content`; a parity run names the website's own content files |
 | `TSR_YOUTUBE_CHANNEL_ID` | `YouTubeFeed`, and `V1Videos` for `data.meta.channelId` | Absent (dev and production): the channel in the code, `YouTubeFeed.DefaultChannel`, a public id. Present: the channel named. Set to nothing (every test stack and the test host of `db/tests`): no outside call, an empty list |
 | `TSR_YOUTUBE_FEED_URL` | `YouTubeFeed` | The feed's address; `http` or `https` only. Empty: YouTube's own. In no compose file |
@@ -83,6 +85,7 @@ None is required: the API starts without them.
 | One refresh, the half rule, the hash | `api/domain/ContentRefresh.cs` |
 | The feed reader and the 30 minute copy | `api/domain/LatestVideos.cs` |
 | Database-backed tests | `db/tests/V1*Tests.cs`, `ContentRefreshTests.cs`, `ContentFilesTests.cs`, `LatestVideosTests.cs`, `YouTubeFeedTests.cs`, `LibraryReadsSchemaTests.cs` |
+| The published content of the repository (published only, LIB-D19): where it comes from, the import, the guard | `/content/README.md` (at the repository root), `tools/content-import.sh`, `tools/prove-content-import.sh`, `api/tests/ContentGuard.cs` |
 | The synthetic content files (12 published, 2 drafts) | `db/synthetic/content/` (its `README.md` maps files to cases) |
 | The article list and article pages of the static site (read from the `/api/v1/` routes, in the present website's markup; the body's rules are `site/ArticleBody.cs`) | `site/` |
 | The article list's filters on the static site (`?category=`, `?tag=`; each card's categories and tags, the panel's tree and counts and the heading data are built in `site/ArticleFilters.cs`; the script only compares and hides) | `site/ArticleFilters.cs`, `site/ArticleIndexPage.razor` |
@@ -101,6 +104,8 @@ tools/test-stack.sh up                             # the default test stack runs
 tools/contract-website.sh test                     # waits for 12 published articles, then runs spec/tests/v1-*.hurl
 TSR_STACK=n TSR_LANE_WORKERS=content-refresh tools/test-stack.sh up && TSR_STACK=n tools/contract-website.sh test   # on a lane
 dotnet test db/tests                               # the refresh, the reader, the routes in process, the fake feed (Docker)
+dotnet test domains/content/api/tests               # the guard over the root content/ folder (no Docker)
+tools/prove-content-import.sh                      # the import script, on invented sources
 ```
 
 Parity with today's website (by hand; the website runs locally, a lane is loaded with its content files; steps and the
