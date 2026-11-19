@@ -1,0 +1,55 @@
+---
+title: Supplications of Divine Emissaries (peace be upon him) accepted through intercession of Ahle Bait (peace be upon them)
+slug: supplications-of-divine-emissaries-a-s-accepted-through-intercession-of-ahle-bait-a-s
+publishedDate: '2019-02-27T10:36:53.000Z'
+modifiedDate: '2019-02-27T10:36:53.000Z'
+excerpt: النبي ﷺ ذكر أن التزكية للنفس مكروهة، وأشار إلى أهمية الدعاء بحق محمد وآل محمد في التوبة والنجاة من الشدائد.
+author: admin
+tags:
+  - Intercession
+  - Prophet Muhammad
+  - Ahle Bait
+  - Divine Emissaries
+  - Supplications
+status: publish
+language: en
+categories:
+  - beliefs
+  - intercession
+id: 348
+---
+عَنْ مَعْمَرِ بْنِ رَاشِدٍ قَالَ سَمِعْتُ اَبَا عَبْدِ اللهِ الصَّادِقَؑ يَقُولُ اَتَى يَهُودِيٌّ النَّبِيَّ ﷺ فَقَامَ بَيْنَ يَدَيْهِ يَحُدُّ النَّظَرَ اِلَيْهِ فَقَالَ يَا يَهُودِيُّ مَا حَاجَتُكَ قَالَ اَنْتَ اَفْضَلُ اَمْ مُوسَى بْنُ عِمْرَانَ النَّبِيُّ الَّذِي كَلَّمَهُ اللهُ وَ اَنْزَلَ عَلَيْهِ التَّوْرَاةَ وَ الْعَصَا وَ فَلَقَ لَهُ الْبَحْرَ وَ اَظَلَّهُ بِالْغَمَامِ فَقَالَ لَهُ النَّبِيُّ ﷺ اِنَّهُ يُكْرَهُ لِلْعَبْدِ اَنْ يُزَكِّيَ نَفْسَهُ وَ لَكِنِّي اَقُولُ اِنَّ آدَمَؑ لَمَّا اَصَابَ الْخَطِيئَةَ كَانَتْ تَوْبَتَهُ اَنْ قَالَ اللهُمَّ اِنِّي اَسْاَلُكَ بِحَقِّ مُحَمَّدٍ وَ آلِ مُحَمَّدٍ لَمَّا غَفَرْتَ لِي فَغَفَرَهَا اللهُ لَهُ وَ اِنَّ نُوحاً لَمَّا رَكِبَ فِي السَّفِينَةِ وَ خَافَ الْغَرَقَ قَالَ اللهُمَّ اِنِّي اَسْاَلُكَ بِحَقِّ مُحَمَّدٍ وَ آلِ مُحَمَّدٍ لَمَّا اَنْجَيْتَنِي مِنَ الْغَرَقِ فَنَجَّاهُ اللهُ عَنْهُ وَ اِنَّ اِبْرَاهِيمَؑ لَمَّا اُلْقِيَ فِي النَّارِ قَالَ اللهُمَّ اِنِّي اَسْاَلُكَ بِحَقِّ مُحَمَّدٍ وَ آلِ مُحَمَّدٍ لَمَّا اَنْجَيْتَنِي مِنْهَا فَجَعَلَهَا اللهُ عَلَيْهِ بَرْداً وَ سَلَاماً وَ اِنَّ مُوسَى لَمَّا اَلْقَى عَصَاهُ وَ اَوْجَسَ فِي نَفْسِهِ خِيفَةً قَالَ اللهُمَّ اِنِّي اَسْاَلُكَ بِحَقِّ مُحَمَّدٍ وَ آلِ مُحَمَّدٍ لَمَّا آمَنْتَنِي فَقَالَ اللهُ جَلَّ جَلَالُهُ لا تَخَفْ اِنَّكَ اَنْتَ الْاَعْلى‏ يَا يَهُودِيُّ اِنَّ مُوسَى لَوْ اَدْرَكَنِي ثُمَّ لَمْ يُؤْمِنْ بِي وَ بِنُبُوَّتِي مَا نَفَعَهُ اِيمَانُهُ شَيْئاً وَ لَا نَفَعَتْهُ النُّبُوَّةُ يَا يَهُودِيُّ وَ مِنْ ذُرِّيَّتِي الْمَهْدِيُّ اِذَا خَرَجَ نَزَلَ عِيسَى ابْنُ مَرْيَمَؑ لِنُصْرَتِهِ فَقَدَّمَهُ وَ صَلَّى خَلْفَهُ  
+
+Ma’mar Ibn Raashid reports, “I heard Imam Abu Abdillah al-Sadeq (peace be upon him) say, 
+
+“A Jew came to the Holy Prophet (peace be upon him and his holy progeny) and stood in front of him, staring at him (peace be upon him and his holy progeny). He (peace be upon him and his holy progeny) asked, ‘What do you want, O Jew?’ 
+
+He replied, ‘Are you superior or Moosa Ibn Imran the Prophet with whom Allah spoke, sent upon him the Torah and the staff, split the ocean for him and shadowed him with a cloud?’ 
+
+The Holy Prophet (peace be upon him and his holy progeny) replied, ‘It is disliked that a person praises his own self but I say that when (Prophet) Adam (peace be upon him) erred, he repented with the following wordings, ‘O Allah! Surely, I ask You for the sake of Muhammad and the progeny of Muhammad (peace be upon him and his holy progeny) that You forgive me. So, Allah forgave him. Verily, when (Prophet) Noah (peace be upon him) boarded the ark and feared drowning, he said, ‘O Allah! Surely, I ask You for the sake of Muhammad and the progeny of Muhammad (peace be upon him and his holy progeny) that You save me from drowning. So Allah saved him it. 
+
+Verily, when (Prophet) Ibraheem (peace be upon him) was thrown in the fire, he said, ‘O Allah! I ask You for the sake of Muhammad and the progeny of Muhammad (peace be upon him and his holy progeny) that You protect me from it, so Allah made it (the fire) cool and safe for him. 
+
+Verily, when (Prophet) Moosa (peace be upon him) threw his staff and experienced some fear in himself, he said, ‘O Allah! Surely I ask You for the sake of Muhammad and the progeny of Muhammad (peace be upon him and his holy progeny) that You grant me safety. So Allah said, ‘Don’t fear. Surely, you will be dominant.’ O Jew! Had Moosa (peace be upon him) found me (i.e. been in my time) and not believed in me and my Prophethood, his belief would not have benefitted him at all nor would have (his) Prophethood benefitted him.’ O Jew! From my progeny is the Mahdi. When he (a.t.f.s.) reappears, (Prophet) Eesaa Ibn Maryam (peace be upon him) will descend for his help and request him to lead the prayers and pray behind him (a.t.f.s.).”
+
+## Note
+
+1) The Jew was wrong in claiming that the staff descended on Prophet Moosa (peace be upon him) because as per our traditions, it was given to Prophet Adam (peace be upon him) and thereafter, it was handed over from one Prophet (peace be upon him) to another in inheritance till it came to Prophet Shoaib (peace be upon him) who gave it to his son-in-law Prophet Moosa (peace be upon him).
+
+2) Why the Holy Prophet (peace be upon him and his holy progeny) did not raise the objection in front of the Jew? The answer is simple. The above question when compared to the issue of the mastership and superiority of the Ahle Bait (peace be upon them) is almost a non-issue. Hence, the Holy Prophet (peace be upon him and his holy progeny), with his perfect and complete wisdom, thought it prudent to answer the core issue rather than get entangled in peripheral matters. 
+
+3) Generally, it is an abhorrent practice to indulge in self-praise. But sometimes, for the sake of supporting truth and nullifying falsehood, it is not only not abominable but even recommended or obligatory to do so. Hence, we see that the Ahle Bait (peace be upon him) spoke about their lofty positions in order to introduce their divine personalities for the people.
+
+4) The divine Prophets (peace be upon him) mentioned in the above tradition are merely examples of the great Prophets (peace be upon them). Otherwise, all the divine emissaries (peace be upon him), without exception, were inferior to the Messenger of Allah (peace be upon him and his holy progeny) and the infallible guides from his progeny (peace be upon him). 
+
+5) When we say that Prophet Adam (peace be upon him) erred, we certainly don’t believe that he committed a sin. It is our firm belief that he (peace be upon him) simply left a preferable act, called as Tark-e-aulaa in religious terminology. 
+
+6) Regarding Imam Mahdi (a.t.f.s.) and Prophet Eesaa (peace be upon him), after the reappearance of Imam Mahdi (a.t.f.s.) when Prophet Eesaa (peace be upon him) also descends from the sky, there is not a single tradition from Shiite sources which says that Imam Mahdi (may Allah hasten his reappearance) will offer Prophet Eesaa (peace be upon him) to lead the prayers. For, it is not permissible for a superior to ask an inferior to lead the prayers. But the opponents have recorded such narrations. 
+
+7) Last but not the least, when the great Prophets, Messengers and proximate angels of Allah (peace be upon him) were in need of the Messenger of Allah (peace be upon him and his holy progeny) and his progeny (peace be upon him) for help, then what about us? Woe unto those who regard seeking help from them as polytheism!
+
+## Reference
+
+1. Al-Amaali al-Saduq (r.a.), p. 218, H. 4, Majlis 39  
+2. Rauzah al-Waaezeen, vol. 2, p. 272  
+3. Behaar al-Anwaar, vol. 26, 319, H. 1
