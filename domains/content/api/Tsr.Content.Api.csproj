@@ -7,7 +7,12 @@
     <ProjectReference Include="../../../shared/api/Tsr.Shared.Api.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <!-- Slices and value objects are internal; the database tests may see them. -->
+    <!-- Tests sit in tests/, which has its own project. -->
+    <Compile Remove="tests/**" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Slices and value objects are internal; this domain's unit tests and the database tests may see them. -->
+    <InternalsVisibleTo Include="Tsr.Content.Api.Tests" />
     <InternalsVisibleTo Include="Tsr.Db.Tests" />
   </ItemGroup>
 </Project>

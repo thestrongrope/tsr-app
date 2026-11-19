@@ -41,6 +41,7 @@ read it before editing.
 | A table or migration | the domain's `api/<Context>Context.cs` and `api/Migrations/` (add: `dotnet ef migrations add <Name> --context <Domain>Context --project domains/<d>/api --startup-project hosts/api --output-dir Migrations -- --TSR_DB=Host=unused --TSR_FIREBASE_PROJECT_ID=demo-design --environment=Development`; the generated files need no edit) | `docs/specs/initial-build/phase-0-design.md` |
 | The production stack and its settings | `docker-compose.yml` | `docs/deployment.md` |
 | Synthetic data | `db/synthetic/seed.sql` | |
+| The published articles, categories and publications page the Library and the site read | `content/` (published only; copied by `tools/content-import.sh`, checked by `dotnet test domains/content/api/tests`) | `content/README.md` |
 | How a database gets its data | migrations create the schema and base data; then the synthetic seed, or a separate load of real data | `docs/specs/repo-structure.md` section 3.3 |
 
 The whole API surface is listed in the **route catalog**, `docs/specs/initial-build/operations.csv` (method, path, domain, auth kind, state); the tests in
@@ -87,7 +88,7 @@ Every other command, each script's fixtures and the order of a full run: `docs/t
 | Task | Command |
 |---|---|
 | Build all .NET | `dotnet build TsrApp.slnx` |
-| Unit and boundary tests (no database) | `dotnet test domains/<context>/api/tests` (every domain but `content`, whose tests are in `db/tests`), `dotnet test shared/api/tests`, `dotnet test hosts/api/tests`, `dotnet test hosts/site/tests` |
+| Unit and boundary tests (no database) | `dotnet test domains/<context>/api/tests` (content's is the guard over `content/`; the reader's tests are in `db/tests`), `dotnet test shared/api/tests`, `dotnet test hosts/api/tests`, `dotnet test hosts/site/tests` |
 | Database tests (needs Docker) | `dotnet test db/tests` |
 | Start the synthetic test stack | `tools/test-stack.sh up` (also `down`, `remove`, `status`) |
 | A lane stack for a parallel worktree | `TSR_STACK=n tools/test-stack.sh up` |
