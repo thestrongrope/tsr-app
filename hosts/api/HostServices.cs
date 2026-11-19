@@ -10,11 +10,12 @@ using Tsr.Search.Api;
 
 namespace Tsr.Host.Api;
 
-/// <summary>How the one API image was started: the API itself, the one-off migrate job (<c>--migrate</c>), or the background workers (<c>--workers</c>).</summary>
+/// <summary>How the one API image was started: the API itself, the one-off migrate job (<c>--migrate</c>), the one-off content load (<c>--load-content</c>), or the background workers (<c>--workers</c>).</summary>
 public enum RunMode
 {
     Api,
     Migrate,
+    LoadContent,
     Workers,
 }
 
