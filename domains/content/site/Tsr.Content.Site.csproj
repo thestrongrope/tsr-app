@@ -4,4 +4,8 @@
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <ProjectReference Include="../../../shared/site/Tsr.Shared.Site.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- The Self-reflection page's words, read at build time (SelfReflection.cs). -->
+    <EmbeddedResource Include="self-reflection.json" LogicalName="self-reflection.json" />
+  </ItemGroup>
 </Project>

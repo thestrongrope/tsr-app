@@ -1,7 +1,7 @@
 #!/bin/sh
 # Compiles the static site's stylesheet: hosts/site/site.input.css -> hosts/site/wwwroot/site.css (committed).
 # Run it after changing a class in a .razor file of the site, in domains/content/site/ArticleBody.cs, in
-# hosts/site/wwwroot/site.js, or the input file itself. Needs the Tailwind CSS command-line tool, version 4, on PATH;
+# hosts/site/wwwroot/site.js or self-reflection.js, domains/content/site/SelfReflection.cs, or the input file itself (its @source lines list what is scanned). Needs the Tailwind CSS command-line tool, version 4, on PATH;
 # the server build does not (it ships the committed file). hosts/site/tests/StylesheetTests.cs fails when a class in
 # use has no rule in the committed file.
 set -eu
