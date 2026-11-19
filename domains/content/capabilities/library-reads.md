@@ -24,7 +24,7 @@ ones into `content`'s tables and the reads answer from that copy.
 `HA` = `spec/tests/v1-articles.hurl`, `H1` = `v1-article.hurl`, `HC` = `v1-categories.hurl`, `HT` = `v1-tags.hurl`,
 `HP` = `v1-publications.hurl`, `HV` = `v1-videos.hurl` (case numbers are the numbered comments in each file);
 in `db/tests/`: `DA` = `V1ArticlesTests.cs`, `D1` = `V1ArticleTests.cs`, `DT` = `V1TaxonomiesTests.cs`,
-`DP` = `V1PublicationsTests.cs`, `DR` = `ContentRefreshTests.cs`, `DF` = `ContentFilesTests.cs`,
+`DP` = `V1PublicationsTests.cs`, `DR` = `ContentRefreshTests.cs`, `CL` = `ContentLoadTests.cs`, `DF` = `ContentFilesTests.cs`,
 `DV` = `LatestVideosTests.cs`, `DY` = `YouTubeFeedTests.cs`;
 in `api/tests/`: `GT` = `ContentGuardTests.cs`, `GR` = `RepositoryContentTests.cs`; `PI` = `tools/prove-content-import.sh` (cases numbered as printed).
 
@@ -38,7 +38,7 @@ in `api/tests/`: `GT` = `ContentGuardTests.cs`, `GR` = `RepositoryContentTests.c
 | LIB-R19 | WHEN a supported app build sends a Library request THEN the system SHALL answer with every field that build reads, under the same name, of the same kind, in the shape `{success, data, meta, pagination}` | no app release can be required | Must | Test: the field assertions of case 1 of `HA`, `H1`, `HC`, `HT`, `HP`; `DV` `Videos_page_newest_first`, `A_video_s_fields_are_made_as_the_website_makes_them`. The app itself has not been run against these routes (section 9) |
 | LIB-R25 | WHERE a caller sends `If-None-Match` equal to the answer's `ETag`, or on the two article routes, with no `If-None-Match` sent, an `If-Modified-Since` not older than its `Last-Modified`, the system SHALL answer 304 with no body (LIB-D16). The videos route sends an `ETag` and never answers 304 | saves data on phones; the website's videos route never compares | Should | Test: `HA` cases 34 to 38; `H1` cases 16 to 22; `HC` cases 9 to 11; `HT` cases 3 to 5; `HP` cases 5 and 6; `HV` case 3; `DV` `The_videos_send_the_cache_headers_and_never_a_304` |
 
-**The published content in the repository** (the folder `content/`, filled by `tools/content-import.sh`, read by nothing in production yet)
+**The published content in the repository** (the folder `content/`, filled by `tools/content-import.sh`, copied into the API image and loaded at each deploy)
 
 | ID | Requirement (EARS, one behaviour) | Rationale | Priority | Verification: method, location |
 |---|---|---|---|---|
@@ -47,6 +47,10 @@ in `api/tests/`: `GT` = `ContentGuardTests.cs`, `GR` = `RepositoryContentTests.c
 | LIB-R29 | WHEN content is copied from the source into the repository THEN only published articles SHALL be copied | the source holds more drafts than published articles | Must | Test: `PI` cases 1 to 3 |
 | LIB-R30 | WHEN content has been copied from the source THEN the copy SHALL report how many files it copied and how many it left out | the person copying must see what was left out | Should | Test: `PI` case 1 |
 | LIB-R31 | IF a published article in the repository names a category the repository does not hold THEN the repository's checks SHALL fail and name the article and the category | otherwise the article silently drops out of its category | Should | Test: `GT` `A_category_without_a_file_is_a_problem_that_names_both` |
+| LIB-R32 | WHEN the production stack has been deployed THEN the Library SHALL answer with the content of the deployed version, with no step by hand after the deploy | production answered nothing | Must | Test: `ProductionStackTests` `The_stack_loads_the_image_s_content_at_each_deploy`; `CL` `A_load_copies_the_content_directory_and_reports_success`. Demonstration: the production stack from empty, `content-load` exits 0 and `GET /api/v1/articles?limit=1` answers the full count |
+| LIB-R33 | WHEN the production stack has been deployed THEN the public site SHALL show the content of the deployed version | a site built before the content is loaded is empty | Must | Test: `ProductionStackTests` `The_site_is_built_only_after_the_content_is_loaded`. Demonstration: the site's `/articles/` page lists articles |
+| LIB-R34 | IF the content of a deployed version cannot be loaded THEN the Library and the site SHALL keep serving the content they served before (nothing, where there was none) | a bad content change must not empty a live site | Must | Test: `CL` `A_load_that_fails_keeps_the_last_set_and_reports_failure`; the job exits 1, so `site-build` does not start |
+| LIB-R35 | IF the content of a deployed version cannot be loaded THEN the failure and its cause SHALL be visible in the deployment's logs | a failure nobody sees is found by a reader | Must | Test: `CL` `A_load_that_fails_logs_the_cause_as_an_error` |
 
 **GET /api/v1/articles**
 

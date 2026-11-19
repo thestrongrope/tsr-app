@@ -7,7 +7,7 @@
 #   - a proxy of its own: the route table of hosts/gateway is for the dev and test stacks;
 #   - a secret's value: every secret is a ${NAME} the deployment tool supplies, and a required one stops the start when it is missing.
 #
-# Start order: db healthy, then db-role (one-off), then migrate (one-off), then api and workers, then site-build (one-off).
+# Start order: db healthy, then db-role (one-off), then migrate (one-off), then content-load (one-off), then api and workers, then site-build (one-off, after content-load and api).
 # The database lives in the volume db-data. Removing that volume removes every member's data.
 
 services:
@@ -116,7 +116,8 @@ services:
       TSR_GOOGLE_SERVICE_ACCOUNT_B64: ${TSR_GOOGLE_SERVICE_ACCOUNT_B64:-}
       TSR_PUBLIC_WEB_BASE: ${TSR_PUBLIC_WEB_BASE:-}
       TSR_QUIZ_SETTINGS_SHEET_ID: ${TSR_QUIZ_SETTINGS_SHEET_ID:-}
-      TSR_YOUTUBE_CHANNEL_ID: ${TSR_YOUTUBE_CHANNEL_ID:-}
+      # The published content baked into the image (hosts/api/Dockerfile); content-load copies it into the database at each deploy.
+      TSR_CONTENT_DIR: /var/tsr/content
       TSR_NOTIFIER_URL: ${TSR_NOTIFIER_URL:-}
       # The browser origins that may call the API (a web build of the app), comma-separated. Empty allows none.
       TSR_CORS_ORIGINS: ${TSR_CORS_ORIGINS:-}
@@ -125,6 +126,20 @@ services:
         condition: service_completed_successfully
       gotenberg:
         condition: service_healthy
+
+  # One-off: the API image run with --load-content copies the image's published content into the database, then stops. When it cannot (it exits 1),
+  # Docker tries again, five times at most, and site-build does not start, so the pages built before stay in the volume.
+  content-load:
+    build:
+      context: .
+      dockerfile: hosts/api/Dockerfile
+    restart: on-failure:5
+    command: ["--load-content"]
+    environment:
+      <<: *api-environment
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
 
   # The API image in its second run mode: it runs the workers named in TSR_WORKERS. Empty (the default) runs none, so a deploy alone
   # sends nothing outward. Naming a sending worker (push-drain, class-schedules) is a decision made in the deployment tool's settings.
@@ -161,7 +176,10 @@ services:
     volumes:
       - site-data:/site
     depends_on:
-      - api
+      content-load:
+        condition: service_completed_successfully
+      api:
+        condition: service_started
 
   # Serves the generated pages, read-only, with the image's own settings: it forwards nothing. The deployment tool attaches the site's
   # host name to it, port 80. Until the first build has written a home page it answers 403 and is reported unhealthy.

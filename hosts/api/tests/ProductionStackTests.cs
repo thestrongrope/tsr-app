@@ -82,6 +82,50 @@ public sealed partial class ProductionStackTests
     public void The_site_tells_search_engines_not_to_crawl_it() =>
         Assert.That(Stack, Does.Contain("TSR_SITE_NO_CRAWL: \"true\""));
 
+    /// <summary>TC-LIB-R32-02: the image holds the content, the API settings point at it, and a one-off job loads it after the migration.</summary>
+    [Test]
+    public void The_stack_loads_the_image_s_content_at_each_deploy()
+    {
+        var load = Service("content-load");
+        var dockerfile = File.ReadAllText(Path.Combine(RouteCatalog.RepoRoot(), "hosts", "api", "Dockerfile"));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(Stack, Does.Contain("TSR_CONTENT_DIR: /var/tsr/content"));
+            Assert.That(dockerfile, Does.Match(@"(?m)^COPY .*content/ /var/tsr/content/?\s*$"));
+            Assert.That(load, Does.Contain("dockerfile: hosts/api/Dockerfile"));
+            Assert.That(load, Does.Contain(@"command: [""--load-content""]"));
+            Assert.That(load, Does.Contain("<<: *api-environment"));
+            Assert.That(load, Does.Match(@"migrate:\s+condition: service_completed_successfully"));
+        });
+    }
+
+    /// <summary>TC-LIB-R33-01: the site is built only from the content the job has loaded.</summary>
+    [Test]
+    public void The_site_is_built_only_after_the_content_is_loaded() =>
+        Assert.That(Service("site-build"), Does.Match(@"content-load:\s+condition: service_completed_successfully"));
+
+    /// <summary>TC-VIDEOS-01: an empty channel setting would switch the Home videos off; unset, the API reads the channel in the code.</summary>
+    [Test]
+    public void The_stack_does_not_switch_the_videos_off() =>
+        Assert.That(Stack, Does.Not.Contain("TSR_YOUTUBE_CHANNEL_ID"));
+
+    /// <summary>The test stack and the lanes mount their synthetic folder over the image's content, so they never read the real set.</summary>
+    [Test]
+    public void The_test_stack_mounts_its_own_content_over_the_image_s()
+    {
+        var dev = File.ReadAllText(Path.Combine(RouteCatalog.RepoRoot(), "docker-compose.dev.yml"));
+
+        Assert.That(dev, Does.Contain(":/var/tsr/content:ro"));
+    }
+
+    private static string Service(string name)
+    {
+        var block = Regex.Match(Stack, @"(?ms)^  " + Regex.Escape(name) + @":\n(?<body>.*?)(?=^  \S|\z)");
+        Assert.That(block.Success, Is.True, "no service " + name);
+        return block.Groups["body"].Value;
+    }
+
     [Test]
     public void No_port_is_published() =>
         Assert.That(Stack, Does.Not.Match(@"(?m)^\s*ports\s*:"));
