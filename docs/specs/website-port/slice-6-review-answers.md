@@ -20,3 +20,24 @@ Each new test was seen to fail first (missing function, or no exception), then t
 | m7 | fixed | `docs/testing.md` row now lists `self-reflection.js` and `SelfReflection.cs`; the notes line 3 no longer says "Uncommitted" |
 | m8 | not fixed | `Math.min(s5, 3)` mirrors page.tsx and is harmless |
 | unused `data-sr-tier-box` | not fixed | Harmless attribute; no test would show it |
+
+## The browser run (19 Nov 2026, after the fixes)
+
+Lane 5 was started from this branch with the present website's published content; the site was generated from it
+(511 pages) and served from `build/site`. This answers quality finding M1. Every answer typed was made-up text.
+
+| Check | Result |
+|---|---|
+| `/self-reflection/` | leads to `/self-reflection/en/` (the meta refresh) |
+| English page | 46 buttons and 10 fields; no script error; a click on Yes/No, an option, a trait level or a step changes the section's score, the total, the percent bar, the range and the focus area at once; a second click on a chosen answer clears it |
+| What is stored | key `tsr-self-reflection`, the present site's twelve fields; section 2 holds the option's words |
+| Urdu page | `lang="ur"`, right to left, the Urdu font; the answers given in English are shown again with the same scores |
+| Words of a stored answer | a change to another field on the Urdu page leaves the English words stored; changing that answer stores the Urdu words |
+| Another tab clears the answers (a `storage` event with no new value) | the form empties and the scores return to 0; typing afterwards stores only what was typed, nothing old comes back |
+| Reset | asks "Are you sure you want to reset all your answers?", then empties the form and removes the stored value |
+| Hostile stored data (markup in a field, a `__proto__` key) | the Gujarati page starts empty, nothing is injected, one console warning without the data |
+| Gujarati page | `lang="gu"`, left to right, renders in the system's Gujarati font |
+| Against the live pages | the titles are equal. The text cannot be compared over HTTP: the present pages send only "Loading..." and draw the form in the browser. The copy check against the present site's source stands in for it |
+
+Not checked: the pages with scripts switched off in a real browser; phone widths; the dark theme; a real second tab
+(the event was sent by hand); the browser's back/forward cache; a reader of Urdu or Gujarati looking at the pages.
