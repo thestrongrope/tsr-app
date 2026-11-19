@@ -1,0 +1,36 @@
+---
+title: Holy Prophet’s (peace be upon him and his holy progeny) Will to Ali Ibn Abi Talib (peace be upon him)
+slug: holy-prophets-s-a-w-a-will-to-ali-ibn-abi-talib-a-s
+publishedDate: '2019-02-20T09:43:38.000Z'
+modifiedDate: '2019-02-20T09:43:38.000Z'
+excerpt: الله اصطفى لكم الدين وأوصى النبي ﷺ علياً بحفظ الوصية والدعوة إلى الملة، مؤكداً أن علياً وأولاده هم أئمة الهدى وقادة التقوى.
+author: admin
+tags:
+  - Imam Ali
+  - Prophet Muhammad
+  - Mastership
+  - Wilayah
+  - Ahle Bait
+status: publish
+language: en
+categories:
+  - wilayah
+  - love-of-ahle-bait
+id: 159
+---
+عَنِ ابْنِ عَبَّاسٍ قَالَ دَخَلْتُ عَلٰى اَمِيرِ الْمُؤْمِنِينَؑ فَقُلْتُ يَا اَبَا الْحَسَنِ اَخْبِرْنِي بِمَا اَوْصَى اِلَيْكَ رَسُولُ اللّهِ ﷺ قَالَ سَاُخْبِرُكُمْ اِنَّ اللهَ اصْطَفَى لَكُمُ الدِّينَ وَ ارْتَضَاهُ وَ اَتَمَّ نِعْمَتَهُ عَلَيْكُمْ وَ كُنْتُمْ اَحَقَّ بِها وَ اَهْلَها وَ اِنَّ اللهَ اَوْحَى اِلَى نَبِيِّهِ اَنْ يُوصِيَ اِلَيَّ فَقَالَ النَّبِيُّ ﷺ يَا عَلِيُّ احْفَظْ وَصِيَّتِي وَ ارْعَ ذِمَامِي وَ اَوْفِ بِعَهْدِي وَ اَنْجِزْ عِدَاتِي وَ اقْضِ دَيْنِي وَ اَحْيِ سُنَّتِي وَ ادْعُ اِلَى مِلَّتِي لِاَنَّ اللهَ تَعَالَى اصْطَفَانِي وَ اخْتَارَنِي فَذَكَرْتُ دَعْوَةَ اَخِي مُوسَى فَقُلْتُ اللَّهُمَّ اجْعَلْ لِي وَزِيراً مِنْ اَهْلِي كَمَا جَعَلْتَ هَارُونَ مِنْ مُوسَى فَاَوْحَى اللَّهُ عَزَّ وَ جَلَّ اِلَيَّ اَنَّ عَلِيّاً وَزِيرُكَ وَ نَاصِرُكَ وَ الْخَلِيفَةُ مِنْ بَعْدِكَ ثُمَّ يَا عَلِيُّ اَنْتَ مِنْ اَئِمَّةِ الْهُدَى وَ اَوْلَادُكَ مِنْكَ فَاَنْتُمْ قَادَةُ الْهُدَى وَ التُّقَى وَ الشَّجَرَةُ الَّتِي اَنَا اَصْلُهَا وَ اَنْتُمْ فَرْعُهَا فَمَنْ تَمَسَّكَ بِهَا فَقَدْ نَجَا وَ مَنْ تَخَلَّفَ عَنْهَا فَقَدْ هَلَكَ وَ هَوَى وَ اَنْتُمُ الَّذِينَ اَوْجَبَ اللَّهُ تَعَالَى مَوَدَّتَكُمْ وَ وَلَايَتَكُمْ وَ الَّذِينَ ذَكَرَهُمُ اللَّهُ فِي كِتَابِهِ وَ وَصَفَهُمْ لِعِبَادِهِ فَقَالَ عَزَّ وَ جَلَّ مِنْ قَائِلٍ اِنَّ اللهَ اصْطَفى‏ آدَمَ وَ نُوحاً وَ آلَ اِبْراهِيمَ وَ آلَ عِمْرانَ عَلَى الْعالَمِينَ ذُرِّيَّةً بَعْضُها مِنْ بَعْضٍ وَ اللَّهُ سَمِيعٌ عَلِيمٌ فَاَنْتُمْ صَفْوَةُ اللّهِ مِنْ آدَمَ وَ نُوحٍ وَ آلِ اِبْرَاهِيمَ وَ آلِ عِمْرَانَ وَ اَنْتُمُ الْاُسْرَةُ مِنْ اِسْمَاعِيلَ وَ الْعِتْرَةُ الْهَادِيَةُ مِنْ مُحَمَّدٍ صَلَّى اللَّهُ عَلَيْهِ وَ عَلَيْهِمْ
+
+Ibn Abbas reports: I went to Ameerul Momineen (peace be upon him) and said to him, “O Aba al-Hasan! Inform me what the Messenger of Allah (peace be upon him and his holy progeny) has willed unto you.” He (peace be upon him) said, 
+
+“Soon I shall inform you. Surely, Allah chose for you the religion and selected it and completed His bounties upon you while you were deserving it and worthy of it. Verily, Allah revealed to His Prophet (peace be upon him and his holy progeny) that he (peace be upon him and his holy progeny) should will unto me. So the Prophet (peace be upon him and his holy progeny) said, ‘O Ali! Preserve my will, observe my agreements, fulfil my promises, repay my loans, enliven my Sunnah and call towards my religion. For, Allah – the High – chose me and selected me. So, I remembered the prayer of my brother (Prophet) Moosa (peace be upon him) and I said, ‘O Allah! Appoint for me a minister from my family’ like you appoint Haroon for Moosa. Allah – Mighty and Majestic be He – revealed to me, ‘Surely, Ali is your minister, your helper and your Caliph after you.’ Then, O Ali, you are from the Imams of guidance and your descendants are from you. So all of you are the leaders of guidance and piety and the tree, whose root I am and you are its branch. So whoever fastens unto it (the tree), then indeed he will be saved and whoever lags behind, then indeed he will be destroyed and perished. You are those whose love and mastership Allah – the High – has made obligatory and Allah has remembered him in His Book and described them for His servants. So, Allah – Mighty and Majestic be He – said, ‘Surely Allah chose Adam, Noah, the progeny of Abraham and the progeny of Imran upon the worlds; (they are) descendants of each other. And Allah is the All-Hearing, the All-Knowing.’ You are the chosen ones of Allah from Adam, Noah, the progeny of Abraham and the progeny of Imran. You are the family of Ismaaeel and the guiding progeny from Muhammad (peace be upon him and his holy progeny).”
+
+## Note
+
+The above tradition is important and its importance increases due to its narrator being Ibn Abbas. The people in general and the Muslims in particular get their lineage from their fathers and not mothers. For example, if a person’s father is from Baghdad and his mother is from Basra, he will be called as Baghdadi and not Basri. But in the case of the Messenger of Allah (peace be upon him and his holy progeny), Allah has made an exception. Of course, Imam Hasan and Husain (peace be upon him) were the sons of Ali (peace be upon him) but here, Allah and His Messenger (peace be upon him and his holy progeny) have made an exception that they are also called as the sons of the Messenger of Allah (peace be upon him and his holy progeny). 
+
+There is a difference between guidance and piety. A person may be guided but may not be pious. Imams (peace be upon them) lead the people towards both. Again, there is a difference between هلك and هوي. Halaka means destroyed and Hawaa means collapse. Destruction in this world, Barzakh and the hereafter. But collapse means punishment. Sometimes destruction may be without punishment. For example, a person meets with a car accident and is killed. But this is not punishment because it is not his fault. But hawaa means destruction with punishment. When the storm of Prophet Noah (peace be upon him) came, only those who boarded the ark were saved and others were destroyed. Now, when they alighted from the ark, they married and had children. Hence, the entire human kind is the progeny of Adam and Noah, including tyrants like Namrood, Firaon, Yazid, Saddam, etc.
+
+## Reference
+
+1. Behaar al-Anwaar, vol. 23, p. 221, H. 24  
+2. Ta’veel al-Aayaat al-Zaaherah, p. 112 under the verse of Surah Aale Imran

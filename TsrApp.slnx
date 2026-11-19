@@ -28,6 +28,9 @@
   <Folder Name="/domains/content/api/">
     <Project Path="domains/content/api/Tsr.Content.Api.csproj" />
   </Folder>
+  <Folder Name="/domains/content/api/tests/">
+    <Project Path="domains/content/api/tests/Tsr.Content.Api.Tests.csproj" />
+  </Folder>
   <Folder Name="/domains/content/site/">
     <Project Path="domains/content/site/Tsr.Content.Site.csproj" />
   </Folder>
