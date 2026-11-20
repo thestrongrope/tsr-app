@@ -14,6 +14,10 @@
     <None Include="wwwroot/**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>
+    <!-- The fixed pages (content/pages/*.md of the repository), copied beside the program for the site build to read (domains/content/site/PageFiles.cs). -->
+    <None Include="../../content/pages/*.md" Link="content-pages/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <ProjectReference Include="../../shared/site/Tsr.Shared.Site.csproj" />
     <ProjectReference Include="../../domains/platform/site/Tsr.Platform.Site.csproj" />

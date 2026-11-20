@@ -1,0 +1,56 @@
+@* A fixed page: the markup and classes of tsr-web's app/[slug]/page.tsx. The body is the page file's own reviewed Markdown and
+   raw HTML (PageFiles.cs), so it is written as it is. *@
+<main class="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 dark:from-gray-950 dark:to-gray-900">
+  <article class="@Width mx-auto px-4 py-12">
+    <header class="mb-8 text-center border-b border-gray-200 dark:border-gray-800 pb-8">
+      <h1 class="text-4xl md:text-5xl font-bold text-gray-900 dark:text-gray-100 mb-4">
+        @Title
+      </h1>
+    </header>
+    <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 p-8 md:p-12">
+      @((MarkupString)Html)
+    </div>
+    @if (Previous is not null || Next is not null || Contents is not null)
+    {
+      <nav class="mt-8 flex flex-col sm:flex-row items-center justify-between gap-4 bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 p-6">
+        <div class="flex-1">
+          @if (Previous is not null)
+          {
+            <a href="/@Previous.Slug/" class="group flex items-center gap-2 text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 transition-colors">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+              </svg>
+              <span class="text-sm font-medium line-clamp-1">@Previous.Title</span>
+            </a>
+          }
+        </div>
+        @if (Contents is not null)
+        {
+          <a href="/@Contents.Slug/" class="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-sm font-medium">Table of Contents</a>
+        }
+        <div class="flex-1 text-right">
+          @if (Next is not null)
+          {
+            <a href="/@Next.Slug/" class="group inline-flex items-center gap-2 text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 transition-colors">
+              <span class="text-sm font-medium line-clamp-1">@Next.Title</span>
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+              </svg>
+            </a>
+          }
+        </div>
+      </nav>
+    }
+  </article>
+</main>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+    [Parameter, EditorRequired] public string Html { get; set; } = "";
+    [Parameter] public bool Wide { get; set; }
+    [Parameter] public FixedPageLink? Previous { get; set; }
+    [Parameter] public FixedPageLink? Next { get; set; }
+    [Parameter] public FixedPageLink? Contents { get; set; }
+
+    private string Width => Wide ? "max-w-7xl" : "max-w-4xl";
+}
