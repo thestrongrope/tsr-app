@@ -197,6 +197,60 @@ public sealed partial class SiteBuildTests
     }
 
     [Test]
+    [Platform(Exclude = "Win", Reason = "The test makes a file unreadable with Unix file modes.")]
+    [System.Runtime.Versioning.UnsupportedOSPlatform("windows")]
+    public void Replacing_the_output_removes_nothing_before_the_new_files_are_in_place()
+    {
+        // The server reads the folder while it is replaced: a page must never be there without its stylesheet.
+        // A copy that fails half way shows the order: what was served is still there.
+        var finished = Directory.CreateTempSubdirectory("tsr-site-test-").FullName;
+        var served = Directory.CreateTempSubdirectory("tsr-site-test-").FullName;
+        var unreadable = Path.Combine(finished, "unreadable.css");
+        File.WriteAllText(unreadable, "new");
+        File.SetUnixFileMode(unreadable, UnixFileMode.None);
+        Directory.CreateDirectory(Path.Combine(served, "articles", "old"));
+        File.WriteAllText(Path.Combine(served, "articles", "old", "index.html"), "old");
+        File.WriteAllText(Path.Combine(served, "site.css"), "old");
+
+        Assert.That(() => SiteBuilder.Replace(finished, served), Throws.InstanceOf<UnauthorizedAccessException>());
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(File.Exists(Path.Combine(served, "articles", "old", "index.html")), Is.True);
+            Assert.That(File.ReadAllText(Path.Combine(served, "site.css")), Is.EqualTo("old"));
+        });
+        File.SetUnixFileMode(unreadable, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+        Directory.Delete(finished, recursive: true);
+        Directory.Delete(served, recursive: true);
+    }
+
+    [Test]
+    public void Replacing_the_output_leaves_no_file_of_its_own_behind()
+    {
+        var finished = Directory.CreateTempSubdirectory("tsr-site-test-").FullName;
+        var served = Directory.CreateTempSubdirectory("tsr-site-test-").FullName;
+        Directory.CreateDirectory(Path.Combine(finished, "fonts"));
+        File.WriteAllText(Path.Combine(finished, "fonts", "a.woff2"), "new font");
+        File.WriteAllText(Path.Combine(finished, "site.css"), "new");
+        Directory.CreateDirectory(Path.Combine(served, "old", "deeper"));
+        File.WriteAllText(Path.Combine(served, "old", "deeper", "index.html"), "old");
+        File.WriteAllText(Path.Combine(served, "site.css"), "old");
+
+        SiteBuilder.Replace(finished, served);
+
+        var after = Directory.EnumerateFileSystemEntries(served, "*", SearchOption.AllDirectories)
+            .Select(path => Path.GetRelativePath(served, path).Replace('\\', '/'))
+            .Order(StringComparer.Ordinal);
+        Assert.Multiple(() =>
+        {
+            Assert.That(after, Is.EqualTo(["fonts", "fonts/a.woff2", "site.css"]));
+            Assert.That(File.ReadAllText(Path.Combine(served, "site.css")), Is.EqualTo("new"));
+        });
+        Directory.Delete(finished, recursive: true);
+        Directory.Delete(served, recursive: true);
+    }
+
+    [Test]
     public async Task A_slug_whose_characters_include_punctuation_of_another_script_is_still_a_page()
     {
         // Found on the website's own content: a title with an Arabic comma (synthetic letters here).
@@ -302,30 +356,17 @@ public sealed partial class SiteBuildTests
     }
 
     [Test]
-    public void Clearing_the_output_folder_removes_what_is_in_it_and_keeps_the_folder()
+    public void Replacing_into_a_folder_that_does_not_exist_creates_it()
     {
-        // The folder may be a mounted volume, which cannot be deleted, only emptied.
-        var root = Directory.CreateTempSubdirectory("tsr-site-test-").FullName;
-        Directory.CreateDirectory(Path.Combine(root, "articles", "old"));
-        File.WriteAllText(Path.Combine(root, "articles", "old", "index.html"), "old");
-        File.WriteAllText(Path.Combine(root, "site.css"), "old");
+        var finished = Directory.CreateTempSubdirectory("tsr-site-test-").FullName;
+        File.WriteAllText(Path.Combine(finished, "index.html"), "home");
+        var served = Path.Combine(Path.GetTempPath(), "tsr-site-test-" + Guid.NewGuid().ToString("N"));
 
-        SiteBuilder.Clear(root);
+        SiteBuilder.Replace(finished, served);
 
-        Assert.That(Directory.Exists(root), Is.True);
-        Assert.That(Directory.EnumerateFileSystemEntries(root), Is.Empty);
-        Directory.Delete(root);
-    }
-
-    [Test]
-    public void Clearing_a_folder_that_does_not_exist_creates_it()
-    {
-        var root = Path.Combine(Path.GetTempPath(), "tsr-site-test-" + Guid.NewGuid().ToString("N"));
-
-        SiteBuilder.Clear(root);
-
-        Assert.That(Directory.Exists(root), Is.True);
-        Directory.Delete(root);
+        Assert.That(File.ReadAllText(Path.Combine(served, "index.html")), Is.EqualTo("home"));
+        Directory.Delete(finished, recursive: true);
+        Directory.Delete(served, recursive: true);
     }
 
     [Test]
