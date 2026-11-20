@@ -1,0 +1,13 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.thestrongrope",
+      "sha256_cert_fingerprints": [
+        "AE:93:3E:E7:A4:9A:AB:46:F3:85:4C:B5:F6:2B:F6:9B:DD:A2:65:57:67:D7:25:46:4D:C0:12:14:4D:15:F6:E5",
+        "D6:EB:58:64:CC:8F:E1:C8:5C:0D:66:8B:64:E6:C0:9B:34:21:77:69:AF:BA:F5:C9:FC:34:7D:BC:B8:C7:E3:97"
+      ]
+    }
+  }
+]
