@@ -88,6 +88,7 @@ public static partial class ContentSite
 
         pages.Add(PublicationsPage(await ReadPublicationsAsync(api, ct)));
         pages.AddRange(FixedPages());
+        pages.AddRange(PageFiles.Pages(PageFiles.DefaultFolder, [.. summaries.Select(summary => summary.Slug!)]));
         pages.AddRange(SelfReflection.Pages());
         return pages;
     }

@@ -4,7 +4,7 @@
 #   source        the website's content folder: it holds articles/, categories/ and pages/
 #   destination   default: content under the repository root; any other destination must be a folder named "content", and never the source, in it or round it
 # Copies: articles/*.md whose front matter (between the first two "---" lines) has the line "status: publish" or "status: published" (the value bare, or in single or double quotes),
-# every categories/*.md, pages/tsr-publications.md, and each file that page links as "file: /downloads/..." from <source>/../public/downloads/ (a missing one refuses, exit 2). The text files are taken from directly in their folders only; the linked files keep their folders below downloads/. The destination's articles, categories, pages and downloads are replaced
+# every categories/*.md, every pages/*.md but five the old website redirects (RETIRED_PAGES; no status is read, as the old page route reads none), and each file the publications page links as "file: /downloads/..." or any page writes as "/downloads/...pdf", from <source>/../public/downloads/ (a missing one refuses, exit 2). The text files are taken from directly in their folders only; the linked files keep their folders below downloads/. The destination's articles, categories, pages and downloads are replaced
 # (a file removed or unpublished at the source leaves); its README.md stays. No published article: nothing changes and the exit code is 1; a refusal exits 2.
 # After it: run `dotnet test domains/content/api/tests` and only then `git add content` (see content/README.md).
 set -euo pipefail
@@ -66,27 +66,39 @@ for file in "$SRC"/categories/*.md; do
   CATEGORIES=$((CATEGORIES + 1))
 done
 
+# The fixed pages (the site shows each at /<name>/): every pages/*.md of the source except these five, which the old website redirects to its home page.
+# The old website's page route does not look at "status", so neither does this.
+RETIRED_PAGES="home account my-account register registration"
 PAGES=0
-PAGE="$SRC/pages/tsr-publications.md"
-if [ -f "$PAGE" ] && [ ! -L "$PAGE" ]; then
-  cp "$PAGE" "$STAGE/pages/"
-  PAGES=1
-fi
+for file in "$SRC"/pages/*.md; do
+  [ -f "$file" ] && [ ! -L "$file" ] || continue
+  case " $RETIRED_PAGES " in *" $(basename "$file" .md) "*) continue ;; esac
+  cp "$file" "$STAGE/pages/"
+  PAGES=$((PAGES + 1))
+done
 
-# The publication files: each "file: /downloads/..." line of the page names a file in the website's public/downloads, which sits beside its content folder.
+# The linked files: each "file: /downloads/..." line of the publications page and each "/downloads/...pdf" address written in any page name a file in the website's public/downloads, which sits beside its content folder.
 # A linked file the source does not hold stops the import before anything is replaced. The guard (RepositoryContentTests) checks that this reading missed no link.
 FILES=0
-if [ "$PAGES" -eq 1 ]; then
-  while IFS= read -r link; do
-    case "$link" in /downloads/*) ;; *) continue ;; esac
-    case "/$link/" in */../*) refuse "a linked file name is not a plain path: $link" ;; esac
-    from="$SRC/../public$link"
-    [ -f "$from" ] && [ ! -L "$from" ] || refuse "the source does not hold the linked file: $link"
-    mkdir -p "$STAGE$(dirname "$link")"
-    cp "$from" "$STAGE$link"
-    FILES=$((FILES + 1))
-  done < <(sed -n -E 's/\r$//; s/^[[:space:]-]*file:[[:space:]]*//p' "$PAGE" | sed -E "s/^['\"]//; s/['\"][[:space:]]*$//")
+LINKS="$STAGE/links.txt"
+: > "$LINKS"
+if [ -f "$STAGE/pages/tsr-publications.md" ]; then
+  sed -n -E 's/\r$//; s/^[[:space:]-]*file:[[:space:]]*//p' "$STAGE/pages/tsr-publications.md" | sed -E "s/^['\"]//; s/['\"][[:space:]]*$//" >> "$LINKS"
 fi
+if [ "$PAGES" -gt 0 ]; then
+  grep -h -o -E "/downloads/[^[:space:])\"'<>?#]*\.pdf" "$STAGE"/pages/*.md >> "$LINKS" || true
+fi
+sort -u "$LINKS" -o "$LINKS"
+while IFS= read -r link; do
+  case "$link" in /downloads/*) ;; *) continue ;; esac
+  case "/$link/" in */../*) refuse "a linked file name is not a plain path: $link" ;; esac
+  from="$SRC/../public$link"
+  [ -f "$from" ] && [ ! -L "$from" ] || refuse "the source does not hold the linked file: $link"
+  mkdir -p "$STAGE$(dirname "$link")"
+  cp "$from" "$STAGE$link"
+  FILES=$((FILES + 1))
+done < "$LINKS"
+rm -f "$LINKS"
 
 if [ "$ARTICLES" -eq 0 ]; then
   echo "content-import: no published article in the source; nothing changed" >&2

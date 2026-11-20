@@ -41,7 +41,7 @@ read it before editing.
 | A table or migration | the domain's `api/<Context>Context.cs` and `api/Migrations/` (add: `dotnet ef migrations add <Name> --context <Domain>Context --project domains/<d>/api --startup-project hosts/api --output-dir Migrations -- --TSR_DB=Host=unused --TSR_FIREBASE_PROJECT_ID=demo-design --environment=Development`; the generated files need no edit) | `docs/specs/initial-build/phase-0-design.md` |
 | The production stack and its settings | `docker-compose.yml` | `docs/deployment.md` |
 | Synthetic data | `db/synthetic/seed.sql` | |
-| The published articles, categories and publications page the Library and the site read | `content/` (published only; copied by `tools/content-import.sh`, checked by `dotnet test domains/content/api/tests`) | `content/README.md` |
+| The published articles, categories, publications page and fixed pages (`content/pages/`, shown only by the site) | `content/` (published only; copied by `tools/content-import.sh`, checked by `dotnet test domains/content/api/tests`) | `content/README.md` |
 | How a database gets its data | migrations create the schema and base data; then the synthetic seed, or a separate load of real data | `docs/specs/repo-structure.md` section 3.3 |
 
 The whole API surface is listed in the **route catalog**, `docs/specs/initial-build/operations.csv` (method, path, domain, auth kind, state); the tests in
@@ -52,7 +52,7 @@ What the product does today and what is still missing: `docs/specs/capability-ma
 
 1. **Rules live in a domain, never in a client or a host.** Apps and the site are presentation;
    hosts only wire. A rule enforced only in the app is not enforced: the repo is public and anyone
-   can build a modified client.
+   can build a modified client. Public content that only the site shows (the fixed pages) is read from `content/` at build time; content the app also reads, and anything with a rule or member data, still comes from the API.
 2. **Permissions go through `access`** (`Permissions.CanAsync(caller, action, target)`), checked in the slice's handler.
    **Gender segregation** is a scope from `access`, applied by each domain to its own data.
 3. **A slice never calls another slice. SQL may read another domain only through its published `v_*` views** (never its

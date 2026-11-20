@@ -6,6 +6,7 @@ WORKDIR /src
 COPY .editorconfig Directory.Build.props Directory.Packages.props ./
 COPY shared/site/ shared/site/
 COPY domains/ domains/
+COPY content/pages/ content/pages/
 COPY hosts/site/ hosts/site/
 RUN dotnet publish hosts/site/Tsr.Host.Site.csproj -c Release -o /out
 
