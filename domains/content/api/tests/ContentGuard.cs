@@ -3,7 +3,7 @@ using Tsr.Content.Api.Domain;
 namespace Tsr.Content.Api.Tests;
 
 /// <summary>
-/// The checks over a published content folder (LIB-R27, LIB-R28, LIB-R31): one line per problem, none when the folder is good.
+/// The checks over a published content folder (LIB-R27, LIB-R28, LIB-R31, LIB-R37): one line per problem, none when the folder is good.
 /// It uses the content reader itself, so a file the reader would not publish is a problem here. It takes the directory, so a test can run it on a folder it wrote.
 /// </summary>
 internal static class ContentGuard
@@ -36,7 +36,7 @@ internal static class ContentGuard
     {
         foreach (var entry in new DirectoryInfo(root).EnumerateFileSystemInfos())
         {
-            var allowedFolder = entry is DirectoryInfo && entry.Name is "articles" or "categories" or "pages";
+            var allowedFolder = entry is DirectoryInfo && entry.Name is "articles" or "categories" or "pages" or "downloads";
             if (entry.LinkTarget is not null || !(allowedFolder || (entry is FileInfo && entry.Name == "README.md")))
             {
                 yield return Unexpected(entry.Name);
@@ -45,7 +45,7 @@ internal static class ContentGuard
 
             if (entry is DirectoryInfo folder)
             {
-                foreach (var inner in InFolder(folder))
+                foreach (var inner in folder.Name == "downloads" ? InDownloads(folder, "downloads") : InFolder(folder))
                 {
                     yield return inner;
                 }
@@ -64,6 +64,73 @@ internal static class ContentGuard
                 yield return Unexpected($"{folder.Name}/{entry.Name}");
             }
         }
+    }
+
+    /// <summary>Rule 6: below downloads/ only folders and regular .pdf files, at any depth.</summary>
+    private static IEnumerable<string> InDownloads(DirectoryInfo folder, string path)
+    {
+        foreach (var entry in folder.EnumerateFileSystemInfos())
+        {
+            var entryPath = $"{path}/{entry.Name}";
+            if (entry.LinkTarget is not null)
+            {
+                yield return Unexpected(entryPath);
+            }
+            else if (entry is DirectoryInfo inner)
+            {
+                foreach (var problem in InDownloads(inner, entryPath))
+                {
+                    yield return problem;
+                }
+            }
+            else if (!entry.Name.EndsWith(".pdf", StringComparison.Ordinal))
+            {
+                yield return Unexpected(entryPath);
+            }
+        }
+    }
+
+    /// <summary>The regular .pdf files below downloads/, as paths from the content folder with "/" (names as the directory listing returns them).</summary>
+    private static List<string> DownloadFiles(string root)
+    {
+        var path = Path.Combine(root, "downloads");
+        if (!Directory.Exists(path))
+        {
+            return [];
+        }
+
+        return
+        [
+            .. new DirectoryInfo(path).EnumerateFileSystemInfos("*", SearchOption.AllDirectories)
+                .Where(entry => entry is FileInfo && entry.LinkTarget is null && entry.Name.EndsWith(".pdf", StringComparison.Ordinal))
+                .Select(entry => Path.GetRelativePath(root, entry.FullName).Replace(Path.DirectorySeparatorChar, '/')),
+        ];
+    }
+
+    /// <summary>Rules 7 to 9: every file link of the publications page is under /downloads/ and names a file the folder holds (exact case), and every PDF is linked.</summary>
+    private static List<string> LinkProblems(string root, ContentSet set)
+    {
+        const string Prefix = "/downloads/";
+        var held = DownloadFiles(root).ToHashSet(StringComparer.Ordinal);
+        var linked = new HashSet<string>(StringComparer.Ordinal);
+        var problems = new List<string>();
+        foreach (var link in set.Publications.Select(publication => publication.File).OfType<string>())
+        {
+            if (!link.StartsWith(Prefix, StringComparison.Ordinal))
+            {
+                problems.Add($"the publications page links a file outside /downloads/: {link}");
+                continue;
+            }
+
+            linked.Add(link[1..]);
+            if (!held.Contains(link[1..]))
+            {
+                problems.Add($"the publications page links a file the folder does not hold: {link}");
+            }
+        }
+
+        problems.AddRange(held.Where(path => !linked.Contains(path)).Order(StringComparer.Ordinal).Select(path => $"no publication links this file: {path}"));
+        return problems;
     }
 
     private static string Unexpected(string path) => $"unexpected entry: {path}";
@@ -136,6 +203,7 @@ internal static class ContentGuard
 
         var slugs = set.Categories.Select(category => category.Slug).ToHashSet(StringComparer.Ordinal);
         problems.AddRange(set.Articles.SelectMany(article => article.Categories.Where(name => !slugs.Contains(name)).Select(name => $"{article.Slug} -> {name}")));
+        problems.AddRange(LinkProblems(root, set));
         return problems;
     }
 }

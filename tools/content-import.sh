@@ -4,7 +4,7 @@
 #   source        the website's content folder: it holds articles/, categories/ and pages/
 #   destination   default: content under the repository root; any other destination must be a folder named "content", and never the source, in it or round it
 # Copies: articles/*.md whose front matter (between the first two "---" lines) has the line "status: publish" or "status: published" (the value bare, or in single or double quotes),
-# every categories/*.md, and pages/tsr-publications.md. Files directly in those folders only. The destination's articles, categories and pages are replaced
+# every categories/*.md, pages/tsr-publications.md, and each file that page links as "file: /downloads/..." from <source>/../public/downloads/ (a missing one refuses, exit 2). The text files are taken from directly in their folders only; the linked files keep their folders below downloads/. The destination's articles, categories, pages and downloads are replaced
 # (a file removed or unpublished at the source leaves); its README.md stays. No published article: nothing changes and the exit code is 1; a refusal exits 2.
 # After it: run `dotnet test domains/content/api/tests` and only then `git add content` (see content/README.md).
 set -euo pipefail
@@ -45,7 +45,7 @@ is_published() {
 
 STAGE="$(mktemp -d "$DEST_PARENT/.content-import.XXXXXX")"
 trap 'rm -rf "$STAGE"' EXIT
-mkdir -p "$STAGE/articles" "$STAGE/categories" "$STAGE/pages"
+mkdir -p "$STAGE/articles" "$STAGE/categories" "$STAGE/pages" "$STAGE/downloads"
 
 ARTICLES=0
 LEFT_OUT=0
@@ -73,14 +73,29 @@ if [ -f "$PAGE" ] && [ ! -L "$PAGE" ]; then
   PAGES=1
 fi
 
+# The publication files: each "file: /downloads/..." line of the page names a file in the website's public/downloads, which sits beside its content folder.
+# A linked file the source does not hold stops the import before anything is replaced. The guard (RepositoryContentTests) checks that this reading missed no link.
+FILES=0
+if [ "$PAGES" -eq 1 ]; then
+  while IFS= read -r link; do
+    case "$link" in /downloads/*) ;; *) continue ;; esac
+    case "/$link/" in */../*) refuse "a linked file name is not a plain path: $link" ;; esac
+    from="$SRC/../public$link"
+    [ -f "$from" ] && [ ! -L "$from" ] || refuse "the source does not hold the linked file: $link"
+    mkdir -p "$STAGE$(dirname "$link")"
+    cp "$from" "$STAGE$link"
+    FILES=$((FILES + 1))
+  done < <(sed -n -E 's/\r$//; s/^[[:space:]-]*file:[[:space:]]*//p' "$PAGE" | sed -E "s/^['\"]//; s/['\"][[:space:]]*$//")
+fi
+
 if [ "$ARTICLES" -eq 0 ]; then
   echo "content-import: no published article in the source; nothing changed" >&2
   exit 1
 fi
 
 mkdir -p "$DEST"
-for folder in articles categories pages; do
+for folder in articles categories pages downloads; do
   rm -rf "${DEST:?}/$folder"
   mv "$STAGE/$folder" "$DEST/$folder"
 done
-echo "copied $ARTICLES articles, $CATEGORIES categories, $PAGES pages; left out $LEFT_OUT articles"
+echo "copied $ARTICLES articles, $CATEGORIES categories, $PAGES pages, $FILES files; left out $LEFT_OUT articles"

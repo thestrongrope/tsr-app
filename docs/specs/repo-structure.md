@@ -297,7 +297,7 @@ each takes over from tsr-account: `domains/CLAUDE.md`.
 | search (read model) | member search and public site search (section 2.5) |
 
 Not domains: `admin` is an audience (permissions decide it); `reports` are query slices owned by
-the domain whose question they answer. `content` here is the API domain; the root `content/` folder holds its published text content (`content/README.md`), not the private data repo.
+the domain whose question they answer. `content` here is the API domain; the root `content/` folder holds its published text content and the publication PDFs (`content/README.md`), not the private data repo.
 
 ### 5. Why this layout, and what it costs
 
