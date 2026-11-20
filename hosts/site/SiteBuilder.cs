@@ -84,40 +84,56 @@ public static class SiteBuilder
     }
 
     /// <summary>
-    /// Empties <paramref name="outDir"/> and keeps the folder itself (creating it when missing): in production it is a mounted volume,
-    /// which can be emptied but not deleted.
-    /// </summary>
-    public static void Clear(string outDir)
-    {
-        var root = Directory.CreateDirectory(outDir);
-        foreach (var entry in root.EnumerateFileSystemInfos())
-        {
-            if (entry is DirectoryInfo folder)
-            {
-                folder.Delete(recursive: true);
-            }
-            else
-            {
-                entry.Delete();
-            }
-        }
-    }
-
-    /// <summary>
-    /// Puts a finished site in place: empties <paramref name="outDir"/> and copies every file of <paramref name="finishedDir"/> into it,
-    /// <c>robots.txt</c> first, so a crawler never finds the pages without it. The site is built in a folder of its own and only then
-    /// put in place, so a build that fails or runs out of time never leaves a partial site where the server reads.
+    /// Puts a finished site in place while the server reads <paramref name="outDir"/>: every file of <paramref name="finishedDir"/> is put
+    /// over what is there, <c>robots.txt</c> first (a crawler never finds the pages without it), and only then is what the new site does not
+    /// hold removed. The folder (in production a mounted volume, created when missing) is never emptied, so no page is served without its
+    /// stylesheet, and a copy that fails removes nothing that was served.
+    /// Each file arrives under a temporary name and is renamed, so the server never reads half a file.
     /// </summary>
     public static void Replace(string finishedDir, string outDir)
     {
-        Clear(outDir);
-        var robots = Path.Combine(finishedDir, "robots.txt");
-        if (File.Exists(robots))
+        Directory.CreateDirectory(outDir);
+        var files = Directory.EnumerateFiles(finishedDir, "*", SearchOption.AllDirectories)
+            .Select(file => Path.GetRelativePath(finishedDir, file))
+            .OrderBy(relative => relative == "robots.txt" ? 0 : 1)
+            .ToList();
+        foreach (var relative in files)
         {
-            File.Copy(robots, Path.Combine(outDir, "robots.txt"), overwrite: true);
+            PutInPlace(Path.Combine(finishedDir, relative), Path.Combine(outDir, relative));
         }
 
-        CopyStaticFiles(finishedDir, outDir);
+        RemoveWhatIsNotIn(files.Select(relative => Path.GetFullPath(Path.Combine(outDir, relative))).ToHashSet(StringComparer.Ordinal), outDir);
+    }
+
+    private const string ArrivingSuffix = ".tsr-arriving";
+
+    private static void PutInPlace(string source, string target)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+        var arriving = target + ArrivingSuffix;
+        File.Copy(source, arriving, overwrite: true);
+        File.Move(arriving, target, overwrite: true);
+    }
+
+    /// <summary>Deletes every file of <paramref name="outDir"/> that is not in <paramref name="kept"/> (full paths), then every folder left empty.</summary>
+    private static void RemoveWhatIsNotIn(HashSet<string> kept, string outDir)
+    {
+        foreach (var file in Directory.EnumerateFiles(outDir, "*", SearchOption.AllDirectories).ToList())
+        {
+            if (!kept.Contains(Path.GetFullPath(file)))
+            {
+                File.Delete(file);
+            }
+        }
+
+        // Deepest first, so a folder whose only content was an emptied folder goes too.
+        foreach (var folder in Directory.EnumerateDirectories(outDir, "*", SearchOption.AllDirectories).OrderByDescending(path => path.Length).ToList())
+        {
+            if (!Directory.EnumerateFileSystemEntries(folder).Any())
+            {
+                Directory.Delete(folder);
+            }
+        }
     }
 
     /// <summary>

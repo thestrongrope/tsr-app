@@ -67,16 +67,38 @@ public sealed partial class ProductionStackTests
     public void The_site_server_answers_an_unknown_address_with_the_site_s_own_page()
     {
         var site = Regex.Match(Stack, @"(?ms)^  site:\n(?<body>.*?)(?=^  \S|\z)").Groups["body"].Value;
-        var server = File.ReadAllText(Path.Combine(RouteCatalog.RepoRoot(), "hosts", "site", "Dockerfile.server"));
+        var dockerfile = File.ReadAllText(Path.Combine(RouteCatalog.RepoRoot(), "hosts", "site", "Dockerfile.server"));
+        var config = SiteServerConfig();
 
         Assert.Multiple(() =>
         {
             Assert.That(site, Does.Contain("context: hosts/site").And.Contain("dockerfile: Dockerfile.server"));
             Assert.That(site, Does.Not.Contain("image:"));
-            Assert.That(server, Does.Contain("error_page 404 /404.html;"));
-            Assert.That(server, Does.Not.Contain("proxy_pass"));
+            Assert.That(dockerfile, Does.Contain("COPY nginx.conf /etc/nginx/conf.d/default.conf"));
+            Assert.That(dockerfile, Does.Contain("AS selftest").And.Contain("selftest.sh"));
+            Assert.That(config, Does.Contain("error_page 404 /404.html;"));
+            Assert.That(config, Does.Contain("listen 80;").And.Contain("root /usr/share/nginx/html;").And.Contain("index index.html;"));
+            Assert.That(config, Does.Contain("absolute_redirect off;"));
         });
     }
+
+    /// <summary>The site's server forwards nothing and names no host: every redirect is relative.</summary>
+    [Test]
+    public void The_site_server_configuration_forwards_nothing_and_names_no_host()
+    {
+        var config = SiteServerConfig();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(config, Does.Not.Contain("proxy_pass"));
+            Assert.That(config, Does.Not.Contain("fastcgi_pass"));
+            Assert.That(config, Does.Not.Contain("upstream"));
+            Assert.That(config, Does.Not.Contain("thestrongrope"));
+        });
+    }
+
+    private static string SiteServerConfig() =>
+        File.ReadAllText(Path.Combine(RouteCatalog.RepoRoot(), "hosts", "site", "nginx.conf"));
 
     [Test]
     public void The_site_tells_search_engines_not_to_crawl_it() =>
