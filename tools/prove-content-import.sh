@@ -54,7 +54,7 @@ expect_listing "./README.md
 ./articles/published-single.md
 ./categories/study-habits.md
 ./pages/tsr-publications.md" "case 1"
-[ "$(cat "$OUT")" = "copied 3 articles, 1 categories, 1 pages; left out 3 articles" ] || fail "case 1: output was: $(cat "$OUT")"
+[ "$(cat "$OUT")" = "copied 3 articles, 1 categories, 1 pages, 0 files; left out 3 articles" ] || fail "case 1: output was: $(cat "$OUT")"
 echo "ok 1: three published articles copied, three left out, the line printed"
 
 # Case 2: an article that became a draft at the source leaves the destination.
@@ -120,4 +120,49 @@ for pair in "$SITE|$SITE" "$SITE|$SITE/content" "$WORK/site|$SITE"; do
   [ -f "$SITE/articles/d.md" ] || fail "case 7: the draft at the source was deleted"
 done
 echo "ok 7: a source that is, holds or lies in the destination is refused"
-echo "content import proven: 7 cases"
+
+# Cases 8 and 9: the files the publications page links come from <source>/../public/downloads (the website keeps web/content and web/public side by side).
+W="$WORK/web"
+mkdir -p "$W/content/articles" "$W/content/pages" "$W/public/downloads/books" "$W/public/downloads/tsr-publications" "$WORK/out8/content"
+printf -- '---\nstatus: publish\n---\n' > "$W/content/articles/p.md"
+printf -- '---\ntitle: P\npublications:\n- title: One\n  file: /downloads/books/One.pdf\n- title: Two\n  file: "/downloads/tsr-publications/two.pdf"\n- title: Three\n  file: '"'"'/downloads/books/three.pdf'"'"'\n- title: Online\n  readOnlineUrl: https://example.invalid/read\n---\n' > "$W/content/pages/tsr-publications.md"
+printf 'one' > "$W/public/downloads/books/One.pdf"
+printf 'two' > "$W/public/downloads/tsr-publications/two.pdf"
+printf 'unlinked' > "$W/public/downloads/books/unlinked.pdf"
+
+# Case 8: a missing linked file refuses with exit 2, names the link, and leaves the destination as it was.
+printf 'kept readme\n' > "$WORK/out8/content/README.md"
+mkdir -p "$WORK/out8/content/downloads"
+printf 'old' > "$WORK/out8/content/downloads/old.pdf"
+before="$(listing "$WORK/out8")"
+status=0
+run "$W/content" "$WORK/out8/content" || status=$?
+[ "$status" = 2 ] || fail "case 8: exit code $status, expected 2"
+grep -q "/downloads/books/three.pdf" "$OUT" || fail "case 8: the output does not name the missing file: $(cat "$OUT")"
+[ "$(listing "$WORK/out8")" = "$before" ] || fail "case 8: the destination changed"
+echo "ok 8: a missing linked file refuses, names it, destination unchanged"
+
+# Case 9: the linked files arrive in their folders, the unlinked one and the old one do not, and the line counts them.
+printf 'three' > "$W/public/downloads/books/three.pdf"
+run "$W/content" "$WORK/out8/content" || fail "case 9: exit code $?"
+[ "$(listing "$WORK/out8/content")" = "./README.md
+./articles/p.md
+./downloads/books/One.pdf
+./downloads/books/three.pdf
+./downloads/tsr-publications/two.pdf
+./pages/tsr-publications.md" ] || fail "case 9: the destination holds $(listing "$WORK/out8/content")"
+[ "$(cat "$WORK/out8/content/downloads/books/One.pdf")" = "one" ] || fail "case 9: the file's bytes differ"
+[ "$(cat "$OUT")" = "copied 1 articles, 0 categories, 1 pages, 3 files; left out 0 articles" ] || fail "case 9: output was: $(cat "$OUT")"
+echo "ok 9: the three linked files arrive, the unlinked file stays out"
+
+# Case 10: a link that climbs out of public/downloads is refused, and the destination stays as it was.
+printf 'outside' > "$W/outside.pdf"
+printf -- '---\ntitle: P\npublications:\n- title: Out\n  file: /downloads/../../outside.pdf\n---\n' > "$W/content/pages/tsr-publications.md"
+before="$(listing "$WORK/out8")"
+status=0
+run "$W/content" "$WORK/out8/content" || status=$?
+[ "$status" = 2 ] || fail "case 10: exit code $status, expected 2"
+grep -q "not a plain path" "$OUT" || fail "case 10: the output does not say why: $(cat "$OUT")"
+[ "$(listing "$WORK/out8")" = "$before" ] || fail "case 10: the destination changed"
+echo "ok 10: a link that climbs out of the downloads folder is refused"
+echo "content import proven: 10 cases"
