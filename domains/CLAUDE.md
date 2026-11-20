@@ -31,7 +31,8 @@ domains/<context>/
 ├── app/               Flutter package (pub workspace member): views, view models, repository
 │   └── lib/features/<screen>/
 └── site/              its pages on the static site (Razor class library): components and
-                       <Context>Site.PagesAsync. Reads the API through shared/site; never
+                       <Context>Site.PagesAsync. Reads the API through shared/site (public content that only
+                       the site shows, the fixed pages, is read from content/ at build time); never
                        references api/ and never another domain's site/. Added to hosts/site/SiteModules.cs
 ```
 
@@ -88,7 +89,7 @@ Platform-owned tables (no domain): `outbox`, `outbound_messages` (PHP's `schema_
    Each `site/` module references only `shared/site` and builds its pages alone; `hosts/site/tests`
    checks it. Both checks see real use of another module, not an unused project reference.
 8. Tests sit next to the code (`Foo.Tests.cs`); behaviour visible over HTTP goes in a Hurl file in `spec/tests`, named after the slice.
-9. Business rules never live in `site/` or `app/`: they render what the API returns. A `site/` module
+9. Business rules never live in `site/` or `app/`: they render what the API returns. Public content that only the site shows (the fixed pages) is read from `content/` at build time; content the app also reads, and anything with a rule or member data, still comes from the API. A `site/` module
    copies the response shapes it reads from `api.yaml` (it is a client of the published contract).
 10. A cross-domain report is owned by the domain whose question it answers (e.g. the MIS report by
     `classes`), reads other domains through their `v_*` views only, and lists the domains it reads.

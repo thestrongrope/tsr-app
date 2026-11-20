@@ -43,18 +43,20 @@ article no-status ""
 printf -- '---\ntitle: C\n---\n' > "$SRC/categories/study-habits.md"
 printf -- '---\ntitle: P\npublications: []\n---\n' > "$SRC/pages/tsr-publications.md"
 printf -- '---\ntitle: Other\n---\n' > "$SRC/pages/other.md"
+for retired in home account my-account register registration; do printf -- '---\ntitle: Retired\n---\n' > "$SRC/pages/$retired.md"; done
 printf 'not an article\n' > "$SRC/articles/x.txt"
 printf 'kept readme\n' > "$DEST/README.md"
 
-# Case 1: only the published three, the category and the publications page; the line; the exit code; README stays.
+# Case 1: only the published three, the category, the publications page and the other page (the five retired pages stay out); the line; the exit code; README stays.
 run "$SRC" "$DEST" || fail "case 1: exit code $?"
 expect_listing "./README.md
 ./articles/published-bare.md
 ./articles/published-double.md
 ./articles/published-single.md
 ./categories/study-habits.md
+./pages/other.md
 ./pages/tsr-publications.md" "case 1"
-[ "$(cat "$OUT")" = "copied 3 articles, 1 categories, 1 pages, 0 files; left out 3 articles" ] || fail "case 1: output was: $(cat "$OUT")"
+[ "$(cat "$OUT")" = "copied 3 articles, 1 categories, 2 pages, 0 files; left out 3 articles" ] || fail "case 1: output was: $(cat "$OUT")"
 echo "ok 1: three published articles copied, three left out, the line printed"
 
 # Case 2: an article that became a draft at the source leaves the destination.
@@ -64,6 +66,7 @@ expect_listing "./README.md
 ./articles/published-bare.md
 ./articles/published-single.md
 ./categories/study-habits.md
+./pages/other.md
 ./pages/tsr-publications.md" "case 2"
 echo "ok 2: an unpublished article is removed from the destination"
 
@@ -165,4 +168,23 @@ run "$W/content" "$WORK/out8/content" || status=$?
 grep -q "not a plain path" "$OUT" || fail "case 10: the output does not say why: $(cat "$OUT")"
 [ "$(listing "$WORK/out8")" = "$before" ] || fail "case 10: the destination changed"
 echo "ok 10: a link that climbs out of the downloads folder is refused"
-echo "content import proven: 10 cases"
+# Case 11: a PDF that a page body links is copied (front matter or body), a PDF that only a retired page links is not required, a missing one refuses.
+printf -- '---\ntitle: P\npublications: []\n---\n' > "$W/content/pages/tsr-publications.md"
+printf -- '---\ntitle: Book\n---\nRead [the book](/downloads/books/body.pdf) or <a href="/downloads/books/html.pdf">this</a>.\n' > "$W/content/pages/book.md"
+printf -- '---\ntitle: Old\n---\n[x](/downloads/books/retired-only.pdf)\n' > "$W/content/pages/home.md"
+printf 'body' > "$W/public/downloads/books/body.pdf"
+status=0
+run "$W/content" "$WORK/out8/content" || status=$?
+[ "$status" = 2 ] || fail "case 11: exit code $status, expected 2 for a missing page link"
+grep -q "/downloads/books/html.pdf" "$OUT" || fail "case 11: the output does not name the missing file: $(cat "$OUT")"
+printf 'html' > "$W/public/downloads/books/html.pdf"
+run "$W/content" "$WORK/out8/content" || fail "case 11: exit code $?"
+[ "$(listing "$WORK/out8/content")" = "./README.md
+./articles/p.md
+./downloads/books/body.pdf
+./downloads/books/html.pdf
+./pages/book.md
+./pages/tsr-publications.md" ] || fail "case 11: the destination holds $(listing "$WORK/out8/content")"
+[ "$(cat "$OUT")" = "copied 1 articles, 0 categories, 2 pages, 2 files; left out 0 articles" ] || fail "case 11: output was: $(cat "$OUT")"
+echo "ok 11: the PDFs a page links arrive, a retired page's link is not needed, a missing one refuses"
+echo "content import proven: 11 cases"

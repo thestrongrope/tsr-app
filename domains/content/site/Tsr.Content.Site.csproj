@@ -2,6 +2,7 @@
   <!-- content's pages on the static site. Reads the API through shared/site; references no api project. -->
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Markdig" />
     <ProjectReference Include="../../../shared/site/Tsr.Shared.Site.csproj" />
   </ItemGroup>
   <ItemGroup>

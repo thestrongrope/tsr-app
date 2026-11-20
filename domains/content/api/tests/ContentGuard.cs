@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Tsr.Content.Api.Domain;
 
 namespace Tsr.Content.Api.Tests;
@@ -6,7 +7,7 @@ namespace Tsr.Content.Api.Tests;
 /// The checks over a published content folder (LIB-R27, LIB-R28, LIB-R31, LIB-R37): one line per problem, none when the folder is good.
 /// It uses the content reader itself, so a file the reader would not publish is a problem here. It takes the directory, so a test can run it on a folder it wrote.
 /// </summary>
-internal static class ContentGuard
+internal static partial class ContentGuard
 {
     private const string PublicationsPage = "tsr-publications.md";
 
@@ -58,7 +59,7 @@ internal static class ContentGuard
         foreach (var entry in folder.EnumerateFileSystemInfos())
         {
             var isFile = entry is FileInfo && entry.LinkTarget is null;
-            var named = folder.Name == "pages" ? entry.Name == PublicationsPage : entry.Name.EndsWith(".md", StringComparison.Ordinal);
+            var named = entry.Name.EndsWith(".md", StringComparison.Ordinal);
             if (!isFile || !named)
             {
                 yield return Unexpected($"{folder.Name}/{entry.Name}");
@@ -129,9 +130,39 @@ internal static class ContentGuard
             }
         }
 
+        foreach (var (page, link) in PageLinks(root))
+        {
+            linked.Add(link[1..]);
+            if (!held.Contains(link[1..]))
+            {
+                problems.Add($"pages/{page} links a file the folder does not hold: {link}");
+            }
+        }
+
         problems.AddRange(held.Where(path => !linked.Contains(path)).Order(StringComparer.Ordinal).Select(path => $"no publication links this file: {path}"));
         return problems;
     }
+
+    /// <summary>Every "/downloads/...pdf" address written in a page other than the publications page (that one is read through its entries), with the page name.</summary>
+    private static IEnumerable<(string Page, string Link)> PageLinks(string root)
+    {
+        var folder = Path.Combine(root, "pages");
+        if (!Directory.Exists(folder))
+        {
+            yield break;
+        }
+
+        foreach (var page in Files(root, "pages").Where(name => name != PublicationsPage))
+        {
+            foreach (Match match in DownloadLink().Matches(File.ReadAllText(Path.Combine(folder, page))))
+            {
+                yield return (page, match.Value);
+            }
+        }
+    }
+
+    [GeneratedRegex(@"/downloads/[^\s)\x22'<>?#]*\.pdf")]
+    private static partial Regex DownloadLink();
 
     private static string Unexpected(string path) => $"unexpected entry: {path}";
 

@@ -66,7 +66,7 @@ public sealed class ContentGuardTests
         Assert.That(ContentGuard.Problems(root.FullName), Does.Contain(NeedsContent), "a category and a page, no article");
 
         GoodFolder();
-        foreach (var (path, named) in new[] { ("articles/x.markdown", "articles/x.markdown"), ("articles/sub/x.md", "articles/sub"), ("pages/other.md", "pages/other.md"), ("notes.txt", "notes.txt") })
+        foreach (var (path, named) in new[] { ("articles/x.markdown", "articles/x.markdown"), ("articles/sub/x.md", "articles/sub"), ("pages/other.txt", "pages/other.txt"), ("pages/sub/x.md", "pages/sub"), ("notes.txt", "notes.txt") })
         {
             Write(path, "---\ntitle: X\n---\n");
             var problems = ContentGuard.Problems(root.FullName);
@@ -76,7 +76,7 @@ public sealed class ContentGuardTests
             File.Delete(Path(path));
             if (path.Contains("sub/", StringComparison.Ordinal))
             {
-                Directory.Delete(Path("articles/sub"));
+                Directory.Delete(System.IO.Path.GetDirectoryName(Path(path))!);
             }
 
             Assert.That(ContentGuard.Problems(root.FullName), Is.Empty, "after removing " + path);
@@ -196,6 +196,28 @@ public sealed class ContentGuardTests
         Write("pages/tsr-publications.md", "---\ntitle: Sample\npublications:\n- title: A Booklet\n  file: https://example.invalid/a-booklet.pdf\n---\n");
 
         Assert.That(ContentGuard.Problems(root.FullName), Has.Some.Contain("outside /downloads/").And.Contain("https://example.invalid/a-booklet.pdf"));
+    }
+
+    [Test]
+    public void Any_md_file_may_be_a_page()
+    {
+        GoodFolder();
+        Write("pages/privacy-policy.md", "---\ntitle: Privacy\n---\nInvented page.\n");
+
+        Assert.That(ContentGuard.Problems(root.FullName), Is.Empty);
+    }
+
+    [Test]
+    public void A_file_a_page_links_is_not_unlinked_and_a_dead_page_link_is_a_problem()
+    {
+        GoodFolder();
+        Write("downloads/books/gift.pdf", "invented bytes");
+        Write("pages/gift.md", "---\ntitle: Gift\n---\nRead [the book](/downloads/books/gift.pdf) and [another](/downloads/books/gone.pdf).\n");
+
+        var problems = ContentGuard.Problems(root.FullName);
+
+        Assert.That(problems, Has.Count.EqualTo(1));
+        Assert.That(problems, Has.Exactly(1).Contain("/downloads/books/gone.pdf"));
     }
 
     [Test]

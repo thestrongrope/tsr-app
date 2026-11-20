@@ -24,19 +24,19 @@ namespace Tsr.Content.Site;
 /// </summary>
 public static partial class ArticleBody
 {
-    private const string Paragraph = "text-gray-900 dark:text-gray-100 leading-relaxed mb-4";
+    internal const string Paragraph = "text-gray-900 dark:text-gray-100 leading-relaxed mb-4";
     private const string ArabicText = "arabic-text";
     private const string ArabicMixed = "arabic-mixed";
-    private const string Link = "text-blue-600 dark:text-blue-400 hover:underline";
+    internal const string Link = "text-blue-600 dark:text-blue-400 hover:underline";
     private const string ImageFrame = "inline-block max-w-sm mr-4 mb-4 float-left";
-    private const string Image = "rounded-lg shadow-md w-full h-auto";
+    internal const string Image = "rounded-lg shadow-md w-full h-auto";
     private const string ImageCaption = "text-xs text-gray-600 dark:text-gray-400 mt-1 block text-center italic";
     private const string CodeBlock = "text-gray-900 dark:text-gray-100 text-sm font-mono";
     private const string CodeInline = "bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-1.5 py-0.5 rounded text-sm font-mono";
     private const string TableFrame = "overflow-x-auto my-4";
-    private const string Table = "min-w-full divide-y divide-gray-200 dark:divide-gray-700 border border-gray-200 dark:border-gray-700";
-    private const string HeaderCell = "px-4 py-2 bg-gray-100 dark:bg-gray-800 text-left text-gray-900 dark:text-gray-100 font-semibold";
-    private const string Cell = "px-4 py-2 border-t border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100";
+    internal const string Table = "min-w-full divide-y divide-gray-200 dark:divide-gray-700 border border-gray-200 dark:border-gray-700";
+    internal const string HeaderCell = "px-4 py-2 bg-gray-100 dark:bg-gray-800 text-left text-gray-900 dark:text-gray-100 font-semibold";
+    internal const string Cell = "px-4 py-2 border-t border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100";
     private const string FootnoteMarker = "text-blue-600 dark:text-blue-400";
     private const string FootnoteReference = Link + " relative group cursor-pointer";
     private const string HoverText = "invisible group-hover:visible absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 text-sm rounded-lg shadow-lg max-w-xs z-50 whitespace-normal text-left";
@@ -50,7 +50,7 @@ public static partial class ArticleBody
     private const int MaxCharacters = 2_000_000;
 
     /// <summary>The elements written with a start and an end tag, each with the classes MarkdownRenderer.tsx gives it (none: written bare).</summary>
-    private static readonly Dictionary<string, string> Containers = new(StringComparer.Ordinal)
+    internal static readonly Dictionary<string, string> Containers = new(StringComparer.Ordinal)
     {
         ["h1"] = "text-3xl font-bold text-gray-900 dark:text-gray-100 mb-4 mt-8 clear-both",
         ["h2"] = Heading2,
@@ -385,7 +385,7 @@ public static partial class ArticleBody
         CheckLength(html);
     }
 
-    private static string ArabicClass(string text)
+    internal static string ArabicClass(string text)
     {
         var arabic = TitleText.ArabicScript().Count(text);
         if (arabic == 0)
