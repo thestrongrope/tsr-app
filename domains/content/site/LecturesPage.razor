@@ -1,0 +1,104 @@
+@using static Tsr.Content.Site.Lectures
+@* The Lectures page, in browse mode: the markup and classes of tsr-web's app/lectures/page.tsx and components/LecturesList.tsx
+   (commit 0093ac3); search, highlights, matching moments and analytics are not here (capabilities/lectures.md). Every lecture is
+   written into the page, the newest 24 shown. site.js shows and hides the cards, from the group in each card's data-language, and
+   fills the count line from data-count-text. A reader without script sees the newest 24, the chapters (a details element) and
+   no control that does nothing: the filter and "Load more" are written hidden. *@
+<main class="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 dark:from-gray-950 dark:to-gray-900" data-lectures data-page-size="@PageSize"
+      data-count-text="Showing {shown} of {total} lectures"
+      data-active-class="bg-blue-600 text-white border-blue-600"
+      data-idle-class="bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:border-blue-400">
+  <div class="max-w-7xl mx-auto px-4 py-12">
+    <div class="mb-8 text-center">
+      <h1 class="text-4xl md:text-5xl font-bold mb-3 bg-gradient-to-r from-blue-600 to-purple-600 dark:from-blue-400 dark:to-purple-400 bg-clip-text text-transparent">Lectures</h1>
+      <p class="text-lg text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">Browse our library of lectures, with timestamped chapters that link straight into the video.</p>
+    </div>
+
+    <div class="flex flex-wrap items-center gap-2 mb-8">
+      <div class="flex flex-wrap items-center gap-2" data-lecture-filter hidden>
+        @foreach (var (value, label) in Filters)
+        {
+          <button type="button" data-lecture-language="@value" aria-pressed="@(value.Length == 0 ? "true" : "false")" class="@ButtonClasses(value)">@label</button>
+        }
+      </div>
+      <span class="ml-auto text-sm text-gray-500 dark:text-gray-400" data-lecture-count>Showing @Math.Min(PageSize, Lectures.Count) of @Lectures.Count lectures</span>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      @for (var index = 0; index < Lectures.Count; index++)
+      {
+        var lecture = Lectures[index];
+        <div class="group flex flex-col bg-white dark:bg-gray-900 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-800 overflow-hidden hover:shadow-2xl transition-all duration-300" data-lecture data-language="@LanguageGroup(lecture.Language)" hidden="@(index >= PageSize)">
+          <a href="@VideoUrl(lecture.Slug)" target="_blank" rel="noopener noreferrer" class="relative block aspect-video bg-gray-100 dark:bg-gray-800 overflow-hidden">
+            <img src="@Thumbnail(lecture.Slug)" alt="@lecture.Title" loading="lazy" class="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-300" />
+            <span class="absolute inset-0 flex items-center justify-center">
+              <span class="flex items-center justify-center w-14 h-14 rounded-full bg-black/60 group-hover:bg-red-600/90 transition-colors">
+                <svg viewBox="0 0 24 24" fill="white" class="w-6 h-6 ml-1"><path d="M8 5v14l11-7z" /></svg>
+              </span>
+            </span>
+            <span class="absolute bottom-2 right-2 px-1.5 py-0.5 text-xs font-medium text-white bg-black/75 rounded">@Timestamp(lecture.DurationSec)</span>
+          </a>
+
+          <div class="flex flex-col flex-1 p-5">
+            <a href="@VideoUrl(lecture.Slug)" target="_blank" rel="noopener noreferrer">
+              <h2 class="text-lg font-bold mb-2 line-clamp-2 text-gray-900 dark:text-gray-100 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">@lecture.Title</h2>
+            </a>
+
+            @if (lecture.Excerpt.Length > 0)
+            {
+              <p class="text-sm text-gray-600 dark:text-gray-400 leading-relaxed line-clamp-3 mb-3">@lecture.Excerpt</p>
+            }
+
+            @if (lecture.Tags.Count > 0)
+            {
+              <div class="flex flex-wrap gap-1.5 mb-3">
+                @foreach (var tag in lecture.Tags.Take(TagsShown))
+                {
+                  <span class="text-xs px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-md">@tag</span>
+                }
+              </div>
+            }
+
+            @if (lecture.Chapters.Count > 0)
+            {
+              <div class="mt-auto pt-2">
+                <details>
+                  <summary class="text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer">@ChaptersLabel(lecture.Chapters.Count)</summary>
+                  <ul class="mt-2 space-y-1 border-l-2 border-gray-100 dark:border-gray-800 pl-3">
+                    @foreach (var chapter in lecture.Chapters)
+                    {
+                      <li>
+                        <a href="@ChapterUrl(lecture.Slug, chapter.StartSec)" target="_blank" rel="noopener noreferrer" class="flex gap-2 text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
+                          <span class="font-mono text-xs text-blue-600 dark:text-blue-400 shrink-0 pt-0.5">▶ @Timestamp(chapter.StartSec)</span>
+                          <span class="line-clamp-1">@chapter.Title</span>
+                        </a>
+                      </li>
+                    }
+                  </ul>
+                </details>
+              </div>
+            }
+          </div>
+        </div>
+      }
+    </div>
+
+    <div class="text-center mt-10" data-lecture-more hidden>
+      <button type="button" class="px-6 py-3 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors">Load more</button>
+    </div>
+  </div>
+</main>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<Lecture> Lectures { get; set; } = default!;
+
+    private const string ActiveClasses = "bg-blue-600 text-white border-blue-600";
+
+    private const string IdleClasses = "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:border-blue-400";
+
+    private static readonly (string Value, string Label)[] Filters = [("", "All"), ("en", "English"), ("ur-hi", "Urdu / Hindi"), ("ar", "Arabic")];
+
+    private static string ButtonClasses(string value) => "text-sm px-3 py-1 rounded-full border transition-colors " + (value.Length == 0 ? ActiveClasses : IdleClasses);
+
+    private static string ChaptersLabel(int count) => count == 1 ? "1 chapter" : count.ToString(CultureInfo.InvariantCulture) + " chapters";
+}

@@ -36,6 +36,9 @@ public sealed class ContentGuardTests
             A short invented paragraph about planning a week of study.
             """));
 
+    private static string LectureLine(string slug, string extra = "") =>
+        "{\"slug\":\"" + slug + "\",\"title\":\"A title\",\"excerpt\":\"\",\"tags\":[],\"language\":\"en\",\"publishedDate\":\"2026-01-02T03:04:05Z\",\"durationSec\":78,\"chapters\":[{\"start_sec\":3,\"title\":\"C\"" + extra + "}]}";
+
     private void GoodFolder()
     {
         Article("first-article");
@@ -44,6 +47,7 @@ public sealed class ContentGuardTests
         Write("pages/tsr-publications.md", "---\ntitle: Sample\npublications:\n- title: A Booklet\n  file: /downloads/a-booklet.pdf\n---\n");
         Write("README.md", "Invented folder for a test.\n");
         Write("downloads/a-booklet.pdf", "invented bytes");
+        Write("lectures/lectures.ndjson", LectureLine("abcdefghijk") + "\n" + LectureLine("bcdefghijkl") + "\n");
     }
 
     [Test]
@@ -227,5 +231,34 @@ public sealed class ContentGuardTests
         File.Delete(Path("pages/tsr-publications.md"));
 
         Assert.That(ContentGuard.Problems(root.FullName), Is.Not.Empty);
+    }
+
+    [Test]
+    public void A_lecture_with_a_key_outside_the_eight_is_a_problem_that_names_it()
+    {
+        GoodFolder();
+        var good = LectureLine("abcdefghijk");
+        var withContent = good.Replace("\"title\"", "\"content\":\"words\",\"title\"", StringComparison.Ordinal);
+        var withEmbedding = good.Replace("\"title\"", "\"embedding\":[0.1],\"title\"", StringComparison.Ordinal);
+        var chapterSummary = LectureLine("cdefghijklm", ",\"summary\":\"S\"");
+
+        Write("lectures/lectures.ndjson", good + "\n" + withContent + "\n");
+        Assert.That(ContentGuard.Problems(root.FullName), Has.Some.Contain("line 2").And.Contain("abcdefghijk").And.Contain("content"));
+
+        Write("lectures/lectures.ndjson", good + "\n" + withEmbedding + "\n");
+        Assert.That(ContentGuard.Problems(root.FullName), Has.Some.Contain("line 2").And.Contain("embedding"));
+
+        Write("lectures/lectures.ndjson", good + "\n" + chapterSummary + "\n");
+        Assert.That(ContentGuard.Problems(root.FullName), Has.Some.Contain("line 2").And.Contain("cdefghijklm").And.Contain("summary"));
+
+        Write("lectures/lectures.ndjson", good + "\nnot json\n");
+        Assert.That(ContentGuard.Problems(root.FullName), Has.Some.Contain("line 2").And.Contain("not a JSON object"));
+
+        File.Delete(Path("lectures/lectures.ndjson"));
+        Assert.That(ContentGuard.Problems(root.FullName), Does.Contain("the folder needs lectures/lectures.ndjson"));
+
+        Write("lectures/lectures.ndjson", good + "\n");
+        Write("lectures/other.ndjson", good + "\n");
+        Assert.That(ContentGuard.Problems(root.FullName), Has.Some.Contain("lectures/other.ndjson"));
     }
 }
