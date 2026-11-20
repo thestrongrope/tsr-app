@@ -12,7 +12,7 @@ Measured 20 Nov 2026 against `https://thestrongrope.com` (the old website, tsr-w
 | Group | Count | Needs | State |
 |---|---|---|---|
 | Fixed pages (`/<slug>`, `/pages`) | 31 of 35 page files, plus `/pages` | a pages route in the API | spec and plan drafted, waits for the owner's decisions |
-| Lectures (`/lectures`) | 1 | lecture data and a route | not started: no data |
+| Lectures (`/lectures`) | 1 | lecture data and a route | built (issue 88), not released |
 | Old addresses that redirect (WordPress links, old article addresses) | 11 rules | server configuration only | built, self test passes, not committed |
 | Public files (`.well-known`, `duas`, dark icons, uploads) | 15 files | copy into the site | built, not committed |
 | Redirects to the member app (`/join/<code>`, `/mcq/<code>`) | 2 rules | the member app's address in the site server | open: owner's decision |
@@ -27,7 +27,7 @@ Works on both today (17 of the 89): Home, About, Articles, an article, Donate, P
 |---|---|---|---|
 | `/accreditation` (and its three anchors) | 510 | the menu or footer; the three endorsement cards on Home | fixed page |
 | `/privacy-policy` | 510 | the footer | fixed page |
-| `/lectures` | 510 | the menu | lectures |
+| `/lectures` | 510 | the menu | lectures (built, issue 88) |
 | `/a-gift-for-the-youth`, `/behaar-al-anwaar-preface`, `/excellence-of-holy-quran-toc`, `/fragrance-of-mastership`, `/gardens-of-scholars`, `/salaah-a-mode-of-divine-proximity-and-recognition`, `/the-city-of-miracles` | 1 each | "Read online" on Publications | fixed pages |
 | `/duas/dua-atawajjahu.html`, `/duas/dua-faakshif.html` | 1 each | Publications | public files (built) |
 

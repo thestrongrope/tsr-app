@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using Tsr.Content.Api.Domain;
 
@@ -10,6 +11,9 @@ namespace Tsr.Content.Api.Tests;
 internal static partial class ContentGuard
 {
     private const string PublicationsPage = "tsr-publications.md";
+    private const string LecturesFile = "lectures.ndjson";
+
+    private static readonly HashSet<string> LectureKeys = new(["slug", "title", "excerpt", "tags", "language", "publishedDate", "durationSec", "chapters"], StringComparer.Ordinal);
 
     public static IReadOnlyList<string> Problems(string contentDirectory)
     {
@@ -29,6 +33,7 @@ internal static partial class ContentGuard
 
         problems.AddRange(articles.SelectMany(article => NotOnePublishedArticle(contentDirectory, article)));
         problems.AddRange(SetProblems(contentDirectory, articles.Count, categories.Count));
+        problems.AddRange(LectureProblems(contentDirectory));
         return problems;
     }
 
@@ -37,7 +42,7 @@ internal static partial class ContentGuard
     {
         foreach (var entry in new DirectoryInfo(root).EnumerateFileSystemInfos())
         {
-            var allowedFolder = entry is DirectoryInfo && entry.Name is "articles" or "categories" or "pages" or "downloads";
+            var allowedFolder = entry is DirectoryInfo && entry.Name is "articles" or "categories" or "pages" or "downloads" or "lectures";
             if (entry.LinkTarget is not null || !(allowedFolder || (entry is FileInfo && entry.Name == "README.md")))
             {
                 yield return Unexpected(entry.Name);
@@ -46,11 +51,91 @@ internal static partial class ContentGuard
 
             if (entry is DirectoryInfo folder)
             {
-                foreach (var inner in folder.Name == "downloads" ? InDownloads(folder, "downloads") : InFolder(folder))
+                foreach (var inner in InsideFolder(folder))
                 {
                     yield return inner;
                 }
             }
+        }
+    }
+
+    private static IEnumerable<string> InsideFolder(DirectoryInfo folder) => folder.Name switch
+    {
+        "downloads" => InDownloads(folder, "downloads"),
+        "lectures" => InLectures(folder),
+        _ => InFolder(folder),
+    };
+
+    /// <summary>Rule 10: lectures/ holds the one regular file lectures.ndjson.</summary>
+    private static IEnumerable<string> InLectures(DirectoryInfo folder)
+    {
+        foreach (var entry in folder.EnumerateFileSystemInfos())
+        {
+            if (entry is not FileInfo || entry.LinkTarget is not null || entry.Name != LecturesFile)
+            {
+                yield return Unexpected($"lectures/{entry.Name}");
+            }
+        }
+    }
+
+    /// <summary>Rule 11 (LEC-R9): the file exists, every line is a JSON object of the eight keys, and every chapter holds start_sec and title only.</summary>
+    private static List<string> LectureProblems(string root)
+    {
+        var path = Path.Combine(root, "lectures", LecturesFile);
+        if (!File.Exists(path))
+        {
+            return ["the folder needs lectures/lectures.ndjson"];
+        }
+
+        var problems = new List<string>();
+        var number = 0;
+        foreach (var line in File.ReadLines(path))
+        {
+            number++;
+            if (line.Length == 0)
+            {
+                continue;
+            }
+
+            problems.AddRange(LectureLineProblems(number, line));
+        }
+
+        return problems;
+    }
+
+    private static List<string> LectureLineProblems(int number, string line)
+    {
+        JsonDocument document;
+        try
+        {
+            document = JsonDocument.Parse(line);
+        }
+        catch (JsonException)
+        {
+            return [$"lectures/lectures.ndjson line {number}: not a JSON object"];
+        }
+
+        using (document)
+        {
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                return [$"lectures/lectures.ndjson line {number}: not a JSON object"];
+            }
+
+            var lecture = document.RootElement;
+            var slug = lecture.TryGetProperty("slug", out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : "?";
+            var problems = new List<string>();
+            problems.AddRange(lecture.EnumerateObject().Select(property => property.Name).Where(name => !LectureKeys.Contains(name))
+                .Select(name => $"lectures/lectures.ndjson line {number}, lecture {slug}: key {name} is not one of the eight"));
+            if (lecture.TryGetProperty("chapters", out var chapters) && chapters.ValueKind == JsonValueKind.Array)
+            {
+                problems.AddRange(chapters.EnumerateArray().Where(chapter => chapter.ValueKind == JsonValueKind.Object)
+                    .SelectMany(chapter => chapter.EnumerateObject().Select(property => property.Name))
+                    .Where(name => name is not ("start_sec" or "title"))
+                    .Select(name => $"lectures/lectures.ndjson line {number}, lecture {slug}: chapter key {name} is not start_sec or title"));
+            }
+
+            return problems;
         }
     }
 

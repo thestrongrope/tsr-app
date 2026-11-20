@@ -17,6 +17,15 @@ article() {
   { printf -- '---\ntitle: T\nslug: %s\n' "$1"; [ -z "$2" ] || printf '%s\n' "$2"; printf -- '---\nBody.\n'; } > "$SRC/articles/$1.md"
 }
 
+# lectures <file>: an invented lecture file of two lines, each carrying the keys the import must drop (content, embedding, and a chapter's summary and url).
+lectures() {
+  mkdir -p "$(dirname "$1")"
+  {
+    printf '%s\n' '{"slug":"abcdefghijk","title":"First","url":"https://example.invalid/a","excerpt":"E","content":"words","embedding":[0.1],"tags":["t"],"language":"en","publishedDate":"2026-01-02T03:04:05Z","durationSec":78,"chapters":[{"start_sec":3,"title":"C","summary":"S","url":"https://example.invalid/c"}]}'
+    printf '%s\n' '{"slug":"bcdefghijkl","title":"Second","excerpt":"","content":"words","embedding":[0.2],"tags":[],"language":"hi","publishedDate":"2025-01-02T03:04:05Z","durationSec":0,"chapters":[]}'
+  } > "$1"
+}
+
 # listing <dir>: the files under it, relative and sorted.
 listing() { (cd "$1" && find . -type f | sort); }
 
@@ -45,6 +54,7 @@ printf -- '---\ntitle: P\npublications: []\n---\n' > "$SRC/pages/tsr-publication
 printf -- '---\ntitle: Other\n---\n' > "$SRC/pages/other.md"
 for retired in home account my-account register registration; do printf -- '---\ntitle: Retired\n---\n' > "$SRC/pages/$retired.md"; done
 printf 'not an article\n' > "$SRC/articles/x.txt"
+lectures "$SRC/lectures/lectures.ndjson"
 printf 'kept readme\n' > "$DEST/README.md"
 
 # Case 1: only the published three, the category, the publications page and the other page (the five retired pages stay out); the line; the exit code; README stays.
@@ -54,9 +64,10 @@ expect_listing "./README.md
 ./articles/published-double.md
 ./articles/published-single.md
 ./categories/study-habits.md
+./lectures/lectures.ndjson
 ./pages/other.md
 ./pages/tsr-publications.md" "case 1"
-[ "$(cat "$OUT")" = "copied 3 articles, 1 categories, 2 pages, 0 files; left out 3 articles" ] || fail "case 1: output was: $(cat "$OUT")"
+[ "$(cat "$OUT")" = "copied 3 articles, 1 categories, 2 pages, 0 files, 2 lectures; left out 3 articles" ] || fail "case 1: output was: $(cat "$OUT")"
 echo "ok 1: three published articles copied, three left out, the line printed"
 
 # Case 2: an article that became a draft at the source leaves the destination.
@@ -66,6 +77,7 @@ expect_listing "./README.md
 ./articles/published-bare.md
 ./articles/published-single.md
 ./categories/study-habits.md
+./lectures/lectures.ndjson
 ./pages/other.md
 ./pages/tsr-publications.md" "case 2"
 echo "ok 2: an unpublished article is removed from the destination"
@@ -73,6 +85,7 @@ echo "ok 2: an unpublished article is removed from the destination"
 # Case 3: a source of drafts only leaves the destination as it was and exits 1.
 DRAFTS="$WORK/drafts"
 mkdir -p "$DRAFTS/articles"
+lectures "$DRAFTS/lectures/lectures.ndjson"
 printf -- '---\nstatus: draft\n---\n' > "$DRAFTS/articles/d.md"
 before="$(listing "$DEST")"
 status=0
@@ -115,6 +128,8 @@ mkdir -p "$SITE/articles" "$SITE/content"
 printf -- '---\nstatus: publish\n---\n' > "$SITE/articles/p.md"
 printf -- '---\nstatus: draft\n---\n' > "$SITE/articles/d.md"
 mkdir -p "$WORK/site/articles"
+lectures "$SITE/lectures/lectures.ndjson"
+lectures "$WORK/site/lectures/lectures.ndjson"
 printf -- '---\nstatus: publish\n---\n' > "$WORK/site/articles/p.md"
 for pair in "$SITE|$SITE" "$SITE|$SITE/content" "$WORK/site|$SITE"; do
   status=0
@@ -132,6 +147,7 @@ printf -- '---\ntitle: P\npublications:\n- title: One\n  file: /downloads/books/
 printf 'one' > "$W/public/downloads/books/One.pdf"
 printf 'two' > "$W/public/downloads/tsr-publications/two.pdf"
 printf 'unlinked' > "$W/public/downloads/books/unlinked.pdf"
+lectures "$W/content/lectures/lectures.ndjson"
 
 # Case 8: a missing linked file refuses with exit 2, names the link, and leaves the destination as it was.
 printf 'kept readme\n' > "$WORK/out8/content/README.md"
@@ -153,9 +169,10 @@ run "$W/content" "$WORK/out8/content" || fail "case 9: exit code $?"
 ./downloads/books/One.pdf
 ./downloads/books/three.pdf
 ./downloads/tsr-publications/two.pdf
+./lectures/lectures.ndjson
 ./pages/tsr-publications.md" ] || fail "case 9: the destination holds $(listing "$WORK/out8/content")"
 [ "$(cat "$WORK/out8/content/downloads/books/One.pdf")" = "one" ] || fail "case 9: the file's bytes differ"
-[ "$(cat "$OUT")" = "copied 1 articles, 0 categories, 1 pages, 3 files; left out 0 articles" ] || fail "case 9: output was: $(cat "$OUT")"
+[ "$(cat "$OUT")" = "copied 1 articles, 0 categories, 1 pages, 3 files, 2 lectures; left out 0 articles" ] || fail "case 9: output was: $(cat "$OUT")"
 echo "ok 9: the three linked files arrive, the unlinked file stays out"
 
 # Case 10: a link that climbs out of public/downloads is refused, and the destination stays as it was.
@@ -183,8 +200,30 @@ run "$W/content" "$WORK/out8/content" || fail "case 11: exit code $?"
 ./articles/p.md
 ./downloads/books/body.pdf
 ./downloads/books/html.pdf
+./lectures/lectures.ndjson
 ./pages/book.md
 ./pages/tsr-publications.md" ] || fail "case 11: the destination holds $(listing "$WORK/out8/content")"
-[ "$(cat "$OUT")" = "copied 1 articles, 0 categories, 2 pages, 2 files; left out 0 articles" ] || fail "case 11: output was: $(cat "$OUT")"
+[ "$(cat "$OUT")" = "copied 1 articles, 0 categories, 2 pages, 2 files, 2 lectures; left out 0 articles" ] || fail "case 11: output was: $(cat "$OUT")"
 echo "ok 11: the PDFs a page links arrive, a retired page's link is not needed, a missing one refuses"
-echo "content import proven: 11 cases"
+# Case 12: the lectures file is trimmed to the eight keys (and each chapter to start_sec and title), a source without it is refused, so is one that is not JSON, and the destination stays as it was.
+LEC="$DEST/lectures/lectures.ndjson"
+run "$SRC" "$DEST" || fail "case 12: exit code $?"
+[ "$(wc -l < "$LEC" | tr -d ' ')" = 2 ] || fail "case 12: the copied file does not have two lines"
+[ "$(jq -c 'keys' "$LEC" | sort -u)" = '["chapters","durationSec","excerpt","language","publishedDate","slug","tags","title"]' ] || fail "case 12: the keys are not the eight: $(jq -c keys "$LEC")"
+[ "$(jq -c '.chapters[] | keys' "$LEC" | sort -u)" = '["start_sec","title"]' ] || fail "case 12: a chapter holds other keys than start_sec and title"
+NOLEC="$WORK/nolec"
+cp -R "$SRC" "$NOLEC"
+rm "$NOLEC/lectures/lectures.ndjson"
+before="$(listing "$DEST")"
+status=0
+run "$NOLEC" "$DEST" || status=$?
+[ "$status" = 2 ] || fail "case 12: a source without the file gave exit code $status, expected 2"
+grep -q "the source has no lectures/lectures.ndjson" "$OUT" || fail "case 12: the output does not say why: $(cat "$OUT")"
+[ "$(listing "$DEST")" = "$before" ] || fail "case 12: the destination changed"
+printf 'not json\n' > "$NOLEC/lectures/lectures.ndjson"
+status=0
+run "$NOLEC" "$DEST" || status=$?
+[ "$status" = 2 ] || fail "case 12: a file that is not JSON gave exit code $status, expected 2"
+[ "$(listing "$DEST")" = "$before" ] || fail "case 12: the destination changed after a bad file"
+echo "ok 12: the lectures are trimmed to eight keys, a missing or broken file is refused, destination unchanged"
+echo "content import proven: 12 cases"
