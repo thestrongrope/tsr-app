@@ -12,6 +12,8 @@ RUN dotnet publish hosts/site/Tsr.Host.Site.csproj -c Release -o /out
 FROM mcr.microsoft.com/dotnet/aspnet:11.0
 WORKDIR /app
 COPY --from=build /out .
+# The publication files (LIB-R36): the program's static files folder, which each site build copies to /site/downloads/. Copied files keep the repository's modes, so the user "app" can read them.
+COPY content/downloads/ ./wwwroot/downloads/
 USER app
 ENTRYPOINT ["dotnet", "Tsr.Host.Site.dll"]
 CMD ["/site"]

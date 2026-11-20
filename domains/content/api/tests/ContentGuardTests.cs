@@ -43,6 +43,7 @@ public sealed class ContentGuardTests
         Write("categories/study-habits.md", "---\ntitle: Study Habits\nslug: study-habits\n---\n");
         Write("pages/tsr-publications.md", "---\ntitle: Sample\npublications:\n- title: A Booklet\n  file: /downloads/a-booklet.pdf\n---\n");
         Write("README.md", "Invented folder for a test.\n");
+        Write("downloads/a-booklet.pdf", "invented bytes");
     }
 
     [Test]
@@ -123,6 +124,78 @@ public sealed class ContentGuardTests
     public void A_folder_that_does_not_exist_is_a_problem_not_an_exception()
     {
         Assert.That(ContentGuard.Problems(Path("missing")), Has.Some.Contain("missing"));
+    }
+
+    [Test]
+    public void A_linked_file_the_folder_does_not_hold_is_a_problem_that_names_the_link()
+    {
+        GoodFolder();
+        File.Delete(Path("downloads/a-booklet.pdf"));
+
+        var problems = ContentGuard.Problems(root.FullName);
+
+        Assert.That(problems, Has.Exactly(1).Contain("/downloads/a-booklet.pdf"));
+        Assert.That(problems, Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public void A_link_that_differs_only_in_case_from_the_file_is_a_problem()
+    {
+        GoodFolder();
+        Write("pages/tsr-publications.md", "---\ntitle: Sample\npublications:\n- title: A Booklet\n  file: /downloads/A-Booklet.pdf\n---\n");
+
+        Assert.That(ContentGuard.Problems(root.FullName), Has.Some.Contain("/downloads/A-Booklet.pdf"));
+    }
+
+    [Test]
+    public void A_file_no_publication_links_is_a_problem_that_names_the_path()
+    {
+        GoodFolder();
+        Write("downloads/extra.pdf", "invented bytes");
+
+        var problems = ContentGuard.Problems(root.FullName);
+
+        Assert.That(problems, Has.Exactly(1).Contain("downloads/extra.pdf"));
+        Assert.That(problems, Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public void Only_pdf_files_are_allowed_below_downloads()
+    {
+        GoodFolder();
+        Write("downloads/notes.txt", "invented text");
+        Assert.That(ContentGuard.Problems(root.FullName), Has.Some.Contain("downloads/notes.txt"), "a text file");
+        File.Delete(Path("downloads/notes.txt"));
+
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        File.CreateSymbolicLink(Path("downloads/x.pdf"), Path("downloads/a-booklet.pdf"));
+        Assert.That(ContentGuard.Problems(root.FullName), Has.Some.Contain("downloads/x.pdf"), "a link");
+    }
+
+    [Test]
+    public void A_file_below_a_subfolder_of_downloads_is_checked_too()
+    {
+        GoodFolder();
+        Write("downloads/books/inner.pdf", "invented bytes");
+        Write("downloads/books/inner.txt", "invented text");
+
+        var problems = ContentGuard.Problems(root.FullName);
+
+        Assert.That(problems, Has.Some.Contain("downloads/books/inner.pdf"), "not linked");
+        Assert.That(problems, Has.Some.Contain("downloads/books/inner.txt"), "not a pdf");
+    }
+
+    [Test]
+    public void A_file_link_outside_downloads_is_a_problem_that_names_the_link()
+    {
+        GoodFolder();
+        Write("pages/tsr-publications.md", "---\ntitle: Sample\npublications:\n- title: A Booklet\n  file: https://example.invalid/a-booklet.pdf\n---\n");
+
+        Assert.That(ContentGuard.Problems(root.FullName), Has.Some.Contain("outside /downloads/").And.Contain("https://example.invalid/a-booklet.pdf"));
     }
 
     [Test]

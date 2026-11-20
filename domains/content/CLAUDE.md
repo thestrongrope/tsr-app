@@ -51,7 +51,7 @@ Production runs no timer: the one-off job `content-load` (the API image with `--
 
 `api/workers/ContentRefreshWorker.cs`, run only in the mode `--workers` with `content-refresh` in `TSR_WORKERS`: one
 refresh at start, then every 5 minutes. A tick (`api/domain/ContentRefresh.cs`) reads the directory `TSR_CONTENT_DIR`
-(`articles/*.md`, `categories/*.md`, `pages/tsr-publications.md`), keeps only articles whose `status` is `publish` or
+(`articles/*.md`, `categories/*.md`, `pages/tsr-publications.md`; never `downloads/`), keeps only articles whose `status` is `publish` or
 `published`, and replaces `published_articles`, `categories` and `publications` in one transaction. Nothing is written
 when the set's hash equals the last one. A read that fails, finds no published article, or finds fewer than half of the
 last count keeps the last set, writes the cause to `content.refresh_state` and logs one warning. It sends nothing
@@ -61,7 +61,7 @@ outward. One worker instance is the supported setup.
 
 | Setting | Read by | Meaning |
 |---|---|---|
-| `TSR_CONTENT_DIR` | the worker, each tick; `content-load` |  The content directory inside the container. Unset, empty or missing: every tick keeps the last set with cause `no content directory`. The compose files mount the files read-only at `/var/tsr/content`; the default test stack sets this to that path, the dev stack leaves it empty; production sets it to the copy in the image (`hosts/api/Dockerfile`) |
+| `TSR_CONTENT_DIR` | the worker, each tick; `content-load` |  The content directory inside the container. Unset, empty or missing: every tick keeps the last set with cause `no content directory`. The compose files mount the files read-only at `/var/tsr/content`; the default test stack sets this to that path, the dev stack leaves it empty; production sets it to the copy in the image (`hosts/api/Dockerfile`: the three text folders, not `downloads/`) |
 | `TSR_CONTENT_SRC` | `docker-compose.dev.yml` only, never the code | The host directory mounted at `/var/tsr/content`. Default `./db/synthetic/content`; a parity run names the website's own content files |
 | `TSR_YOUTUBE_CHANNEL_ID` | `YouTubeFeed`, and `V1Videos` for `data.meta.channelId` | Absent (dev and production): the channel in the code, `YouTubeFeed.DefaultChannel`, a public id. Present: the channel named. Set to nothing (every test stack and the test host of `db/tests`): no outside call, an empty list |
 | `TSR_YOUTUBE_FEED_URL` | `YouTubeFeed` | The feed's address; `http` or `https` only. Empty: YouTube's own. In no compose file |
@@ -85,7 +85,7 @@ None is required: the API starts without them.
 | One refresh, the half rule, the hash | `api/domain/ContentRefresh.cs` |
 | The feed reader and the 30 minute copy | `api/domain/LatestVideos.cs` |
 | Database-backed tests | `db/tests/V1*Tests.cs`, `ContentRefreshTests.cs`, `ContentFilesTests.cs`, `LatestVideosTests.cs`, `YouTubeFeedTests.cs`, `LibraryReadsSchemaTests.cs` |
-| The published content of the repository (published only, LIB-D19): where it comes from, the import, the guard | `/content/README.md` (at the repository root), `tools/content-import.sh`, `tools/prove-content-import.sh`, `api/tests/ContentGuard.cs` |
+| The published content of the repository (published only, LIB-D19; the publication PDFs in `content/downloads/`, LIB-D10, carried by the site image only, LIB-R36): where it comes from, the import, the guard (LIB-R37) | `/content/README.md` (at the repository root), `tools/content-import.sh`, `tools/prove-content-import.sh`, `api/tests/ContentGuard.cs` |
 | The synthetic content files (12 published, 2 drafts) | `db/synthetic/content/` (its `README.md` maps files to cases) |
 | The article list and article pages of the static site (read from the `/api/v1/` routes, in the present website's markup; the body's rules are `site/ArticleBody.cs`) | `site/` |
 | The article list's filters on the static site (`?category=`, `?tag=`; each card's categories and tags, the panel's tree and counts and the heading data are built in `site/ArticleFilters.cs`; the script only compares and hides) | `site/ArticleFilters.cs`, `site/ArticleIndexPage.razor` |

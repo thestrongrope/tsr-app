@@ -13,8 +13,10 @@ RUN dotnet publish hosts/api/Tsr.Host.Api.csproj -c Release -o /out
 FROM mcr.microsoft.com/dotnet/aspnet:11.0
 WORKDIR /app
 COPY --from=build /out .
-# The published content the Library reads (TSR_CONTENT_DIR in docker-compose.yml). Copied files keep the repository's modes (644 and 755), so the user "app" can read them.
-COPY content/ /var/tsr/content/
+# The published content the Library reads (TSR_CONTENT_DIR in docker-compose.yml). The publication files (content/downloads/) are not copied: the API does not read them, the site image carries them. Copied files keep the repository's modes (644 and 755), so the user "app" can read them.
+COPY content/articles/ /var/tsr/content/articles/
+COPY content/categories/ /var/tsr/content/categories/
+COPY content/pages/ /var/tsr/content/pages/
 ENV ASPNETCORE_HTTP_PORTS=8080
 USER app
 ENTRYPOINT ["dotnet", "Tsr.Host.Api.dll"]

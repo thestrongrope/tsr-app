@@ -15,7 +15,7 @@ and runs the file. It holds no secret and publishes no port; `hosts/api/tests/Pr
 | `workers` | the API image with `--workers`: runs the workers named in `TSR_WORKERS` | always |
 | `gotenberg` | PDF rendering for report downloads | always |
 | `elasticsearch` | the search index; data in the volume `es-data` | always |
-| `site-build` | the static site generator (`hosts/site`): reads the API, writes the pages into the volume `site-data` | once per start, after `content-load` has succeeded and `api` has started; retried up to five times |
+| `site-build` | the static site generator (`hosts/site`): reads the API, writes the pages into the volume `site-data` with the publication files (`content/downloads/`, about 187 MB, copied into the site-build image and from it into the volume at `/site/downloads/`) | once per start, after `content-load` has succeeded and `api` has started; retried up to five times |
 | `site` | nginx serving `site-data`, read-only; port 80. It forwards nothing. Its image is the stock one with one setting baked in (`hosts/site/Dockerfile.server`): an address the site does not publish answers 404 with the site's own `404.html` | always |
 
 Two services are reached from outside. Attach the API's host name to `api`, port 8080, and the site's host name to `site`, port 80. The server's proxy (Traefik) is the
@@ -37,7 +37,7 @@ Set these in the deployment tool. A missing required setting stops the start and
 | `TSR_CORS_ORIGINS` | no | the browser origins that may call the API, comma-separated (for a web build of the app, e.g. `https://app.thestrongrope.com`). Empty allows none. An entry with a path, a trailing slash or a wildcard stops the start |
 | `TSR_QUIZ_SETTINGS_SHEET_ID`, `TSR_NOTIFIER_URL` | no | each empty switches its feature off |
 | `TSR_YOUTUBE_CHANNEL_ID` | no | not in the stack: the API reads the channel in the code. Do not set it empty, that switches the Home videos off |
-| `TSR_CONTENT_DIR` | fixed | `/var/tsr/content` in `docker-compose.yml`: the published content copied into the image from `content/`. Not a setting to change |
+| `TSR_CONTENT_DIR` | fixed | `/var/tsr/content` in `docker-compose.yml`: the published text content (`articles/`, `categories/`, `pages/`) copied into the image from `content/`; the publication files are not in the API image. Not a setting to change |
 
 Not wired yet: the app-version catalog file (`TSR_APP_VERSIONS_FILE`; without it the version check allows every build).
 

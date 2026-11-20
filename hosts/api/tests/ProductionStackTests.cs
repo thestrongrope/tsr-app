@@ -92,11 +92,45 @@ public sealed partial class ProductionStackTests
         Assert.Multiple(() =>
         {
             Assert.That(Stack, Does.Contain("TSR_CONTENT_DIR: /var/tsr/content"));
-            Assert.That(dockerfile, Does.Match(@"(?m)^COPY .*content/ /var/tsr/content/?\s*$"));
+            foreach (var folder in (string[])["articles", "categories", "pages"])
+            {
+                Assert.That(dockerfile, Does.Match(@"(?m)^COPY content/" + folder + @"/ /var/tsr/content/" + folder + @"/\s*$"), folder);
+            }
+
             Assert.That(load, Does.Contain("dockerfile: hosts/api/Dockerfile"));
             Assert.That(load, Does.Contain(@"command: [""--load-content""]"));
             Assert.That(load, Does.Contain("<<: *api-environment"));
             Assert.That(load, Does.Match(@"migrate:\s+condition: service_completed_successfully"));
+        });
+    }
+
+    /// <summary>TC-LIB-D10-01: the API image holds the three text folders and never the publication files (187 MB the API does not read).</summary>
+    [Test]
+    public void The_api_image_carries_the_text_content_and_not_the_files()
+    {
+        var copies = File.ReadAllLines(Path.Combine(RouteCatalog.RepoRoot(), "hosts", "api", "Dockerfile"))
+            .Where(line => line.StartsWith("COPY content", StringComparison.Ordinal))
+            .ToList();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(copies, Has.Count.EqualTo(3));
+            Assert.That(copies, Has.None.Match(@"^COPY content/? "), "the whole content folder");
+            Assert.That(copies, Has.None.Contain("downloads"));
+        });
+    }
+
+    /// <summary>TC-LIB-R36-01: the site image copies the publication files into the program's static files folder, which the build copies to /site/downloads/.</summary>
+    [Test]
+    public void The_site_image_carries_the_publication_files()
+    {
+        var dockerfile = File.ReadAllText(Path.Combine(RouteCatalog.RepoRoot(), "hosts", "site", "Dockerfile"));
+        var finalStage = dockerfile[dockerfile.LastIndexOf("FROM ", StringComparison.Ordinal)..];
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(finalStage, Does.Match(@"(?m)^COPY content/downloads/ \./wwwroot/downloads/\s*$"));
+            Assert.That(finalStage, Does.Match(@"(?m)^WORKDIR /app\s*$"));
         });
     }
 
