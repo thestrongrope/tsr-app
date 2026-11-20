@@ -1,0 +1,14 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["6GBKBN5BK5.com.thestrongrope"],
+        "components": [
+          { "/": "/join/*" },
+          { "/": "/mcq/*" },
+          { "/": "/articles/*" }
+        ]
+      }
+    ]
+  }
+}
