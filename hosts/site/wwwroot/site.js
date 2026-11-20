@@ -1,4 +1,4 @@
-// The site's one script: the theme switch, the menu, the publications page, the article list's filters, the home page's category cards and its search box. No framework and no other script.
+// The site's one script: the theme switch, the menu, the publications page, the article list's filters, the Lectures page's language filter and load more, the home page's category cards and its search box. No framework and no other script.
 // It only adds and removes classes the stylesheet already has (hosts/site/tests/StylesheetTests.cs reads the
 // classList calls below, and the class lists the publications page and the article list hand over in their data- attributes), and it keeps what the present website keeps: localStorage key "theme", "light" or "dark".
 // It holds no sentence a reader sees: the pages write every one (the publications page's count lines and summary labels, the article
@@ -115,6 +115,18 @@
     return category.indexOf('|') === -1 && children.indexOf('|' + category + '|') !== -1 ? 'ancestor' : 'none';
   }
 
+  // The Lectures page: the cards to show for a language, the first count of them. groups is each card's data-language in page order;
+  // language is '' for All or a group. total is how many cards match; show is the indexes of the first count of those.
+  function lecturesToShow(groups, language, count) {
+    var matching = [];
+    groups.forEach(function (group, index) {
+      if (language === '' || group === language) {
+        matching.push(index);
+      }
+    });
+    return { show: matching.slice(0, count), total: matching.length };
+  }
+
   // Outside a browser (hosts/site/tests/js) the file only hands over the functions above.
   if (typeof document === 'undefined') {
     module.exports = {
@@ -130,6 +142,7 @@
       fill: fill,
       searchTarget: searchTarget,
       attempt: attempt,
+      lecturesToShow: lecturesToShow,
     };
     return;
   }
@@ -358,6 +371,72 @@
     });
   }
 
+  // The Lectures page (domains/content/site/LecturesPage.razor) writes every card, the newest 24 shown, and its filter and "Load more" hidden.
+  // Here: show the controls, then show and hide cards by language and count. The sentence and the button classes are the page's
+  // (data-count-text, data-active-class, data-idle-class).
+  function setUpLecturesPage() {
+    var page = document.querySelector('main[data-lectures]');
+    if (!page) {
+      return;
+    }
+
+    var cards = page.querySelectorAll('[data-lecture]');
+    var groups = Array.prototype.map.call(cards, function (card) {
+      return card.getAttribute('data-language');
+    });
+    var buttons = page.querySelectorAll('[data-lecture-language]');
+    var more = page.querySelector('[data-lecture-more]');
+    var countText = page.getAttribute('data-count-text');
+    var activeClass = page.getAttribute('data-active-class');
+    var idleClass = page.getAttribute('data-idle-class');
+    var pageSize = parseInt(page.getAttribute('data-page-size'), 10);
+    var language = '';
+    var count = pageSize;
+
+    function swapClasses(button, remove, add) {
+      remove.split(' ').forEach(function (name) {
+        button.classList.remove(name);
+      });
+      add.split(' ').forEach(function (name) {
+        button.classList.add(name);
+      });
+    }
+
+    function render() {
+      var result = lecturesToShow(groups, language, count);
+      var visible = {};
+      result.show.forEach(function (index) {
+        visible[index] = true;
+      });
+      cards.forEach(function (card, index) {
+        card.hidden = !visible[index];
+      });
+      var shown = fillIn(countText, '{shown}', String(result.show.length));
+      page.querySelector('[data-lecture-count]').textContent = fillIn(shown, '{total}', String(result.total));
+      more.hidden = result.show.length >= result.total;
+      buttons.forEach(function (button) {
+        var chosen = button.getAttribute('data-lecture-language') === language;
+        swapClasses(button, chosen ? idleClass : activeClass, chosen ? activeClass : idleClass);
+        button.setAttribute('aria-pressed', chosen ? 'true' : 'false');
+      });
+    }
+
+    buttons.forEach(function (button) {
+      button.addEventListener('click', function () {
+        language = button.getAttribute('data-lecture-language');
+        count = pageSize;
+        render();
+      });
+    });
+    more.querySelector('button').addEventListener('click', function () {
+      count += pageSize;
+      render();
+    });
+
+    page.querySelector('[data-lecture-filter]').hidden = false;
+    render();
+  }
+
   function setUpMenu() {
     var panel = document.querySelector('[data-menu-panel]');
     var overlay = document.querySelector('[data-menu-overlay]');
@@ -434,4 +513,5 @@
   attempt('home page category cards', setUpHomeCategories, reportToConsole);
   attempt('home page search', setUpArticleSearch, reportToConsole);
   attempt('article list filters', setUpArticleFiltersPage, reportToConsole);
+  attempt('lectures page', setUpLecturesPage, reportToConsole);
 })();

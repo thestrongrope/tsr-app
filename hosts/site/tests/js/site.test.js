@@ -203,3 +203,27 @@ test('TC-SITE-R50-03 a part of the page that throws is reported by name and the 
   assert.deepEqual(ran, ['first', 'third']);
   assert.deepEqual(reports, ['second: boom']);
 });
+
+// The Lectures page (issue 88, LEC-R4 and LEC-R5): which cards show for a language and a count. The words and the cards are the page's.
+
+test('TC-LEC-R4-02 load more shows the next 24 and stops at the total', () => {
+  var groups = new Array(60).fill('en');
+  var first = site.lecturesToShow(groups, '', 24);
+  var second = site.lecturesToShow(groups, '', 48);
+  var third = site.lecturesToShow(groups, '', 72);
+  assert.deepEqual(first.show, Array.from({ length: 24 }, (_, i) => i));
+  assert.deepEqual(second.show, Array.from({ length: 48 }, (_, i) => i));
+  assert.deepEqual(third.show, Array.from({ length: 60 }, (_, i) => i));
+  assert.equal(first.total, 60);
+  assert.equal(second.total, 60);
+  assert.equal(third.total, 60);
+});
+
+test('TC-LEC-R5-01 a language shows only its lectures', () => {
+  var groups = ['ur-hi', 'en', '', 'ur-hi', 'ar'];
+  assert.deepEqual(site.lecturesToShow(groups, 'ur-hi', 24), { show: [0, 3], total: 2 });
+  assert.deepEqual(site.lecturesToShow(groups, 'en', 24), { show: [1], total: 1 });
+  assert.deepEqual(site.lecturesToShow(groups, '', 24), { show: [0, 1, 2, 3, 4], total: 5 });
+  assert.deepEqual(site.lecturesToShow(groups, 'ar', 24), { show: [4], total: 1 });
+  assert.deepEqual(site.lecturesToShow(groups, 'ur-hi', 1), { show: [0], total: 2 });
+});

@@ -16,6 +16,8 @@
   <ItemGroup>
     <!-- The fixed pages (content/pages/*.md of the repository), copied beside the program for the site build to read (domains/content/site/PageFiles.cs). -->
     <None Include="../../content/pages/*.md" Link="content-pages/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <!-- The lecture data (content/lectures/lectures.ndjson), copied beside the program for the site build to read (domains/content/site/Lectures.cs). -->
+    <None Include="../../content/lectures/lectures.ndjson" Link="content-lectures/lectures.ndjson" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />

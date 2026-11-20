@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # Copies the PUBLISHED content of the website repository into this repository's content/ folder (LIB-R29, LIB-R30, LIB-D19). Drafts never enter.
 # Usage: tools/content-import.sh <source directory> [destination directory]
-#   source        the website's content folder: it holds articles/, categories/ and pages/
+#   source        the website's content folder: it holds articles/, categories/, pages/ and lectures/
 #   destination   default: content under the repository root; any other destination must be a folder named "content", and never the source, in it or round it
 # Copies: articles/*.md whose front matter (between the first two "---" lines) has the line "status: publish" or "status: published" (the value bare, or in single or double quotes),
 # every categories/*.md, every pages/*.md but five the old website redirects (RETIRED_PAGES; no status is read, as the old page route reads none), and each file the publications page links as "file: /downloads/..." or any page writes as "/downloads/...pdf", from <source>/../public/downloads/ (a missing one refuses, exit 2). The text files are taken from directly in their folders only; the linked files keep their folders below downloads/. The destination's articles, categories, pages and downloads are replaced
 # (a file removed or unpublished at the source leaves); its README.md stays. No published article: nothing changes and the exit code is 1; a refusal exits 2.
+# Lectures: <source>/lectures/lectures.ndjson, trimmed with jq to the eight keys the site shows (no transcript, no embedding, no chapter summary), into lectures/lectures.ndjson. A source without the file, or a file jq cannot read, refuses (exit 2).
 # After it: run `dotnet test domains/content/api/tests` and only then `git add content` (see content/README.md).
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -18,6 +19,8 @@ SRC="$1"
 DEST="${2:-$ROOT/content}"
 [ -d "$SRC" ] || refuse "the source is not a directory"
 [ -d "$SRC/articles" ] || refuse "the source has no articles folder"
+[ -f "$SRC/lectures/lectures.ndjson" ] || refuse "the source has no lectures/lectures.ndjson"
+command -v jq >/dev/null 2>&1 || refuse "jq is needed to trim the lectures and was not found"
 
 DEST="${DEST%/}"
 [ "$(basename "$DEST")" = "content" ] || refuse "the destination must be a folder named content"
@@ -45,7 +48,7 @@ is_published() {
 
 STAGE="$(mktemp -d "$DEST_PARENT/.content-import.XXXXXX")"
 trap 'rm -rf "$STAGE"' EXIT
-mkdir -p "$STAGE/articles" "$STAGE/categories" "$STAGE/pages" "$STAGE/downloads"
+mkdir -p "$STAGE/articles" "$STAGE/categories" "$STAGE/pages" "$STAGE/downloads" "$STAGE/lectures"
 
 ARTICLES=0
 LEFT_OUT=0
@@ -100,14 +103,18 @@ while IFS= read -r link; do
 done < "$LINKS"
 rm -f "$LINKS"
 
+# The lectures: the eight keys of the site's lecture page and, of each chapter, its start and title.
+jq -c '{slug, title, excerpt, tags, language, publishedDate, durationSec, chapters: [.chapters[] | {start_sec, title}]}' "$SRC/lectures/lectures.ndjson" > "$STAGE/lectures/lectures.ndjson" || refuse "jq could not read lectures/lectures.ndjson"
+LECTURES=$(wc -l < "$STAGE/lectures/lectures.ndjson" | tr -d ' ')
+
 if [ "$ARTICLES" -eq 0 ]; then
   echo "content-import: no published article in the source; nothing changed" >&2
   exit 1
 fi
 
 mkdir -p "$DEST"
-for folder in articles categories pages downloads; do
+for folder in articles categories pages downloads lectures; do
   rm -rf "${DEST:?}/$folder"
   mv "$STAGE/$folder" "$DEST/$folder"
 done
-echo "copied $ARTICLES articles, $CATEGORIES categories, $PAGES pages, $FILES files; left out $LEFT_OUT articles"
+echo "copied $ARTICLES articles, $CATEGORIES categories, $PAGES pages, $FILES files, $LECTURES lectures; left out $LEFT_OUT articles"
