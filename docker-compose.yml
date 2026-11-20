@@ -167,7 +167,7 @@ services:
       dockerfile: hosts/site/Dockerfile
     restart: on-failure:5
     # As root, unlike the image's default user: the volume belongs to root whichever container creates it first, and this job must
-    # empty and refill it. It serves nothing and is reached by nothing.
+    # replace its files. It serves nothing and is reached by nothing.
     user: "0:0"
     environment:
       TSR_BASE_URL: http://api:8080
