@@ -204,6 +204,10 @@ services:
       interval: 10s
       timeout: 3s
       retries: 5
+      # The proxy sends nothing to a container that is not healthy yet. Without these two the first check runs 10 s after a start,
+      # so a deploy that replaces this container left the site unanswered for those 10 s. Needs Docker Engine 25 or later.
+      start_period: 10s
+      start_interval: 1s
 
 volumes:
   db-data:
