@@ -71,7 +71,7 @@ public struct Sql
 
     public readonly void AppendFormatted(DateOnly value) => Add(NpgsqlDbType.Date, value);
 
-    public readonly void AppendFormatted(string[] value) => Add(NpgsqlDbType.Array | NpgsqlDbType.Text, value);
+    public readonly void AppendFormatted(string?[] value) => Add(NpgsqlDbType.Array | NpgsqlDbType.Text, value);
 
     public readonly void AppendFormatted(int[] value) => Add(NpgsqlDbType.Array | NpgsqlDbType.Integer, value);
 

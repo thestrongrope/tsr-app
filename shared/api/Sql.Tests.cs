@@ -48,6 +48,17 @@ public sealed class SqlTests
     }
 
     [Test]
+    public void A_text_array_with_a_null_element_arrives_as_a_text_array()
+    {
+        string?[] words = ["a", null];
+
+        Sql sql = $"{words}";
+
+        Assert.That(sql.Parameters[0].NpgsqlDbType, Is.EqualTo(NpgsqlDbType.Array | NpgsqlDbType.Text));
+        Assert.That(sql.Parameters[0].Value, Is.EqualTo(words));
+    }
+
+    [Test]
     public void Each_supported_type_arrives_with_its_database_type_and_value()
     {
         var id = Guid.NewGuid();

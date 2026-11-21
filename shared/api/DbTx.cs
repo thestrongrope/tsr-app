@@ -12,24 +12,38 @@ public sealed class DbTx : IAsyncDisposable
     private readonly NpgsqlConnection _connection;
     private readonly NpgsqlTransaction _transaction;
     private readonly bool _owned;
+    private readonly Func<bool>? _stillOpen;
     private bool _committed;
 
-    private DbTx(NpgsqlConnection connection, NpgsqlTransaction transaction, bool owned)
+    private DbTx(NpgsqlConnection connection, NpgsqlTransaction transaction, bool owned, Func<bool>? stillOpen = null)
     {
         _connection = connection;
         _transaction = transaction;
         _owned = owned;
+        _stillOpen = stillOpen;
     }
 
     /// <summary>
-    /// Wraps a connection and transaction someone else owns (Entity Framework's, for a domain not yet converted): dispose then neither rolls back
-    /// nor closes, and the owner commits or rolls back.
+    /// Wraps a connection and transaction someone else owns: dispose then neither rolls back nor closes, and the owner commits or rolls back. Internal, with no still-open check:
+    /// a caller on Entity Framework joins only through <see cref="EfTransaction.Join"/>, which adds the check.
     /// </summary>
-    public static DbTx Join(NpgsqlConnection connection, NpgsqlTransaction transaction)
+    internal static DbTx Join(NpgsqlConnection connection, NpgsqlTransaction transaction)
     {
         ArgumentNullException.ThrowIfNull(connection);
         ArgumentNullException.ThrowIfNull(transaction);
         return new DbTx(connection, transaction, owned: false);
+    }
+
+    /// <summary>
+    /// As <see cref="Join(NpgsqlConnection, NpgsqlTransaction)"/>, with a check from the joiner that its transaction is still the open one. Npgsql refuses a
+    /// joined transaction its owner committed or rolled back, but not one the owner only disposed and replaced: the next statement would run in the new transaction.
+    /// </summary>
+    internal static DbTx Join(NpgsqlConnection connection, NpgsqlTransaction transaction, Func<bool> stillOpen)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+        ArgumentNullException.ThrowIfNull(transaction);
+        ArgumentNullException.ThrowIfNull(stillOpen);
+        return new DbTx(connection, transaction, owned: false, stillOpen);
     }
 
     internal static DbTx Own(NpgsqlConnection connection, NpgsqlTransaction transaction) => new(connection, transaction, owned: true);
@@ -53,6 +67,11 @@ public sealed class DbTx : IAsyncDisposable
         if (_committed)
         {
             throw new InvalidOperationException("The transaction is already committed.");
+        }
+
+        if (_stillOpen is not null && !_stillOpen())
+        {
+            throw new InvalidOperationException("The transaction that was joined has ended.");
         }
     }
 

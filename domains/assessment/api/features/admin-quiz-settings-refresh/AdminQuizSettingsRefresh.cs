@@ -107,7 +107,7 @@ internal static partial class AdminQuizSettingsRefreshSlice
         await transaction.CreateSavepointAsync(SavePoint, ct);
         try
         {
-            await NotificationsCommands.AnnounceAsync(db, announcement, ct);
+            await NotificationsCommands.AnnounceAsync(EfTransaction.Join(db), announcement, ct);
             await transaction.ReleaseSavepointAsync(SavePoint, ct);
         }
         catch (Exception e) when (e is DbException or Microsoft.EntityFrameworkCore.DbUpdateException)

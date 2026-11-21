@@ -126,14 +126,15 @@ internal static class ClassStudentEditSlice
     private static async Task<Outcome> SaveAsync(ClassesContext db, TimeProvider clock, int classId, int student, Dictionary<string, string> values, int by, CancellationToken ct)
     {
         await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        var tx = EfTransaction.Join(db);
         try
         {
-            if (values["email"].Length > 0 && await IdentityCommands.EmailTakenAsync(db, student, values["email"], ct))
+            if (values["email"].Length > 0 && await IdentityCommands.EmailTakenAsync(tx, student, values["email"], ct))
             {
                 return Outcome.EmailTaken;
             }
 
-            if (values["email"].Length > 0 && !await IdentityCommands.ChangeEmailAsync(db, student, values["email"], clock, ct))
+            if (values["email"].Length > 0 && !await IdentityCommands.ChangeEmailAsync(tx, student, values["email"], clock, ct))
             {
                 return Outcome.EmailRefused;
             }
@@ -144,7 +145,7 @@ internal static class ClassStudentEditSlice
                 return Outcome.Failed;
             }
 
-            await MembershipCommands.ChangeContactAsync(db, student, name, values["mobile"], clock, ct);
+            await MembershipCommands.ChangeContactAsync(tx, student, name, values["mobile"], clock, ct);
             var notes = values["notes"];
             await db.Database.ExecuteSqlAsync($"update classes.class_students set notes = {notes} where class_id = {classId} and token_no = {student}", ct);
             await Outbox.WriteAsync(db, "classes.student_edited", new StudentEdited(classId, student, by), clock, ct);

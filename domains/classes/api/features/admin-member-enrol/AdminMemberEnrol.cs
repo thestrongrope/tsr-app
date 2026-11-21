@@ -193,7 +193,7 @@ internal static partial class AdminMemberEnrolSlice
         }
         else
         {
-            await MembershipCommands.RecordAcceptedRegistrationAsync(db, token, classId, ct);
+            await MembershipCommands.RecordAcceptedRegistrationAsync(EfTransaction.Join(db), token, classId, ct);
             await db.Database.ExecuteSqlAsync(
                 $"insert into classes.class_students (class_id, token_no, joined_on, added_by) values ({classId}, {token}, (now() at time zone 'UTC')::date, {by})", ct);
             await Outbox.WriteAsync(db, "classes.student_enrolled", new StudentEnrolled(classId, token, by, "by_token"), clock, ct);
