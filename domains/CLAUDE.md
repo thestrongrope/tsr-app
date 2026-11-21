@@ -81,10 +81,21 @@ Platform-owned tables (no domain): `outbox`, `outbound_messages` (PHP's `schema_
    query must return only public data (e.g. only published articles), so no client or the site can
    show more by mistake. Mark it `security: []` in `api.yaml` and say why in the domain `CLAUDE.md`.
 5. Expected failures are `Result<T>` (shared); exceptions are for bugs and infrastructure.
-6. Interfaces only at external boundaries (DB, HTTP, FCM, Firebase). No repository layer, no handler class, no mapping layer (D3):
-   reads are parameterised `SqlQuery<T>` ported from PHP; writes use EF entities or `ExecuteSql`. A helper moves to `domain/` only
-   when two slices use it; the PHP-emulation helpers (`PhpValue`, `PhpText`, `JsonBody`) are in `shared/api` (D4). PHP is the oracle (D6):
-   a slice is done when its Hurl file passes on PHP and on the new API.
+6. Interfaces only at external boundaries (DB, HTTP, FCM, Firebase). No repository layer, no handler class, no mapping layer (D3).
+   A helper moves to `domain/` only when two slices use it; the PHP-emulation helpers (`PhpValue`, `PhpText`, `JsonBody`) are in `shared/api` (D4).
+   PHP is the oracle (D6): a slice is done when its Hurl file passes on PHP and on the new API.
+   **An unconverted domain** reads with `SqlQuery<T>` and writes with EF entities or `ExecuteSql`, as before.
+   **A converted domain** uses no Entity Framework at run time. Its context and migrations stay (the schema is still made by them); the context is registered
+   for the JIT host and the migrate job only, not for the API's request path (`AddDomainContext` and `MigrateDatabasesAsync` in `shared/api/DomainContexts.cs` are marked JIT only; a separate `Add<Context>Migrations()` for this is planned, not built).
+   SQL is an interpolated string given to `Sql` (`shared/api/Sql.cs`), never built by hand and never a `$$"` string.
+   No raw `NpgsqlCommand` and no `*Raw` call outside `shared/api/Db.cs`; `SqlHandlerUseTests` lists the few files that still have one.
+   It runs on an `NpgsqlDataSource` or a `DbTx` (`Db.cs`, `DbTx.cs`) and reads rows by column name with `DbRow`;
+   `ScalarAsync` is for value types only. An event goes through the `Outbox.WriteAsync` overload that takes the domain's `<Context>Json`
+   (a source-generated context in `domain/`), and so does an answer serialized from a value (`Results.Json(value, <Context>Json.Default.<Type>)`); an answer a domain writes by hand (content's `V1` with `Utf8JsonWriter`) does not need it.
+   A test of a converted query must return at least one row: `DbRow` checks the row's shape on the first row, so a `ListAsync` with no rows checks nothing.
+   A handler keeps its declared parameters and the project sets `<EnableRequestDelegateGenerator>true</EnableRequestDelegateGenerator>`.
+   A text value compared with a citext column still needs `::citext`; a select of one needs no `::text`.
+   The project sets `IsAotCompatible` and is added to the list in `hosts/api/tests/AotAnalyzerTests.cs`.
 7. Each domain module must start with only its listed dependencies; `hosts/api/tests` checks it.
    Each `site/` module references only `shared/site` and builds its pages alone; `hosts/site/tests`
    checks it. Both checks see real use of another module, not an unused project reference.
