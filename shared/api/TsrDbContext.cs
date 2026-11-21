@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.EntityFrameworkCore;
 
 namespace Tsr.Shared.Api;
@@ -6,6 +7,8 @@ namespace Tsr.Shared.Api;
 /// Base of every domain's DbContext: one context and one PostgreSQL schema per domain, so every table
 /// has one owner. The conventions (snake_case names, citext text) are applied here, never per column.
 /// </summary>
+[UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Entity Framework: migrations and unconverted domains, JIT only")]
+[UnconditionalSuppressMessage("AOT", "IL3050", Justification = "Entity Framework: migrations and unconverted domains, JIT only")]
 public abstract class TsrDbContext(DbContextOptions options, string schema) : DbContext(options)
 {
     protected sealed override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)

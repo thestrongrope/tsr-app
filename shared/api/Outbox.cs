@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
 using Microsoft.EntityFrameworkCore;
@@ -18,6 +19,8 @@ public static class Outbox
     // Same JSON shape as the API (camelCase): events are a published contract too (each domain CLAUDE.md, "Events").
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
+    [RequiresUnreferencedCode("Entity Framework is JIT only. Use the DbTx overload with a source-generated JsonTypeInfo.")]
+    [RequiresDynamicCode("Entity Framework is JIT only. Use the DbTx overload with a source-generated JsonTypeInfo.")]
     public static async Task WriteAsync<TEvent>(
         DbContext context,
         string eventType,
