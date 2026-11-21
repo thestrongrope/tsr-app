@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using NUnit.Framework;
 using Tsr.Notifications.Api;
+using Tsr.Shared.Api;
 
 namespace Tsr.Db.Tests;
 
@@ -574,10 +575,10 @@ public sealed class TestCalendarTests
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<NotificationsContext>();
 
-        Assert.That(async () => await NotificationsErasure.EraseEventSettingsAsync(db, BothClasses, CancellationToken.None), Throws.InstanceOf<InvalidOperationException>());
+        Assert.That(async () => await NotificationsErasure.EraseEventSettingsAsync(EfTransaction.Join(db), BothClasses, CancellationToken.None), Throws.InstanceOf<InvalidOperationException>());
         await using (var transaction = await db.Database.BeginTransactionAsync())
         {
-            Assert.That(await NotificationsErasure.EraseEventSettingsAsync(db, BothClasses, CancellationToken.None), Is.EqualTo(2));
+            Assert.That(await NotificationsErasure.EraseEventSettingsAsync(EfTransaction.Join(db), BothClasses, CancellationToken.None), Is.EqualTo(2));
             await transaction.CommitAsync();
         }
 

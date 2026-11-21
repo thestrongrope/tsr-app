@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Tsr.Shared.Api;
 
 namespace Tsr.Platform.Api;
 
@@ -61,46 +62,36 @@ public static partial class PlatformCommands
     /// <summary>
     /// PHP <c>AccountDeletionModel::complete</c>: <c>delete from feedback where user_id = :user_id</c>. Feedback is free text that may name the member. Run inside the caller's transaction.
     /// </summary>
-    public static async Task EraseFeedbackAsync(DbContext db, int userId, CancellationToken ct)
+    public static async Task EraseFeedbackAsync(DbTx tx, int userId, CancellationToken ct)
     {
-        ArgumentNullException.ThrowIfNull(db);
-        RequireTransaction(db);
-        await db.Database.ExecuteSqlAsync($"delete from platform.feedback where user_id = {userId}", ct);
+        ArgumentNullException.ThrowIfNull(tx);
+        await tx.ExecuteAsync($"delete from platform.feedback where user_id = {userId}", ct);
     }
 
     /// <summary>
     /// PHP <c>redactQueuedMessages</c>: <c>update outbound_messages set recipient = '[deleted]' where recipient in (...)</c>. The queue has no member key, so a member's rows are found by their
     /// recipient values (mobile number, device ids); the rows stay, with the recipient redacted. Any number of recipients, as PHP (a refusal here would strand a deletion whose Firebase account is already gone); 1000 per statement. Run inside the caller's transaction.
     /// </summary>
-    public static async Task RedactRecipientsAsync(DbContext db, IReadOnlyCollection<string> recipients, CancellationToken ct)
+    public static async Task RedactRecipientsAsync(DbTx tx, IReadOnlyCollection<string> recipients, CancellationToken ct)
     {
-        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(tx);
         ArgumentNullException.ThrowIfNull(recipients);
-        RequireTransaction(db);
         foreach (var values in recipients.Chunk(RedactChunk))
         {
-            await db.Database.ExecuteSqlAsync($"update platform.outbound_messages set recipient = '[deleted]' where recipient = any({values}::citext[])", ct);
-        }
-    }
-
-    private static void RequireTransaction(DbContext db)
-    {
-        if (db.Database.CurrentTransaction is null)
-        {
-            throw new InvalidOperationException("An erasure is written inside the transaction of the deletion it belongs to.");
+            await tx.ExecuteAsync($"update platform.outbound_messages set recipient = '[deleted]' where recipient = any({values}::citext[])", ct);
         }
     }
 
     /// <summary>
     /// PHP <c>queue_message</c> (functions.php:472, OutboundMessagesModel::enqueue): one <c>outbound_messages</c> row per non-blank recipient with status queued, on the caller's transaction. NOTHING is sent here: the push channel is
     /// drained by the notifications push-drain worker (run mode <c>--workers</c>). The dedupe key is PHP's <c>dedupeKeyFor</c>: the first 150 characters of <paramref name="dedupeKey"/>, a colon and the first 20 bytes of the SHA-256 of the recipient in hex (PHP used SHA-1: a deliberate difference, so a key PHP queued is not recognised); the unique (channel, dedupe_key) index makes a repeat a no-op.
-    /// Returns the rows queued. ONE statement that starts no transaction and needs none: inside the caller's open transaction it commits or rolls back with it (the announce command), without one it commits at once
-    /// (the class schedule worker queues first, then claims the occurrence in a transaction of its own). The recipients are device ids: not logged.
+    /// Returns the rows queued. ONE statement that starts no transaction itself: it runs on the transaction in <paramref name="tx"/>, so it commits or rolls back with its owner (the announce command; the class schedule worker opens a transaction just for this call, then claims the occurrence in another). The payload text is stored exactly as given (the column is citext).
+    /// The recipients are device ids: not logged.
     /// </summary>
     public static async Task<int> QueueMessagesAsync(
-        DbContext db, string channel, IReadOnlyList<string> recipients, string payloadJson, string? dedupeKey, int? createdBy, CancellationToken ct)
+        DbTx tx, string channel, IReadOnlyList<string> recipients, string payloadJson, string? dedupeKey, int? createdBy, CancellationToken ct)
     {
-        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(tx);
         ArgumentNullException.ThrowIfNull(recipients);
         var wanted = recipients.Select(r => r.Trim()).Where(r => r.Length > 0).Distinct(StringComparer.Ordinal).ToArray();
         if (wanted.Length == 0)
@@ -109,7 +100,7 @@ public static partial class PlatformCommands
         }
 
         var keys = wanted.Select(r => dedupeKey is null ? null : DedupeKeyFor(dedupeKey, r)).ToArray();
-        return await db.Database.ExecuteSqlAsync(
+        return await tx.ExecuteAsync(
             $"""
             insert into platform.outbound_messages (channel, recipient, payload, dedupe_key, status, created_by)
             select {channel}, r.recipient, {payloadJson}, r.dedupe_key, 'queued', {createdBy}

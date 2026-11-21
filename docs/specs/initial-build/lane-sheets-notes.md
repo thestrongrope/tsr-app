@@ -25,7 +25,7 @@ Order everywhere as PHP: 401, `quiz:admin` (403), body (422), unknown target (42
 
 ## Decisions and ASSUMPTIONS (PHP unclear or changed)
 
-1. Notification command: `NotificationsCommands.AnnounceAsync(db, Announcement(Title, Body, ActionLink, DataType, DedupeKey, Tokens?), ct)`: `Tokens` null means every registered member (a device, demo cohort `%@demo.invalid` left out), otherwise exactly those tokens (the class-students lane passes theirs). It finds or creates the system inbox copy, fans it out, and calls the new `PlatformCommands.QueueMessagesAsync` for the push rows. Nothing is sent.
+1. Notification command: `NotificationsCommands.AnnounceAsync(tx, Announcement(Title, Body, ActionLink, DataType, DedupeKey, Tokens?), ct)`: `Tokens` null means every registered member (a device, demo cohort `%@demo.invalid` left out), otherwise exactly those tokens (the class-students lane passes theirs). It finds or creates the system inbox copy, fans it out, and calls the new `PlatformCommands.QueueMessagesAsync` for the push rows. Nothing is sent.
 2. The push dedupe key is `first 150 chars of key : first 20 bytes of SHA-256(device) in hex`. PHP used SHA-1 (analyzer CA5350 refuses it): a key PHP queued is not recognised. Harmless once PHP stops queueing.
 3. Timestamps: PHP shifts by the env `timeoffset` (IST in production). Here a fixed +05:30 wall clock; a `today_override` date keeps `+00:00` as PHP's `DateTime` did. `Last updated on` line uses the wall clock with 24-hour hours and AM/PM, as PHP's `H:i A`.
 4. The actor stamp is `Name (token)` with the name read from `membership.v_members` (PHP: the session user). The app strips the ` (token)`.

@@ -238,11 +238,12 @@ internal static class AdminDeletionCompleteSlice
     // Before the profile mobile is cleared, not after: outbound_messages has no member key, so a member's rows are found only by matching their recipient values.
     private static async Task EraseMemberAsync(IdentityContext db, IMemberErasure memberErasure, int token, List<Member> members, CancellationToken ct)
     {
+        var tx = EfTransaction.Join(db);
         var recipients = members.Where(m => !string.IsNullOrEmpty(m.Mobile)).Select(m => m.Mobile!).Distinct().ToList();
-        recipients.AddRange(await NotificationsErasure.EraseDevicesAsync(db, token, ct));
-        await NotificationsErasure.EraseEventSettingsAsync(db, token, ct);
-        await PlatformCommands.RedactRecipientsAsync(db, recipients, ct);
-        await memberErasure.EraseAsync(db, token, ct);
+        recipients.AddRange(await NotificationsErasure.EraseDevicesAsync(tx, token, ct));
+        await NotificationsErasure.EraseEventSettingsAsync(tx, token, ct);
+        await PlatformCommands.RedactRecipientsAsync(tx, recipients, ct);
+        await memberErasure.EraseAsync(tx, token, ct);
 
         // The anonymised row: id, token, role, created-on and provider stay (attendance and quiz rows key on the token). The address is unique per member and ends .invalid (RFC 2606).
         var placeholder = $"deleted-{token}@deleted.invalid";
@@ -255,7 +256,7 @@ internal static class AdminDeletionCompleteSlice
             ct);
         foreach (var row in members)
         {
-            await PlatformCommands.EraseFeedbackAsync(db, row.Id, ct);
+            await PlatformCommands.EraseFeedbackAsync(tx, row.Id, ct);
         }
     }
 

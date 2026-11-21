@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+using Tsr.Shared.Api;
 
 namespace Tsr.Identity.Api;
 
@@ -12,16 +12,11 @@ internal static class TokenAllocation
     private const int FirstToken = 1000;
     private const long TokenLock = 7_100_001;
 
-    public static async Task<int> NextAsync(DbContext db, CancellationToken ct)
+    public static async Task<int> NextAsync(DbTx tx, CancellationToken ct)
     {
-        if (db.Database.CurrentTransaction is null)
-        {
-            throw new InvalidOperationException("A token is allocated inside the transaction that inserts it.");
-        }
-
-        await db.Database.ExecuteSqlAsync($"select set_config('lock_timeout', '10s', true)", ct);
-        await db.Database.ExecuteSqlAsync($"select pg_advisory_xact_lock({TokenLock})", ct);
-        var highest = await db.Database.SqlQuery<int?>($"select max(token) as \"Value\" from identity.users").ToListAsync(ct);
-        return (highest[0] ?? FirstToken) + 1;
+        await tx.ExecuteAsync($"select set_config('lock_timeout', '10s', true)", ct);
+        await tx.ExecuteAsync($"select pg_advisory_xact_lock({TokenLock})", ct);
+        var highest = await tx.ScalarAsync<int>($"select max(token) as \"Value\" from identity.users", ct);
+        return (highest ?? FirstToken) + 1;
     }
 }

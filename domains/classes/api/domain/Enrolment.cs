@@ -37,7 +37,7 @@ internal static class Enrolment
             return false;
         }
 
-        await MembershipCommands.RecordAcceptedRegistrationAsync(db, token, classId, ct);
+        await MembershipCommands.RecordAcceptedRegistrationAsync(EfTransaction.Join(db), token, classId, ct);
         if (addedBy is null)
         {
             await db.Database.ExecuteSqlAsync(

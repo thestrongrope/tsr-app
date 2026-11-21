@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+using Tsr.Shared.Api;
 
 namespace Tsr.Identity.Api;
 
@@ -10,11 +10,11 @@ namespace Tsr.Identity.Api;
 public interface IMemberErasure
 {
     /// <summary>Anonymises the profile data of <paramref name="token"/> on the caller's connection and transaction.</summary>
-    Task EraseAsync(DbContext db, int token, CancellationToken ct);
+    Task EraseAsync(DbTx tx, int token, CancellationToken ct);
 }
 
 /// <summary>The default: nothing to erase.</summary>
 internal sealed class NoMemberErasure : IMemberErasure
 {
-    public Task EraseAsync(DbContext db, int token, CancellationToken ct) => Task.CompletedTask;
+    public Task EraseAsync(DbTx tx, int token, CancellationToken ct) => Task.CompletedTask;
 }

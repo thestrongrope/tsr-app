@@ -76,6 +76,38 @@ public sealed class AotAnalyzerTests
         Assert.That(canary.Output, Does.Contain("IL2026"));
     }
 
+    /// <summary>CMD-R12: the bridge to Entity Framework carries the reflection attributes, so a converted domain that calls it fails its own build.</summary>
+    [Test]
+    public async Task The_ef_bridge_fails_the_build_where_the_analyzer_is_on()
+    {
+        var shared = Path.Combine(RouteCatalog.RepoRoot(), "shared", "api", "Tsr.Shared.Api.csproj");
+        var project = $$"""
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <IsAotCompatible>true</IsAotCompatible>
+              </PropertyGroup>
+              <ItemGroup>
+                <FrameworkReference Include="Microsoft.AspNetCore.App" />
+                <ProjectReference Include="{{shared}}" />
+              </ItemGroup>
+            </Project>
+            """;
+        const string source = """
+            namespace Canary;
+
+            public static class Bridge
+            {
+                public static Tsr.Shared.Api.DbTx Run(Microsoft.EntityFrameworkCore.DbContext db) => Tsr.Shared.Api.EfTransaction.Join(db);
+            }
+            """;
+
+        var result = await BuildAsync("ef-bridge", project, source);
+
+        Assert.That(result.ExitCode, Is.Not.Zero, result.Output);
+        Assert.That(result.Output, Does.Contain("IL2026"));
+        Assert.That(result.Output, Does.Contain("IL3050"));
+    }
+
     /// <summary>
     /// AOT-R2: a slice in the converted form (declared parameters, the request delegate generator on the project, a body read through the shared reader,
     /// a write on DbTx with an outbox event, answers through a source-generated context) builds with no AOT or trim warning in a class library.

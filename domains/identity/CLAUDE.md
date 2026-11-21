@@ -56,10 +56,10 @@ An endpoint opts in with `.RequireMember()` (`.RequireMember(createsMember: true
 
 `TSR_FIREBASE_PROJECT_ID` is required everywhere. `TSR_AUTH_EMULATOR_HOST` (unsigned tokens) is accepted only in Development, with a `demo-` project and a host in the allow list; otherwise the API does not start.
 
-## Published commands (`api/IdentityCommands.cs`; each runs on the caller's transaction)
+## Published commands (`api/IdentityCommands.cs`; each takes the caller's `DbTx` and runs on its transaction)
 
-- `ChangeEmailAsync(db, token, email, clock, ct)`: only a placeholder (blank or `<token>@thestrongrope.com`) with no Firebase link may be given another address; an address another member already has is refused (PHP has no such check; `EmailTakenAsync` lets the caller ask first for its own message; no unique index backs it). Returns false and writes nothing otherwise. Validates its inputs (throws). Event `identity.member_email_changed` (token). Used by `classes` (edit a student); proved by `db/tests/StudentEditTests.cs`.
-- `CreateMemberAsync(db, clock, ct)` returns the token of a new `users` row for a member who is not an app member yet (bulk add): address `<token>@thestrongrope.com`, no Firebase link, no role. The token comes from `domain/TokenAllocation.cs`, the one allocator (sign-in uses it too): highest + 1 under advisory lock 7100001, waiting at most 10 seconds, inside the caller's transaction. Throws without a transaction. Event `identity.member_created` (token). Used by `classes` (bulk add); proved by `db/tests/BulkAddTests.cs`.
+- `ChangeEmailAsync(tx, token, email, clock, ct)`: only a placeholder (blank or `<token>@thestrongrope.com`) with no Firebase link may be given another address; an address another member already has is refused (PHP has no such check; `EmailTakenAsync` lets the caller ask first for its own message; no unique index backs it). Returns false and writes nothing otherwise. Validates its inputs (throws). Event `identity.member_email_changed` (token). Used by `classes` (edit a student); proved by `db/tests/StudentEditTests.cs`.
+- `CreateMemberAsync(tx, clock, ct)` returns the token of a new `users` row for a member who is not an app member yet (bulk add): address `<token>@thestrongrope.com`, no Firebase link, no role. The token comes from `domain/TokenAllocation.cs`, the one allocator (sign-in uses it too): highest + 1 under advisory lock 7100001, waiting at most 10 seconds, inside the caller's transaction. Event `identity.member_created` (token). Used by `classes` (bulk add); proved by `db/tests/BulkAddTests.cs`.
 
 ## Where things are
 

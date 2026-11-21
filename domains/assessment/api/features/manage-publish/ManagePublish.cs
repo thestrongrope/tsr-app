@@ -87,7 +87,7 @@ internal static partial class ManagePublishSlice
             var students = await ClassStudents.ListAsync(db, quiz.ClassId, ct);
             var announcement = Announce(quiz, token, students.Select(s => s.Token).ToList(), configuration);
             await using var transaction = await db.Database.BeginTransactionAsync(ct);
-            var result = await NotificationsCommands.AnnounceCountedAsync(db, announcement, ct);
+            var result = await NotificationsCommands.AnnounceCountedAsync(EfTransaction.Join(db), announcement, ct);
             await transaction.CommitAsync(ct);
             return result;
         }

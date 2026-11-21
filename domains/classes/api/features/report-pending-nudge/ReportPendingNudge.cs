@@ -82,7 +82,7 @@ internal static class ReportPendingNudgeSlice
         }
 
         var (title, text) = Message(teacher);
-        var last = await NotificationsCommands.LastNudgeAsync(db, teacher.TeacherToken, WindowHours, ct);
+        var last = await LastNudgeInOwnTransactionAsync(db, teacher.TeacherToken, ct);
         var answer = new Answer(teacher.TeacherToken, teacher.Teacher, title, text, last is not null, Stamp(last), false, 0);
         if (!send)
         {
@@ -121,13 +121,21 @@ internal static class ReportPendingNudgeSlice
     private static string? Stamp(DateTimeOffset? when) =>
         when?.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
 
+    // The preview read runs in a short transaction of its own, closed before the send path opens its own.
+    private static async Task<DateTimeOffset?> LastNudgeInOwnTransactionAsync(ClassesContext db, int teacher, CancellationToken ct)
+    {
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        return await NotificationsCommands.LastNudgeAsync(EfTransaction.Join(db), teacher, WindowHours, ct);
+    }
+
     // Null when the teacher was reminded meanwhile; else the devices queued for.
     private static async Task<int?> RecordAsync(ClassesContext db, TimeProvider clock, int sender, int teacher, Answer message, List<int> classIds, DateTimeOffset now, CancellationToken ct)
     {
         await using var transaction = await db.Database.BeginTransactionAsync(ct);
         await db.Database.ExecuteSqlAsync($"set local lock_timeout = '5s'", ct);
         await db.Database.ExecuteSqlAsync($"select pg_advisory_xact_lock({LockClass}, {teacher})", ct);
-        if (await NotificationsCommands.LastNudgeAsync(db, teacher, WindowHours, ct) is not null)
+        var tx = EfTransaction.Join(db);
+        if (await NotificationsCommands.LastNudgeAsync(tx, teacher, WindowHours, ct) is not null)
         {
             return null;
         }
@@ -145,7 +153,7 @@ internal static class ReportPendingNudgeSlice
         var announcement = new Announcement(
             message.Title, message.Body, null, "cc_reminder", key, [teacher],
             Sender: sender, Criteria: criteria, Data: data, ReuseExisting: false, SkipDemoDevices: true);
-        var devices = await NotificationsCommands.AnnounceAsync(db, announcement, ct);
+        var devices = await NotificationsCommands.AnnounceAsync(tx, announcement, ct);
         await Outbox.WriteAsync(db, "classes.teacher_nudged", new TeacherNudged(teacher, sender, classIds), clock, ct);
         await transaction.CommitAsync(ct);
         return devices;

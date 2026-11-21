@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+using Tsr.Shared.Api;
 
 namespace Tsr.Notifications.Api;
 
@@ -12,33 +12,20 @@ public static class NotificationsErasure
     /// PHP <c>AccountDeletionModel::complete</c>: <c>delete from user_devices where token = :token</c>. Deletes every device row of the member and returns the device ids it
     /// deleted, because they are also the recipients of queued push messages, which the caller redacts. Every one, as PHP: a cap would leave queued pushes to the devices past it unredacted. Run inside the caller's transaction.
     /// </summary>
-    public static async Task<IReadOnlyList<string>> EraseDevicesAsync(DbContext db, int token, CancellationToken ct)
+    public static async Task<IReadOnlyList<string>> EraseDevicesAsync(DbTx tx, int token, CancellationToken ct)
     {
-        ArgumentNullException.ThrowIfNull(db);
-        if (db.Database.CurrentTransaction is null)
-        {
-            throw new InvalidOperationException("Devices are erased inside the transaction of the deletion they belong to.");
-        }
-
-        var ids = await db.Database
-            .SqlQuery<string>($"""delete from notifications.user_devices where token = {token} returning device_id as "Value" """)
-            .ToListAsync(ct);
-        return ids;
+        ArgumentNullException.ThrowIfNull(tx);
+        return await tx.ListAsync($"delete from notifications.user_devices where token = {token} returning device_id", row => row.Text("device_id"), ct);
     }
 
     /// <summary>
     /// PHP <c>AccountDeletionModel::complete</c>: <c>delete from member_event_settings where user_id in (select id from users where token = :token)</c>. Deletes the member's calendar alert
     /// settings and tombstones (they say which class events a person follows) and returns how many. Run inside the caller's transaction.
     /// </summary>
-    public static async Task<int> EraseEventSettingsAsync(DbContext db, int token, CancellationToken ct)
+    public static async Task<int> EraseEventSettingsAsync(DbTx tx, int token, CancellationToken ct)
     {
-        ArgumentNullException.ThrowIfNull(db);
-        if (db.Database.CurrentTransaction is null)
-        {
-            throw new InvalidOperationException("Calendar settings are erased inside the transaction of the deletion they belong to.");
-        }
-
-        return await db.Database.ExecuteSqlAsync(
+        ArgumentNullException.ThrowIfNull(tx);
+        return await tx.ExecuteAsync(
             $"delete from notifications.member_event_settings where user_id in (select id from identity.v_users where token = {token})", ct);
     }
 }
