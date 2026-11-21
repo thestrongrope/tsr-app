@@ -71,4 +71,7 @@ HTTP 200
 GET {{base_url}}/reports/mcq-adherence/a%20b%0Ac/download?format=xlsx
 Authorization: {{auth_r2_coord}}
 HTTP 200
+Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
 Content-Disposition: attachment; filename="MCQ-adherence-a b_c.xlsx"
+[Asserts]
+bytes startsWith hex,504b;

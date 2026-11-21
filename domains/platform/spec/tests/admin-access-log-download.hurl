@@ -61,6 +61,7 @@ HTTP 200
 header "Content-Type" == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 header "Content-Disposition" matches /^attachment; filename="TSR_Admin_Access_Log_[0-9]{8}_[0-9]{6}\.xlsx"$/
 bytes count > 1000
+bytes startsWith hex,504b;
 
 GET {{base_url}}/admin/access-log/download?format=xlsx&token=927101
 Authorization: {{auth_edge_download}}

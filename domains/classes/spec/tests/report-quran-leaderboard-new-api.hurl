@@ -27,6 +27,9 @@ HTTP 422
 GET {{base_url}}/reports/quran-leaderboard/download?format=xlsx&from=2019-03-01&to=2019-03-31&level=%00
 Authorization: {{auth_r2_super}}
 HTTP 200
+Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+[Asserts]
+bytes startsWith hex,504b;
 
 # 2. A full-width digit is not a digit; the year 0001 and 9999 are real days
 GET {{base_url}}/reports/quran-leaderboard?from=2019-03-01&to=2019-03-31&level=%EF%BC%A1
