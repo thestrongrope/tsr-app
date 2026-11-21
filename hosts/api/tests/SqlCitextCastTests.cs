@@ -32,13 +32,8 @@ public sealed partial class SqlCitextCastTests
     public void A_citext_column_compared_with_an_interpolated_value_says_citext()
     {
         var root = RouteCatalog.RepoRoot();
-        var directories = Directory.EnumerateDirectories(Path.Combine(root, "domains"))
-            .Select(d => Path.Combine(d, "api"))
-            .Where(Directory.Exists)
-            .Append(Path.Combine(root, "shared", "api"))
-            .Append(Path.Combine(root, "hosts"));
         var found = new List<string>();
-        foreach (var file in directories.SelectMany(SqlBoundaryTests.Sources))
+        foreach (var file in ScannedDirectories().SelectMany(SqlBoundaryTests.Sources))
         {
             var relative = Path.GetRelativePath(root, file).Replace('\\', '/');
             found.AddRange(Violations(File.ReadAllText(file))
@@ -64,6 +59,32 @@ public sealed partial class SqlCitextCastTests
     [TestCase("var message = $\"name = {name}\";")]
     public void A_cast_an_assignment_and_non_sql_text_are_allowed(string source) =>
         Assert.That(Violations(source.Contains('"', StringComparison.Ordinal) ? source : "var q = $\"" + source + "\";"), Is.Empty);
+
+    [TestCase("ListAsync")]
+    [TestCase("ScalarAsync")]
+    [TestCase("ExecuteAsync")]
+    public void A_converted_query_without_the_cast_is_reported(string helper)
+    {
+        // The scan reads every SQL-looking string literal, not the method that receives it, so it sees a query after it leaves SqlQuery and ExecuteSql.
+        var uncast = "await db." + helper + "($\"\"\"select 1 from identity.users where email = {email} limit 1\"\"\", row => row.Int(\"id\"), ct);";
+        var cast = "await db." + helper + "($\"\"\"select 1 from identity.users where email = {email}::citext limit 1\"\"\", row => row.Int(\"id\"), ct);";
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(Violations(uncast), Has.Count.EqualTo(1));
+            Assert.That(Violations(cast), Is.Empty);
+        });
+    }
+
+    internal static IEnumerable<string> ScannedDirectories()
+    {
+        var root = RouteCatalog.RepoRoot();
+        return Directory.EnumerateDirectories(Path.Combine(root, "domains"))
+            .Select(d => Path.Combine(d, "api"))
+            .Where(Directory.Exists)
+            .Append(Path.Combine(root, "shared", "api"))
+            .Append(Path.Combine(root, "hosts"));
+    }
 
     internal static IReadOnlyList<string> Violations(string source)
     {
