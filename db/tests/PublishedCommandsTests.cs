@@ -189,7 +189,7 @@ public sealed class PublishedCommandsTests
                 await PlatformCommands.EraseFeedbackAsync(tx, userId, CancellationToken.None);
                 Assert.That(queued, Is.EqualTo(1));
                 Assert.That(
-                    await tx.ScalarAsync<long>($"select count(*) from platform.outbound_messages where recipient = '[deleted]'", CancellationToken.None),
+                    await tx.ScalarAsync<long>($"select count(*) from platform.outbound_messages where dedupe_key = 'k98-old' and recipient = '[deleted]'", CancellationToken.None),
                     Is.EqualTo(1),
                     "the commands wrote inside the transaction");
                 await transaction.RollbackAsync();
@@ -460,5 +460,224 @@ public sealed class PublishedCommandsTests
         await Assert.ThrowsAsync<InvalidOperationException>(() => MembershipCommands.RecordAcceptedRegistrationAsync(tx, token, 98001, CancellationToken.None));
 
         Assert.That(await TestDatabase.ScalarAsync<long>($"select count(*) from membership.class_registrations where token = {token}", TestDatabase.OwnerConnection), Is.Zero);
+    }
+
+    private sealed record FourDomainRows(long Users, long Profiles, long Requests, long Notifications, long Inbox, long Queued, long Events);
+
+    // One command of each owning domain on the caller's transaction: identity (create), membership (profile, request), notifications (announce to a device), platform (a direct queue and the announce's own).
+    private static async Task<int> RunFourDomainCommandsAsync(DbTx tx)
+    {
+        var token = await IdentityCommands.CreateMemberAsync(tx, TimeProvider.System, CancellationToken.None);
+        await MembershipCommands.CreateProfileAsync(tx, token, "R98 Member", "1", "0300", TimeProvider.System, CancellationToken.None);
+        await MembershipCommands.RecordAcceptedRegistrationAsync(tx, token, 98001, CancellationToken.None);
+        await tx.ExecuteAsync($"insert into notifications.user_devices (token, device_id) values ({token}, {"dev-98-" + token})", CancellationToken.None);
+        var announcement = new Announcement("R98 title", "R98 body", "/r98", "r98_type", "k98-four", [token]);
+        Assert.That(await NotificationsCommands.AnnounceCountedAsync(tx, announcement, CancellationToken.None), Is.EqualTo(new AnnounceResult(1, 1)));
+        Assert.That(await PlatformCommands.QueueMessagesAsync(tx, "push", ["r98-direct"], """{"title":"t"}""", "k98-direct", null, CancellationToken.None), Is.EqualTo(1));
+        return token;
+    }
+
+    // Read on a fresh connection each time, so only committed rows count.
+    private static async Task<FourDomainRows> FourDomainRowsAsync(int token) =>
+        new(
+            await TestDatabase.ScalarAsync<long>($"select count(*) from identity.users where token = {token}", TestDatabase.OwnerConnection),
+            await TestDatabase.ScalarAsync<long>($"select count(*) from membership.member_profiles where name = 'R98 Member'", TestDatabase.OwnerConnection),
+            await TestDatabase.ScalarAsync<long>($"select count(*) from membership.class_registrations where token = {token}", TestDatabase.OwnerConnection),
+            await TestDatabase.ScalarAsync<long>("select count(*) from notifications.notifications where title = 'R98 title'", TestDatabase.OwnerConnection),
+            await TestDatabase.ScalarAsync<long>($"select count(*) from notifications.user_notifications where user_token = {token}", TestDatabase.OwnerConnection),
+            await TestDatabase.ScalarAsync<long>("select count(*) from platform.outbound_messages where dedupe_key like 'k98-%'", TestDatabase.OwnerConnection),
+            await TestDatabase.ScalarAsync<long>(
+                $"select count(*) from platform.outbox where event_type in ('identity.member_created', 'membership.member_created') and (payload->>'token')::int = {token}",
+                TestDatabase.OwnerConnection));
+
+    private static Task DeleteFourDomainRowsAsync() =>
+        TestDatabase.ExecuteAsync(
+            $"""
+            delete from notifications.user_notifications where user_token >= {Anchor};
+            delete from notifications.notifications where title = 'R98 title';
+            delete from notifications.user_devices where token >= {Anchor};
+            delete from platform.outbound_messages where dedupe_key like 'k98-%';
+            """);
+
+    // TC-CMD-R1-01: the converted-caller path. The caller holds its own DbTx and has no Entity Framework at all.
+    [Test]
+    public async Task An_owned_DbTx_commits_commands_of_four_domains_together()
+    {
+        await CreateAnchorAsync();
+        try
+        {
+            var source = factory.Services.GetRequiredService<NpgsqlDataSource>();
+            int token;
+            await using (var tx = await source.BeginAsync(CancellationToken.None))
+            {
+                token = await RunFourDomainCommandsAsync(tx);
+                Assert.That(await FourDomainRowsAsync(token), Is.EqualTo(new FourDomainRows(0, 0, 0, 0, 0, 0, 0)), "nothing is visible to others before the commit");
+                await tx.CommitAsync(CancellationToken.None);
+            }
+
+            Assert.That(await FourDomainRowsAsync(token), Is.EqualTo(new FourDomainRows(1, 1, 1, 1, 1, 2, 2)));
+        }
+        finally
+        {
+            await DeleteFourDomainRowsAsync();
+            await DeleteMembershipRowsAsync();
+            await DeleteMembersAsync();
+        }
+    }
+
+    // TC-CMD-R3-05: the same commands, the owned transaction disposed with no commit.
+    [Test]
+    public async Task An_owned_DbTx_disposed_without_a_commit_keeps_none_of_the_four_domains_writes()
+    {
+        await CreateAnchorAsync();
+        try
+        {
+            var source = factory.Services.GetRequiredService<NpgsqlDataSource>();
+            int token;
+            await using (var tx = await source.BeginAsync(CancellationToken.None))
+            {
+                token = await RunFourDomainCommandsAsync(tx);
+                Assert.That(
+                    await tx.ScalarAsync<long>($"select count(*) from platform.outbox where (payload->>'token')::int = {token}", CancellationToken.None),
+                    Is.EqualTo(2),
+                    "the commands wrote inside the transaction");
+            }
+
+            Assert.That(await FourDomainRowsAsync(token), Is.EqualTo(new FourDomainRows(0, 0, 0, 0, 0, 0, 0)));
+        }
+        finally
+        {
+            await DeleteFourDomainRowsAsync();
+            await DeleteMembershipRowsAsync();
+            await DeleteMembersAsync();
+        }
+    }
+
+    private static readonly string SlowTriggerSql =
+        $"""
+        create or replace function public.slow_users_98() returns trigger language plpgsql as $$ begin perform pg_sleep(2); return new; end $$;
+        create trigger slow_users_98 before insert on identity.users for each row when (new.token > {Anchor}) execute function public.slow_users_98();
+        """;
+
+    private static async Task CleanUpCancelledAsync()
+    {
+        await TestDatabase.ExecuteAsync("drop trigger if exists slow_users_98 on identity.users; drop function if exists public.slow_users_98()");
+        await TestDatabase.ExecuteAsync("delete from platform.outbound_messages where dedupe_key like 'k98-%'");
+        await DeleteMembersAsync();
+    }
+
+    // Starts the command, waits until the database is inside the held insert (the trigger's pg_sleep), and only then cancels.
+    // So the cancel always lands in a running statement, whatever the speed of the machine. Returns what the caller sees.
+    private static async Task<Exception> CancelWhileTheInsertRunsAsync(Func<CancellationToken, Task> command)
+    {
+        using var cancelling = new CancellationTokenSource();
+        var running = command(cancelling.Token);
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (!running.IsCompleted)
+        {
+            var sleeping = await TestDatabase.ScalarAsync<long>(
+                "select count(*) from pg_stat_activity where wait_event = 'PgSleep' and query like 'insert into identity.users%'",
+                TestDatabase.OwnerConnection);
+            if (sleeping > 0)
+            {
+                break;
+            }
+
+            Assert.That(DateTime.UtcNow, Is.LessThan(deadline), "the held insert never started");
+            await Task.Delay(20);
+        }
+
+        Assert.That(running.IsCompleted, Is.False, "the command finished before the cancel, so nothing was held");
+        cancelling.Cancel();
+        return await Assert.CatchAsync(() => running.WaitAsync(TimeSpan.FromSeconds(10)));
+    }
+
+    // A cancelled RUNNING statement: Npgsql throws OperationCanceledException whose inner exception is the database's own 57014 (query cancelled).
+    private static void AssertCancelledInsideTheStatement(Exception thrown)
+    {
+        Assert.That(thrown, Is.InstanceOf<OperationCanceledException>());
+        Assert.That(thrown.InnerException, Is.InstanceOf<PostgresException>(), "the database's own cancellation, not a token seen before the statement");
+        Assert.That(((PostgresException)thrown.InnerException!).SqlState, Is.EqualTo(PostgresErrorCodes.QueryCanceled));
+    }
+
+    private static async Task AssertNoWritesOfTheCancelledCommandAsync()
+    {
+        Assert.That(await TestDatabase.ScalarAsync<long>("select count(*) from platform.outbound_messages where dedupe_key like 'k98-cancel:%'", TestDatabase.OwnerConnection), Is.Zero, "the write before the cancelled command");
+        Assert.That(await TestDatabase.ScalarAsync<long>($"select count(*) from identity.users where token > {Anchor}", TestDatabase.OwnerConnection), Is.Zero, "the user");
+        Assert.That(
+            await TestDatabase.ScalarAsync<long>("select count(*) from platform.outbox where event_type = 'identity.member_created' and (payload->>'token')::int > " + Anchor, TestDatabase.OwnerConnection),
+            Is.Zero,
+            "the event");
+    }
+
+    // TC-CMD-R6-01 on an owned DbTx: the cancel is sent once the database is inside CreateMemberAsync's insert, held 2 s by a trigger.
+    // The command has four statements (lock, read, insert, event); the cancel lands in the third.
+    [Test]
+    public async Task A_cancelled_command_keeps_none_of_its_writes()
+    {
+        await CreateAnchorAsync();
+        await TestDatabase.ExecuteAsync(SlowTriggerSql);
+        try
+        {
+            var source = factory.Services.GetRequiredService<NpgsqlDataSource>();
+            var tx = await source.BeginAsync(CancellationToken.None);
+            try
+            {
+                await PlatformCommands.QueueMessagesAsync(tx, "push", ["r98-cancel"], """{"title":"t"}""", "k98-cancel", null, CancellationToken.None);
+
+                var thrown = await CancelWhileTheInsertRunsAsync(ct => IdentityCommands.CreateMemberAsync(tx, TimeProvider.System, ct));
+
+                AssertCancelledInsideTheStatement(thrown);
+            }
+            finally
+            {
+                await tx.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(10));
+            }
+
+            await AssertNoWritesOfTheCancelledCommandAsync();
+            await using var after = await source.BeginAsync(CancellationToken.None);
+            Assert.That(await after.ScalarAsync<int>($"select 1", CancellationToken.None), Is.EqualTo(1), "the pool serves a new transaction");
+        }
+        finally
+        {
+            await CleanUpCancelledAsync();
+        }
+    }
+
+    // TC-CMD-R6-01 on the bridge path every production caller uses: the command joins the context's transaction, the cancel lands inside it,
+    // the caller rolls back its Entity Framework transaction, and the context can begin another. The plan names CreateMemberAsync (four
+    // statements, the third held by the trigger), the same command as the test above.
+    [Test]
+    public async Task A_cancelled_command_on_a_joined_Entity_Framework_transaction_keeps_none_of_its_writes_after_the_caller_rolls_back()
+    {
+        await CreateAnchorAsync();
+        await TestDatabase.ExecuteAsync(SlowTriggerSql);
+        try
+        {
+            await using var scope = factory.Services.CreateAsyncScope();
+            var context = scope.ServiceProvider.GetRequiredService<ClassesContext>();
+            await using (var transaction = await context.Database.BeginTransactionAsync())
+            {
+                var tx = EfTransaction.Join(context);
+                await PlatformCommands.QueueMessagesAsync(tx, "push", ["r98-cancel"], """{"title":"t"}""", "k98-cancel", null, CancellationToken.None);
+
+                var thrown = await CancelWhileTheInsertRunsAsync(ct => IdentityCommands.CreateMemberAsync(tx, TimeProvider.System, ct));
+
+                AssertCancelledInsideTheStatement(thrown);
+                await transaction.RollbackAsync().WaitAsync(TimeSpan.FromSeconds(10));
+            }
+
+            await AssertNoWritesOfTheCancelledCommandAsync();
+            await using var next = await context.Database.BeginTransactionAsync();
+            Assert.That(
+                await EfTransaction.Join(context).ScalarAsync<int>($"select 1", CancellationToken.None),
+                Is.EqualTo(1),
+                "the context begins a new transaction and runs a statement on it");
+            await next.RollbackAsync();
+        }
+        finally
+        {
+            await CleanUpCancelledAsync();
+        }
     }
 }

@@ -75,7 +75,7 @@ Platform-owned tables (no domain): `outbox`, `outbound_messages` (PHP's `schema_
    still go through `access` in C#. Other uses go through the listed public interface or events. A view is a contract: change
    one with its readers. List every dependency in `<Context>Module.Dependencies`. `hosts/api/tests/SqlBoundaryTests.cs` scans every domain's, `shared/` and `hosts/` SQL literals (quoted names too). It cannot see a name built from variables: review that.
 3. Commands write only this domain's tables. A cross-domain write is a published command of the owner (D2): a public static method
-   in the owning domain, run on the caller's connection and transaction (planned shape, e.g. `MembershipCommands.RecordAcceptedRegistrationAsync`; each is built by the batch that first needs it).
+   in the owning domain, run on the caller's transaction: it takes the caller's `DbTx` (e.g. `MembershipCommands.RecordAcceptedRegistrationAsync(tx, ...)`). A converted caller passes its own `DbTx`. A caller still on Entity Framework passes `EfTransaction.Join(db)`, which throws unless `db` has an open transaction; a project with the AOT analyzer on cannot call it (build error IL2026). `PlatformCommands.RecordAdminAccessAsync` and the five commands of `PlatformCommands.Queue.cs` still take the Entity Framework context and are called outside a transaction.
 4. Every member handler: caller present (401) → `access` allows it (403) → validate (422) → act.
    A **public read** (no sign-in, e.g. `GET /articles`) skips the caller and `access` checks; its
    query must return only public data (e.g. only published articles), so no client or the site can
@@ -84,7 +84,7 @@ Platform-owned tables (no domain): `outbox`, `outbound_messages` (PHP's `schema_
 6. Interfaces only at external boundaries (DB, HTTP, FCM, Firebase). No repository layer, no handler class, no mapping layer (D3).
    A helper moves to `domain/` only when two slices use it; the PHP-emulation helpers (`PhpValue`, `PhpText`, `JsonBody`) are in `shared/api` (D4).
    PHP is the oracle (D6): a slice is done when its Hurl file passes on PHP and on the new API.
-   **An unconverted domain** reads with `SqlQuery<T>` and writes with EF entities or `ExecuteSql`, as before.
+   **An unconverted domain** reads with `SqlQuery<T>` and writes with EF entities or `ExecuteSql`, as before; its published commands that run on a `DbTx` (rule 3) use the shared helpers below even while the rest of the domain is unconverted.
    **A converted domain** uses no Entity Framework at run time. Its context and migrations stay (the schema is still made by them); the context is registered
    for the JIT host and the migrate job only, not for the API's request path (`AddDomainContext` and `MigrateDatabasesAsync` in `shared/api/DomainContexts.cs` are marked JIT only; a separate `Add<Context>Migrations()` for this is planned, not built).
    SQL is an interpolated string given to `Sql` (`shared/api/Sql.cs`), never built by hand and never a `$$"` string.

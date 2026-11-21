@@ -34,10 +34,10 @@ Tables, keys and the **wall-clock columns** (`send_at`, `send_time`: read in the
 
 ## Published commands
 
-- `NotificationsCommands.AnnounceAsync(db, Announcement, ct)`, on the caller's open transaction; nothing is sent here: the push drain worker below sends what is queued, in worker mode only, and neither it nor the class schedule worker has been verified against real FCM. It queues one push per device (deduped by the caller's key), then writes the inbox copy. The push is queued first because PHP sends (queues) before it records, and the counts kept on the notification need the queue's answer. The fields of `Announcement` (`Tokens` null is every registered member) are described on the record in `api/NotificationsCommands.cs`. `AnnounceCountedAsync` is the same and answers `AnnounceResult(Devices, Queued)`; `AnnounceAsync` returns `Queued`.
+- `NotificationsCommands.AnnounceAsync(tx, Announcement, ct)`, on the caller's `DbTx`; nothing is sent here: the push drain worker below sends what is queued, in worker mode only, and neither it nor the class schedule worker has been verified against real FCM. It queues one push per device (deduped by the caller's key), then writes the inbox copy. The push is queued first because PHP sends (queues) before it records, and the counts kept on the notification need the queue's answer. The fields of `Announcement` (`Tokens` null is every registered member) are described on the record in `api/NotificationsCommands.cs`. `AnnounceCountedAsync` is the same and answers `AnnounceResult(Devices, Queued)`; `AnnounceAsync` returns `Queued`.
 - Callers: assessment's quiz settings refresh (defaults), assessment's quiz publish, classes' `POST /reports/pending/nudge`.
-- `NotificationsCommands.LastNudgeAsync(db, teacher, hours)`: the newest `CC_NUDGE` notification to a teacher.
-- `NotificationsErasure.EraseDevicesAsync` and `EraseEventSettingsAsync(db, token, ct)`: identity's deletion completion calls them, inside its transaction. The events a member created stay (PHP keeps them).
+- `NotificationsCommands.LastNudgeAsync(tx, teacher, hours, ct)`: the newest `CC_NUDGE` notification to a teacher.
+- `NotificationsErasure.EraseDevicesAsync` and `EraseEventSettingsAsync(tx, token, ct)`: identity's deletion completion calls them, inside its transaction. The events a member created stay (PHP keeps them).
 
 ## Push and settings
 
