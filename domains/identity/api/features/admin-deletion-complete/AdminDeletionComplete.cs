@@ -243,7 +243,7 @@ internal static class AdminDeletionCompleteSlice
         recipients.AddRange(await NotificationsErasure.EraseDevicesAsync(tx, token, ct));
         await NotificationsErasure.EraseEventSettingsAsync(tx, token, ct);
         await PlatformCommands.RedactRecipientsAsync(tx, recipients, ct);
-        await memberErasure.EraseAsync(db, token, ct);
+        await memberErasure.EraseAsync(tx, token, ct);
 
         // The anonymised row: id, token, role, created-on and provider stay (attendance and quiz rows key on the token). The address is unique per member and ends .invalid (RFC 2606).
         var placeholder = $"deleted-{token}@deleted.invalid";

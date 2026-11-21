@@ -16,14 +16,6 @@ public sealed partial class PublishedCommandTests
     /// </summary>
     private static readonly string[] NotConvertedYet =
     [
-        "IdentityCommands.ChangeEmailAsync(DbContext, Int32, String, TimeProvider, CancellationToken)",
-        "IdentityCommands.CreateMemberAsync(DbContext, TimeProvider, CancellationToken)",
-        "IdentityCommands.EmailTakenAsync(DbContext, Int32, String, CancellationToken)",
-        "IMemberErasure.EraseAsync(DbContext, Int32, CancellationToken)",
-        "MembershipCommands.ChangeContactAsync(DbContext, Int32, String, String, TimeProvider, CancellationToken)",
-        "MembershipCommands.CreateProfileAsync(DbContext, Int32, String, String, String, TimeProvider, CancellationToken)",
-        "MembershipCommands.EraseMemberAsync(DbContext, Int32, CancellationToken)",
-        "MembershipCommands.RecordAcceptedRegistrationAsync(DbContext, Int32, Int32, CancellationToken)",
         "PlatformCommands.ClaimMessagesAsync(DbContext, String, Int32, DateTimeOffset, CancellationToken)",
         "PlatformCommands.MarkDeadAsync(DbContext, Int64, Int32, String, CancellationToken)",
         "PlatformCommands.MarkFailedAsync(DbContext, Int64, Int32, String, DateTimeOffset, CancellationToken)",
@@ -47,9 +39,9 @@ public sealed partial class PublishedCommandTests
     }
 
     [Test]
-    public void The_list_of_entries_still_allowed_has_14_entries()
+    public void The_list_of_entries_still_allowed_has_6_entries()
     {
-        Assert.That(NotConvertedYet, Has.Length.EqualTo(14));
+        Assert.That(NotConvertedYet, Has.Length.EqualTo(6));
     }
 
     private const BindingFlags Declared = BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly;

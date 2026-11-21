@@ -252,8 +252,9 @@ internal static class ClassStudentsBulkSlice
 
     private static async Task<int> CreateMemberAsync(ClassesContext db, TimeProvider clock, int classGender, BulkLines.Step step, CancellationToken ct)
     {
-        var token = await IdentityCommands.CreateMemberAsync(db, clock, ct);
-        await MembershipCommands.CreateProfileAsync(db, token, step.Name, classGender.ToString(System.Globalization.CultureInfo.InvariantCulture), step.Mobile, clock, ct);
+        var tx = EfTransaction.Join(db);
+        var token = await IdentityCommands.CreateMemberAsync(tx, clock, ct);
+        await MembershipCommands.CreateProfileAsync(tx, token, step.Name, classGender.ToString(System.Globalization.CultureInfo.InvariantCulture), step.Mobile, clock, ct);
         return token;
     }
 

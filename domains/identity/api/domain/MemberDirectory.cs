@@ -2,6 +2,7 @@ using System.Data.Common;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Npgsql;
+using Tsr.Shared.Api;
 
 namespace Tsr.Identity.Api;
 
@@ -142,7 +143,7 @@ internal sealed partial class MemberDirectory(IdentityContext db, TimeProvider c
         try
         {
             await using var transaction = await db.Database.BeginTransactionAsync(ct);
-            var token = await TokenAllocation.NextAsync(db, ct);
+            var token = await TokenAllocation.NextAsync(EfTransaction.Join(db), ct);
             var user = new User
             {
                 Email = who.Email,

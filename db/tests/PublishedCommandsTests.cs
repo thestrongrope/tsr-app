@@ -3,6 +3,9 @@ using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using NUnit.Framework;
+using Tsr.Classes.Api;
+using Tsr.Identity.Api;
+using Tsr.Membership.Api;
 using Tsr.Notifications.Api;
 using Tsr.Platform.Api;
 using Tsr.Shared.Api;
@@ -244,5 +247,218 @@ public sealed class PublishedCommandsTests
                 delete from identity.users where token = {token};
                 """);
         }
+    }
+
+    // A synthetic member above every real token, so the token CreateMemberAsync allocates (the highest + 1) is 900000 or more.
+    private const int Anchor = 984310;
+
+    private static Task CreateAnchorAsync() =>
+        TestDatabase.ExecuteAsync($"insert into identity.users (token, email, firebase_uid) values ({Anchor}, 'm{Anchor}@example.invalid', 'uid-{Anchor}')");
+
+    private static Task DeleteMembersAsync() =>
+        TestDatabase.ExecuteAsync(
+            $"""
+            delete from platform.outbox where event_type in ('identity.member_created', 'identity.member_email_changed') and (payload->>'token')::int >= {Anchor};
+            delete from identity.users where token >= {Anchor};
+            """);
+
+    // TC-CMD-R3-01: identity's commands leave nothing behind when the caller rolls back.
+    [Test]
+    public async Task A_rollback_removes_the_member_the_new_email_and_both_events_of_identitys_commands()
+    {
+        await CreateAnchorAsync();
+        try
+        {
+            await using var scope = factory.Services.CreateAsyncScope();
+            var context = scope.ServiceProvider.GetRequiredService<ClassesContext>();
+            int token;
+            await using (var transaction = await context.Database.BeginTransactionAsync())
+            {
+                var tx = EfTransaction.Join(context);
+                token = await IdentityCommands.CreateMemberAsync(tx, TimeProvider.System, CancellationToken.None);
+                Assert.That(await IdentityCommands.ChangeEmailAsync(tx, token, $"new{token}@example.invalid", TimeProvider.System, CancellationToken.None), Is.True);
+                Assert.That(
+                    await tx.ScalarAsync<long>($"select count(*) from identity.users where email = {"new" + token + "@example.invalid"}", CancellationToken.None),
+                    Is.EqualTo(1),
+                    "the commands wrote inside the transaction");
+                await transaction.RollbackAsync();
+            }
+
+            Assert.That(await TestDatabase.ScalarAsync<long>($"select count(*) from identity.users where token = {token}", TestDatabase.OwnerConnection), Is.Zero, "the user and its new email");
+            Assert.That(
+                await TestDatabase.ScalarAsync<long>(
+                    $"select count(*) from platform.outbox where event_type in ('identity.member_created', 'identity.member_email_changed') and (payload->>'token')::int = {token}",
+                    TestDatabase.OwnerConnection),
+                Is.Zero,
+                "both events");
+        }
+        finally
+        {
+            await DeleteMembersAsync();
+        }
+    }
+
+    // CMD-R2 and R9: a commit keeps both events, and each stored payload is what the reflection serializer's bytes became in the jsonb column.
+    [Test]
+    public async Task A_commit_keeps_identitys_events_with_the_payload_the_old_code_stored()
+    {
+        await CreateAnchorAsync();
+        try
+        {
+            await using var scope = factory.Services.CreateAsyncScope();
+            var context = scope.ServiceProvider.GetRequiredService<ClassesContext>();
+            int token;
+            await using (var transaction = await context.Database.BeginTransactionAsync())
+            {
+                var tx = EfTransaction.Join(context);
+                token = await IdentityCommands.CreateMemberAsync(tx, TimeProvider.System, CancellationToken.None);
+                await IdentityCommands.ChangeEmailAsync(tx, token, $"new{token}@example.invalid", TimeProvider.System, CancellationToken.None);
+                await transaction.CommitAsync();
+            }
+
+            // The old code wrote JsonSerializer.Serialize(new Record(token), new JsonSerializerOptions(JsonSerializerDefaults.Web)) through the same jsonb insert.
+            var oldBytes = System.Text.Json.JsonSerializer.Serialize(new OldTokenPayload(token), OldOptions);
+            var oldStored = await TestDatabase.ScalarAsync<string>($"select '{oldBytes}'::jsonb::text", TestDatabase.OwnerConnection);
+            Assert.That(oldStored, Is.EqualTo($"{{\"token\": {token}}}"), "the old form, as jsonb stores it");
+            foreach (var type in new[] { "identity.member_created", "identity.member_email_changed" })
+            {
+                Assert.That(
+                    await TestDatabase.ScalarAsync<string>($"select payload::text from platform.outbox where event_type = '{type}' and (payload->>'token')::int = {token}", TestDatabase.OwnerConnection),
+                    Is.EqualTo(oldStored),
+                    type);
+            }
+
+            Assert.That(await TestDatabase.ScalarAsync<string>($"select email::text from identity.users where token = {token}", TestDatabase.OwnerConnection), Is.EqualTo($"new{token}@example.invalid"));
+        }
+        finally
+        {
+            await DeleteMembersAsync();
+        }
+    }
+
+    private static readonly System.Text.Json.JsonSerializerOptions OldOptions = new(System.Text.Json.JsonSerializerDefaults.Web);
+
+    private sealed record OldTokenPayload(int Token);
+
+    private sealed record OldContactPayload(int Token, bool NameChanged);
+
+    private static Task DeleteMembershipRowsAsync() =>
+        TestDatabase.ExecuteAsync(
+            $"""
+            delete from platform.outbox where event_type in ('membership.member_created', 'membership.member_contact_changed') and (payload->>'token')::int >= {Anchor};
+            delete from membership.class_registrations where token >= {Anchor};
+            delete from membership.member_profiles where user_id in (select id from identity.users where token >= {Anchor});
+            """);
+
+    // TC-CMD-R3-02: membership's commands leave nothing behind when the caller rolls back.
+    [Test]
+    public async Task A_rollback_removes_the_profile_the_new_name_the_request_and_both_events_of_membership_commands()
+    {
+        await CreateAnchorAsync();
+        try
+        {
+            await using var scope = factory.Services.CreateAsyncScope();
+            var context = scope.ServiceProvider.GetRequiredService<ClassesContext>();
+            int token;
+            await using (var transaction = await context.Database.BeginTransactionAsync())
+            {
+                var tx = EfTransaction.Join(context);
+                token = await IdentityCommands.CreateMemberAsync(tx, TimeProvider.System, CancellationToken.None);
+                await MembershipCommands.CreateProfileAsync(tx, token, "R98 Member", "1", "0300", TimeProvider.System, CancellationToken.None);
+                await MembershipCommands.ChangeContactAsync(tx, token, "R98 Renamed", "0311", TimeProvider.System, CancellationToken.None);
+                await MembershipCommands.RecordAcceptedRegistrationAsync(tx, token, 98001, CancellationToken.None);
+                Assert.That(
+                    await tx.ScalarAsync<long>($"select count(*) from membership.member_profiles where name = 'R98 Renamed' and mobile = '0311'", CancellationToken.None),
+                    Is.EqualTo(1),
+                    "the commands wrote inside the transaction");
+                await transaction.RollbackAsync();
+            }
+
+            Assert.That(await TestDatabase.ScalarAsync<long>("select count(*) from membership.member_profiles where name like 'R98 %'", TestDatabase.OwnerConnection), Is.Zero, "the profile and its new name");
+            Assert.That(await TestDatabase.ScalarAsync<long>($"select count(*) from membership.class_registrations where token = {token}", TestDatabase.OwnerConnection), Is.Zero, "the request");
+            Assert.That(
+                await TestDatabase.ScalarAsync<long>(
+                    $"select count(*) from platform.outbox where event_type in ('membership.member_created', 'membership.member_contact_changed') and (payload->>'token')::int = {token}",
+                    TestDatabase.OwnerConnection),
+                Is.Zero,
+                "both events");
+        }
+        finally
+        {
+            await DeleteMembershipRowsAsync();
+            await DeleteMembersAsync();
+        }
+    }
+
+    // CMD-R2 and R9: a commit keeps the rows and the events, each stored payload is what the old code's bytes became in the jsonb column.
+    [Test]
+    public async Task A_commit_keeps_membership_rows_and_events_with_the_payload_the_old_code_stored()
+    {
+        await CreateAnchorAsync();
+        try
+        {
+            await using var scope = factory.Services.CreateAsyncScope();
+            var context = scope.ServiceProvider.GetRequiredService<ClassesContext>();
+            int token;
+            await using (var transaction = await context.Database.BeginTransactionAsync())
+            {
+                var tx = EfTransaction.Join(context);
+                token = await IdentityCommands.CreateMemberAsync(tx, TimeProvider.System, CancellationToken.None);
+                await MembershipCommands.CreateProfileAsync(tx, token, "R98 Member", "1", "0300", TimeProvider.System, CancellationToken.None);
+                await MembershipCommands.ChangeContactAsync(tx, token, "R98 Renamed é", "0311", TimeProvider.System, CancellationToken.None);
+                await MembershipCommands.ChangeContactAsync(tx, token, null, "0322", TimeProvider.System, CancellationToken.None);
+                await MembershipCommands.RecordAcceptedRegistrationAsync(tx, token, 98001, CancellationToken.None);
+                await MembershipCommands.RecordAcceptedRegistrationAsync(tx, token, 98002, CancellationToken.None);
+                await transaction.CommitAsync();
+            }
+
+            var profile = await TestDatabase.RowAsync($"select name::text as name, mobile::text as mobile from membership.member_profiles where user_id in (select id from identity.users where token = {token})");
+            Assert.That(profile, Is.EqualTo(new Dictionary<string, string?> { ["name"] = "R98 Renamed é", ["mobile"] = "0322" }), "a null name leaves the name, the mobile is overwritten");
+            Assert.That(
+                await TestDatabase.RowAsync($"select for_classid::text as c, status::text as s from membership.class_registrations where token = {token}"),
+                Is.EqualTo(new Dictionary<string, string?> { ["c"] = "98001", ["s"] = "Accepted" }),
+                "a member with a request is left alone");
+
+            var created = await OldStoredAsync(new OldTokenPayload(token));
+            var renamed = await OldStoredAsync(new OldContactPayload(token, true));
+            var kept = await OldStoredAsync(new OldContactPayload(token, false));
+            Assert.Multiple(async () =>
+            {
+                Assert.That(await EventPayloadAsync("membership.member_created", token, null), Is.EqualTo(created));
+                Assert.That(await EventPayloadAsync("membership.member_contact_changed", token, true), Is.EqualTo(renamed));
+                Assert.That(await EventPayloadAsync("membership.member_contact_changed", token, false), Is.EqualTo(kept));
+            });
+        }
+        finally
+        {
+            await DeleteMembershipRowsAsync();
+            await DeleteMembersAsync();
+        }
+    }
+
+    private static async Task<string> OldStoredAsync<T>(T payload)
+    {
+        var oldBytes = System.Text.Json.JsonSerializer.Serialize(payload, OldOptions);
+        return await TestDatabase.ScalarAsync<string>($"select '{oldBytes}'::jsonb::text", TestDatabase.OwnerConnection);
+    }
+
+    private static Task<string> EventPayloadAsync(string type, int token, bool? nameChanged)
+    {
+        var filter = nameChanged is null ? string.Empty : $" and payload->>'nameChanged' = '{(nameChanged.Value ? "true" : "false")}'";
+        return TestDatabase.ScalarAsync<string>($"select payload::text from platform.outbox where event_type = '{type}' and (payload->>'token')::int = {token}{filter}", TestDatabase.OwnerConnection);
+    }
+
+    // TC-CMD-R5-03: a command on a committed owned transaction writes nothing.
+    [Test]
+    public async Task A_command_on_a_committed_transaction_writes_nothing()
+    {
+        const int token = 984320;
+        var source = factory.Services.GetRequiredService<NpgsqlDataSource>();
+        await using var tx = await source.BeginAsync(CancellationToken.None);
+        await tx.CommitAsync(CancellationToken.None);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => MembershipCommands.RecordAcceptedRegistrationAsync(tx, token, 98001, CancellationToken.None));
+
+        Assert.That(await TestDatabase.ScalarAsync<long>($"select count(*) from membership.class_registrations where token = {token}", TestDatabase.OwnerConnection), Is.Zero);
     }
 }
