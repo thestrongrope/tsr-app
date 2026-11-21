@@ -226,4 +226,18 @@ run "$NOLEC" "$DEST" || status=$?
 [ "$status" = 2 ] || fail "case 12: a file that is not JSON gave exit code $status, expected 2"
 [ "$(listing "$DEST")" = "$before" ] || fail "case 12: the destination changed after a bad file"
 echo "ok 12: the lectures are trimmed to eight keys, a missing or broken file is refused, destination unchanged"
-echo "content import proven: 12 cases"
+# Case 13: a text file written with CRLF line endings arrives with LF only (the repository stores LF, so a CRLF copy would show as modified with no change in it); a file with LF arrives byte for byte.
+CRLF="$WORK/crlf"
+cp -R "$SRC" "$CRLF"
+printf -- '---\r\ntitle: T\r\nslug: windows\r\nstatus: publish\r\n---\r\nBody.\r\n' > "$CRLF/articles/windows.md"
+printf -- '---\r\ntitle: C\r\n---\r\n' > "$CRLF/categories/windows.md"
+printf -- '---\r\ntitle: W\r\n---\r\nLine one.\r\nLine two.\r\n' > "$CRLF/pages/windows.md"
+run "$CRLF" "$DEST" || fail "case 13: exit code $?"
+for copied in articles/windows.md categories/windows.md pages/windows.md; do
+  [ -f "$DEST/$copied" ] || fail "case 13: $copied was not copied"
+  if LC_ALL=C grep -q "$(printf '\r')" "$DEST/$copied"; then fail "case 13: $copied still holds a carriage return"; fi
+done
+[ "$(cat "$DEST/pages/windows.md")" = "$(printf -- '---\ntitle: W\n---\nLine one.\nLine two.')" ] || fail "case 13: the page's text changed: $(cat "$DEST/pages/windows.md")"
+cmp -s "$CRLF/articles/published-bare.md" "$DEST/articles/published-bare.md" || fail "case 13: a file with LF endings did not arrive byte for byte"
+echo "ok 13: CRLF line endings arrive as LF, an LF file arrives unchanged"
+echo "content import proven: 13 cases"
