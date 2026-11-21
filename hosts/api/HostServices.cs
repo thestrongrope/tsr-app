@@ -7,6 +7,7 @@ using Tsr.Membership.Api;
 using Tsr.Notifications.Api;
 using Tsr.Platform.Api;
 using Tsr.Search.Api;
+using Tsr.Shared.Api;
 
 namespace Tsr.Host.Api;
 
@@ -36,6 +37,7 @@ public static class HostServices
             services.AddIdentity(environment, configuration);
         }
 
+        services.AddTsrDataSource();
         services.AddAccess();
         services.AddPlatform();
         services.AddMembership();

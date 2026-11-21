@@ -17,7 +17,7 @@ public static partial class DomainContexts
     /// <summary>The limited database role the API connects as. Created by infrastructure (db/init/01-app-role.sql locally).</summary>
     public const string AppRole = "tsr_app";
 
-    private const int TimeoutSeconds = 5;
+    internal const int TimeoutSeconds = 5;
     private const int MigrationTimeoutSeconds = 300;
 
     /// <summary>

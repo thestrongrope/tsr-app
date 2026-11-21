@@ -40,6 +40,10 @@ public sealed class DbRow
 
     public long? LongOrNull(string column) => OrNullValue<long>(column);
 
+    public short Short(string column) => Required<short>(column);
+
+    public short? ShortOrNull(string column) => OrNullValue<short>(column);
+
     public bool Bool(string column) => Required<bool>(column);
 
     public bool? BoolOrNull(string column) => OrNullValue<bool>(column);
@@ -59,6 +63,16 @@ public sealed class DbRow
     public int[] IntArray(string column) => Required<int[]>(column);
 
     public Guid Guid(string column) => Required<Guid>(column);
+
+    /// <summary>
+    /// Whether a column of this .NET type and database type name is read as <paramref name="wanted"/>. Exact type only, so an int column is not
+    /// quietly read as a long, with two exceptions Npgsql forces: it reports timestamptz as DateTime and arrays as Array.
+    /// </summary>
+    internal static bool Accepts(Type fieldType, string dataTypeName, Type wanted) =>
+        fieldType == wanted
+        || (wanted == typeof(DateTimeOffset) && fieldType == typeof(DateTime) && dataTypeName == "timestamp with time zone")
+        || (wanted == typeof(string[]) && fieldType == typeof(Array) && dataTypeName is "text[]" or "character varying[]" or "public.citext[]")
+        || (wanted == typeof(int[]) && fieldType == typeof(Array) && dataTypeName == "integer[]");
 
     internal void Begin()
     {
@@ -103,7 +117,7 @@ public sealed class DbRow
         }
     }
 
-    private int Claim(string column)
+    private int Claim<T>(string column)
     {
         if (_ordinals is null || !_ordinals.TryGetValue(column, out var ordinal))
         {
@@ -115,6 +129,12 @@ public sealed class DbRow
             throw Shape($"column '{column}' was read twice");
         }
 
+        // Once per column, on the first row and whatever the value, so a null first value cannot hide a wrongly typed column.
+        if (_rowNumber == 1 && !Accepts(_reader.GetFieldType(ordinal), _reader.GetDataTypeName(ordinal), typeof(T)))
+        {
+            throw Shape($"column '{column}' is of type {_reader.GetFieldType(ordinal).Name} but the row reader reads {typeof(T).Name}");
+        }
+
         _seen[ordinal] = true;
         _readCount++;
         return ordinal;
@@ -122,38 +142,38 @@ public sealed class DbRow
 
     private T Required<T>(string column)
     {
-        var ordinal = Claim(column);
+        var ordinal = Claim<T>(column);
         if (_reader.IsDBNull(ordinal))
         {
             throw Shape($"column '{column}' is null; read it with an OrNull reader if null is allowed");
         }
 
-        return Value<T>(column, ordinal);
+        return Value<T>(ordinal);
     }
 
     private T? OrNull<T>(string column)
         where T : class
     {
-        var ordinal = Claim(column);
-        return _reader.IsDBNull(ordinal) ? null : Value<T>(column, ordinal);
+        var ordinal = Claim<T>(column);
+        return _reader.IsDBNull(ordinal) ? null : Value<T>(ordinal);
     }
 
     private T? OrNullValue<T>(string column)
         where T : struct
     {
-        var ordinal = Claim(column);
-        return _reader.IsDBNull(ordinal) ? null : Value<T>(column, ordinal);
+        var ordinal = Claim<T>(column);
+        return _reader.IsDBNull(ordinal) ? null : Value<T>(ordinal);
     }
 
-    private T Value<T>(string column, int ordinal)
+    private T Value<T>(int ordinal)
     {
         try
         {
             return _reader.GetFieldValue<T>(ordinal);
         }
-        catch (InvalidCastException e)
+        catch (InvalidCastException cast)
         {
-            throw Shape($"column '{column}' is of type {_reader.GetFieldType(ordinal).Name} but the row reader reads {typeof(T).Name}", e);
+            throw Shape($"column '{_reader.GetName(ordinal)}' could not be read as {typeof(T).Name}: {cast.Message}", cast);
         }
     }
 

@@ -1,3 +1,5 @@
+using Microsoft.Extensions.DependencyInjection;
+using Npgsql;
 using NpgsqlTypes;
 using NUnit.Framework;
 
@@ -9,6 +11,8 @@ namespace Tsr.Shared.Api.Tests;
 /// </summary>
 public sealed class SqlTests
 {
+    private static readonly string[] AllowedStrings = ["file", "member", "eventType"];
+
     [Test]
     public void A_DateTime_hole_is_a_compile_error()
     {
@@ -136,5 +140,76 @@ public sealed class SqlTests
             Assert.That(sql.Text, Is.EqualTo("select 1"));
             Assert.That(sql.Parameters, Is.Empty);
         });
+    }
+
+    // TC-AOT-R8-02
+    [Test]
+    public void No_public_db_helper_takes_a_string_as_sql()
+    {
+        const System.Reflection.BindingFlags all = System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance
+            | System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.DeclaredOnly;
+        var methods = new[] { typeof(Db), typeof(DbTx), typeof(Outbox) }
+            .SelectMany(t => t.GetMethods(all))
+            .Where(m => !m.IsSpecialName)
+            .ToList();
+
+        Assert.That(methods, Is.Not.Empty);
+        foreach (var method in methods)
+        {
+            var parameters = method.GetParameters();
+            var strings = parameters.Where(p => p.ParameterType == typeof(string)).Select(p => p.Name).ToList();
+            Assert.That(strings, Is.SubsetOf(AllowedStrings), method.Name);
+            Assert.That(parameters.Where(p => p.ParameterType == typeof(FormattableString)), Is.Empty, method.Name);
+        }
+
+        var sqlTakers = methods.Where(m => m.DeclaringType != typeof(Outbox) && m.Name is "ListAsync" or "ScalarAsync" or "ExecuteAsync");
+        Assert.That(sqlTakers.All(m => m.GetParameters().Any(p => p.ParameterType == typeof(Sql))), Is.True);
+        var tx = methods.Where(m => m.DeclaringType == typeof(Outbox) && m.GetParameters()[0].ParameterType == typeof(DbTx));
+        Assert.That(tx, Is.Not.Empty);
+    }
+
+    [Test]
+    public void A_short_hole_is_a_smallint_parameter()
+    {
+        short? none = null;
+
+        Sql sql = $"{(short)7} {none}";
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(sql.Parameters[0].NpgsqlDbType, Is.EqualTo(NpgsqlDbType.Smallint));
+            Assert.That(sql.Parameters[0].Value, Is.EqualTo((short)7));
+            Assert.That(sql.Parameters[1].NpgsqlDbType, Is.EqualTo(NpgsqlDbType.Smallint));
+            Assert.That(sql.Parameters[1].Value, Is.EqualTo(DBNull.Value));
+        });
+    }
+
+    [Test]
+    public void AddTsrDataSource_caps_the_pool_keeps_the_timeouts_and_registers_one_data_source()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton(new DbSettings("Host=db.invalid;Database=synthetic;Username=nobody;Password=none"));
+
+        services.AddTsrDataSource().AddTsrDataSource();
+
+        Assert.That(services.Count(d => d.ServiceType == typeof(NpgsqlDataSource)), Is.EqualTo(1));
+        using var provider = services.BuildServiceProvider();
+        var connection = new NpgsqlConnectionStringBuilder(provider.GetRequiredService<NpgsqlDataSource>().ConnectionString);
+        Assert.Multiple(() =>
+        {
+            Assert.That(connection.MaxPoolSize, Is.EqualTo(20));
+            Assert.That(connection.Timeout, Is.EqualTo(DomainContexts.TimeoutSeconds));
+            Assert.That(connection.CommandTimeout, Is.EqualTo(DomainContexts.TimeoutSeconds));
+        });
+    }
+
+    [Test]
+    public async Task A_default_Sql_is_refused_with_an_argument_exception()
+    {
+        using var source = Npgsql.NpgsqlDataSource.Create("Host=unused");
+
+        await Assert.ThrowsAsync<ArgumentException>(() => source.ExecuteAsync(default, CancellationToken.None));
+        await Assert.ThrowsAsync<ArgumentException>(() => source.ScalarAsync<int>(default, CancellationToken.None));
+        await Assert.ThrowsAsync<ArgumentException>(() => source.ListAsync(default, r => r.Int("x"), CancellationToken.None));
     }
 }

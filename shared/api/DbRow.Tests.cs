@@ -77,6 +77,35 @@ public sealed class DbRowTests
         Assert.That(error.Message, Does.Contain("read 1 of 2 columns"));
     }
 
+    // The row reader reads in another order than the select lists the columns: each value still comes by name.
+    [Test]
+    public void Columns_are_read_by_name_whatever_the_order_of_the_select()
+    {
+        using var reader = Reader(("id", typeof(int), [1, 2]), ("title", typeof(string), ["a", "b"]), ("big", typeof(long), [10L, 20L]));
+
+        var rows = ReadAll(reader, r =>
+        {
+            var big = r.Long("big");
+            var title = r.Text("title");
+            var id = r.Int("id");
+            return (id, title, big);
+        });
+
+        Assert.That(rows, Is.EqualTo(new[] { (1, "a", 10L), (2, "b", 20L) }));
+    }
+
+    [Test]
+    public void A_smallint_reader_returns_the_value_and_null()
+    {
+        using var reader = Reader(("s", typeof(short), [(short)3, null]));
+
+        var rows = ReadAll(reader, r => r.ShortOrNull("s"));
+
+        Assert.That(rows, Is.EqualTo(new short?[] { 3, null }));
+        using var required = Reader(("s", typeof(short), [(short)4]));
+        Assert.That(ReadAll(required, r => r.Short("s")), Is.EqualTo(new[] { (short)4 }));
+    }
+
     [Test]
     public void A_column_read_twice_fails()
     {
@@ -166,5 +195,32 @@ public sealed class DbRowTests
         var error = Assert.Throws<DbShapeException>(() => ReadAll(reader, r => r.Int("id")))!;
 
         Assert.That(error.Message, Does.Contain("column 'id'").And.Contain("String").And.Contain("Int32"));
+    }
+
+    // A null in the first row must not hide a wrongly typed column: the type is checked once per column, on the first row, whatever the value.
+    [Test]
+    public void A_wrongly_typed_column_fails_even_when_its_first_value_is_null()
+    {
+        using var reader = Reader(("id", typeof(int), [null]));
+
+        var error = Assert.Throws<DbShapeException>(() => ReadAll(reader, r => r.LongOrNull("id")))!;
+
+        Assert.That(error.Message, Does.Contain("column 'id'").And.Contain("Int32").And.Contain("Int64"));
+    }
+
+    [Test]
+    public void The_database_types_npgsql_reports_under_another_name_are_accepted()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(DbRow.Accepts(typeof(DateTime), "timestamp with time zone", typeof(DateTimeOffset)), Is.True);
+            Assert.That(DbRow.Accepts(typeof(DateTime), "timestamp without time zone", typeof(DateTimeOffset)), Is.False);
+            Assert.That(DbRow.Accepts(typeof(Array), "text[]", typeof(string[])), Is.True);
+            Assert.That(DbRow.Accepts(typeof(Array), "character varying[]", typeof(string[])), Is.True);
+            Assert.That(DbRow.Accepts(typeof(Array), "public.citext[]", typeof(string[])), Is.True);
+            Assert.That(DbRow.Accepts(typeof(Array), "integer[]", typeof(int[])), Is.True);
+            Assert.That(DbRow.Accepts(typeof(Array), "integer[]", typeof(string[])), Is.False);
+            Assert.That(DbRow.Accepts(typeof(int), "integer", typeof(long)), Is.False);
+        });
     }
 }

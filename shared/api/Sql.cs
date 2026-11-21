@@ -24,6 +24,9 @@ public struct Sql
         _parameters = new List<NpgsqlParameter>(formattedCount);
     }
 
+    /// <summary>True for <c>default(Sql)</c>, which was not built from an interpolated string and holds no text.</summary>
+    internal readonly bool IsDefault => _text is null;
+
     internal readonly string Text => _text.ToString();
 
     internal readonly NpgsqlParameter[] Parameters => [.. _parameters];
@@ -31,6 +34,10 @@ public struct Sql
     public readonly void AppendLiteral(string value) => _text.Append(value);
 
     public readonly void AppendFormatted(string? value) => Add(NpgsqlDbType.Text, value);
+
+    public readonly void AppendFormatted(short value) => Add(NpgsqlDbType.Smallint, value);
+
+    public readonly void AppendFormatted(short? value) => Add(NpgsqlDbType.Smallint, value);
 
     public readonly void AppendFormatted(int value) => Add(NpgsqlDbType.Integer, value);
 
