@@ -46,6 +46,12 @@ is_published() {
   '
 }
 
+# copy_text <file> <folder>: copies one text file without its carriage returns. The website keeps some files with CRLF line endings and this
+# repository stores LF (.gitattributes), so a plain copy shows as modified in git with no change in it. Every other byte is kept.
+copy_text() {
+  tr -d '\r' < "$1" > "$2/$(basename "$1")"
+}
+
 STAGE="$(mktemp -d "$DEST_PARENT/.content-import.XXXXXX")"
 trap 'rm -rf "$STAGE"' EXIT
 mkdir -p "$STAGE/articles" "$STAGE/categories" "$STAGE/pages" "$STAGE/downloads" "$STAGE/lectures"
@@ -55,7 +61,7 @@ LEFT_OUT=0
 for file in "$SRC"/articles/*.md; do
   [ -f "$file" ] && [ ! -L "$file" ] || continue
   if is_published < "$file"; then
-    cp "$file" "$STAGE/articles/"
+    copy_text "$file" "$STAGE/articles"
     ARTICLES=$((ARTICLES + 1))
   else
     LEFT_OUT=$((LEFT_OUT + 1))
@@ -65,7 +71,7 @@ done
 CATEGORIES=0
 for file in "$SRC"/categories/*.md; do
   [ -f "$file" ] && [ ! -L "$file" ] || continue
-  cp "$file" "$STAGE/categories/"
+  copy_text "$file" "$STAGE/categories"
   CATEGORIES=$((CATEGORIES + 1))
 done
 
@@ -76,7 +82,7 @@ PAGES=0
 for file in "$SRC"/pages/*.md; do
   [ -f "$file" ] && [ ! -L "$file" ] || continue
   case " $RETIRED_PAGES " in *" $(basename "$file" .md) "*) continue ;; esac
-  cp "$file" "$STAGE/pages/"
+  copy_text "$file" "$STAGE/pages"
   PAGES=$((PAGES + 1))
 done
 
