@@ -38,7 +38,8 @@ public static class PlannedRouteExtensions
         return routes;
     }
 
-    private static RouteHandlerBuilder MapPlannedOne(this IEndpointRouteBuilder routes, string method, string path) =>
-        routes.MapMethods(path, [method], () => Problem.Detail(StatusCodes.Status501NotImplemented, "Not implemented"))
+    // A RequestDelegate needs no parameter binding, which would use reflection; the answer is the same as a lambda returning the result.
+    private static IEndpointConventionBuilder MapPlannedOne(this IEndpointRouteBuilder routes, string method, string path) =>
+        routes.MapMethods(path, [method], context => Problem.Detail(StatusCodes.Status501NotImplemented, "Not implemented").ExecuteAsync(context))
             .WithMetadata(new PlannedRoute());
 }
