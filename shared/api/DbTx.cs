@@ -24,10 +24,10 @@ public sealed class DbTx : IAsyncDisposable
     }
 
     /// <summary>
-    /// Wraps a connection and transaction someone else owns (Entity Framework's, for a domain not yet converted): dispose then neither rolls back
-    /// nor closes, and the owner commits or rolls back.
+    /// Wraps a connection and transaction someone else owns: dispose then neither rolls back nor closes, and the owner commits or rolls back. Internal, with no still-open check:
+    /// a caller on Entity Framework joins only through <see cref="EfTransaction.Join"/>, which adds the check.
     /// </summary>
-    public static DbTx Join(NpgsqlConnection connection, NpgsqlTransaction transaction)
+    internal static DbTx Join(NpgsqlConnection connection, NpgsqlTransaction transaction)
     {
         ArgumentNullException.ThrowIfNull(connection);
         ArgumentNullException.ThrowIfNull(transaction);

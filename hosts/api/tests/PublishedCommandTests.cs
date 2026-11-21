@@ -11,37 +11,29 @@ namespace Tsr.Host.Api.Tests;
 public sealed partial class PublishedCommandTests
 {
     /// <summary>
-    /// The entry points that still take an Entity Framework type: "Type.Method". The list only shrinks: a task that converts a command takes it off, and the test
-    /// fails when a listed method no longer takes such a type, or an unlisted one does. Part B of issue 98 empties it.
+    /// The entry points that still take an Entity Framework type, by full signature "Type.Method(ParameterType, ...)" (a constructor is "Type..ctor(...)"). The list only shrinks: a task that converts
+    /// a command takes it off, and the test fails when a listed entry no longer takes such a type, or an unlisted one does (a new overload of a listed method is a new entry). Part B of issue 98 empties it.
     /// </summary>
     private static readonly string[] NotConvertedYet =
     [
-        "IdentityCommands.ChangeEmailAsync",
-        "IdentityCommands.CreateMemberAsync",
-        "IdentityCommands.EmailTakenAsync",
-        "IMemberErasure.EraseAsync",
-        "MembershipCommands.ChangeContactAsync",
-        "MembershipCommands.CreateProfileAsync",
-        "MembershipCommands.EraseMemberAsync",
-        "MembershipCommands.RecordAcceptedRegistrationAsync",
-        "NotificationsCommands.AnnounceAsync",
-        "NotificationsCommands.AnnounceCountedAsync",
-        "NotificationsCommands.LastNudgeAsync",
-        "NotificationsErasure.EraseDevicesAsync",
-        "NotificationsErasure.EraseEventSettingsAsync",
-        "PlatformCommands.ClaimMessagesAsync",
-        "PlatformCommands.EraseFeedbackAsync",
-        "PlatformCommands.MarkDeadAsync",
-        "PlatformCommands.MarkFailedAsync",
-        "PlatformCommands.MarkSentAsync",
-        "PlatformCommands.QueueMessagesAsync",
-        "PlatformCommands.RecordAdminAccessAsync",
-        "PlatformCommands.RedactRecipientsAsync",
-        "PlatformCommands.ReleaseMessageAsync",
+        "IdentityCommands.ChangeEmailAsync(DbContext, Int32, String, TimeProvider, CancellationToken)",
+        "IdentityCommands.CreateMemberAsync(DbContext, TimeProvider, CancellationToken)",
+        "IdentityCommands.EmailTakenAsync(DbContext, Int32, String, CancellationToken)",
+        "IMemberErasure.EraseAsync(DbContext, Int32, CancellationToken)",
+        "MembershipCommands.ChangeContactAsync(DbContext, Int32, String, String, TimeProvider, CancellationToken)",
+        "MembershipCommands.CreateProfileAsync(DbContext, Int32, String, String, String, TimeProvider, CancellationToken)",
+        "MembershipCommands.EraseMemberAsync(DbContext, Int32, CancellationToken)",
+        "MembershipCommands.RecordAcceptedRegistrationAsync(DbContext, Int32, Int32, CancellationToken)",
+        "PlatformCommands.ClaimMessagesAsync(DbContext, String, Int32, DateTimeOffset, CancellationToken)",
+        "PlatformCommands.MarkDeadAsync(DbContext, Int64, Int32, String, CancellationToken)",
+        "PlatformCommands.MarkFailedAsync(DbContext, Int64, Int32, String, DateTimeOffset, CancellationToken)",
+        "PlatformCommands.MarkSentAsync(DbContext, Int64, Int32, DateTimeOffset, CancellationToken)",
+        "PlatformCommands.RecordAdminAccessAsync(DbContext, HttpContext, Int32, Int32, Int32, CancellationToken)",
+        "PlatformCommands.ReleaseMessageAsync(DbContext, Int64, Int32, CancellationToken)",
     ];
 
     [Test]
-    public void No_public_domain_method_takes_an_entity_framework_type()
+    public void No_public_domain_method_or_constructor_takes_an_entity_framework_type()
     {
         var found = EfEntryPoints().ToList();
 
@@ -49,20 +41,93 @@ public sealed partial class PublishedCommandTests
         var stale = NotConvertedYet.Except(found).Order().ToList();
         Assert.Multiple(() =>
         {
-            Assert.That(added, Is.Empty, "a public domain method takes an Entity Framework type: take a DbTx (the caller's transaction) instead");
-            Assert.That(stale, Is.Empty, "this method no longer takes an Entity Framework type: remove it from NotConvertedYet");
+            Assert.That(string.Join("\n", added), Is.Empty, "a public domain method or constructor takes an Entity Framework type: take a DbTx (the caller's transaction) instead");
+            Assert.That(stale, Is.Empty, "this entry no longer takes an Entity Framework type: remove it from NotConvertedYet");
         });
     }
 
-    /// <summary>"Type.Method" for every public method, static or not, of every exported type of every module except the module class, that has an Entity Framework parameter.</summary>
+    [Test]
+    public void The_list_of_entries_still_allowed_has_14_entries()
+    {
+        Assert.That(NotConvertedYet, Has.Length.EqualTo(14));
+    }
+
+    private const BindingFlags Declared = BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly;
+
+    /// <summary>The signature of every public method and constructor, static or not, of every exported type of every module except the module class, that has an Entity Framework parameter.</summary>
     private static IEnumerable<string> EfEntryPoints() =>
         Modules.All.SelectMany(module => module.Assembly.GetExportedTypes()
             .Where(type => type != module.GetType())
-            .SelectMany(type => type
-                .GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly)
-                .Where(method => !method.IsSpecialName && method.GetParameters().Any(p => TakesEfType(p.ParameterType)))
-                .Select(method => type.Name + "." + method.Name)))
+            .SelectMany(type => Entries(type)))
             .Distinct();
+
+    private static IEnumerable<string> Entries(Type type)
+    {
+        var methods = type.GetMethods(Declared).Where(method => !method.IsSpecialName).Select(method => (method.Name, method.GetParameters()));
+        var constructors = type.GetConstructors(Declared).Select(constructor => (constructor.Name, constructor.GetParameters()));
+        return methods.Concat(constructors)
+            .Where(entry => entry.Item2.Any(p => TakesEfType(p.ParameterType)))
+            .Select(entry => Signature(type.Name, entry.Name, entry.Item2.Select(p => p.ParameterType)));
+    }
+
+    /// <summary>"Type.Member(ParameterType, ...)": the full signature, so a new overload is a different entry.</summary>
+    internal static string Signature(string typeName, string member, IEnumerable<Type> parameterTypes) =>
+        $"{typeName}.{member}({string.Join(", ", parameterTypes.Select(TypeName))})";
+
+    private static string TypeName(Type type)
+    {
+        if (type.IsByRef)
+        {
+            return TypeName(type.GetElementType()!) + "&";
+        }
+
+        if (type.IsArray)
+        {
+            return TypeName(type.GetElementType()!) + "[]";
+        }
+
+        if (!type.IsGenericType)
+        {
+            return type.Name;
+        }
+
+        var name = type.Name[..type.Name.IndexOf('`', StringComparison.Ordinal)];
+        return $"{name}<{string.Join(", ", type.GetGenericArguments().Select(TypeName))}>";
+    }
+
+    [Test]
+    public void A_signature_names_the_type_method_and_every_parameter_type()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(Signature("T", "M", [typeof(int), typeof(string)]), Is.EqualTo("T.M(Int32, String)"));
+            Assert.That(Signature("T", "M", []), Is.EqualTo("T.M()"));
+            Assert.That(Signature("T", ".ctor", [typeof(Microsoft.EntityFrameworkCore.DbContext)]), Is.EqualTo("T..ctor(DbContext)"));
+            Assert.That(Signature("T", "M", [typeof(IReadOnlyList<string[]>)]), Is.EqualTo("T.M(IReadOnlyList<String[]>)"));
+        });
+    }
+
+    [Test]
+    public void An_overload_of_a_listed_method_has_a_different_signature()
+    {
+        var listed = Signature("PlatformCommands", "MarkSentAsync", [typeof(int)]);
+        var overload = Signature("PlatformCommands", "MarkSentAsync", [typeof(int), typeof(Microsoft.EntityFrameworkCore.DbContext)]);
+
+        Assert.That(overload, Is.Not.EqualTo(listed));
+    }
+
+    private sealed class WithConstructor(Microsoft.EntityFrameworkCore.DbContext context)
+    {
+        public Microsoft.EntityFrameworkCore.DbContext Context { get; } = context;
+    }
+
+    [Test]
+    public void A_constructor_with_an_entity_framework_parameter_is_reported()
+    {
+        var constructor = typeof(WithConstructor).GetConstructors(Declared).Single();
+
+        Assert.That(constructor.GetParameters().Any(p => TakesEfType(p.ParameterType)), Is.True);
+    }
 
     /// <summary>A parameter type that is, wraps (array, reference, generic argument) or derives from a type of an Entity Framework namespace.</summary>
     internal static bool TakesEfType(Type type)

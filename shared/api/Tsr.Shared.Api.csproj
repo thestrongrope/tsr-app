@@ -13,6 +13,8 @@
   <ItemGroup>
     <!-- Sql and DbRow keep their parts internal; the unit tests next to them read those parts. -->
     <InternalsVisibleTo Include="Tsr.Shared.Api.Tests" />
+    <!-- Two database tests join a raw connection and transaction, which the Entity Framework bridge cannot give them. -->
+    <InternalsVisibleTo Include="Tsr.Db.Tests" />
   </ItemGroup>
   <ItemGroup>
     <!-- Tests sit next to the code they test; tests/ compiles them. -->

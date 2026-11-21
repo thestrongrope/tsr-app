@@ -198,7 +198,9 @@ internal static partial class ClassScheduleSend
     {
         try
         {
-            await PlatformCommands.QueueMessagesAsync(db, Channel, devices, PushPayload(row, due), $"class-sched-{row.Id}-{due.Key}", row.CreatedBy, ct);
+            await using var transaction = await db.Database.BeginTransactionAsync(ct);
+            await PlatformCommands.QueueMessagesAsync(EfTransaction.Join(db), Channel, devices, PushPayload(row, due), $"class-sched-{row.Id}-{due.Key}", row.CreatedBy, ct);
+            await transaction.CommitAsync(ct);
             return true;
         }
         catch (Exception e) when (e is not OperationCanceledException)

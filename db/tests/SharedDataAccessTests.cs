@@ -195,6 +195,19 @@ public sealed class SharedDataAccessTests
         Assert.That(await ScratchCountAsync(), Is.EqualTo(1));
     }
 
+    [Test]
+    public async Task A_text_array_with_a_null_element_is_sent_and_read_back_as_SQL_NULL_in_that_position()
+    {
+        string?[] values = ["a", null, "c"];
+
+        var rows = await Data.ListAsync(
+            $"select v is null as is_null, v from unnest({values}::text[]) with ordinality as t(v, n) order by n",
+            r => (r.Bool("is_null"), r.TextOrNull("v")),
+            CancellationToken.None);
+
+        Assert.That(rows, Is.EqualTo(new[] { (false, (string?)"a"), (true, (string?)null), (false, (string?)"c") }));
+    }
+
     // TC-AOT-R9-02
     [Test]
     public async Task A_failed_commit_leaves_nothing_and_throws()
@@ -522,7 +535,7 @@ public sealed class SharedDataAccessTests
         var context = scope.ServiceProvider.GetRequiredService<PlatformContext>();
         await using var efTransaction = await context.Database.BeginTransactionAsync();
 
-        var joined = DbTx.Join((NpgsqlConnection)context.Database.GetDbConnection(), (NpgsqlTransaction)efTransaction.GetDbTransaction());
+        var joined = EfTransaction.Join(context);
         await joined.ExecuteAsync($"insert into public.scratch_96 (id, note) values ({1}, {"joined"})", CancellationToken.None);
         await context.Database.ExecuteSqlAsync($"insert into public.scratch_96 (id, note) values ({2}, {"ef"})");
 

@@ -10,7 +10,7 @@ namespace Tsr.Shared.Api;
 /// </summary>
 public static class EfTransaction
 {
-    /// <exception cref="InvalidOperationException">The context has no open transaction.</exception>
+    /// <exception cref="InvalidOperationException">The context has no open transaction, or does not use the Npgsql provider.</exception>
     [RequiresUnreferencedCode("Entity Framework is JIT only. A converted domain passes its own DbTx.")]
     [RequiresDynamicCode("Entity Framework is JIT only. A converted domain passes its own DbTx.")]
     public static DbTx Join(DbContext db)
@@ -19,9 +19,11 @@ public static class EfTransaction
         var current = db.Database.CurrentTransaction
             ?? throw new InvalidOperationException("A published command runs inside its caller's transaction.");
         var id = current.TransactionId;
-        return DbTx.Join(
-            (NpgsqlConnection)db.Database.GetDbConnection(),
-            (NpgsqlTransaction)current.GetDbTransaction(),
-            () => db.Database.CurrentTransaction?.TransactionId == id);
+        if (db.Database.GetDbConnection() is not NpgsqlConnection connection || current.GetDbTransaction() is not NpgsqlTransaction transaction)
+        {
+            throw new InvalidOperationException("The bridge needs the Npgsql provider: the context's connection and transaction are not Npgsql's.");
+        }
+
+        return DbTx.Join(connection, transaction, () => db.Database.CurrentTransaction?.TransactionId == id);
     }
 }
