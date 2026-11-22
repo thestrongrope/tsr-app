@@ -45,7 +45,7 @@ internal static class ContentGolden
     {
         await using var scope = services.CreateAsyncScope();
         return await ContentRefresh.TickAsync(
-            scope.ServiceProvider.GetRequiredService<ContentContext>(), directory, clock, NullLogger.Instance, beforeCommit, CancellationToken.None);
+            scope.ServiceProvider.GetRequiredService<NpgsqlDataSource>(), directory, clock, NullLogger.Instance, beforeCommit, CancellationToken.None);
     }
 
     /// <summary>What a copy answered, as a transcript line.</summary>

@@ -17,12 +17,7 @@ public sealed partial class RunTimeEfUseTests
         new("access", "domains/access/api/AccessModule.cs", "services.AddDomainContext<AccessContext>(AccessContext.SchemaName);",
             "domains/access/api/AccessContext.cs", "domains/access/api/Tsr.Access.Api.csproj", []),
         new("content", "domains/content/api/ContentModule.cs", "services.AddDomainContext<ContentContext>(ContentContext.SchemaName);",
-            "domains/content/api/ContentContext.cs", "domains/content/api/Tsr.Content.Api.csproj",
-            [
-                "domains/content/api/ContentModule.cs",
-                "domains/content/api/domain/ContentRefresh.cs",
-                "domains/content/api/workers/ContentRefreshWorker.cs",
-            ]),
+            "domains/content/api/ContentContext.cs", "domains/content/api/Tsr.Content.Api.csproj", []),
     ];
 
     [GeneratedRegex("""<Using\s[^>]*Include\s*=\s*"[^"]*EntityFramework""")]
@@ -127,7 +122,7 @@ public sealed partial class RunTimeEfUseTests
             Assert.That(files, Has.None.Contain("/tests/"));
             Assert.That(files, Has.None.EndsWith("AccessContext.cs"));
             Assert.That(files, Has.None.EndsWith("ContentContext.cs"));
-            Assert.That(files, Does.Not.Contain("domains/content/api/domain/ContentRefresh.cs"));
+            Assert.That(files, Does.Contain("domains/content/api/domain/ContentRefresh.cs"));
         });
     }
 }

@@ -106,6 +106,34 @@ public sealed class ContentFailureTests
         GoldenScenario.Check(scenario, run.Transcript, ContentGolden.Set);
     }
 
+    // Entity Framework threw when its update of the state row changed no row; the SQL that replaced it must too, or a copy would commit a set with no state behind it.
+    [Test]
+    public async Task A_state_write_that_changes_no_row_fails_and_keeps_the_last_set()
+    {
+        using var files = new ContentTestFiles();
+        var changed = ChangedSet(files);
+        await using var run = await GoldenScenario.StartAsync("failure-copy-state-no-row", set: ContentGolden.Set, settings: Directory(changed));
+        await run.ExecuteAsync(
+            """
+            create function content.skip_state() returns trigger language plpgsql as
+            $$ begin return null; end $$;
+            create trigger skip_state before update on content.refresh_state for each row execute function content.skip_state();
+            """);
+        var before = await StoredAsync(run);
+
+        _ = await Assert.CatchAsync(async () => await ContentGolden.TickAsync(run.Services, changed, ContentGolden.ClockAfter(5)), "a store must throw");
+        _ = await Assert.CatchAsync(async () => await ContentGolden.TickAsync(run.Services, directory: null, ContentGolden.ClockAfter(6)), "a keep must throw");
+
+        Assert.That(await StoredAsync(run), Is.EqualTo(before));
+    }
+
+    private static async Task<List<string>> StoredAsync(GoldenScenario run)
+    {
+        var rows = await run.QueryAsync("select row_to_json(t)::text from content.published_articles t order by t.slug collate \"C\"");
+        rows.AddRange(await run.QueryAsync("select row_to_json(t)::text from content.refresh_state t"));
+        return rows;
+    }
+
     // The synthetic set with one article's title changed: a copy of it is a new set, so a copy that did not throw would write.
     private static string ChangedSet(ContentTestFiles files)
     {

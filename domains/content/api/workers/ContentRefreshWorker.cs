@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Npgsql;
 using Tsr.Content.Api.Domain;
 using Tsr.Shared.Api;
 
@@ -24,7 +25,7 @@ internal sealed class ContentRefreshWorker(IServiceScopeFactory scopes, ILogger<
 
     protected override async Task TickAsync(IServiceProvider services, CancellationToken ct) =>
         _ = await ContentRefresh.TickAsync(
-            services.GetRequiredService<ContentContext>(),
+            services.GetRequiredService<NpgsqlDataSource>(),
             services.GetRequiredService<IConfiguration>()[DirectorySetting],
             services.GetRequiredService<TimeProvider>(),
             Log,

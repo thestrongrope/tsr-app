@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Npgsql;
 using Tsr.Content.Api.Domain;
 using Tsr.Content.Api.Features.HolyQuran;
 using Tsr.Content.Api.Features.ListPublishedArticles;
@@ -59,7 +60,7 @@ public static partial class ContentModule
         var log = services.GetRequiredService<ILoggerFactory>().CreateLogger("Tsr.Content.Api.ContentLoad");
         await using var scope = services.CreateAsyncScope();
         var outcome = await ContentRefresh.TickAsync(
-            scope.ServiceProvider.GetRequiredService<ContentContext>(),
+            scope.ServiceProvider.GetRequiredService<NpgsqlDataSource>(),
             scope.ServiceProvider.GetRequiredService<IConfiguration>()[ContentRefreshWorker.DirectorySetting],
             scope.ServiceProvider.GetRequiredService<TimeProvider>(),
             log,
