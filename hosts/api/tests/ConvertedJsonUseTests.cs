@@ -16,11 +16,7 @@ public sealed partial class ConvertedJsonUseTests
     private static readonly Converted[] ConvertedDomains =
     [
         new("access", "AccessJson.", []),
-        new("content", "ContentJson.",
-            [
-                "domains/content/api/features/holy-quran/HolyQuran.cs",
-                "domains/content/api/features/list-published-articles/ListPublishedArticles.cs",
-            ]),
+        new("content", "ContentJson.", []),
     ];
 
     // The call, up to the end of its statement: a statement may run over several lines, and its type info is often on the last.

@@ -35,7 +35,7 @@ internal static partial class V1TagsSlice
 
     public static IEndpointRouteBuilder MapV1Tags(this IEndpointRouteBuilder routes)
     {
-        V1.MapGet(routes, "/api/v1/taxonomies/tags", HandleAsync);
+        routes.MapGet("/api/v1/taxonomies/tags", HandleAsync).WithV1Failures();
         return routes;
     }
 

@@ -1,5 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!-- content: Quran, articles, lectures, books. Depends on no other domain. -->
+  <PropertyGroup>
+    <EnableRequestDelegateGenerator>true</EnableRequestDelegateGenerator>
+  </PropertyGroup>
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="Markdig" />

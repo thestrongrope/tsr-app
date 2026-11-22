@@ -36,7 +36,7 @@ internal static class V1CategoriesSlice
 
     public static IEndpointRouteBuilder MapV1Categories(this IEndpointRouteBuilder routes)
     {
-        V1.MapGet(routes, "/api/v1/taxonomies/categories", HandleAsync);
+        routes.MapGet("/api/v1/taxonomies/categories", HandleAsync).WithV1Failures();
         return routes;
     }
 

@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
+using Tsr.Content.Api.Domain;
 
 namespace Tsr.Content.Api.Features.ListPublishedArticles;
 
@@ -41,6 +42,6 @@ internal sealed class ListPublishedArticlesHandler(ContentContext db, TimeProvid
             .Select(a => new ArticleResponse(a.Slug, a.Title, a.Body, a.PublishedAt!.Value))
             .ToListAsync(ct);
 
-        return Results.Ok(new ListPublishedArticlesResponse(articles));
+        return Results.Json(new ListPublishedArticlesResponse(articles), ContentJson.Answers.ListPublishedArticlesResponse);
     }
 }

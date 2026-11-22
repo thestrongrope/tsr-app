@@ -31,7 +31,7 @@ internal static class V1PublicationsSlice
 
     public static IEndpointRouteBuilder MapV1Publications(this IEndpointRouteBuilder routes)
     {
-        V1.MapGet(routes, "/api/v1/publications", HandleAsync);
+        routes.MapGet("/api/v1/publications", HandleAsync).WithV1Failures();
         return routes;
     }
 

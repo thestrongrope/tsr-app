@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
+using Tsr.Content.Api.Domain;
 using Tsr.Shared.Api;
 
 namespace Tsr.Content.Api.Features.HolyQuran;
@@ -34,6 +35,6 @@ internal static class HolyQuranSlice
             .Take(MaxRows)
             .Select(s => new SurahItem(s.Id, s.Surah, s.Arabic ?? string.Empty, s.Verses))
             .ToListAsync(ct);
-        return Results.Json(surahs);
+        return Results.Json(surahs, ContentJson.Answers.SurahList);
     }
 }
