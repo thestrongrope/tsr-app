@@ -21,26 +21,17 @@ internal sealed class GoldenScenario : IAsyncDisposable
     internal const string Instant = "2026-01-01T00:00:00Z";
 
     private static readonly SemaphoreSlim TemplateLock = new(1, 1);
-    private static bool templateReady;
+    private static readonly HashSet<string> ReadyTemplates = [];
 
-    private static readonly string[] RecordedHeaders = ["ETag", "Cache-Control", "Vary", "X-Permissions-Revision", "Content-Type"];
-
-    private static readonly string[] RowQueries =
-    [
-        "access.user_permissions|select row_to_json(t)::text from access.user_permissions t order by id",
-        "access.user_roles|select row_to_json(t)::text from access.user_roles t order by user_id",
-        "access.class_access_rules|select row_to_json(t)::text from access.class_access_rules t order by id",
-        "access.class_access_rule_conditions|select row_to_json(t)::text from access.class_access_rule_conditions t order by id",
-        "platform.outbox (event_type, created_at, payload)|select t.event_type || ' | ' || to_json(t.created_at)::text || ' | ' || t.payload::text from platform.outbox t order by t.id",
-    ];
-
+    private readonly GoldenSet set;
     private readonly string database;
     private readonly WebApplicationFactory<Program> factory;
     private readonly HttpClient client;
     private readonly StringBuilder transcript = new();
 
-    private GoldenScenario(string database, WebApplicationFactory<Program> factory)
+    private GoldenScenario(GoldenSet set, string database, WebApplicationFactory<Program> factory)
     {
+        this.set = set;
         this.database = database;
         this.factory = factory;
         client = factory.CreateClient();
@@ -49,29 +40,45 @@ internal sealed class GoldenScenario : IAsyncDisposable
     /// <summary>What the scenario sent and what came back, as the golden file holds it.</summary>
     public string Transcript => transcript.ToString();
 
-    /// <summary>A fresh copy of the template and the API on it. Dispose drops the copy.</summary>
-    public static async Task<GoldenScenario> StartAsync(string name, Action<IServiceCollection>? configure = null)
+    /// <summary>
+    /// A fresh copy of the template of <paramref name="set"/> (access when left out) and the API on it. Dispose drops the copy.
+    /// <paramref name="settings"/> are host settings (<c>UseSetting</c>) for a scenario that reads one, such as the content directory of a load.
+    /// </summary>
+    public static async Task<GoldenScenario> StartAsync(
+        string name, Action<IServiceCollection>? configure = null, GoldenSet? set = null, IReadOnlyDictionary<string, string>? settings = null)
     {
-        await EnsureTemplateAsync();
-        var database = DatabaseOf(name);
+        set ??= GoldenSet.Access;
+        await EnsureTemplateAsync(set);
+        var database = DatabaseOf(set, name);
         await AdminAsync($"drop database if exists {database} with (force)");
-        await AdminAsync($"create database {database} with template {GoldenSeed.TemplateName}");
+        await AdminAsync($"create database {database} with template {set.TemplateName}");
         var factory = TestApi.Create(ConnectionTo(database, TestDatabase.AppConnection))
-            .WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
+            .WithWebHostBuilder(builder =>
             {
-                services.AddSingleton<TimeProvider>(new FixedClock());
-                configure?.Invoke(services);
-            }));
-        return new GoldenScenario(database, factory);
+                foreach (var (key, value) in settings ?? new Dictionary<string, string>())
+                {
+                    builder.UseSetting(key, value);
+                }
+
+                builder.ConfigureTestServices(services =>
+                {
+                    services.AddSingleton<TimeProvider>(new FixedClock());
+                    configure?.Invoke(services);
+                });
+            });
+        return new GoldenScenario(set, database, factory);
     }
+
+    /// <summary>The fixed clock every scenario runs on, for a seed or a copy made outside a scenario's host.</summary>
+    internal static TimeProvider Clock { get; } = new FixedClock();
 
     /// <summary>The API's services on the scenario's database, for a test that resolves one in its own scope.</summary>
     public IServiceProvider Services => factory.Services;
 
-    /// <summary>Compares a transcript with its golden file, or records it when TSR_RECORD_GOLDEN=1.</summary>
-    public static void Check(string name, string actual)
+    /// <summary>Compares a transcript with its golden file (access's folder when <paramref name="set"/> is left out), or records it when TSR_RECORD_GOLDEN=1.</summary>
+    public static void Check(string name, string actual, GoldenSet? set = null)
     {
-        var path = Path.Combine(TestDatabase.RepoRoot(), "db", "tests", "golden", "access", name + ".txt");
+        var path = Path.Combine(TestDatabase.RepoRoot(), "db", "tests", "golden", (set ?? GoldenSet.Access).Folder, name + ".txt");
         if (Environment.GetEnvironmentVariable("TSR_RECORD_GOLDEN") == "1")
         {
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
@@ -88,7 +95,7 @@ internal sealed class GoldenScenario : IAsyncDisposable
     }
 
     /// <summary>Sends one request as one seeded member (null: nobody signed in) and writes what came back to the transcript.</summary>
-    public async Task<GoldenReply> SendAsync(int? caller, HttpMethod method, string path, string? json = null, string? ifNoneMatch = null)
+    public async Task<GoldenReply> SendAsync(int? caller, HttpMethod method, string path, string? json = null, string? ifNoneMatch = null, string? ifModifiedSince = null)
     {
         using var request = new HttpRequestMessage(method, path);
         if (caller is null)
@@ -108,6 +115,11 @@ internal sealed class GoldenScenario : IAsyncDisposable
             request.Headers.TryAddWithoutValidation("If-None-Match", ifNoneMatch);
         }
 
+        if (ifModifiedSince is not null)
+        {
+            request.Headers.TryAddWithoutValidation("If-Modified-Since", ifModifiedSince);
+        }
+
         if (json is not null)
         {
             request.Content = new StringContent(json, Encoding.UTF8, new MediaTypeHeaderValue("application/json"));
@@ -115,11 +127,20 @@ internal sealed class GoldenScenario : IAsyncDisposable
 
         using var response = await client.SendAsync(request);
         var body = await response.Content.ReadAsStringAsync();
-        Record(caller, method, path, json, ifNoneMatch, response, body);
-        return new GoldenReply(response.StatusCode, body);
+        Record(caller, method, path, json, new Conditions(ifNoneMatch, ifModifiedSince), response, body);
+        return new GoldenReply(response.StatusCode, body, HeaderOrNull(response, "ETag"), HeaderOrNull(response, "Last-Modified"));
     }
 
-    /// <summary>Appends every row of the four writable access tables and every outbox payload, as text.</summary>
+    /// <summary>Appends a line of text to the transcript (what a copy answered, or that it threw).</summary>
+    public void Note(string line)
+    {
+        lock (transcript)
+        {
+            transcript.Append(line).Append('\n');
+        }
+    }
+
+    /// <summary>Appends every row of the set's tables (access: the four writable tables and every outbox payload), as text.</summary>
     public async Task AppendRowsAsync(string label)
     {
         transcript.Append("=== rows after ").Append(label).Append(" ===\n");
@@ -130,7 +151,7 @@ internal sealed class GoldenScenario : IAsyncDisposable
             await zone.ExecuteNonQueryAsync();
         }
 
-        foreach (var entry in RowQueries)
+        foreach (var entry in set.RowQueries)
         {
             var (title, sql) = Split(entry);
             transcript.Append("-- ").Append(title).Append('\n');
@@ -184,20 +205,27 @@ internal sealed class GoldenScenario : IAsyncDisposable
     }
 
     // A lock: a scenario may send two requests at once, and a StringBuilder is not safe for two writers.
-    private void Record(int? caller, HttpMethod method, string path, string? json, string? ifNoneMatch, HttpResponseMessage response, string body)
+    private void Record(int? caller, HttpMethod method, string path, string? json, Conditions conditions, HttpResponseMessage response, string body)
     {
         lock (transcript)
         {
-            RecordLocked(caller, method, path, json, ifNoneMatch, response, body);
+            RecordLocked(caller, method, path, json, conditions, response, body);
         }
     }
 
-    private void RecordLocked(int? caller, HttpMethod method, string path, string? json, string? ifNoneMatch, HttpResponseMessage response, string body)
+    private sealed record Conditions(string? IfNoneMatch, string? IfModifiedSince);
+
+    private void RecordLocked(int? caller, HttpMethod method, string path, string? json, Conditions conditions, HttpResponseMessage response, string body)
     {
         transcript.Append("### ").Append(method.Method).Append(' ').Append(path).Append(" as ").Append(caller?.ToString(CultureInfo.InvariantCulture) ?? "nobody").Append('\n');
-        if (ifNoneMatch is not null)
+        if (conditions.IfNoneMatch is not null)
         {
-            transcript.Append("If-None-Match: ").Append(ifNoneMatch).Append('\n');
+            transcript.Append("If-None-Match: ").Append(conditions.IfNoneMatch).Append('\n');
+        }
+
+        if (conditions.IfModifiedSince is not null)
+        {
+            transcript.Append("If-Modified-Since: ").Append(conditions.IfModifiedSince).Append('\n');
         }
 
         if (json is not null)
@@ -206,7 +234,7 @@ internal sealed class GoldenScenario : IAsyncDisposable
         }
 
         transcript.Append("status: ").Append((int)response.StatusCode).Append('\n');
-        foreach (var header in RecordedHeaders)
+        foreach (var header in set.RecordedHeaders ?? AllHeaderNames(response))
         {
             transcript.Append(header).Append(": ").Append(HeaderValue(response, header)).Append('\n');
         }
@@ -227,6 +255,16 @@ internal sealed class GoldenScenario : IAsyncDisposable
             ? values.ToString()
             : "(absent)";
 
+    // Every header the server sent but Date (a clock reading of the host, not of the API), by name, from the response and its content.
+    private static IEnumerable<string> AllHeaderNames(HttpResponseMessage response) =>
+        response.Headers.NonValidated.Select(h => h.Key)
+            .Concat(response.Content.Headers.NonValidated.Select(h => h.Key))
+            .Where(name => !string.Equals(name, "Date", StringComparison.OrdinalIgnoreCase))
+            .Order(StringComparer.OrdinalIgnoreCase);
+
+    private static string? HeaderOrNull(HttpResponseMessage response, string name) =>
+        HeaderValue(response, name) is var value && value != "(absent)" ? value : null;
+
     private static (string Title, string Sql) Split(string entry)
     {
         var at = entry.IndexOf('|', StringComparison.Ordinal);
@@ -234,11 +272,11 @@ internal sealed class GoldenScenario : IAsyncDisposable
     }
 
     // One database per scenario, named from it, so nothing a scenario leaves behind (a pooled connection, a failed drop) can reach the next.
-    private static string DatabaseOf(string name) =>
-        "access_golden_" + new string(name.Select(c => char.IsAsciiLetterOrDigit(c) ? char.ToLowerInvariant(c) : '_').ToArray());
+    private static string DatabaseOf(GoldenSet set, string name) =>
+        set.Folder + "_golden_" + new string(name.Select(c => char.IsAsciiLetterOrDigit(c) ? char.ToLowerInvariant(c) : '_').ToArray());
 
     // Pooling off: an idle pooled connection to the template would make "create database ... template" fail.
-    private static string ConnectionTo(string database, string baseConnection) =>
+    internal static string ConnectionTo(string database, string baseConnection) =>
         new NpgsqlConnectionStringBuilder(baseConnection) { Database = database, Pooling = false }.ConnectionString;
 
     private static async Task AdminAsync(string sql)
@@ -249,22 +287,22 @@ internal sealed class GoldenScenario : IAsyncDisposable
         await command.ExecuteNonQueryAsync();
     }
 
-    private static async Task EnsureTemplateAsync()
+    private static async Task EnsureTemplateAsync(GoldenSet set)
     {
         await TemplateLock.WaitAsync();
         try
         {
-            if (templateReady)
+            if (ReadyTemplates.Contains(set.TemplateName))
             {
                 return;
             }
 
-            await AdminAsync($"drop database if exists {GoldenSeed.TemplateName} with (force)");
-            await AdminAsync($"create database {GoldenSeed.TemplateName}");
-            var owner = ConnectionTo(GoldenSeed.TemplateName, TestDatabase.OwnerConnection);
+            await AdminAsync($"drop database if exists {set.TemplateName} with (force)");
+            await AdminAsync($"create database {set.TemplateName}");
+            var owner = ConnectionTo(set.TemplateName, TestDatabase.OwnerConnection);
             await TestDatabase.MigrateAsProductionAsync(owner);
-            await GoldenSeed.RunAsync(owner);
-            templateReady = true;
+            await set.SeedAsync(owner);
+            ReadyTemplates.Add(set.TemplateName);
         }
         finally
         {
@@ -273,13 +311,33 @@ internal sealed class GoldenScenario : IAsyncDisposable
     }
 
     /// <summary>The instant every clock reading of a scenario answers, so every stored and answered time is exact.</summary>
-    private sealed class FixedClock : TimeProvider
+    internal sealed class FixedClock : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() => DateTimeOffset.Parse(Instant, CultureInfo.InvariantCulture);
     }
 }
 
-internal sealed record GoldenReply(HttpStatusCode Status, string Body)
+/// <summary>
+/// What differs between one domain's goldens and another's: the folder under db/tests/golden, the template database and how it is seeded (as the owner, after the
+/// migrations), the queries whose rows a scenario appends (<c>title|sql</c>), and the response headers recorded (null: every header but Date, by name).
+/// </summary>
+internal sealed record GoldenSet(string Folder, string TemplateName, Func<string, Task> SeedAsync, IReadOnlyList<string> RowQueries, IReadOnlyList<string>? RecordedHeaders)
+{
+    public static GoldenSet Access { get; } = new(
+        "access",
+        GoldenSeed.TemplateName,
+        GoldenSeed.RunAsync,
+        [
+            "access.user_permissions|select row_to_json(t)::text from access.user_permissions t order by id",
+            "access.user_roles|select row_to_json(t)::text from access.user_roles t order by user_id",
+            "access.class_access_rules|select row_to_json(t)::text from access.class_access_rules t order by id",
+            "access.class_access_rule_conditions|select row_to_json(t)::text from access.class_access_rule_conditions t order by id",
+            "platform.outbox (event_type, created_at, payload)|select t.event_type || ' | ' || to_json(t.created_at)::text || ' | ' || t.payload::text from platform.outbox t order by t.id",
+        ],
+        ["ETag", "Cache-Control", "Vary", "X-Permissions-Revision", "Content-Type"]);
+}
+
+internal sealed record GoldenReply(HttpStatusCode Status, string Body, string? ETag = null, string? LastModified = null)
 {
     public JsonNode? Json => JsonNode.Parse(Body);
 }

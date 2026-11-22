@@ -1,0 +1,104 @@
+### GET /api/v1/taxonomies/categories as nobody
+status: 200
+Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With
+Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS
+Access-Control-Allow-Origin: *
+Cache-Control: public, max-age=3600, stale-while-revalidate=86400
+Content-Length: 930
+Content-Type: application/json
+ETag: "4e18a5d2812b15dcfea81b82777f4e12"
+Vary: Accept-Encoding
+X-Content-Type-Options: nosniff
+body: {"success":true,"data":[{"slug":"foundations","title":"Foundations","description":"Basic ideas every student starts with","order":1,"articleCount":2,"subcategories":[{"slug":"core-terms","title":"Core Terms","order":4,"parent":"foundations","articleCount":2}]},{"slug":"practice","title":"Practice","description":"Everyday study routines","order":2,"articleCount":3,"subcategories":[{"slug":"note-taking","title":"Note Taking","order":5,"parent":"practice","articleCount":2},{"slug":"revision-plans","title":"Revision Plans","order":6,"parent":"practice","articleCount":2}]},{"slug":"history","title":"History","description":"How study methods changed over time","order":3,"articleCount":2,"subcategories":[{"slug":"early-schools","title":"Early Schools","order":7,"parent":"history","articleCount":2}]}],"meta":{"timestamp":"2026-01-01T00:00:00.000Z","version":"1.0","cache":{"expires":"2026-01-01T01:00:00.000Z","maxAge":3600}}}
+### GET /api/v1/taxonomies/categories?hierarchical=false as nobody
+status: 200
+Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With
+Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS
+Access-Control-Allow-Origin: *
+Cache-Control: public, max-age=3600, stale-while-revalidate=86400
+Content-Length: 876
+Content-Type: application/json
+ETag: "a7773ccfbb6d9b99d415e2caa1938197"
+Vary: Accept-Encoding
+X-Content-Type-Options: nosniff
+body: {"success":true,"data":[{"slug":"foundations","title":"Foundations","description":"Basic ideas every student starts with","order":1,"articleCount":2},{"slug":"practice","title":"Practice","description":"Everyday study routines","order":2,"articleCount":3},{"slug":"history","title":"History","description":"How study methods changed over time","order":3,"articleCount":2},{"slug":"core-terms","title":"Core Terms","order":4,"parent":"foundations","articleCount":2},{"slug":"note-taking","title":"Note Taking","order":5,"parent":"practice","articleCount":2},{"slug":"revision-plans","title":"Revision Plans","order":6,"parent":"practice","articleCount":2},{"slug":"early-schools","title":"Early Schools","order":7,"parent":"history","articleCount":2}],"meta":{"timestamp":"2026-01-01T00:00:00.000Z","version":"1.0","cache":{"expires":"2026-01-01T01:00:00.000Z","maxAge":3600}}}
+### GET /api/v1/taxonomies/categories?hierarchical=true as nobody
+status: 200
+Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With
+Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS
+Access-Control-Allow-Origin: *
+Cache-Control: public, max-age=3600, stale-while-revalidate=86400
+Content-Length: 930
+Content-Type: application/json
+ETag: "4e18a5d2812b15dcfea81b82777f4e12"
+Vary: Accept-Encoding
+X-Content-Type-Options: nosniff
+body: {"success":true,"data":[{"slug":"foundations","title":"Foundations","description":"Basic ideas every student starts with","order":1,"articleCount":2,"subcategories":[{"slug":"core-terms","title":"Core Terms","order":4,"parent":"foundations","articleCount":2}]},{"slug":"practice","title":"Practice","description":"Everyday study routines","order":2,"articleCount":3,"subcategories":[{"slug":"note-taking","title":"Note Taking","order":5,"parent":"practice","articleCount":2},{"slug":"revision-plans","title":"Revision Plans","order":6,"parent":"practice","articleCount":2}]},{"slug":"history","title":"History","description":"How study methods changed over time","order":3,"articleCount":2,"subcategories":[{"slug":"early-schools","title":"Early Schools","order":7,"parent":"history","articleCount":2}]}],"meta":{"timestamp":"2026-01-01T00:00:00.000Z","version":"1.0","cache":{"expires":"2026-01-01T01:00:00.000Z","maxAge":3600}}}
+### GET /api/v1/taxonomies/categories?includeArticleCounts=false as nobody
+status: 200
+Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With
+Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS
+Access-Control-Allow-Origin: *
+Cache-Control: public, max-age=3600, stale-while-revalidate=86400
+Content-Length: 930
+Content-Type: application/json
+ETag: "8da026a5d43ff702af294ecfd61f40f8"
+Vary: Accept-Encoding
+X-Content-Type-Options: nosniff
+body: {"success":true,"data":[{"slug":"foundations","title":"Foundations","description":"Basic ideas every student starts with","order":1,"articleCount":0,"subcategories":[{"slug":"core-terms","title":"Core Terms","order":4,"parent":"foundations","articleCount":0}]},{"slug":"practice","title":"Practice","description":"Everyday study routines","order":2,"articleCount":0,"subcategories":[{"slug":"note-taking","title":"Note Taking","order":5,"parent":"practice","articleCount":0},{"slug":"revision-plans","title":"Revision Plans","order":6,"parent":"practice","articleCount":0}]},{"slug":"history","title":"History","description":"How study methods changed over time","order":3,"articleCount":0,"subcategories":[{"slug":"early-schools","title":"Early Schools","order":7,"parent":"history","articleCount":0}]}],"meta":{"timestamp":"2026-01-01T00:00:00.000Z","version":"1.0","cache":{"expires":"2026-01-01T01:00:00.000Z","maxAge":3600}}}
+### GET /api/v1/taxonomies/categories?hierarchical=false&includeArticleCounts=false as nobody
+status: 200
+Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With
+Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS
+Access-Control-Allow-Origin: *
+Cache-Control: public, max-age=3600, stale-while-revalidate=86400
+Content-Length: 876
+Content-Type: application/json
+ETag: "ae0479ed41ac353669de5b20801ef563"
+Vary: Accept-Encoding
+X-Content-Type-Options: nosniff
+body: {"success":true,"data":[{"slug":"foundations","title":"Foundations","description":"Basic ideas every student starts with","order":1,"articleCount":0},{"slug":"practice","title":"Practice","description":"Everyday study routines","order":2,"articleCount":0},{"slug":"history","title":"History","description":"How study methods changed over time","order":3,"articleCount":0},{"slug":"core-terms","title":"Core Terms","order":4,"parent":"foundations","articleCount":0},{"slug":"note-taking","title":"Note Taking","order":5,"parent":"practice","articleCount":0},{"slug":"revision-plans","title":"Revision Plans","order":6,"parent":"practice","articleCount":0},{"slug":"early-schools","title":"Early Schools","order":7,"parent":"history","articleCount":0}],"meta":{"timestamp":"2026-01-01T00:00:00.000Z","version":"1.0","cache":{"expires":"2026-01-01T01:00:00.000Z","maxAge":3600}}}
+### GET /api/v1/taxonomies/categories?hierarchical=FALSE as nobody
+status: 200
+Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With
+Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS
+Access-Control-Allow-Origin: *
+Cache-Control: public, max-age=3600, stale-while-revalidate=86400
+Content-Length: 930
+Content-Type: application/json
+ETag: "4e18a5d2812b15dcfea81b82777f4e12"
+Vary: Accept-Encoding
+X-Content-Type-Options: nosniff
+body: {"success":true,"data":[{"slug":"foundations","title":"Foundations","description":"Basic ideas every student starts with","order":1,"articleCount":2,"subcategories":[{"slug":"core-terms","title":"Core Terms","order":4,"parent":"foundations","articleCount":2}]},{"slug":"practice","title":"Practice","description":"Everyday study routines","order":2,"articleCount":3,"subcategories":[{"slug":"note-taking","title":"Note Taking","order":5,"parent":"practice","articleCount":2},{"slug":"revision-plans","title":"Revision Plans","order":6,"parent":"practice","articleCount":2}]},{"slug":"history","title":"History","description":"How study methods changed over time","order":3,"articleCount":2,"subcategories":[{"slug":"early-schools","title":"Early Schools","order":7,"parent":"history","articleCount":2}]}],"meta":{"timestamp":"2026-01-01T00:00:00.000Z","version":"1.0","cache":{"expires":"2026-01-01T01:00:00.000Z","maxAge":3600}}}
+### GET /api/v1/taxonomies/categories?hierarchical=0 as nobody
+status: 200
+Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With
+Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS
+Access-Control-Allow-Origin: *
+Cache-Control: public, max-age=3600, stale-while-revalidate=86400
+Content-Length: 930
+Content-Type: application/json
+ETag: "4e18a5d2812b15dcfea81b82777f4e12"
+Vary: Accept-Encoding
+X-Content-Type-Options: nosniff
+body: {"success":true,"data":[{"slug":"foundations","title":"Foundations","description":"Basic ideas every student starts with","order":1,"articleCount":2,"subcategories":[{"slug":"core-terms","title":"Core Terms","order":4,"parent":"foundations","articleCount":2}]},{"slug":"practice","title":"Practice","description":"Everyday study routines","order":2,"articleCount":3,"subcategories":[{"slug":"note-taking","title":"Note Taking","order":5,"parent":"practice","articleCount":2},{"slug":"revision-plans","title":"Revision Plans","order":6,"parent":"practice","articleCount":2}]},{"slug":"history","title":"History","description":"How study methods changed over time","order":3,"articleCount":2,"subcategories":[{"slug":"early-schools","title":"Early Schools","order":7,"parent":"history","articleCount":2}]}],"meta":{"timestamp":"2026-01-01T00:00:00.000Z","version":"1.0","cache":{"expires":"2026-01-01T01:00:00.000Z","maxAge":3600}}}
+### GET /api/v1/taxonomies/categories as nobody
+status: 200
+Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With
+Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS
+Access-Control-Allow-Origin: *
+Cache-Control: public, max-age=3600, stale-while-revalidate=86400
+Content-Length: 930
+Content-Type: application/json
+ETag: "4e18a5d2812b15dcfea81b82777f4e12"
+Vary: Accept-Encoding
+X-Content-Type-Options: nosniff
+body: {"success":true,"data":[{"slug":"foundations","title":"Foundations","description":"Basic ideas every student starts with","order":1,"articleCount":2,"subcategories":[{"slug":"core-terms","title":"Core Terms","order":4,"parent":"foundations","articleCount":2}]},{"slug":"practice","title":"Practice","description":"Everyday study routines","order":2,"articleCount":3,"subcategories":[{"slug":"note-taking","title":"Note Taking","order":5,"parent":"practice","articleCount":2},{"slug":"revision-plans","title":"Revision Plans","order":6,"parent":"practice","articleCount":2}]},{"slug":"history","title":"History","description":"How study methods changed over time","order":3,"articleCount":2,"subcategories":[{"slug":"early-schools","title":"Early Schools","order":7,"parent":"history","articleCount":2}]}],"meta":{"timestamp":"2026-01-01T00:00:00.000Z","version":"1.0","cache":{"expires":"2026-01-01T01:00:00.000Z","maxAge":3600}}}
+### GET /api/v1/taxonomies/categories as nobody
+If-None-Match: "4e18a5d2812b15dcfea81b82777f4e12"
+status: 304
+Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With
+Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS
+Access-Control-Allow-Origin: *
+X-Content-Type-Options: nosniff
+body: 
