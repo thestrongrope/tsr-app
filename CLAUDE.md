@@ -38,7 +38,7 @@ read it before editing.
 | The Flutter shell | `hosts/app/` | `lib/main.dart` |
 | The static site generator | `hosts/site/` | `SiteModules.cs`, `Program.cs`; a domain's pages are in `domains/<context>/site/` |
 | Plumbing every domain uses (DB, outbox, HTTP client, site API reader) | `shared/api/`, `shared/app/`, `shared/site/` | the file you need; no rules live here |
-| A table or migration | the domain's `api/<Context>Context.cs` and `api/Migrations/` (add: `dotnet ef migrations add <Name> --context <Domain>Context --project domains/<d>/api --startup-project hosts/api --output-dir Migrations -- --TSR_DB=Host=unused --TSR_FIREBASE_PROJECT_ID=demo-design --environment=Development`; the generated files need no edit) | `docs/specs/initial-build/phase-0-design.md` |
+| A table or migration | the domain's `api/<Context>Context.cs` and `api/Migrations/` (add: `dotnet ef migrations add <Name> --context <Domain>Context --project domains/<d>/api --startup-project hosts/api --output-dir Migrations -- --TSR_DB=Host=unused --TSR_FIREBASE_PROJECT_ID=demo-design --environment=Production --migrate`; a converted domain's context is registered in migrate mode only, so `--migrate` is needed; the generated files need no edit) | `docs/specs/initial-build/phase-0-design.md` |
 | The production stack and its settings | `docker-compose.yml` | `docs/deployment.md` |
 | Synthetic data | `db/synthetic/seed.sql` | |
 | The published articles, categories, publications page and fixed pages (`content/pages/`, shown only by the site) | `content/` (published only; copied by `tools/content-import.sh`, checked by `dotnet test domains/content/api/tests`) | `content/README.md` |

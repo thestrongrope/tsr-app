@@ -1,0 +1,173 @@
+### POST /admin/permissions/members/900005/grants as nobody
+request: {"permission": "donors:read:all", "reason": "Needs the list"}
+status: 401
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: (absent)
+Content-Type: application/json; charset=utf-8
+body: {"detail":"Not authenticated"}
+### POST /admin/permissions/members/900005/grants as 900004
+request: {"permission": "donors:read:all", "reason": "Needs the list"}
+status: 403
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: a28e16a8925dffe9
+Content-Type: application/json; charset=utf-8
+body: {"detail":"Only super admins can manage permissions"}
+### POST /admin/permissions/members/900005/grants as 900002
+request: {"permission": "donors:read:all", "reason": "Needs the list"}
+status: 403
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: fe01853a5809a40f
+Content-Type: application/json; charset=utf-8
+body: {"detail":"Only super admins can manage permissions"}
+### POST /admin/permissions/members/900005/grants as 900001
+request: not json
+status: 422
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: 126e2b52e77d2cb3
+Content-Type: application/json; charset=utf-8
+body: {"detail":"Invalid JSON body"}
+### POST /admin/permissions/members/900005/grants as 900001
+request: {"reason": "Needs the list"}
+status: 422
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: 126e2b52e77d2cb3
+Content-Type: application/json; charset=utf-8
+body: {"detail":"permission is required"}
+### POST /admin/permissions/members/900005/grants as 900001
+request: {"permission": 5, "reason": "Needs the list"}
+status: 422
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: 126e2b52e77d2cb3
+Content-Type: application/json; charset=utf-8
+body: {"detail":"permission is required"}
+### POST /admin/permissions/members/900005/grants as 900001
+request: {"permission": "donors:read:all"}
+status: 422
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: 126e2b52e77d2cb3
+Content-Type: application/json; charset=utf-8
+body: {"detail":"A reason is required"}
+### POST /admin/permissions/members/900005/grants as 900001
+request: {"permission": "donors:read:all", "reason": 5}
+status: 422
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: 126e2b52e77d2cb3
+Content-Type: application/json; charset=utf-8
+body: {"detail":"reason must be text"}
+### POST /admin/permissions/members/900005/grants as 900001
+request: {"permission": "donors:read:all", "reason": "   "}
+status: 422
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: 126e2b52e77d2cb3
+Content-Type: application/json; charset=utf-8
+body: {"detail":"A reason is required"}
+### POST /admin/permissions/members/900005/grants as 900001
+request: {"permission": "donors:read:all", "reason": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}
+status: 422
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: 126e2b52e77d2cb3
+Content-Type: application/json; charset=utf-8
+body: {"detail":"The reason must be 300 characters or fewer"}
+### POST /admin/permissions/members/99999999/grants as 900001
+request: {"permission": "donors:read:all", "reason": "Needs the list"}
+status: 404
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: 126e2b52e77d2cb3
+Content-Type: application/json; charset=utf-8
+body: {"detail":"Member not found"}
+### POST /admin/permissions/members/900001/grants as 900001
+request: {"permission": "donors:read:all", "reason": "Self"}
+status: 422
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: 126e2b52e77d2cb3
+Content-Type: application/json; charset=utf-8
+body: {"detail":"You cannot grant a permission to yourself"}
+### POST /admin/permissions/members/900005/grants as 900001
+request: {"permission": "permissions:manage:all", "reason": "Needs the list"}
+status: 422
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: 126e2b52e77d2cb3
+Content-Type: application/json; charset=utf-8
+body: {"detail":"That permission cannot be granted"}
+### POST /admin/permissions/members/900005/grants as 900001
+request: {"permission": "class-access:manage:all", "reason": "Needs the list"}
+status: 422
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: 126e2b52e77d2cb3
+Content-Type: application/json; charset=utf-8
+body: {"detail":"That permission cannot be granted"}
+### POST /admin/permissions/members/900005/grants as 900001
+request: {"permission": "members:enrol-by-token:all", "reason": "Needs the list"}
+status: 422
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: 126e2b52e77d2cb3
+Content-Type: application/json; charset=utf-8
+body: {"detail":"That permission cannot be granted"}
+### POST /admin/permissions/members/900005/grants as 900001
+request: {"permission": "donors:read:gender", "reason": "Needs the list"}
+status: 422
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: 126e2b52e77d2cb3
+Content-Type: application/json; charset=utf-8
+body: {"detail":"That permission cannot be granted"}
+### POST /admin/permissions/members/900005/grants as 900001
+request: {"permission": "nothing:here:all", "reason": "Needs the list"}
+status: 422
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: 126e2b52e77d2cb3
+Content-Type: application/json; charset=utf-8
+body: {"detail":"That permission cannot be granted"}
+### POST /admin/permissions/members/900005/grants as 900001
+request: {"permission": "content:read:all", "reason": "Needs the list"}
+status: 409
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: 126e2b52e77d2cb3
+Content-Type: application/json; charset=utf-8
+body: {"detail":"The member already holds that permission"}
+=== rows after the refused grants ===
+-- access.user_permissions
+-- access.user_roles
+{"user_id":1,"roleid":1}
+{"user_id":2,"roleid":3}
+{"user_id":3,"roleid":4}
+{"user_id":10,"roleid":7}
+{"user_id":12,"roleid":3}
+-- access.class_access_rules
+-- access.class_access_rule_conditions
+-- platform.outbox (event_type, created_at, payload)

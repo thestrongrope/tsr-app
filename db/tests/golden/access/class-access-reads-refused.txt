@@ -1,0 +1,99 @@
+### GET /admin/class-access/members?q=Gold as nobody
+status: 401
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: (absent)
+Content-Type: application/json; charset=utf-8
+body: {"detail":"Not authenticated"}
+### GET /admin/class-access/members/900005 as nobody
+status: 401
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: (absent)
+Content-Type: application/json; charset=utf-8
+body: {"detail":"Not authenticated"}
+### GET /admin/class-access/options as nobody
+status: 401
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: (absent)
+Content-Type: application/json; charset=utf-8
+body: {"detail":"Not authenticated"}
+### POST /admin/class-access/preview as nobody
+request: {"gender": 1, "conditions": [{"field": "city", "value": "Goldville"}]}
+status: 401
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: (absent)
+Content-Type: application/json; charset=utf-8
+body: {"detail":"Not authenticated"}
+### GET /admin/class-access/members?q=Gold as 900004
+status: 403
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: a28e16a8925dffe9
+Content-Type: application/json; charset=utf-8
+body: {"detail":"You do not have permission to do that"}
+### GET /admin/class-access/members/900005 as 900004
+status: 403
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: a28e16a8925dffe9
+Content-Type: application/json; charset=utf-8
+body: {"detail":"You do not have permission to do that"}
+### GET /admin/class-access/options as 900004
+status: 403
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: a28e16a8925dffe9
+Content-Type: application/json; charset=utf-8
+body: {"detail":"You do not have permission to do that"}
+### POST /admin/class-access/preview as 900004
+request: {"gender": 1, "conditions": [{"field": "city", "value": "Goldville"}]}
+status: 403
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: a28e16a8925dffe9
+Content-Type: application/json; charset=utf-8
+body: {"detail":"You do not have permission to do that"}
+### GET /admin/class-access/members?q=Gold as 900003
+status: 200
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: 60768df06595dc8e
+Content-Type: application/json; charset=utf-8
+body: {"members":[{"token":900003,"name":"Gold Ladies","gender":2},{"token":900006,"name":"Gold Ladies Member","gender":2}]}
+### GET /admin/class-access/members/900005 as 900003
+status: 403
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: 60768df06595dc8e
+Content-Type: application/json; charset=utf-8
+body: {"detail":"This member belongs to the other gender"}
+### GET /admin/class-access/options as 900003
+status: 200
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: 60768df06595dc8e
+Content-Type: application/json; charset=utf-8
+body: {"genders":[{"id":2,"name":"Ladies"}],"levels":[{"id":1,"code":"SM","name":"SALMAN"},{"id":2,"code":"AG","name":"ABUZAR"},{"id":3,"code":"MK","name":"MIQDAD"}],"cities":["Goldville"],"countries":["Goldland"],"tags":[]}
+### POST /admin/class-access/preview as 900003
+request: {"gender": 1, "conditions": [{"field": "city", "value": "Goldville"}]}
+status: 403
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: 60768df06595dc8e
+Content-Type: application/json; charset=utf-8
+body: {"detail":"This member belongs to the other gender"}

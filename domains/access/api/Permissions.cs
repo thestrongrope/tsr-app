@@ -1,5 +1,5 @@
 using System.Data.Common;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api.Domain;
 using Tsr.Shared.Api;
 
@@ -12,14 +12,15 @@ namespace Tsr.Access.Api;
 /// </summary>
 public sealed class Permissions
 {
-    private readonly AccessContext _db;
+    private readonly NpgsqlDataSource _source;
     private readonly IClassScopes _classes;
     private readonly Dictionary<int, UserAccess> _resolved = [];
     private IReadOnlyList<string>? _catalog;
 
-    internal Permissions(AccessContext db, IClassScopes classes)
+    // Each read runs on its own short pooled connection and never inside another: no path holds two connections of the data source at once.
+    internal Permissions(NpgsqlDataSource source, IClassScopes classes)
     {
-        _db = db;
+        _source = source;
         _classes = classes;
     }
 
@@ -88,10 +89,7 @@ public sealed class Permissions
 
     /// <summary>The caller's role id (0 when the user holds no role): the <c>roleid</c> of GET /me.</summary>
     public async Task<int> RoleIdAsync(Caller caller, CancellationToken ct) =>
-        await _db.UserRoles.AsNoTracking()
-            .Where(u => u.UserId == caller.UserId)
-            .Select(u => (int?)u.RoleId)
-            .FirstOrDefaultAsync(ct) ?? 0;
+        await _source.ScalarAsync<int>($"select u.roleid from access.user_roles as u where u.user_id = {caller.UserId} limit 1", ct) ?? 0;
 
     private async Task RequireKnownAsync(string action, CancellationToken ct)
     {
@@ -106,7 +104,7 @@ public sealed class Permissions
     {
         if (_catalog is null)
         {
-            var names = await _db.Permissions.AsNoTracking().Select(p => p.Name).ToListAsync(ct);
+            var names = await _source.ListAsync($"""select p.name as "Name" from access.permissions as p""", row => row.Text("Name"), ct);
             // Ordinal order, which is MariaDB's order for these names (db tests and the Hurl parity file prove it).
             _catalog = names.Order(StringComparer.Ordinal).ToList();
         }
@@ -143,8 +141,8 @@ public sealed class Permissions
     // user_permissions), and whether the user holds a live class access rule (few do; their rules are read after).
     private async Task<StoredAccess> StoredAsync(Caller caller, CancellationToken ct)
     {
-        var rows = await _db.Database
-            .SqlQuery<StoredAccess>($"""
+        var rows = await _source.ListAsync(
+            $"""
                 with r as (select coalesce((select roleid from access.user_roles where user_id = {caller.UserId}), 0)::int as roleid)
                 select r.roleid as "RoleId",
                        array(select name::text from access.permissions) as "Catalog",
@@ -154,8 +152,9 @@ public sealed class Permissions
                            select permission from access.user_permissions where user_id = {caller.UserId} and revoked_at is null) g) as "Names",
                        exists(select 1 from access.class_access_rules where token = {caller.Token} and revoked_at is null) as "HasRules"
                 from r
-                """)
-            .ToListAsync(ct);
+                """,
+            row => new StoredAccess(row.Int("RoleId"), row.TextArray("Catalog"), row.TextArray("Names"), row.Bool("HasRules")),
+            ct);
         return rows[0];
     }
 
@@ -172,23 +171,36 @@ public sealed class Permissions
 
     private async Task<IReadOnlyList<AccessRule>> LiveRulesAsync(int token, CancellationToken ct)
     {
-        var rules = await _db.ClassAccessRules.AsNoTracking()
-            .Where(r => r.Token == token && r.RevokedAt == null)
-            .Select(r => new { r.Id, r.Gender })
-            .ToListAsync(ct);
+        var rules = await _source.ListAsync(
+            $"""
+                select c.id as "Id", c.gender as "Gender"
+                from access.class_access_rules as c
+                where c.token = {token} and c.revoked_at is null
+                """,
+            row => new RuleRow(row.Int("Id"), row.IntOrNull("Gender")),
+            ct);
         if (rules.Count == 0)
         {
             return [];
         }
 
-        var ids = rules.Select(r => r.Id).ToList();
-        var conditions = await _db.ClassAccessRuleConditions.AsNoTracking()
-            .Where(c => ids.Contains(c.RuleId))
-            .ToListAsync(ct);
+        var ids = rules.Select(r => r.Id).ToArray();
+        var conditions = await _source.ListAsync(
+            $"""
+                select c.field as "Field", c.level_id as "LevelId", c.negate as "Negate", c.rule_id as "RuleId", c.value as "Value"
+                from access.class_access_rule_conditions as c
+                where c.rule_id = any({ids})
+                """,
+            row => new ConditionRow(row.Int("RuleId"), row.Text("Field"), row.Bool("Negate"), row.TextOrNull("Value"), row.IntOrNull("LevelId")),
+            ct);
         return rules
             .Select(r => new AccessRule(
                 r.Gender,
                 conditions.Where(c => c.RuleId == r.Id).Select(c => new RuleCondition(c.Field, c.Negate, c.Value, c.LevelId)).ToList()))
             .ToList();
     }
+
+    private sealed record RuleRow(int Id, int? Gender);
+
+    private sealed record ConditionRow(int RuleId, string Field, bool Negate, string? Value, int? LevelId);
 }

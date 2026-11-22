@@ -1,0 +1,44 @@
+### GET /me/permissions/donors:read as 900001
+status: 500
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: (absent)
+Content-Type: text/plain; charset=utf-8
+body: Npgsql.PostgresException (0x80004005): 42501: permission denied for table permissions
+### GET /admin/permissions/members/900005 as 900001
+status: 500
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: (absent)
+Content-Type: text/plain; charset=utf-8
+body: Npgsql.PostgresException (0x80004005): 42501: permission denied for table permissions
+### POST /admin/permissions/members/900005/grants as 900001
+request: {"permission": "donors:read:all", "reason": "Needs the list"}
+status: 500
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: (absent)
+Content-Type: text/plain; charset=utf-8
+body: Npgsql.PostgresException (0x80004005): 42501: permission denied for table permissions
+### GET /admin/class-access/members?q=al as 900001
+status: 500
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: (absent)
+Content-Type: text/plain; charset=utf-8
+body: Npgsql.PostgresException (0x80004005): 42501: permission denied for table permissions
+=== rows after the failed routes ===
+-- access.user_permissions
+-- access.user_roles
+{"user_id":1,"roleid":1}
+{"user_id":2,"roleid":3}
+{"user_id":3,"roleid":4}
+{"user_id":10,"roleid":7}
+{"user_id":12,"roleid":3}
+-- access.class_access_rules
+-- access.class_access_rule_conditions
+-- platform.outbox (event_type, created_at, payload)

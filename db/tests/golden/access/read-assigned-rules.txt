@@ -1,0 +1,80 @@
+### GET /me/permissions as 900005
+status: 200
+ETag: "087faf0d70798c5e"
+Cache-Control: private, no-cache
+Vary: Authorization
+X-Permissions-Revision: 087faf0d70798c5e
+Content-Type: application/json; charset=utf-8
+body: {"version":5,"issued_at":"2026-01-01T00:00:00.000000+00:00","permissions":["account:delete:self","attendance:read:self","children-performance:read:self","children:link:self","children:read:self","class-requests:create:self","classes:join:self","classes:read:assigned","classes:read:enrolled","classes:update:assigned","content:read:all","devices:manage:self","feedback:create:self","mcqs:copy:assigned","notifications:read:self","notifications:send:assigned","parents:add-direct:assigned","parents:add:assigned","parents:manage:self","performance:read:self","profile:read:self","profile:update:self","quiz-competition:take:all","quiz-scores:read:self","quizzes:take:enrolled","registrations:approve:assigned","registrations:read:assigned","reports:read:assigned","sessions:create:assigned","sessions:read:enrolled","sessions:update:assigned","students:enrol:assigned","syllabus:read:all","teachers:lookup:assigned"],"scopes":{"gender":null,"assigned":[98501,98505],"assigned_genders":[1,2],"own":[],"taught":[],"enrolled":[]},"navigation":{"classes":true,"manage":true},"revision":"087faf0d70798c5e"}
+### GET /me/permissions/donors:read as 900005
+status: 200
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: 087faf0d70798c5e
+Content-Type: application/json; charset=utf-8
+body: {"permission":"donors:read","scopes":[]}
+### GET /me/permissions/permissions:manage as 900005
+status: 200
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: 087faf0d70798c5e
+Content-Type: application/json; charset=utf-8
+body: {"permission":"permissions:manage","scopes":[]}
+### GET /me/permissions/classes:read as 900005
+status: 200
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: 087faf0d70798c5e
+Content-Type: application/json; charset=utf-8
+body: {"permission":"classes:read","scopes":["assigned","enrolled"]}
+### GET /me/permissions/nothing:here as 900005
+status: 404
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: 087faf0d70798c5e
+Content-Type: application/json; charset=utf-8
+body: {"detail":"Unknown permission"}
+### GET /user/permissions as 900005
+status: 200
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: 087faf0d70798c5e
+Content-Type: application/json; charset=utf-8
+body: {"version":3,"permissions":["class_management","class_reports","mcq_management","student_management"],"role_id":5,"role_name":"CLASS_ADMIN","applicable_roles":[{"role_id":5,"role_name":"CLASS_ADMIN","source":"database_role","priority":1}],"enrolled":false,"class_count":0,"teacher_count":0,"mcq_admin":false,"is_teacher":false,"issued_at":"2026-01-01T00:00:00.000000+00:00"}
+### GET /me/permissions/classes:read as 900005
+status: 200
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: 087faf0d70798c5e
+Content-Type: application/json; charset=utf-8
+body: {"permission":"classes:read","scopes":["assigned","enrolled"]}
+### GET /me/permissions as 900004
+status: 200
+ETag: "a28e16a8925dffe9"
+Cache-Control: private, no-cache
+Vary: Authorization
+X-Permissions-Revision: a28e16a8925dffe9
+Content-Type: application/json; charset=utf-8
+body: {"version":5,"issued_at":"2026-01-01T00:00:00.000000+00:00","permissions":["account:delete:self","attendance:read:self","children-performance:read:self","children:link:self","children:read:self","class-requests:create:self","classes:join:self","classes:read:enrolled","content:read:all","devices:manage:self","feedback:create:self","notifications:read:self","parents:manage:self","performance:read:self","profile:read:self","profile:update:self","quiz-competition:take:all","quiz-scores:read:self","quizzes:take:enrolled","sessions:read:enrolled","syllabus:read:all"],"scopes":{"gender":null,"assigned":[],"assigned_genders":[],"own":[],"taught":[],"enrolled":[98501]},"navigation":{"classes":true,"manage":false},"revision":"a28e16a8925dffe9"}
+### GET /admin/class-access/members/900005 as 900002
+status: 200
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: fe01853a5809a40f
+Content-Type: application/json; charset=utf-8
+body: {"member":{"token":900005,"name":"Gold Subject","gender":1},"version":"5:17f8af97ad4a7f76","fromRole":null,"rules":[{"id":1,"gender":1,"note":"Gents, level 2, Goldville, alpha","createdAt":"2026-01-01T00:00:00","conditions":[{"field":"city","negate":false,"value":"Goldville"},{"field":"level","negate":false,"value":2},{"field":"tag","negate":false,"value":"alpha"}],"classCount":1,"classes":[{"id":98501,"code":"GL-G-501","name":"Gold One","ruleId":1,"rule":"Gents, level 2, Goldville, alpha"}]}]}
+### GET /admin/permissions/members/900005 as 900001
+status: 200
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: 126e2b52e77d2cb3
+Content-Type: application/json; charset=utf-8
+body: {"member":{"token":900005,"name":"Gold Subject"},"fromRole":[{"name":"classes:read:assigned","description":"View assigned classes","reach":"In the classes they are assigned"},{"name":"classes:update:assigned","description":"Update assigned classes","reach":"In the classes they are assigned"},{"name":"mcqs:copy:assigned","description":"Copy MCQs between assigned classes","reach":"In the classes they are assigned"},{"name":"notifications:send:assigned","description":"Notify assigned classes","reach":"In the classes they are assigned"},{"name":"parents:add-direct:assigned","description":"Directly link parents by token number in assigned classes","reach":"In the classes they are assigned"},{"name":"parents:add:assigned","description":"Create one-time invite link for parents in assigned classes","reach":"In the classes they are assigned"},{"name":"registrations:approve:assigned","description":"Approve registrations of assigned genders","reach":"In the classes they are assigned"},{"name":"registrations:read:assigned","description":"View registrations of assigned genders","reach":"In the classes they are assigned"},{"name":"reports:read:assigned","description":"Reports on assigned classes","reach":"In the classes they are assigned"},{"name":"sessions:create:assigned","description":"Record conduction for assigned classes","reach":"In the classes they are assigned"},{"name":"sessions:update:assigned","description":"Edit conduction for assigned classes","reach":"In the classes they are assigned"},{"name":"students:enrol:assigned","description":"Enrol students into assigned classes","reach":"In the classes they are assigned"},{"name":"teachers:lookup:assigned","description":"Look up teachers for assigned classes","reach":"In the classes they are assigned"}],"granted":[],"grantable":[{"name":"api-docs:read:all","description":"Mobile API reference","reach":"In every class and for every member"},{"name":"audit-log:read:all","description":"Admin access log","reach":"In every class and for every member"},{"name":"class-students:read:all","description":"View students of any class","reach":"In every class and for every member"},{"name":"class-students:update:all","description":"Set MCQ flag in any class","reach":"In every class and for every member"},{"name":"classes:create:all","description":"Create any class","reach":"In every class and for every member"},{"name":"classes:read:all","description":"View every class","reach":"In every class and for every member"},{"name":"classes:update:all","description":"Update any class","reach":"In every class and for every member"},{"name":"deactivated-classes:manage:all","description":"Deactivated classes","reach":"In every class and for every member"},{"name":"deletion-requests:manage:all","description":"Account deletion requests","reach":"In every class and for every member"},{"name":"donors:read:all","description":"View donors","reach":"In every class and for every member"},{"name":"feedback:review:all","description":"Review member feedback and mark items handled","reach":"In every class and for every member"},{"name":"guides:manage:all","description":"Manage guides","reach":"In every class and for every member"},{"name":"mcqs:copy:all","description":"Copy MCQs between any classes","reach":"In every class and for every member"},{"name":"mcqs:manage:all","description":"Manage quizzes of any class","reach":"In every class and for every member"},{"name":"notifications:broadcast:all","description":"Broadcast notifications","reach":"In every class and for every member"},{"name":"notifications:send:all","description":"Notify any class","reach":"In every class and for every member"},{"name":"parents:add-direct:all","description":"Directly link parents by token number across all members","reach":"In every class and for every member"},{"name":"parents:add:all","description":"Create one-time invite link for parents across all classes","reach":"In every class and for every member"},{"name":"parents:manage:all","description":"Manage and revoke parent links across all members","reach":"In every class and for every member"},{"name":"quiz:admin:all","description":"Quiz competition admin, including reset","reach":"In every class and for every member"},{"name":"quiz:reset:all","description":"Reset all quiz data","reach":"In every class and for every member"},{"name":"quran-leaderboard:read:all","description":"Quran recitation leaderboard","reach":"In every class and for every member"},{"name":"registrations:approve:all","description":"Approve any registration","reach":"In every class and for every member"},{"name":"registrations:read:all","description":"View all registrations","reach":"In every class and for every member"},{"name":"registrations:reject:all","description":"Reject registrations","reach":"In every class and for every member"},{"name":"reports:read:all","description":"Reports on every class","reach":"In every class and for every member"},{"name":"sessions:create:all","description":"Record conduction for any class","reach":"In every class and for every member"},{"name":"sessions:update:all","description":"Edit conduction for any class","reach":"In every class and for every member"},{"name":"spot-quizzes:manage:all","description":"Manage spot quizzes","reach":"In every class and for every member"},{"name":"standard-mcqs:update:all","description":"Edit the Standard MCQs","reach":"In every class and for every member"},{"name":"students:enrol:all","description":"Enrol students into any class","reach":"In every class and for every member"},{"name":"students:transfer:all","description":"Transfer students between classes","reach":"In every class and for every member"},{"name":"summary-report:read:all","description":"Summary report","reach":"In every class and for every member"},{"name":"syllabus:update:all","description":"Administer the syllabus","reach":"In every class and for every member"},{"name":"teachers:lookup:all","description":"Look up any teacher","reach":"In every class and for every member"},{"name":"teachers:read:all","description":"List and view all teachers","reach":"In every class and for every member"},{"name":"whatsapp:manage:all","description":"WhatsApp reminders","reach":"In every class and for every member"}]}

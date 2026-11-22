@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Npgsql;
 using Tsr.Access.Api.Domain;
 using Tsr.Shared.Api;
 
@@ -14,13 +15,15 @@ namespace Tsr.Access.Api.Features.ClassAccessPreview;
 
 internal static class ClassAccessPreviewSlice
 {
+    internal sealed record PreviewAnswer(IReadOnlyList<PreviewClass> Classes, int ClassCount, string PreviewHash);
+
     public static IEndpointRouteBuilder MapClassAccessPreview(this IEndpointRouteBuilder routes)
     {
         routes.MapPost("/admin/class-access/preview", HandleAsync).RequireMember(createsMember: true);
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(HttpContext context, AccessContext db, Permissions permissions, IClassScopes classes, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(HttpContext context, NpgsqlDataSource source, Permissions permissions, IClassScopes classes, CancellationToken ct)
     {
         var (op, refusal) = await ClassAccessOperator.RequireAsync(context, permissions, ct);
         if (op is null)
@@ -47,7 +50,7 @@ internal static class ClassAccessPreviewSlice
             return range.ToResult();
         }
 
-        var checkedConditions = await ClassAccessStore.CheckedConditionsAsync(db, raw.Value!, ct);
+        var checkedConditions = await ClassAccessStore.CheckedConditionsAsync(source, raw.Value!, ct);
         if (checkedConditions.Failed)
         {
             return checkedConditions.Refusal!.ToResult();
@@ -65,11 +68,9 @@ internal static class ClassAccessPreviewSlice
         }
 
         var reached = ClassAccessRules.Reach(gender.Value, offered.Value!, await classes.ActiveClassesAsync(ct));
-        return Results.Json(new
-        {
-            classes = ClassAccessStore.Listed(reached),
-            classCount = reached.Count,
-            previewHash = ClassAccessRules.PreviewHash(reached.Select(c => c.Id)),
-        });
+        return Results.Json(new PreviewAnswer(
+            ClassAccessStore.Listed(reached),
+            reached.Count,
+            ClassAccessRules.PreviewHash(reached.Select(c => c.Id))), AccessJson.Answers.PreviewAnswer);
     }
 }

@@ -2,6 +2,7 @@
   <!-- Unit tests for access. The test files live next to the code ("*.Tests.cs"). -->
   <PropertyGroup>
     <IsPackable>false</IsPackable>
+    <JsonSerializerIsReflectionEnabledByDefault>false</JsonSerializerIsReflectionEnabledByDefault>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="../**/*.Tests.cs" Exclude="../tests/**" />

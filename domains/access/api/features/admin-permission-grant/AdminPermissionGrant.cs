@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api.Domain;
 using Tsr.Shared.Api;
 
@@ -24,7 +24,7 @@ internal static class AdminPermissionGrantSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string token, HttpContext context, AccessContext db, Permissions permissions, TimeProvider clock, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(string token, HttpContext context, NpgsqlDataSource source, Permissions permissions, TimeProvider clock, CancellationToken ct)
     {
         var refusal = await PermissionGrants.GuardAsync(context, permissions, ct);
         if (refusal is not null)
@@ -52,7 +52,12 @@ internal static class AdminPermissionGrantSlice
             return reason.Refusal!.ToResult();
         }
 
-        var member = await AdminMembers.FindAsync(db, AdminMembers.TokenOf(token), ct);
+        MemberRow? member;
+        await using (var read = await source.BeginAsync(ct))
+        {
+            member = await AdminMembers.FindAsync(read, AdminMembers.TokenOf(token), ct);
+        }
+
         if (member is null)
         {
             return Problem.Detail(StatusCodes.Status404NotFound, "Member not found");
@@ -63,39 +68,41 @@ internal static class AdminPermissionGrantSlice
             return Problem.Detail(StatusCodes.Status422UnprocessableEntity, "You cannot grant a permission to yourself");
         }
 
-        var (grantable, held) = await PermissionGrants.GrantableAsync(db, permissions, member, ct);
+        var (grantable, held) = await PermissionGrants.GrantableAsync(source, permissions, member, ct);
         var notAllowed = GrantRules.RefuseGrant(permission, grantable, held);
         if (notAllowed is not null)
         {
             return notAllowed.ToResult();
         }
 
-        var conflict = await InsertAsync(db, clock, member, permission, reason.Value!, context.GetCaller()!.UserId, ct);
+        var conflict = await InsertAsync(source, clock, member, permission, reason.Value!, context.GetCaller()!.UserId, ct);
         if (conflict is not null)
         {
             return conflict.ToResult();
         }
 
-        var view = await PermissionGrants.ViewAsync(db, permissions, member.Token, ct);
-        return view is null ? Problem.Detail(StatusCodes.Status404NotFound, "Member not found") : Results.Json(view);
+        var view = await PermissionGrants.ViewAsync(source, permissions, member.Token, ct);
+        return view is null ? Problem.Detail(StatusCodes.Status404NotFound, "Member not found") : Results.Json(view, AccessJson.Answers.GrantMemberView);
     }
 
-    private static async Task<Refusal?> InsertAsync(AccessContext db, TimeProvider clock, MemberRow member, string permission, string reason, int operatorId, CancellationToken ct)
+    private static async Task<Refusal?> InsertAsync(NpgsqlDataSource source, TimeProvider clock, MemberRow member, string permission, string reason, int operatorId, CancellationToken ct)
     {
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        await MemberLock.TakeAsync(db, member.Token, ct);
-        var live = await db.UserPermissions.AsNoTracking()
-            .AnyAsync(g => g.UserId == member.UserId && g.Permission == permission && g.RevokedAt == null, ct);
-        if (live)
+        await using var tx = await source.BeginAsync(ct);
+        await MemberLock.TakeAsync(tx, member.Token, ct);
+        var live = await tx.ScalarAsync<int>(
+            $"select 1 from access.user_permissions where user_id = {member.UserId} and permission = {permission}::citext and revoked_at is null limit 1",
+            ct);
+        if (live is not null)
         {
             return new Refusal(StatusCodes.Status409Conflict, "The member already holds that permission");
         }
 
-        var grant = new UserPermission { UserId = member.UserId, Permission = permission, GrantedBy = operatorId, GrantedAt = clock.GetUtcNow(), Reason = reason };
-        db.UserPermissions.Add(grant);
-        await db.SaveChangesAsync(ct);
-        await Outbox.WriteAsync(db, "access.permission_granted", new PermissionGranted(grant.Id, member.Token, permission, operatorId), clock, ct);
-        await transaction.CommitAsync(ct);
+        var grantedAt = clock.GetUtcNow();
+        var grantId = await tx.ScalarAsync<int>(
+            $"insert into access.user_permissions (user_id, permission, granted_by, granted_at, reason) values ({member.UserId}, {permission}, {operatorId}, {grantedAt}, {reason}) returning id",
+            ct);
+        await Outbox.WriteAsync(tx, "access.permission_granted", new PermissionGranted(grantId!.Value, member.Token, permission, operatorId), AccessJson.Default.PermissionGranted, clock, ct);
+        await tx.CommitAsync(ct);
         return null;
     }
 }

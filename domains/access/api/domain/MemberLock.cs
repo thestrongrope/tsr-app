@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+using Tsr.Shared.Api;
 
 namespace Tsr.Access.Api.Domain;
 
@@ -10,14 +10,9 @@ internal static class MemberLock
 {
     public const int LockClass = 6001;
 
-    public static async Task TakeAsync(AccessContext db, int token, CancellationToken ct)
+    public static async Task TakeAsync(DbTx tx, int token, CancellationToken ct)
     {
-        if (db.Database.CurrentTransaction is null)
-        {
-            throw new InvalidOperationException("The member lock is taken inside the transaction of the change it guards.");
-        }
-
-        await db.Database.ExecuteSqlAsync($"set local lock_timeout = '5s'", ct);
-        await db.Database.ExecuteSqlAsync($"select pg_advisory_xact_lock({LockClass}, {token})", ct);
+        await tx.ExecuteAsync($"set local lock_timeout = '5s'", ct);
+        await tx.ExecuteAsync($"select pg_advisory_xact_lock({LockClass}, {token})", ct);
     }
 }

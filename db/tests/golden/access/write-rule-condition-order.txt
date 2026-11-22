@@ -1,0 +1,52 @@
+### GET /admin/class-access/members/900005 as 900002
+status: 200
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: fe01853a5809a40f
+Content-Type: application/json; charset=utf-8
+body: {"member":{"token":900005,"name":"Gold Subject","gender":1},"version":"0:e3b0c44298fc1c14","fromRole":null,"rules":[]}
+### POST /admin/class-access/preview as 900002
+request: {"gender": 1, "conditions": [{"field": "level", "value": 3}, {"field": "city", "value": "goldville"}, {"field": "tag", "value": "ALPHA"}, {"field": "level", "value": 2}]}
+status: 200
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: fe01853a5809a40f
+Content-Type: application/json; charset=utf-8
+body: {"classes":[{"id":98501,"code":"GL-G-501","name":"Gold One"},{"id":98502,"code":"GL-G-502","name":"Gold Two"}],"classCount":2,"previewHash":"9324274ed0291d84"}
+### POST /admin/class-access/members/900005/rules as 900002
+request: {"gender": 1, "conditions": [{"field": "level", "value": 3}, {"field": "city", "value": "goldville"}, {"field": "tag", "value": "ALPHA"}, {"field": "level", "value": 2}], "reason": "Order", "version": "0:e3b0c44298fc1c14", "previewHash": "9324274ed0291d84"}
+status: 200
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: fe01853a5809a40f
+Content-Type: application/json; charset=utf-8
+body: {"saved":true,"member":{"token":900005,"name":"Gold Subject","gender":1},"version":"5:6b86b273ff34fce1","fromRole":null,"rules":[{"id":1,"gender":1,"note":"Gents, levels 2-3, Goldville, alpha","createdAt":"2026-01-01T00:00:00","conditions":[{"field":"city","negate":false,"value":"Goldville"},{"field":"level","negate":false,"value":2},{"field":"level","negate":false,"value":3},{"field":"tag","negate":false,"value":"alpha"}],"classCount":2,"classes":[{"id":98501,"code":"GL-G-501","name":"Gold One","ruleId":1,"rule":"Gents, levels 2-3, Goldville, alpha"},{"id":98502,"code":"GL-G-502","name":"Gold Two","ruleId":1,"rule":"Gents, levels 2-3, Goldville, alpha"}]}]}
+### GET /admin/class-access/members/900005 as 900002
+status: 200
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: fe01853a5809a40f
+Content-Type: application/json; charset=utf-8
+body: {"member":{"token":900005,"name":"Gold Subject","gender":1},"version":"5:6b86b273ff34fce1","fromRole":null,"rules":[{"id":1,"gender":1,"note":"Gents, levels 2-3, Goldville, alpha","createdAt":"2026-01-01T00:00:00","conditions":[{"field":"city","negate":false,"value":"Goldville"},{"field":"level","negate":false,"value":2},{"field":"level","negate":false,"value":3},{"field":"tag","negate":false,"value":"alpha"}],"classCount":2,"classes":[{"id":98501,"code":"GL-G-501","name":"Gold One","ruleId":1,"rule":"Gents, levels 2-3, Goldville, alpha"},{"id":98502,"code":"GL-G-502","name":"Gold Two","ruleId":1,"rule":"Gents, levels 2-3, Goldville, alpha"}]}]}
+=== rows after save ===
+-- access.user_permissions
+-- access.user_roles
+{"user_id":1,"roleid":1}
+{"user_id":2,"roleid":3}
+{"user_id":3,"roleid":4}
+{"user_id":5,"roleid":5}
+{"user_id":10,"roleid":7}
+{"user_id":12,"roleid":3}
+-- access.class_access_rules
+{"id":1,"token":900005,"gender":1,"note":"Gents, levels 2-3, Goldville, alpha","created_at":"2026-01-01T00:00:00+00:00","granted_by":2,"reason":"Order","revoked_at":null,"revoked_by":null,"revoke_reason":null}
+-- access.class_access_rule_conditions
+{"id":1,"rule_id":1,"field":"city","negate":false,"value":"Goldville","level_id":null}
+{"id":2,"rule_id":1,"field":"level","negate":false,"value":null,"level_id":2}
+{"id":3,"rule_id":1,"field":"level","negate":false,"value":null,"level_id":3}
+{"id":4,"rule_id":1,"field":"tag","negate":false,"value":"alpha","level_id":null}
+-- platform.outbox (event_type, created_at, payload)
+access.class_access_rule_created | "2026-01-01T00:00:00+00:00" | {"token": 900005, "gender": 1, "ruleId": 1, "grantedBy": 2}

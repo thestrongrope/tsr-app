@@ -88,15 +88,19 @@ Platform-owned tables (no domain): `outbox`, `outbound_messages` (PHP's `schema_
    PHP is the oracle (D6): a slice is done when its Hurl file passes on PHP and on the new API.
    **An unconverted domain** reads with `SqlQuery<T>` and writes with EF entities or `ExecuteSql`, as before; its published commands that run on a `DbTx` (rule 3) use the shared helpers below even while the rest of the domain is unconverted.
    **A converted domain** uses no Entity Framework at run time. Its context and migrations stay (the schema is still made by them); the context is registered
-   for the JIT host and the migrate job only, not for the API's request path (`AddDomainContext` and `MigrateDatabasesAsync` in `shared/api/DomainContexts.cs` are marked JIT only; a separate `Add<Context>Migrations()` for this is planned, not built).
+   for the migrate job only: the module has an `Add<Context>Migrations()` (access: `AddAccessMigrations`, marked JIT only) and `hosts/api/HostServices.cs` calls it in `RunMode.Migrate` just before `Add<Context>()`, so the migration order is unchanged.
+   `hosts/api/tests/RunTimeEfUseTests.cs` fails on any Entity Framework or `AccessContext` name in access's run-time files (the one allowed line is that registration). Its file names and banned context name are written for access alone: the next converted domain must extend them, not only its domain list.
+   A read route that needs a port or an uncached `Permissions` read after its own reads opens a short transaction for them and disposes it first: no code path holds two connections of the data source at once, so no number of requests can starve the pool by waiting on itself. (`Permissions.CanAsync` for the caller `RequireAsync` already resolved opens none, so a guard may call it inside the transaction; `db/tests/AccessPoolTests.cs` runs every access route on a pool of one and fails if a path needs two.)
+   A helper that runs both in a write transaction and on its own takes the `DbTx`; a read route passes its short transaction.
    SQL is an interpolated string given to `Sql` (`shared/api/Sql.cs`), never built by hand and never a `$$"` string.
    No raw `NpgsqlCommand` and no `*Raw` call outside `shared/api/Db.cs`; `SqlHandlerUseTests` lists the few files that still have one.
    It runs on an `NpgsqlDataSource` or a `DbTx` (`Db.cs`, `DbTx.cs`) and reads rows by column name with `DbRow`;
    `ScalarAsync` is for value types only. An event goes through the `Outbox.WriteAsync` overload that takes the domain's `<Context>Json`
-   (a source-generated context in `domain/`), and so does an answer serialized from a value (`Results.Json(value, <Context>Json.Default.<Type>)`); an answer a domain writes by hand (content's `V1` with `Utf8JsonWriter`) does not need it.
+   (a source-generated context in `domain/`). An answer serialized from a value goes through `Results.Json(value, <Context>Json.Answers.<Type>)`: a second instance of the context built on the host's JSON options (web defaults and the relaxed encoder, so `+` and non-ASCII text stay as written); events use `<Context>Json.Default`, which is what the outbox always wrote. Access is the pattern (`domains/access/api/domain/AccessJson.cs`). Every runtime type behind an `object` field is registered in the context. An answer a domain writes by hand (content's `V1` with `Utf8JsonWriter`) does not need it.
+   The unit test project of a converted domain sets `<JsonSerializerIsReflectionEnabledByDefault>false</JsonSerializerIsReflectionEnabledByDefault>`, so a serialization that would need reflection fails there as it would in a native build; `AccessJson.Tests.cs` writes each answer type that way.
    A test of a converted query must return at least one row: `DbRow` checks the row's shape on the first row, so a `ListAsync` with no rows checks nothing.
    A handler keeps its declared parameters and the project sets `<EnableRequestDelegateGenerator>true</EnableRequestDelegateGenerator>`.
-   A text value compared with a citext column still needs `::citext`; a select of one needs no `::text`.
+   A text value compared with a citext column still needs `::citext` (a LINQ comparison that became SQL gets it too: `{permission}::citext` in access); a select of one needs no `::text`.
    The project sets `IsAotCompatible` and is added to the list in `hosts/api/tests/AotAnalyzerTests.cs`.
 7. Each domain module must start with only its listed dependencies; `hosts/api/tests` checks it.
    Each `site/` module references only `shared/site` and builds its pages alone; `hosts/site/tests`

@@ -18,6 +18,7 @@ Every operation is built (no `api/Planned.cs`). Each slice's header comment name
 | Read routes `GET /me/permissions` (PHP's version 5), `GET /me/permissions/{permission}`, `GET /user/permissions` | built (slices `me-permissions`, `me-permission`, `user-permissions`) |
 | Grant routes (`permissions:manage`): member search, member view, grant, revoke; class access routes (`class-access:manage`): member search, member view, options, preview, grant a rule, revoke a rule | built (slices `admin-permission-*`, `class-access-*`); notes `docs/specs/initial-build/lane-access-notes.md`, `test-grants-notes.md` |
 | Header `X-Permissions-Revision` on signed-in responses | built, database tested, Hurl cases not yet run |
+| Data access | converted (issue 99): plain SQL through the data source (`Sql`, `DbTx`, `DbRow`, `shared/api`), no Entity Framework call at run time; `AccessContext` and `Migrations/` stay for the migrate job (`AccessModule.AddAccessMigrations`, called by the host in migrate mode only) |
 
 ## Owns
 
@@ -93,10 +94,12 @@ also treats `Zürich` and `Zurich` as equal. Not built; settle it when `classes`
 | The revision header on signed-in responses | `api/PermissionsRevisionHeader.cs`, `AccessModule.UsePermissionsRevision` |
 | Decision rules, no database | `api/domain/AccessEngine.cs`, `RuleMatcher.cs`, `PermissionSets.cs`, `LegacyPermissions.cs`, `PermissionsSnapshot.cs` (navigation, revision) |
 | The classes port | `api/IClassScopes.cs` |
-| Tables, migrations | `api/AccessContext.cs`, `api/Migrations/` |
+| Tables, migrations (the migrate job only; no run-time code names the context, `hosts/api/tests/RunTimeEfUseTests.cs`) | `api/AccessContext.cs`, `api/Migrations/`, `AccessModule.AddAccessMigrations` |
+| Data access: `NpgsqlDataSource` or `DbTx` (a read route opens a short transaction; no path holds two connections) | `api/Permissions.cs`, `api/domain/PermissionGrants.cs`, `AdminMembers.cs`, `ClassAccessStore.cs`, the writes in `features/*/` |
+| JSON: answers `AccessJson.Answers` (the host's options, relaxed encoder), events `AccessJson.Default` | `api/domain/AccessJson.cs` |
 | The grant and class access rules | `api/domain/GrantRules.cs`, `ClassAccessRules.cs` (no database), `ClassAccessStore.cs`, `ClassAccessOperator.cs`, `MemberLock.cs` |
 | Words, contract, behaviour | `spec/glossary.md`, `spec/api.yaml`, `spec/tests/*.hurl` |
-| Database tests | `db/tests/AccessTests.cs`, `TestGrantsTests.cs`, `PermissionsRevisionHeaderTests.cs` |
+| Database tests | `db/tests/AccessTests.cs`, `TestGrantsTests.cs`, `PermissionsRevisionHeaderTests.cs`, `AccessGolden*.cs` (answers, stored rows and events as text, `db/tests/golden/access/`), `AccessFailureTests.cs`, `AccessPoolTests.cs` |
 
 ## Checks
 

@@ -105,6 +105,6 @@ internal sealed class MePermissionsHandler(Permissions permissions, TimeProvider
             access.Permissions,
             ScopesBody.From(access.Scopes),
             navigation,
-            revision));
+            revision), AccessJson.Answers.MePermissionsResponse);
     }
 }
