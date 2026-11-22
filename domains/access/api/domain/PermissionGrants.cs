@@ -1,6 +1,6 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Http;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Shared.Api;
 
 namespace Tsr.Access.Api.Domain;
@@ -24,8 +24,6 @@ internal sealed record GrantMemberView(
 internal static class PermissionGrants
 {
     public const string ManageAction = "permissions:manage";
-
-    private sealed record GrantRow(int Id, string Name, string? Description, string? Reason, string? GrantedBy, DateTimeOffset GrantedAt);
 
     /// <summary>The route guard: signed in (401), then <c>permissions:manage</c> (403, in PHP's words). Null when allowed.</summary>
     public static async Task<IResult?> GuardAsync(HttpContext context, Permissions permissions, CancellationToken ct)
@@ -54,9 +52,9 @@ internal static class PermissionGrants
     }
 
     /// <summary>The member's view, or null for an unknown member (the route answers 404). Reads live rows: the request's cached answers for this member are dropped first.</summary>
-    public static async Task<GrantMemberView?> ViewAsync(AccessContext db, Permissions permissions, int token, CancellationToken ct)
+    public static async Task<GrantMemberView?> ViewAsync(NpgsqlDataSource source, Permissions permissions, int token, CancellationToken ct)
     {
-        var member = await AdminMembers.FindAsync(db, token, ct);
+        var member = await FindAsync(source, token, ct);
         if (member is null)
         {
             return null;
@@ -67,9 +65,9 @@ internal static class PermissionGrants
         var held = (await permissions.ForUserOrUnavailableAsync(caller, ct)).Permissions;
         var roleId = await permissions.RoleIdAsync(caller, ct);
 
-        var catalog = await CatalogAsync(db, ct);
-        var fromRole = await FromRoleAsync(db, roleId, catalog, ct);
-        var granted = await GrantedAsync(db, member.UserId, ct);
+        var catalog = await CatalogAsync(source, ct);
+        var fromRole = await FromRoleAsync(source, roleId, catalog, ct);
+        var granted = await GrantedAsync(source, member.UserId, ct);
 
         return new GrantMemberView(
             new GrantMemberBody(member.Token, Cast.Text(member.Name)),
@@ -80,44 +78,65 @@ internal static class PermissionGrants
 
     /// <summary>The live grants and the member's held names, for the 409 and 422 decision of a grant.</summary>
     public static async Task<(IReadOnlyList<PermissionInfo> Grantable, IReadOnlyList<string> Held)> GrantableAsync(
-        AccessContext db, Permissions permissions, MemberRow member, CancellationToken ct)
+        NpgsqlDataSource source, Permissions permissions, MemberRow member, CancellationToken ct)
     {
         permissions.Forget(member.UserId);
         var held = (await permissions.ForUserOrUnavailableAsync(new Caller(member.UserId, member.Token), ct)).Permissions;
-        var catalog = await CatalogAsync(db, ct);
+        var catalog = await CatalogAsync(source, ct);
         return (GrantRules.Grantable(catalog, held), held);
     }
 
-    private static async Task<IReadOnlyList<PermissionInfo>> CatalogAsync(AccessContext db, CancellationToken ct) =>
-        (await db.Permissions.AsNoTracking().ToListAsync(ct))
+    // The member is read in a short transaction that ends before Permissions or any other read opens a connection: no path holds two.
+    private static async Task<MemberRow?> FindAsync(NpgsqlDataSource source, int token, CancellationToken ct)
+    {
+        await using var tx = await source.BeginAsync(ct);
+        return await AdminMembers.FindAsync(tx, token, ct);
+    }
+
+    private static async Task<IReadOnlyList<PermissionInfo>> CatalogAsync(NpgsqlDataSource source, CancellationToken ct) =>
+        (await source.ListAsync(
+            $"""select p.name as "Name", p.description as "Description" from access.permissions as p""",
+            row => new PermissionInfo(row.Text("Name"), row.TextOrNull("Description")),
+            ct))
             .OrderBy(p => p.Name, StringComparer.Ordinal)
-            .Select(p => new PermissionInfo(p.Name, p.Description))
             .ToList();
 
     private static PermissionBody Described(PermissionInfo p) =>
         new(p.Name, Cast.Text(p.Description), GrantRules.ReachOf(p.Name));
 
-    private static async Task<IReadOnlyList<PermissionBody>> FromRoleAsync(AccessContext db, int roleId, IReadOnlyList<PermissionInfo> catalog, CancellationToken ct)
+    private static async Task<IReadOnlyList<PermissionBody>> FromRoleAsync(NpgsqlDataSource source, int roleId, IReadOnlyList<PermissionInfo> catalog, CancellationToken ct)
     {
-        var names = await db.RolePermissions.AsNoTracking().Where(g => g.RoleId == roleId).Select(g => g.Permission).ToListAsync(ct);
+        var names = await source.ListAsync(
+            $"""select r.permission as "Permission" from access.role_permissions as r where r.roleid = {roleId}""",
+            row => row.Text("Permission"),
+            ct);
         var wanted = names.ToHashSet(StringComparer.Ordinal);
         return catalog.Where(p => wanted.Contains(p.Name)).Select(Described).ToList();
     }
 
-    private static async Task<IReadOnlyList<GrantedBody>> GrantedAsync(AccessContext db, int userId, CancellationToken ct)
-    {
-        var rows = await db.Database
-            .SqlQuery<GrantRow>($"""
+    private static async Task<IReadOnlyList<GrantedBody>> GrantedAsync(NpgsqlDataSource source, int userId, CancellationToken ct) =>
+        await source.ListAsync(
+            $"""
                 select g.id as "Id", p.name as "Name", p.description as "Description", g.reason as "Reason", b.name as "GrantedBy", g.granted_at as "GrantedAt"
                 from access.user_permissions g
                 join access.permissions p on p.name = g.permission
                 left join membership.v_members b on b.user_id = g.granted_by
                 where g.user_id = {userId} and g.revoked_at is null
                 order by g.granted_at, g.id
-                """)
-            .ToListAsync(ct);
-        return rows
-            .Select(r => new GrantedBody(r.Id, r.Name, Cast.Text(r.Description), GrantRules.ReachOf(r.Name), Cast.TextOrNull(r.Reason), Cast.TextOrNull(r.GrantedBy), Cast.DateTime(r.GrantedAt)))
-            .ToList();
+                """,
+            ToGranted,
+            ct);
+
+    private static GrantedBody ToGranted(DbRow row)
+    {
+        var name = row.Text("Name");
+        return new GrantedBody(
+            row.Int("Id"),
+            name,
+            Cast.Text(row.TextOrNull("Description")),
+            GrantRules.ReachOf(name),
+            Cast.TextOrNull(row.TextOrNull("Reason")),
+            Cast.TextOrNull(row.TextOrNull("GrantedBy")),
+            Cast.DateTime(row.Instant("GrantedAt")));
     }
 }

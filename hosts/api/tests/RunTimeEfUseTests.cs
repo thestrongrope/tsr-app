@@ -17,24 +17,8 @@ public sealed partial class RunTimeEfUseTests
     private const string ProjectFile = "domains/access/api/Tsr.Access.Api.csproj";
     private const string AllowedLine = "services.AddDomainContext<AccessContext>(AccessContext.SchemaName);";
 
-    /// <summary>The access files not converted yet: the 9 that hold EF calls, the 6 read slices that take the context, and the module. Each conversion task removes its files; task 13 removes the list.</summary>
-    private static readonly string[] NotConverted =
-    [
-        "domains/access/api/domain/AdminMembers.cs",
-        "domains/access/api/domain/ClassAccessStore.cs",
-        "domains/access/api/domain/MemberLock.cs",
-        "domains/access/api/domain/PermissionGrants.cs",
-        "domains/access/api/features/admin-permission-grant/AdminPermissionGrant.cs",
-        "domains/access/api/features/admin-permission-member/AdminPermissionMember.cs",
-        "domains/access/api/features/admin-permission-members/AdminPermissionMembers.cs",
-        "domains/access/api/features/admin-permission-revoke/AdminPermissionRevoke.cs",
-        "domains/access/api/features/class-access-grant/ClassAccessGrant.cs",
-        "domains/access/api/features/class-access-member/ClassAccessMember.cs",
-        "domains/access/api/features/class-access-members/ClassAccessMembers.cs",
-        "domains/access/api/features/class-access-options/ClassAccessOptions.cs",
-        "domains/access/api/features/class-access-preview/ClassAccessPreview.cs",
-        "domains/access/api/features/class-access-revoke/ClassAccessRevoke.cs",
-    ];
+    /// <summary>The access files not converted yet: none. Each conversion task removes its files; task 13 removes the list.</summary>
+    private static readonly string[] NotConverted = [];
 
     [GeneratedRegex("""<Using\s[^>]*Include\s*=\s*"[^"]*EntityFramework""")]
     private static partial Regex EfUsing();
@@ -125,7 +109,7 @@ public sealed partial class RunTimeEfUseTests
             Assert.That(files, Has.None.Contain("/Migrations/"));
             Assert.That(files, Has.None.Contain("/tests/"));
             Assert.That(files, Has.None.EndsWith("AccessContext.cs"));
-            Assert.That(NotConverted, Has.Length.EqualTo(14));
+            Assert.That(NotConverted, Is.Empty);
         });
     }
 }

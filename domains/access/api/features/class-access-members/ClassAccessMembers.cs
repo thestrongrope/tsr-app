@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Npgsql;
 using Tsr.Access.Api.Domain;
 using Tsr.Shared.Api;
 
@@ -23,7 +24,7 @@ internal static class ClassAccessMembersSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(HttpContext context, AccessContext db, Permissions permissions, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(HttpContext context, NpgsqlDataSource source, Permissions permissions, CancellationToken ct)
     {
         var (op, refusal) = await ClassAccessOperator.RequireAsync(context, permissions, ct);
         if (op is null)
@@ -43,7 +44,7 @@ internal static class ClassAccessMembersSlice
         }
 
         var genders = await op.GendersAsync(ct);
-        var members = await AdminMembers.SearchOfGendersAsync(db, q.Value!, genders, ct);
+        var members = await AdminMembers.SearchOfGendersAsync(source, q.Value!, genders, ct);
         return Results.Json(new ClassAccessMembersAnswer(members.Select(m => new Found(m.Token, Cast.Text(m.Name), AdminMembers.GenderOf(m.Gender) ?? 0)).ToList()), AccessJson.Answers.ClassAccessMembersAnswer);
     }
 }

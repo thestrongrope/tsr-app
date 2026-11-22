@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api.Domain;
 using Tsr.Shared.Api;
 
@@ -24,7 +24,7 @@ internal static class AdminPermissionRevokeSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string id, HttpContext context, AccessContext db, Permissions permissions, TimeProvider clock, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(string id, HttpContext context, NpgsqlDataSource source, Permissions permissions, TimeProvider clock, CancellationToken ct)
     {
         var refusal = await PermissionGrants.GuardAsync(context, permissions, ct);
         if (refusal is not null)
@@ -46,7 +46,7 @@ internal static class AdminPermissionRevokeSlice
         }
 
         var grantId = AdminMembers.IdOf(id);
-        var grant = await FindAsync(db, grantId, ct);
+        var grant = await FindAsync(source, grantId, ct);
         if (grant is null)
         {
             return Problem.Detail(StatusCodes.Status404NotFound, "Grant not found");
@@ -58,49 +58,50 @@ internal static class AdminPermissionRevokeSlice
         }
 
         var operatorId = context.GetCaller()!.UserId;
-        if (!await RevokeAsync(db, clock, grantId, grant, reason.Value!, operatorId, ct))
+        if (!await RevokeAsync(source, clock, grantId, grant, reason.Value!, operatorId, ct))
         {
             return Problem.Detail(StatusCodes.Status409Conflict, "That grant is already revoked");
         }
 
-        var view = await PermissionGrants.ViewAsync(db, permissions, grant.Token, ct);
+        var view = await PermissionGrants.ViewAsync(source, permissions, grant.Token, ct);
         return view is null ? Problem.Detail(StatusCodes.Status404NotFound, "Member not found") : Results.Json(view, AccessJson.Answers.GrantMemberView);
     }
 
-    private static async Task<GrantRow?> FindAsync(AccessContext db, int grantId, CancellationToken ct)
+    private static async Task<GrantRow?> FindAsync(NpgsqlDataSource source, int grantId, CancellationToken ct)
     {
         if (grantId <= 0)
         {
             return null;
         }
 
-        var rows = await db.Database
-            .SqlQuery<GrantRow>($"""
+        var rows = await source.ListAsync(
+            $"""
                 select g.user_id as "UserId", u.token as "Token", g.permission as "Permission", g.revoked_at as "RevokedAt"
                 from access.user_permissions g
                 join identity.v_users u on u.id = g.user_id
                 where g.id = {grantId}
                 limit 1
-                """)
-            .ToListAsync(ct);
+                """,
+            row => new GrantRow(row.Int("UserId"), row.Int("Token"), row.Text("Permission"), row.InstantOrNull("RevokedAt")),
+            ct);
         return rows.Count == 0 ? null : rows[0];
     }
 
     // False when another request revoked the grant between the read and the update: nothing is written.
-    private static async Task<bool> RevokeAsync(AccessContext db, TimeProvider clock, int grantId, GrantRow grant, string reason, int operatorId, CancellationToken ct)
+    private static async Task<bool> RevokeAsync(NpgsqlDataSource source, TimeProvider clock, int grantId, GrantRow grant, string reason, int operatorId, CancellationToken ct)
     {
         var now = clock.GetUtcNow();
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        var changed = await db.UserPermissions
-            .Where(g => g.Id == grantId && g.RevokedAt == null)
-            .ExecuteUpdateAsync(set => set.SetProperty(g => g.RevokedAt, now).SetProperty(g => g.RevokedBy, operatorId).SetProperty(g => g.RevokeReason, reason), ct);
+        await using var tx = await source.BeginAsync(ct);
+        var changed = await tx.ExecuteAsync(
+            $"update access.user_permissions set revoked_at = {now}, revoked_by = {operatorId}, revoke_reason = {reason} where id = {grantId} and revoked_at is null",
+            ct);
         if (changed == 0)
         {
             return false;
         }
 
-        await Outbox.WriteAsync(db, "access.permission_revoked", new PermissionRevoked(grantId, grant.Token, grant.Permission, operatorId), clock, ct);
-        await transaction.CommitAsync(ct);
+        await Outbox.WriteAsync(tx, "access.permission_revoked", new PermissionRevoked(grantId, grant.Token, grant.Permission, operatorId), AccessJson.Default.PermissionRevoked, clock, ct);
+        await tx.CommitAsync(ct);
         return true;
     }
 }

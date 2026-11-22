@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Npgsql;
 using Tsr.Access.Api.Domain;
 using Tsr.Shared.Api;
 
@@ -19,7 +20,7 @@ internal static class ClassAccessMemberSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string token, HttpContext context, AccessContext db, Permissions permissions, IClassScopes classes, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(string token, HttpContext context, NpgsqlDataSource source, Permissions permissions, IClassScopes classes, CancellationToken ct)
     {
         var (op, refusal) = await ClassAccessOperator.RequireAsync(context, permissions, ct);
         if (op is null)
@@ -27,7 +28,7 @@ internal static class ClassAccessMemberSlice
             return refusal!;
         }
 
-        var view = await ClassAccessStore.MemberViewAsync(db, permissions, classes, op, AdminMembers.TokenOf(token), ct);
+        var view = await ClassAccessStore.MemberViewAsync(source, permissions, classes, op, AdminMembers.TokenOf(token), ct);
         return view.Failed ? view.Refusal!.ToResult() : Results.Json(view.Value, AccessJson.Answers.ClassAccessView);
     }
 }

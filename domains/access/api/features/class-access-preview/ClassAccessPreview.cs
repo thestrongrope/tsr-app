@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Npgsql;
 using Tsr.Access.Api.Domain;
 using Tsr.Shared.Api;
 
@@ -22,7 +23,7 @@ internal static class ClassAccessPreviewSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(HttpContext context, AccessContext db, Permissions permissions, IClassScopes classes, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(HttpContext context, NpgsqlDataSource source, Permissions permissions, IClassScopes classes, CancellationToken ct)
     {
         var (op, refusal) = await ClassAccessOperator.RequireAsync(context, permissions, ct);
         if (op is null)
@@ -49,7 +50,7 @@ internal static class ClassAccessPreviewSlice
             return range.ToResult();
         }
 
-        var checkedConditions = await ClassAccessStore.CheckedConditionsAsync(db, raw.Value!, ct);
+        var checkedConditions = await ClassAccessStore.CheckedConditionsAsync(source, raw.Value!, ct);
         if (checkedConditions.Failed)
         {
             return checkedConditions.Refusal!.ToResult();

@@ -2,8 +2,8 @@ using System.Data.Common;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Npgsql;
 using Tsr.Access.Api.Domain;
 using Tsr.Shared.Api;
 
@@ -31,7 +31,7 @@ internal static class ClassAccessGrantSlice
     }
 
     private static async Task<IResult> HandleAsync(
-        string token, HttpContext context, AccessContext db, Permissions permissions, IClassScopes classes, TimeProvider clock, ILoggerFactory loggers, CancellationToken ct)
+        string token, HttpContext context, NpgsqlDataSource source, Permissions permissions, IClassScopes classes, TimeProvider clock, ILoggerFactory loggers, CancellationToken ct)
     {
         var (op, refusal) = await ClassAccessOperator.RequireAsync(context, permissions, ct);
         if (op is null)
@@ -55,12 +55,12 @@ internal static class ClassAccessGrantSlice
         var memberToken = AdminMembers.TokenOf(token);
         try
         {
-            var failure = await GrantAsync(db, permissions, classes, op, clock, memberToken, shape.Value!, ct);
+            var failure = await GrantAsync(source, permissions, classes, op, clock, memberToken, shape.Value!, ct);
             return failure is not null
                 ? failure.ToResult()
-                : await ClassAccessStore.SavedAsync(db, permissions, classes, op, memberToken, logger, ct);
+                : await ClassAccessStore.SavedAsync(source, permissions, classes, op, memberToken, logger, ct);
         }
-        catch (Exception e) when (e is DbException or DbUpdateException)
+        catch (Exception e) when (e is DbException)
         {
             return ClassAccessStore.NothingChanged(logger, e);
         }
@@ -81,7 +81,7 @@ internal static class ClassAccessGrantSlice
     }
 
     private static async Task<Refusal?> GrantAsync(
-        AccessContext db,
+        NpgsqlDataSource source,
         Permissions permissions,
         IClassScopes classes,
         ClassAccessOperator op,
@@ -97,19 +97,13 @@ internal static class ClassAccessGrantSlice
             return reason.Refusal ?? range;
         }
 
-        var conditions = await ClassAccessStore.CheckedConditionsAsync(db, input.Raw, ct);
+        var conditions = await ClassAccessStore.CheckedConditionsAsync(source, input.Raw, ct);
         if (conditions.Failed)
         {
             return conditions.Refusal;
         }
 
-        var found = await ClassAccessStore.MemberAsync(db, token, ct);
-        if (found is null)
-        {
-            return new Refusal(StatusCodes.Status404NotFound, "Member not found");
-        }
-
-        var guard = await op.GuardAsync(found.Value.Member, found.Value.RoleId, input.Gender, ct);
+        var guard = await ReadGuardAsync(source, op, token, input.Gender, ct);
         if (guard is not null)
         {
             return guard;
@@ -122,31 +116,41 @@ internal static class ClassAccessGrantSlice
         }
 
         var draft = new Draft(input.Gender, offered.Value!, reason.Value!, input.Version, input.Hash);
-        return await WriteAsync(db, classes, op, clock, token, draft, ct);
+        return await WriteAsync(source, classes, op, clock, token, draft, ct);
     }
 
-    private static async Task<Refusal?> WriteAsync(AccessContext db, IClassScopes classes, ClassAccessOperator op, TimeProvider clock, int token, Draft draft, CancellationToken ct)
+    // The member and the guards on a short read transaction, ended before the port or Permissions is called.
+    private static async Task<Refusal?> ReadGuardAsync(NpgsqlDataSource source, ClassAccessOperator op, int token, int? gender, CancellationToken ct)
     {
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        await MemberLock.TakeAsync(db, token, ct);
-        var locked = await ClassAccessStore.MemberAsync(db, token, ct);
+        await using var read = await source.BeginAsync(ct);
+        var found = await ClassAccessStore.MemberAsync(read, token, ct);
+        return found is null
+            ? new Refusal(StatusCodes.Status404NotFound, "Member not found")
+            : await op.GuardAsync(read, found.Value.Member, found.Value.RoleId, gender, ct);
+    }
+
+    private static async Task<Refusal?> WriteAsync(NpgsqlDataSource source, IClassScopes classes, ClassAccessOperator op, TimeProvider clock, int token, Draft draft, CancellationToken ct)
+    {
+        await using var tx = await source.BeginAsync(ct);
+        await MemberLock.TakeAsync(tx, token, ct);
+        var locked = await ClassAccessStore.MemberAsync(tx, token, ct);
         if (locked is null)
         {
             return new Refusal(StatusCodes.Status404NotFound, "Member not found");
         }
 
         var (member, roleId) = locked.Value;
-        var guard = await op.GuardAsync(member, roleId, draft.Gender, ct);
-        var rules = await ClassAccessStore.LiveRulesAsync(db, token, ct);
+        var guard = await op.GuardAsync(tx, member, roleId, draft.Gender, ct);
+        var rules = await ClassAccessStore.LiveRulesAsync(tx, token, ct);
         var refused = guard ?? await RefuseAsync(classes, roleId, rules, draft, ct);
         if (refused is not null)
         {
             return refused;
         }
 
-        var ruleId = await InsertAsync(db, clock, member, roleId, draft, op.Caller.UserId, ct);
-        await Outbox.WriteAsync(db, "access.class_access_rule_created", new RuleCreated(ruleId, token, draft.Gender, op.Caller.UserId), clock, ct);
-        await transaction.CommitAsync(ct);
+        var ruleId = await InsertAsync(tx, clock, member, roleId, draft, op.Caller.UserId, ct);
+        await Outbox.WriteAsync(tx, "access.class_access_rule_created", new RuleCreated(ruleId, token, draft.Gender, op.Caller.UserId), AccessJson.Default.RuleCreated, clock, ct);
+        await tx.CommitAsync(ct);
         return null;
     }
 
@@ -179,38 +183,39 @@ internal static class ClassAccessGrantSlice
         return ClassAccessRules.SameHash(hash, draft.PreviewHash) ? null : ClassAccessMessages.PreviewChanged(reached, hash);
     }
 
-    private static async Task<int> InsertAsync(AccessContext db, TimeProvider clock, MemberRow member, int roleId, Draft draft, int operatorId, CancellationToken ct)
+    private static async Task<int> InsertAsync(DbTx tx, TimeProvider clock, MemberRow member, int roleId, Draft draft, int operatorId, CancellationToken ct)
     {
         if (roleId == ClassAccessRules.RoleMember)
         {
-            db.UserRoles.Add(new UserRole { UserId = member.UserId, RoleId = ClassAccessRules.RoleClassAdmin });
+            await tx.ExecuteAsync($"insert into access.user_roles (user_id, roleid) values ({member.UserId}, {ClassAccessRules.RoleClassAdmin})", ct);
         }
 
-        var rule = new ClassAccessRule
-        {
-            Token = member.Token,
-            Gender = draft.Gender,
-            Note = ClassAccessRules.NoteFor(draft.Gender, draft.Conditions),
-            CreatedAt = clock.GetUtcNow(),
-            GrantedBy = operatorId,
-            Reason = draft.Reason,
-        };
-        db.ClassAccessRules.Add(rule);
-        await db.SaveChangesAsync(ct);
+        var note = ClassAccessRules.NoteFor(draft.Gender, draft.Conditions);
+        var createdAt = clock.GetUtcNow();
+        var ruleId = await tx.ScalarAsync<int>(
+            $"""
+            insert into access.class_access_rules (token, gender, note, created_at, granted_by, reason)
+            values ({member.Token}, {draft.Gender}, {note}, {createdAt}, {operatorId}, {draft.Reason})
+            returning id
+            """,
+            ct);
 
+        // One insert per condition, in the order given (ClassAccessRules.Ordered): the ids give the order the member view lists them in.
         foreach (var condition in draft.Conditions)
         {
-            db.ClassAccessRuleConditions.Add(new ClassAccessRuleCondition
-            {
-                RuleId = rule.Id,
-                Field = condition.Field,
-                Negate = false,
-                Value = condition.Field == "level" ? null : condition.Value,
-                LevelId = condition.Field == "level" ? condition.LevelId : null,
-            });
+            await InsertConditionAsync(tx, ruleId!.Value, condition, ct);
         }
 
-        await db.SaveChangesAsync(ct);
-        return rule.Id;
+        return ruleId!.Value;
+    }
+
+    private static async Task InsertConditionAsync(DbTx tx, int ruleId, RuleCondition condition, CancellationToken ct)
+    {
+        var isLevel = condition.Field == "level";
+        var value = isLevel ? null : condition.Value;
+        var levelId = isLevel ? condition.LevelId : null;
+        await tx.ExecuteAsync(
+            $"insert into access.class_access_rule_conditions (rule_id, field, negate, value, level_id) values ({ruleId}, {condition.Field}, false, {value}, {levelId})",
+            ct);
     }
 }

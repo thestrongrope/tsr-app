@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Npgsql;
 using Tsr.Access.Api.Domain;
 using Tsr.Shared.Api;
 
@@ -22,7 +23,7 @@ internal static class AdminPermissionMembersSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(HttpContext context, AccessContext db, Permissions permissions, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(HttpContext context, NpgsqlDataSource source, Permissions permissions, CancellationToken ct)
     {
         var refusal = await PermissionGrants.GuardAsync(context, permissions, ct);
         if (refusal is not null)
@@ -36,7 +37,7 @@ internal static class AdminPermissionMembersSlice
             return Problem.Detail(StatusCodes.Status422UnprocessableEntity, "q must be text");
         }
 
-        var members = await AdminMembers.SearchForGrantsAsync(db, q, ct);
+        var members = await AdminMembers.SearchForGrantsAsync(source, q, ct);
         return Results.Json(new GrantMembersAnswer(members.Select(m => new Found(m.Token, Cast.Text(m.Name))).ToList()), AccessJson.Answers.GrantMembersAnswer);
     }
 }
