@@ -38,8 +38,7 @@ internal sealed class XlsxXml
 
     public IReadOnlyCollection<string> PartNames => _raw.Keys;
 
-    /// <summary>The core-properties part: a random name in today's file, <c>docProps/core.xml</c> in the new one.</summary>
-    public string CorePartName => _raw.Keys.Single(n => n.EndsWith(".psmdcp", StringComparison.Ordinal) || n == "docProps/core.xml");
+    public const string CorePartName = "docProps/core.xml";
 
     public byte[] RawPart(string name) => _raw[name];
 

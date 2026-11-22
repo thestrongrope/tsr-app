@@ -3,7 +3,6 @@ using System.IO.Compression;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml;
-using ClosedXML.Excel;
 
 namespace Tsr.Platform.Api.Domain;
 
@@ -14,7 +13,7 @@ namespace Tsr.Platform.Api.Domain;
 /// </summary>
 internal static partial class ReportXlsx
 {
-    /// <summary>A cell holds 32767 characters; PhpSpreadsheet cuts longer text, ClosedXML throws, so it is cut here.</summary>
+    /// <summary>A cell holds 32767 characters; PhpSpreadsheet cuts longer text and a workbook cannot hold more, so it is cut here.</summary>
     private const int MaxCellCharacters = 32767;
     private const int MaxSheetName = 31;
     private const string FallbackSheetName = "Report";
@@ -67,8 +66,11 @@ internal static partial class ReportXlsx
     /// <summary>What a value is in the file: text cleaned and with line feeds (or the G15 text of a number), and whether the text had an apostrophe removed (Quote) or a line feed (Wrap).</summary>
     private readonly record struct CellContent(string Text, bool IsNumber, bool Quote, bool Wrap);
 
-    /// <summary>Temporary: the writer without a library. It replaces <see cref="Build"/> in the swap (plan, task 8).</summary>
-    internal static byte[] BuildNew(string title, IReadOnlyList<ReportSection> sections)
+    /// <summary>
+    /// The workbook as an xlsx package, written straight into a zip with <see cref="XmlWriter"/> (no library). Two passes over the sections, no cell list:
+    /// pass 1 finds the widest column and the longest line of each column (the widths come before the rows), pass 2 writes the rows.
+    /// </summary>
+    public static byte[] Build(string title, IReadOnlyList<ReportSection> sections)
     {
         ArgumentNullException.ThrowIfNull(sections);
         var sheetName = SheetName(title);
@@ -121,7 +123,7 @@ internal static partial class ReportXlsx
         return $"{XmlDeclaration}<cp:coreProperties xmlns:cp=\"http://schemas.openxmlformats.org/package/2006/metadata/core-properties\" xmlns:dcterms=\"http://purl.org/dc/terms/\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"><dcterms:created xsi:type=\"dcterms:W3CDTF\">{stamp}</dcterms:created><dcterms:modified xsi:type=\"dcterms:W3CDTF\">{stamp}</dcterms:modified></cp:coreProperties>";
     }
 
-    /// <summary>The properties as today's file lists them: the sheet and its two print names, and a count of two named ranges (the workbook defines none).</summary>
+    /// <summary>The properties as the first (ClosedXML) writer listed them: the sheet and its two print names, and a count of two named ranges (the workbook defines none).</summary>
     private static void WriteApp(XmlWriter w, string sheetName)
     {
         w.WriteStartElement("ap", "Properties", "http://schemas.openxmlformats.org/officeDocument/2006/extended-properties");
@@ -306,7 +308,7 @@ internal static partial class ReportXlsx
         w.WriteEndElement();
     }
 
-    /// <summary>A header row holds a cell for every column up to the widest so far, empty ones included (bold), as today; a data row holds only the cells that have a value.</summary>
+    /// <summary>A header row holds a cell for every column up to the widest so far, empty ones included (bold); a data row holds only the cells that have a value.</summary>
     private static void WriteRow(XmlWriter w, SheetRow row)
     {
         w.WriteRaw(Inv($"<row r=\"{row.Number}\">"));
@@ -356,70 +358,6 @@ internal static partial class ReportXlsx
         }
 
         return name.ToString();
-    }
-
-    public static byte[] Build(string title, IReadOnlyList<ReportSection> sections)
-    {
-        ArgumentNullException.ThrowIfNull(sections);
-        using var book = new XLWorkbook();
-        var sheet = book.Worksheets.Add(SheetName(title));
-
-        var row = 1;
-        var widest = 0;
-        widest = Math.Max(widest, WriteRow(sheet, row, [title]));
-        sheet.Cell(row, 1).Style.Font.Bold = true;
-        sheet.Cell(row, 1).Style.Font.FontSize = 14;
-        row += 2;
-
-        foreach (var section in sections)
-        {
-            widest = Math.Max(widest, WriteRow(sheet, row, [section.Heading]));
-            sheet.Cell(row, 1).Style.Font.Bold = true;
-            row++;
-            widest = Math.Max(widest, WriteRow(sheet, row, [.. section.Headers]));
-            sheet.Range(row, 1, row, widest).Style.Font.Bold = true;
-            row++;
-            foreach (var values in section.Rows)
-            {
-                widest = Math.Max(widest, WriteRow(sheet, row, values));
-                row++;
-            }
-
-            row++;
-        }
-
-        sheet.Columns(1, Math.Max(widest, 1)).AdjustToContents();
-        using var stream = new MemoryStream();
-        book.SaveAs(stream);
-        return stream.ToArray();
-    }
-
-    /// <summary>One row of cells; returns the highest column written (0 when none).</summary>
-    private static int WriteRow(IXLWorksheet sheet, int row, IReadOnlyList<object?> values)
-    {
-        var highest = 0;
-        for (var i = 0; i < values.Count; i++)
-        {
-            var value = values[i];
-            if (value is null || value is string { Length: 0 })
-            {
-                continue;
-            }
-
-            var cell = sheet.Cell(row, i + 1);
-            if (ReportCell.IsNumber(value))
-            {
-                cell.Value = Convert.ToDouble(value, CultureInfo.InvariantCulture);
-            }
-            else
-            {
-                cell.Value = XmlSafe(ReportCell.Text(value));
-            }
-
-            highest = i + 1;
-        }
-
-        return highest;
     }
 
     /// <summary>Drops the characters XML 1.0 cannot carry (control characters other than tab, line feed and carriage return), which a workbook cannot hold either, and cuts the text to what a cell holds.</summary>
