@@ -2,8 +2,9 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Content.Api.Domain;
+using Tsr.Shared.Api;
 
 namespace Tsr.Content.Api.Features.V1Categories;
 
@@ -36,16 +37,16 @@ internal static class V1CategoriesSlice
 
     public static IEndpointRouteBuilder MapV1Categories(this IEndpointRouteBuilder routes)
     {
-        V1.MapGet(routes, "/api/v1/taxonomies/categories", HandleAsync);
+        routes.MapGet("/api/v1/taxonomies/categories", HandleAsync).WithV1Failures();
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(HttpContext context, ContentContext db, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(HttpContext context, NpgsqlDataSource source, CancellationToken ct)
     {
         var hierarchical = IsOn(context.Request.Query, "hierarchical");
         var withCounts = IsOn(context.Request.Query, "includeArticleCounts");
-        var rows = await db.Database
-            .SqlQuery<Row>($"""
+        var rows = await source.ListAsync(
+            $"""
                 select category.slug as "Slug", category.title::text as "Title", category.description::text as "Description",
                        category.sort_order as "Order", category.parent_slug as "Parent",
                        case when {withCounts} then
@@ -54,11 +55,20 @@ internal static class V1CategoriesSlice
                 from content.categories as category
                 order by category.sort_order, category.slug
                 limit {MaxCategories}
-                """)
-            .ToListAsync(ct);
+                """,
+            Read,
+            ct);
 
         return V1.Ok(json => Write(json, rows, hierarchical), MaxAgeSeconds, StaleWhileRevalidateSeconds);
     }
+
+    private static Row Read(DbRow row) => new(
+        row.Text("Slug"),
+        row.Text("Title"),
+        row.TextOrNull("Description"),
+        row.Int("Order"),
+        row.TextOrNull("Parent"),
+        row.Int("ArticleCount"));
 
     /// <summary>tsr-web's <c>searchParams.get(name) !== 'false'</c>.</summary>
     private static bool IsOn(IQueryCollection query, string name) =>

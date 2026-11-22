@@ -1,0 +1,18 @@
+### GET /api/v1/taxonomies/categories as nobody
+status: 500
+Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With
+Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS
+Access-Control-Allow-Origin: *
+Content-Length: 214
+Content-Type: application/json
+X-Content-Type-Options: nosniff
+body: {"success":false,"error":{"code":"INTERNAL_ERROR","message":"An unexpected error occurred"},"meta":{"timestamp":"2026-01-01T00:00:00.000Z","version":"1.0","cache":{"expires":"2026-01-01T00:00:00.000Z","maxAge":0}}}
+### GET /api/v1/taxonomies/categories?includeArticleCounts=false&hierarchical=false as nobody
+status: 500
+Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With
+Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS
+Access-Control-Allow-Origin: *
+Content-Length: 214
+Content-Type: application/json
+X-Content-Type-Options: nosniff
+body: {"success":false,"error":{"code":"INTERNAL_ERROR","message":"An unexpected error occurred"},"meta":{"timestamp":"2026-01-01T00:00:00.000Z","version":"1.0","cache":{"expires":"2026-01-01T00:00:00.000Z","maxAge":0}}}

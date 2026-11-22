@@ -13,7 +13,7 @@ public sealed class AotAnalyzerTests
     private const int BuildTimeoutSeconds = 120;
 
     // Each domain issue adds its own project here when it converts.
-    private static readonly string[] AotProjects = ["shared/api/Tsr.Shared.Api.csproj", "domains/access/api/Tsr.Access.Api.csproj"];
+    private static readonly string[] AotProjects = ["shared/api/Tsr.Shared.Api.csproj", "domains/access/api/Tsr.Access.Api.csproj", "domains/content/api/Tsr.Content.Api.csproj"];
 
     [TestCaseSource(nameof(AotProjects))]
     public void Each_listed_project_has_the_aot_analyzer_on(string project)

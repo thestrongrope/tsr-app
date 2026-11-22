@@ -11,7 +11,7 @@ namespace Tsr.Host.Api.Tests;
 /// </summary>
 public sealed class AccessPublicApiTests
 {
-    private const BindingFlags Declared = BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly;
+    internal const BindingFlags Declared = BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly;
 
     private static readonly string[] Today =
     [
@@ -86,7 +86,7 @@ public sealed class AccessPublicApiTests
         "static UserAccess.None:Tsr.Access.Api.UserAccess get",
     ];
 
-    private static readonly string[] SynthesizedByRecords = ["Equals", "GetHashCode", "ToString", "Deconstruct"];
+    internal static readonly string[] SynthesizedByRecords = ["Equals", "GetHashCode", "ToString", "Deconstruct"];
 
     private static IEnumerable<string> PublicMembers()
     {
@@ -98,7 +98,7 @@ public sealed class AccessPublicApiTests
 
     // Every entry carries what a caller compiles against: parameter names (named arguments), default values, nullability of reference types, static, and a property's accessors.
     // Nullability of generic arguments (IReadOnlyList<string?>) is not read: no access type has one.
-    private static IEnumerable<string> Members(Type type, NullabilityInfoContext nullability)
+    internal static IEnumerable<string> Members(Type type, NullabilityInfoContext nullability)
     {
         var methods = type.GetMethods(Declared)
             .Where(m => !m.IsSpecialName && !m.Name.StartsWith('<') && !SynthesizedByRecords.Contains(m.Name))
@@ -113,22 +113,22 @@ public sealed class AccessPublicApiTests
         return methods.Concat(constructors).Concat(properties).Concat(fields).Append("TYPE " + type.Name);
     }
 
-    private static string StaticMark(bool isStatic) => isStatic ? "static " : string.Empty;
+    internal static string StaticMark(bool isStatic) => isStatic ? "static " : string.Empty;
 
-    private static string Typed(Type type, NullabilityInfo info) =>
+    internal static string Typed(Type type, NullabilityInfo info) =>
         type.ToString() + (info.ReadState == NullabilityState.Nullable && Nullable.GetUnderlyingType(type) is null && !type.IsValueType ? "?" : string.Empty);
 
-    private static string Parameters(ParameterInfo[] parameters, NullabilityInfoContext nullability) =>
+    internal static string Parameters(ParameterInfo[] parameters, NullabilityInfoContext nullability) =>
         string.Join(", ", parameters.Select(p => $"{Typed(p.ParameterType, nullability.Create(p))} {p.Name}{(p.HasDefaultValue ? " = " + DefaultOf(p.RawDefaultValue) : string.Empty)}"));
 
-    private static string DefaultOf(object? value) => value switch
+    internal static string DefaultOf(object? value) => value switch
     {
         null => "null",
         string text => "\"" + text + "\"",
         _ => Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture)!,
     };
 
-    private static string Accessors(PropertyInfo property)
+    internal static string Accessors(PropertyInfo property)
     {
         if (property.SetMethod is null)
         {

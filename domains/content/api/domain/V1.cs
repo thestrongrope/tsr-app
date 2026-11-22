@@ -40,6 +40,16 @@ internal static partial class V1
 
     internal sealed record Pagination(int Total, int Limit, int Offset, bool HasMore);
 
+    /// <summary>Endpoint metadata: this endpoint answers failures in the <c>/api/v1/</c> shape. <see cref="WithV1Failures"/> adds it; a test finds it.</summary>
+    internal sealed class FailureShape
+    {
+        public static readonly FailureShape Instance = new();
+
+        private FailureShape()
+        {
+        }
+    }
+
     /// <summary>
     /// A 200 with <paramref name="data"/> (which writes exactly one JSON value), or a 304 when the request's validators match.
     /// <paramref name="swr"/> 0 sends no <c>stale-while-revalidate</c>. <paramref name="lastModified"/> is given only by a route that sends <c>Last-Modified</c>.
@@ -52,10 +62,11 @@ internal static partial class V1
         new OkResult(data, maxAge, swr, pagination, lastModified: null, conditional: false);
 
     /// <summary>
-    /// Maps one <c>GET</c> route of <c>/api/v1/</c>. Whatever its handler throws is answered as tsr-web answers an unknown error: a 500 in the failure shape, with nothing of the exception in it.
+    /// Makes one <c>GET</c> route of <c>/api/v1/</c> answer as tsr-web answers an unknown error: whatever its handler throws is a 500 in the failure shape, with nothing of the exception in it.
+    /// The route is mapped by the slice itself (<c>routes.MapGet(pattern, HandleAsync).WithV1Failures()</c>), so the request delegate generator sees the handler's real signature.
     /// </summary>
-    public static RouteHandlerBuilder MapGet(IEndpointRouteBuilder routes, string pattern, Delegate handler) =>
-        routes.MapGet(pattern, handler).AddEndpointFilter(AnswerFailureAsync);
+    public static RouteHandlerBuilder WithV1Failures(this RouteHandlerBuilder route) =>
+        route.AddEndpointFilter(AnswerFailureAsync).WithMetadata(FailureShape.Instance);
 
     /// <summary>A failure. No cache headers, and <c>meta.cache.maxAge</c> 0, as tsr-web's <c>errorResponse</c> without a cache config.</summary>
     public static IResult Error(int status, string code, string message) => new ErrorResult(status, code, message);

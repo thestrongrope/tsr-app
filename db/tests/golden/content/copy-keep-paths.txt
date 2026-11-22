@@ -1,0 +1,79 @@
+step 1, no directory: Kept: no content directory
+=== rows after step 1, no directory ===
+-- content.published_articles
+-- content.categories
+-- content.publications
+-- content.refresh_state
+{"id":1,"content_hash":"","article_count":0,"refreshed_at":null,"last_failure_at":"2026-01-01T00:01:00+00:00","last_failure_cause":"no content directory"}
+step 2, a good set: Refreshed
+=== rows after step 2, a good set ===
+-- content.published_articles
+{"slug":"four","slug_decoded":"four","legacy_id":null,"title":"Title of four","excerpt":"Excerpt of four","body_markdown":"Body text.\n","body_html":"<p>Body text.</p>\n","published_at":"2024-01-01T08:00:00+00:00","published_date_text":"2024-01-01T08:00:00.000Z","modified_at":null,"modified_date_text":null,"author":"admin","language":"en","reading_minutes":1,"categories":["shared-category"],"tags":["Shared Tag"]}
+{"slug":"one","slug_decoded":"one","legacy_id":null,"title":"Title of one","excerpt":"Excerpt of one","body_markdown":"Body text.\n","body_html":"<p>Body text.</p>\n","published_at":"2024-01-01T08:00:00+00:00","published_date_text":"2024-01-01T08:00:00.000Z","modified_at":null,"modified_date_text":null,"author":"admin","language":"en","reading_minutes":1,"categories":["shared-category"],"tags":["Shared Tag"]}
+{"slug":"three","slug_decoded":"three","legacy_id":null,"title":"Title of three","excerpt":"Excerpt of three","body_markdown":"Body text.\n","body_html":"<p>Body text.</p>\n","published_at":"2024-01-01T08:00:00+00:00","published_date_text":"2024-01-01T08:00:00.000Z","modified_at":null,"modified_date_text":null,"author":"admin","language":"en","reading_minutes":1,"categories":["shared-category"],"tags":["Shared Tag"]}
+{"slug":"two","slug_decoded":"two","legacy_id":null,"title":"Title of two","excerpt":"Excerpt of two","body_markdown":"Body text.\n","body_html":"<p>Body text.</p>\n","published_at":"2024-01-01T08:00:00+00:00","published_date_text":"2024-01-01T08:00:00.000Z","modified_at":null,"modified_date_text":null,"author":"admin","language":"en","reading_minutes":1,"categories":["shared-category"],"tags":["Shared Tag"]}
+-- content.categories
+{"slug":"shared-category","title":"Shared","description":null,"sort_order":1,"parent_slug":null}
+-- content.publications
+-- content.refresh_state
+{"id":1,"content_hash":"9ef1240bf234bc478e055e0680ffbc81bd8650ed5cb57de8c6e3ca2a310df78c","article_count":4,"refreshed_at":"2026-01-01T00:02:00+00:00","last_failure_at":"2026-01-01T00:01:00+00:00","last_failure_cause":"no content directory"}
+step 3, the same set: Unchanged
+=== rows after step 3, the same set ===
+-- content.published_articles
+{"slug":"four","slug_decoded":"four","legacy_id":null,"title":"Title of four","excerpt":"Excerpt of four","body_markdown":"Body text.\n","body_html":"<p>Body text.</p>\n","published_at":"2024-01-01T08:00:00+00:00","published_date_text":"2024-01-01T08:00:00.000Z","modified_at":null,"modified_date_text":null,"author":"admin","language":"en","reading_minutes":1,"categories":["shared-category"],"tags":["Shared Tag"]}
+{"slug":"one","slug_decoded":"one","legacy_id":null,"title":"Title of one","excerpt":"Excerpt of one","body_markdown":"Body text.\n","body_html":"<p>Body text.</p>\n","published_at":"2024-01-01T08:00:00+00:00","published_date_text":"2024-01-01T08:00:00.000Z","modified_at":null,"modified_date_text":null,"author":"admin","language":"en","reading_minutes":1,"categories":["shared-category"],"tags":["Shared Tag"]}
+{"slug":"three","slug_decoded":"three","legacy_id":null,"title":"Title of three","excerpt":"Excerpt of three","body_markdown":"Body text.\n","body_html":"<p>Body text.</p>\n","published_at":"2024-01-01T08:00:00+00:00","published_date_text":"2024-01-01T08:00:00.000Z","modified_at":null,"modified_date_text":null,"author":"admin","language":"en","reading_minutes":1,"categories":["shared-category"],"tags":["Shared Tag"]}
+{"slug":"two","slug_decoded":"two","legacy_id":null,"title":"Title of two","excerpt":"Excerpt of two","body_markdown":"Body text.\n","body_html":"<p>Body text.</p>\n","published_at":"2024-01-01T08:00:00+00:00","published_date_text":"2024-01-01T08:00:00.000Z","modified_at":null,"modified_date_text":null,"author":"admin","language":"en","reading_minutes":1,"categories":["shared-category"],"tags":["Shared Tag"]}
+-- content.categories
+{"slug":"shared-category","title":"Shared","description":null,"sort_order":1,"parent_slug":null}
+-- content.publications
+-- content.refresh_state
+{"id":1,"content_hash":"9ef1240bf234bc478e055e0680ffbc81bd8650ed5cb57de8c6e3ca2a310df78c","article_count":4,"refreshed_at":"2026-01-01T00:02:00+00:00","last_failure_at":"2026-01-01T00:01:00+00:00","last_failure_cause":"no content directory"}
+step 4, a malformed file: Kept: cannot parse file: broken.md
+=== rows after step 4, a malformed file ===
+-- content.published_articles
+{"slug":"four","slug_decoded":"four","legacy_id":null,"title":"Title of four","excerpt":"Excerpt of four","body_markdown":"Body text.\n","body_html":"<p>Body text.</p>\n","published_at":"2024-01-01T08:00:00+00:00","published_date_text":"2024-01-01T08:00:00.000Z","modified_at":null,"modified_date_text":null,"author":"admin","language":"en","reading_minutes":1,"categories":["shared-category"],"tags":["Shared Tag"]}
+{"slug":"one","slug_decoded":"one","legacy_id":null,"title":"Title of one","excerpt":"Excerpt of one","body_markdown":"Body text.\n","body_html":"<p>Body text.</p>\n","published_at":"2024-01-01T08:00:00+00:00","published_date_text":"2024-01-01T08:00:00.000Z","modified_at":null,"modified_date_text":null,"author":"admin","language":"en","reading_minutes":1,"categories":["shared-category"],"tags":["Shared Tag"]}
+{"slug":"three","slug_decoded":"three","legacy_id":null,"title":"Title of three","excerpt":"Excerpt of three","body_markdown":"Body text.\n","body_html":"<p>Body text.</p>\n","published_at":"2024-01-01T08:00:00+00:00","published_date_text":"2024-01-01T08:00:00.000Z","modified_at":null,"modified_date_text":null,"author":"admin","language":"en","reading_minutes":1,"categories":["shared-category"],"tags":["Shared Tag"]}
+{"slug":"two","slug_decoded":"two","legacy_id":null,"title":"Title of two","excerpt":"Excerpt of two","body_markdown":"Body text.\n","body_html":"<p>Body text.</p>\n","published_at":"2024-01-01T08:00:00+00:00","published_date_text":"2024-01-01T08:00:00.000Z","modified_at":null,"modified_date_text":null,"author":"admin","language":"en","reading_minutes":1,"categories":["shared-category"],"tags":["Shared Tag"]}
+-- content.categories
+{"slug":"shared-category","title":"Shared","description":null,"sort_order":1,"parent_slug":null}
+-- content.publications
+-- content.refresh_state
+{"id":1,"content_hash":"9ef1240bf234bc478e055e0680ffbc81bd8650ed5cb57de8c6e3ca2a310df78c","article_count":4,"refreshed_at":"2026-01-01T00:02:00+00:00","last_failure_at":"2026-01-01T00:04:00+00:00","last_failure_cause":"cannot parse file: broken.md"}
+step 5, a file over the size limit: Kept: file too large: big.md
+=== rows after step 5, a file over the size limit ===
+-- content.published_articles
+{"slug":"four","slug_decoded":"four","legacy_id":null,"title":"Title of four","excerpt":"Excerpt of four","body_markdown":"Body text.\n","body_html":"<p>Body text.</p>\n","published_at":"2024-01-01T08:00:00+00:00","published_date_text":"2024-01-01T08:00:00.000Z","modified_at":null,"modified_date_text":null,"author":"admin","language":"en","reading_minutes":1,"categories":["shared-category"],"tags":["Shared Tag"]}
+{"slug":"one","slug_decoded":"one","legacy_id":null,"title":"Title of one","excerpt":"Excerpt of one","body_markdown":"Body text.\n","body_html":"<p>Body text.</p>\n","published_at":"2024-01-01T08:00:00+00:00","published_date_text":"2024-01-01T08:00:00.000Z","modified_at":null,"modified_date_text":null,"author":"admin","language":"en","reading_minutes":1,"categories":["shared-category"],"tags":["Shared Tag"]}
+{"slug":"three","slug_decoded":"three","legacy_id":null,"title":"Title of three","excerpt":"Excerpt of three","body_markdown":"Body text.\n","body_html":"<p>Body text.</p>\n","published_at":"2024-01-01T08:00:00+00:00","published_date_text":"2024-01-01T08:00:00.000Z","modified_at":null,"modified_date_text":null,"author":"admin","language":"en","reading_minutes":1,"categories":["shared-category"],"tags":["Shared Tag"]}
+{"slug":"two","slug_decoded":"two","legacy_id":null,"title":"Title of two","excerpt":"Excerpt of two","body_markdown":"Body text.\n","body_html":"<p>Body text.</p>\n","published_at":"2024-01-01T08:00:00+00:00","published_date_text":"2024-01-01T08:00:00.000Z","modified_at":null,"modified_date_text":null,"author":"admin","language":"en","reading_minutes":1,"categories":["shared-category"],"tags":["Shared Tag"]}
+-- content.categories
+{"slug":"shared-category","title":"Shared","description":null,"sort_order":1,"parent_slug":null}
+-- content.publications
+-- content.refresh_state
+{"id":1,"content_hash":"9ef1240bf234bc478e055e0680ffbc81bd8650ed5cb57de8c6e3ca2a310df78c","article_count":4,"refreshed_at":"2026-01-01T00:02:00+00:00","last_failure_at":"2026-01-01T00:05:00+00:00","last_failure_cause":"file too large: big.md"}
+step 6, no published article: Kept: too few articles
+=== rows after step 6, no published article ===
+-- content.published_articles
+{"slug":"four","slug_decoded":"four","legacy_id":null,"title":"Title of four","excerpt":"Excerpt of four","body_markdown":"Body text.\n","body_html":"<p>Body text.</p>\n","published_at":"2024-01-01T08:00:00+00:00","published_date_text":"2024-01-01T08:00:00.000Z","modified_at":null,"modified_date_text":null,"author":"admin","language":"en","reading_minutes":1,"categories":["shared-category"],"tags":["Shared Tag"]}
+{"slug":"one","slug_decoded":"one","legacy_id":null,"title":"Title of one","excerpt":"Excerpt of one","body_markdown":"Body text.\n","body_html":"<p>Body text.</p>\n","published_at":"2024-01-01T08:00:00+00:00","published_date_text":"2024-01-01T08:00:00.000Z","modified_at":null,"modified_date_text":null,"author":"admin","language":"en","reading_minutes":1,"categories":["shared-category"],"tags":["Shared Tag"]}
+{"slug":"three","slug_decoded":"three","legacy_id":null,"title":"Title of three","excerpt":"Excerpt of three","body_markdown":"Body text.\n","body_html":"<p>Body text.</p>\n","published_at":"2024-01-01T08:00:00+00:00","published_date_text":"2024-01-01T08:00:00.000Z","modified_at":null,"modified_date_text":null,"author":"admin","language":"en","reading_minutes":1,"categories":["shared-category"],"tags":["Shared Tag"]}
+{"slug":"two","slug_decoded":"two","legacy_id":null,"title":"Title of two","excerpt":"Excerpt of two","body_markdown":"Body text.\n","body_html":"<p>Body text.</p>\n","published_at":"2024-01-01T08:00:00+00:00","published_date_text":"2024-01-01T08:00:00.000Z","modified_at":null,"modified_date_text":null,"author":"admin","language":"en","reading_minutes":1,"categories":["shared-category"],"tags":["Shared Tag"]}
+-- content.categories
+{"slug":"shared-category","title":"Shared","description":null,"sort_order":1,"parent_slug":null}
+-- content.publications
+-- content.refresh_state
+{"id":1,"content_hash":"9ef1240bf234bc478e055e0680ffbc81bd8650ed5cb57de8c6e3ca2a310df78c","article_count":4,"refreshed_at":"2026-01-01T00:02:00+00:00","last_failure_at":"2026-01-01T00:06:00+00:00","last_failure_cause":"too few articles"}
+step 7, one article of the last four: Kept: too few articles
+=== rows after step 7, one article of the last four ===
+-- content.published_articles
+{"slug":"four","slug_decoded":"four","legacy_id":null,"title":"Title of four","excerpt":"Excerpt of four","body_markdown":"Body text.\n","body_html":"<p>Body text.</p>\n","published_at":"2024-01-01T08:00:00+00:00","published_date_text":"2024-01-01T08:00:00.000Z","modified_at":null,"modified_date_text":null,"author":"admin","language":"en","reading_minutes":1,"categories":["shared-category"],"tags":["Shared Tag"]}
+{"slug":"one","slug_decoded":"one","legacy_id":null,"title":"Title of one","excerpt":"Excerpt of one","body_markdown":"Body text.\n","body_html":"<p>Body text.</p>\n","published_at":"2024-01-01T08:00:00+00:00","published_date_text":"2024-01-01T08:00:00.000Z","modified_at":null,"modified_date_text":null,"author":"admin","language":"en","reading_minutes":1,"categories":["shared-category"],"tags":["Shared Tag"]}
+{"slug":"three","slug_decoded":"three","legacy_id":null,"title":"Title of three","excerpt":"Excerpt of three","body_markdown":"Body text.\n","body_html":"<p>Body text.</p>\n","published_at":"2024-01-01T08:00:00+00:00","published_date_text":"2024-01-01T08:00:00.000Z","modified_at":null,"modified_date_text":null,"author":"admin","language":"en","reading_minutes":1,"categories":["shared-category"],"tags":["Shared Tag"]}
+{"slug":"two","slug_decoded":"two","legacy_id":null,"title":"Title of two","excerpt":"Excerpt of two","body_markdown":"Body text.\n","body_html":"<p>Body text.</p>\n","published_at":"2024-01-01T08:00:00+00:00","published_date_text":"2024-01-01T08:00:00.000Z","modified_at":null,"modified_date_text":null,"author":"admin","language":"en","reading_minutes":1,"categories":["shared-category"],"tags":["Shared Tag"]}
+-- content.categories
+{"slug":"shared-category","title":"Shared","description":null,"sort_order":1,"parent_slug":null}
+-- content.publications
+-- content.refresh_state
+{"id":1,"content_hash":"9ef1240bf234bc478e055e0680ffbc81bd8650ed5cb57de8c6e3ca2a310df78c","article_count":4,"refreshed_at":"2026-01-01T00:02:00+00:00","last_failure_at":"2026-01-01T00:07:00+00:00","last_failure_cause":"too few articles"}

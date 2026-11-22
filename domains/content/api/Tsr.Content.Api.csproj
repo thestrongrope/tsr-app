@@ -1,5 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!-- content: Quran, articles, lectures, books. Depends on no other domain. -->
+  <PropertyGroup>
+    <IsAotCompatible>true</IsAotCompatible>
+    <EnableRequestDelegateGenerator>true</EnableRequestDelegateGenerator>
+  </PropertyGroup>
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="Markdig" />
@@ -7,7 +11,8 @@
     <ProjectReference Include="../../../shared/api/Tsr.Shared.Api.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <!-- Tests sit in tests/, which has its own project. -->
+    <!-- Tests sit next to the code they test; tests/ compiles them. -->
+    <Compile Remove="**/*.Tests.cs" />
     <Compile Remove="tests/**" />
   </ItemGroup>
   <ItemGroup>

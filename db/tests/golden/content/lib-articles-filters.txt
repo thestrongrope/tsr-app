@@ -1,0 +1,260 @@
+### GET /api/v1/articles?category=note-taking as nobody
+status: 200
+Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With
+Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS
+Access-Control-Allow-Origin: *
+Cache-Control: public, max-age=300, stale-while-revalidate=600
+Content-Length: 970
+Content-Type: application/json
+ETag: "a42832d2551ffd8cb3c29648ce0c296e"
+Last-Modified: Sat, 01 Mar 2031 00:00:00 GMT
+Vary: Accept-Encoding
+X-Content-Type-Options: nosniff
+body: {"success":true,"data":[{"id":1,"slug":"a-first-look-at-margin-notes","title":"A First Look at Margin Notes","excerpt":"A short introduction to writing brief notes beside a text while reading.","publishedDate":"2024-05-10T08:15:00.000Z","modifiedDate":"2024-05-12T09:00:00.000Z","author":"admin","categories":["note-taking"],"tags":["Study Skills"],"language":"en","readingTime":1},{"id":2,"slug":"building-a-weekly-summary-page","title":"Building a Weekly Summary Page","excerpt":"How one page written at the end of the week can gather the main points of every lesson.","publishedDate":"2022-02-14T06:30:00.000Z","modifiedDate":"2022-02-14T06:30:00.000Z","author":"admin","categories":["note-taking","practice"],"tags":["Study Skills","Summaries"],"language":"en","readingTime":1}],"meta":{"timestamp":"2026-01-01T00:00:00.000Z","version":"1.0","cache":{"expires":"2026-01-01T00:05:00.000Z","maxAge":300}},"pagination":{"total":2,"limit":20,"offset":0,"hasMore":false}}
+### GET /api/v1/articles?category=note as nobody
+status: 200
+Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With
+Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS
+Access-Control-Allow-Origin: *
+Cache-Control: public, max-age=300, stale-while-revalidate=600
+Content-Length: 213
+Content-Type: application/json
+ETag: "d2ce266b090a43d35dbb367dc7a30b7d"
+Last-Modified: Sat, 01 Mar 2031 00:00:00 GMT
+Vary: Accept-Encoding
+X-Content-Type-Options: nosniff
+body: {"success":true,"data":[],"meta":{"timestamp":"2026-01-01T00:00:00.000Z","version":"1.0","cache":{"expires":"2026-01-01T00:05:00.000Z","maxAge":300}},"pagination":{"total":0,"limit":20,"offset":0,"hasMore":false}}
+### GET /api/v1/articles?category=Note-Taking as nobody
+status: 200
+Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With
+Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS
+Access-Control-Allow-Origin: *
+Cache-Control: public, max-age=300, stale-while-revalidate=600
+Content-Length: 213
+Content-Type: application/json
+ETag: "d2ce266b090a43d35dbb367dc7a30b7d"
+Last-Modified: Sat, 01 Mar 2031 00:00:00 GMT
+Vary: Accept-Encoding
+X-Content-Type-Options: nosniff
+body: {"success":true,"data":[],"meta":{"timestamp":"2026-01-01T00:00:00.000Z","version":"1.0","cache":{"expires":"2026-01-01T00:05:00.000Z","maxAge":300}},"pagination":{"total":0,"limit":20,"offset":0,"hasMore":false}}
+### GET /api/v1/articles?tag=Night%20Reading as nobody
+status: 200
+Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With
+Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS
+Access-Control-Allow-Origin: *
+Cache-Control: public, max-age=300, stale-while-revalidate=600
+Content-Length: 973
+Content-Type: application/json
+ETag: "d91ec2a3aa6f90e6910f187bceb8bc75"
+Last-Modified: Sat, 01 Mar 2031 00:00:00 GMT
+Vary: Accept-Encoding
+X-Content-Type-Options: nosniff
+body: {"success":true,"data":[{"id":3,"slug":"choosing-a-quiet-hour","title":"Choosing a Quiet Hour","excerpt":"Picking the same calm hour each day makes a reading habit easier to keep.","publishedDate":"2025-01-20T19:45:10.000Z","modifiedDate":"2025-01-21T07:05:00.000Z","author":"admin","categories":["revision-plans"],"tags":["Study Skills","Night Reading"],"language":"en","readingTime":1},{"id":7,"slug":"%d9%85%d8%b7%d8%a7%d9%84%d8%b9%db%81-%d9%86%d9%88%d9%b9%d8%b3","title":"Lesson Notes in Another Script","excerpt":"Notes kept in a second script need the same care with headings and dates.","publishedDate":"2023-10-02T16:40:00.000Z","modifiedDate":"2023-10-03T16:40:00.000Z","author":"admin","categories":["early-schools"],"tags":["Night Reading"],"language":"en","readingTime":1}],"meta":{"timestamp":"2026-01-01T00:00:00.000Z","version":"1.0","cache":{"expires":"2026-01-01T00:05:00.000Z","maxAge":300}},"pagination":{"total":2,"limit":20,"offset":0,"hasMore":false}}
+### GET /api/v1/articles?tag=Night as nobody
+status: 200
+Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With
+Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS
+Access-Control-Allow-Origin: *
+Cache-Control: public, max-age=300, stale-while-revalidate=600
+Content-Length: 213
+Content-Type: application/json
+ETag: "d2ce266b090a43d35dbb367dc7a30b7d"
+Last-Modified: Sat, 01 Mar 2031 00:00:00 GMT
+Vary: Accept-Encoding
+X-Content-Type-Options: nosniff
+body: {"success":true,"data":[],"meta":{"timestamp":"2026-01-01T00:00:00.000Z","version":"1.0","cache":{"expires":"2026-01-01T00:05:00.000Z","maxAge":300}},"pagination":{"total":0,"limit":20,"offset":0,"hasMore":false}}
+### GET /api/v1/articles?locale=ur as nobody
+status: 200
+Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With
+Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS
+Access-Control-Allow-Origin: *
+Cache-Control: public, max-age=300, stale-while-revalidate=600
+Content-Length: 619
+Content-Type: application/json
+ETag: "2140974c5fbe902965415963a9ff5239"
+Last-Modified: Sat, 01 Mar 2031 00:00:00 GMT
+Vary: Accept-Encoding
+X-Content-Type-Options: nosniff
+body: {"success":true,"data":[{"id":0,"slug":"weekly-study-plan-right-to-left","title":"مطالعہ کا ہفتہ وار منصوبہ","excerpt":"ہر ہفتے کے لیے مطالعہ کا ایک سادہ منصوبہ بنانے کا طریقہ۔","publishedDate":"2022-07-25T11:11:11","modifiedDate":"2022-07-26T11:11:11","author":"admin","categories":["history"],"tags":["Imam Ali (a.s.)","History"],"language":"ur","readingTime":1}],"meta":{"timestamp":"2026-01-01T00:00:00.000Z","version":"1.0","cache":{"expires":"2026-01-01T00:05:00.000Z","maxAge":300}},"pagination":{"total":1,"limit":20,"offset":0,"hasMore":false}}
+### GET /api/v1/articles?locale=UR as nobody
+status: 200
+Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With
+Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS
+Access-Control-Allow-Origin: *
+Cache-Control: public, max-age=300, stale-while-revalidate=600
+Content-Length: 213
+Content-Type: application/json
+ETag: "d2ce266b090a43d35dbb367dc7a30b7d"
+Last-Modified: Sat, 01 Mar 2031 00:00:00 GMT
+Vary: Accept-Encoding
+X-Content-Type-Options: nosniff
+body: {"success":true,"data":[],"meta":{"timestamp":"2026-01-01T00:00:00.000Z","version":"1.0","cache":{"expires":"2026-01-01T00:05:00.000Z","maxAge":300}},"pagination":{"total":0,"limit":20,"offset":0,"hasMore":false}}
+### GET /api/v1/articles?locale=en as nobody
+status: 200
+Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With
+Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS
+Access-Control-Allow-Origin: *
+Cache-Control: public, max-age=300, stale-while-revalidate=600
+Content-Length: 4458
+Content-Type: application/json
+ETag: "51954c097e822ea7f9e6844ac4fb1c5d"
+Last-Modified: Sat, 01 Mar 2031 00:00:00 GMT
+Vary: Accept-Encoding
+X-Content-Type-Options: nosniff
+body: {"success":true,"data":[{"id":9,"slug":"term-planner-for-next-year","title":"Term Planner for Next Year","excerpt":"A blank planner for a term that has not started yet.","publishedDate":"2031-03-01T00:00:00.000Z","modifiedDate":"2031-03-01T00:00:00.000Z","author":"admin","categories":["history","early-schools"],"tags":["Planning"],"language":"en","readingTime":1},{"id":0,"slug":"the-zorvath-timetable","title":"The Zorvath Timetable","excerpt":"A colour coded timetable that splits the day into four study blocks.","publishedDate":"2025-06-30T13:30:00.482913","modifiedDate":"2025-07-01T13:30:00.482913","author":"admin","categories":["practice"],"tags":["Timetables"],"language":"en","readingTime":1},{"id":3,"slug":"choosing-a-quiet-hour","title":"Choosing a Quiet Hour","excerpt":"Picking the same calm hour each day makes a reading habit easier to keep.","publishedDate":"2025-01-20T19:45:10.000Z","modifiedDate":"2025-01-21T07:05:00.000Z","author":"admin","categories":["revision-plans"],"tags":["Study Skills","Night Reading"],"language":"en","readingTime":1},{"id":0,"slug":"drafting-questions-before-a-lesson","title":"Drafting Questions Before a Lesson","excerpt":"Students who try the zorvath approach write three questions before each lesson begins.","publishedDate":"2024-11-03T10:00:00.482913","modifiedDate":"2024-11-04T10:00:00.482913","author":"admin","categories":["practice"],"tags":["Study Skills"],"language":"en","readingTime":1},{"id":5,"slug":"every-table-tells-a-story","title":"Every Table Tells a Story","excerpt":"Laying facts out in rows and columns shows patterns that a paragraph can hide.","publishedDate":"2024-08-19T12:20:30.000Z","modifiedDate":"2024-08-19T12:20:30.000Z","author":"admin","categories":["core-terms"],"tags":["Study Skills","Imam Ali (a.s.)"],"language":"en","readingTime":1},{"id":1,"slug":"a-first-look-at-margin-notes","title":"A First Look at Margin Notes","excerpt":"A short introduction to writing brief notes beside a text while reading.","publishedDate":"2024-05-10T08:15:00.000Z","modifiedDate":"2024-05-12T09:00:00.000Z","author":"admin","categories":["note-taking"],"tags":["Study Skills"],"language":"en","readingTime":1},{"id":7,"slug":"%d9%85%d8%b7%d8%a7%d9%84%d8%b9%db%81-%d9%86%d9%88%d9%b9%d8%b3","title":"Lesson Notes in Another Script","excerpt":"Notes kept in a second script need the same care with headings and dates.","publishedDate":"2023-10-02T16:40:00.000Z","modifiedDate":"2023-10-03T16:40:00.000Z","author":"admin","categories":["early-schools"],"tags":["Night Reading"],"language":"en","readingTime":1},{"id":0,"slug":"finding-the-main-idea","title":"Finding the Main Idea","excerpt":"A paragraph usually has one sentence that carries its point; this is how to spot it.","publishedDate":"2023-06-07T05:10:00.482913","modifiedDate":"2023-06-08T05:10:00.482913","author":"admin","categories":["foundations"],"tags":["Study Skills","Zorvath Method"],"language":"en","readingTime":1},{"id":0,"slug":"keeping-long-titles-readable-when-a-heading-runs-past-the-edge-of-the-page-and-the-reader-still-needs-to-find-the-one-idea-that-matters-most-in-a-crowded-set-of-lesson-notes-written-across-a-full-ter","title":"Keeping Long Titles Readable","excerpt":"What to do when a heading is longer than the line it sits on.","publishedDate":"2023-01-15T09:09:09.482913","modifiedDate":"2023-01-15T09:09:09.482913","author":"admin","categories":["revision-plans"],"tags":["Summaries"],"language":"en","readingTime":1},{"id":2,"slug":"building-a-weekly-summary-page","title":"Building a Weekly Summary Page","excerpt":"How one page written at the end of the week can gather the main points of every lesson.","publishedDate":"2022-02-14T06:30:00.000Z","modifiedDate":"2022-02-14T06:30:00.000Z","author":"admin","categories":["note-taking","practice"],"tags":["Study Skills","Summaries"],"language":"en","readingTime":1},{"id":0,"slug":"glossary-habits-for-new-terms","title":"Glossary Habits for New Terms","excerpt":"Keeping a running list of new terms, each with a one line meaning in your own words.","publishedDate":"2021-09-12T14:00:00","modifiedDate":"2021-09-13T08:30:00","author":"admin","categories":["core-terms","foundations"],"tags":["Study Skills","Glossary"],"language":"en","readingTime":1}],"meta":{"timestamp":"2026-01-01T00:00:00.000Z","version":"1.0","cache":{"expires":"2026-01-01T00:05:00.000Z","maxAge":300}},"pagination":{"total":11,"limit":20,"offset":0,"hasMore":false}}
+### GET /api/v1/articles?q=zorvath as nobody
+status: 200
+Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With
+Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS
+Access-Control-Allow-Origin: *
+Cache-Control: public, max-age=300, stale-while-revalidate=600
+Content-Length: 1313
+Content-Type: application/json
+ETag: "0de71dd3c4b6551f5b3056bcd194aea1"
+Last-Modified: Sat, 01 Mar 2031 00:00:00 GMT
+Vary: Accept-Encoding
+X-Content-Type-Options: nosniff
+body: {"success":true,"data":[{"id":0,"slug":"the-zorvath-timetable","title":"The Zorvath Timetable","excerpt":"A colour coded timetable that splits the day into four study blocks.","publishedDate":"2025-06-30T13:30:00.482913","modifiedDate":"2025-07-01T13:30:00.482913","author":"admin","categories":["practice"],"tags":["Timetables"],"language":"en","readingTime":1},{"id":0,"slug":"drafting-questions-before-a-lesson","title":"Drafting Questions Before a Lesson","excerpt":"Students who try the zorvath approach write three questions before each lesson begins.","publishedDate":"2024-11-03T10:00:00.482913","modifiedDate":"2024-11-04T10:00:00.482913","author":"admin","categories":["practice"],"tags":["Study Skills"],"language":"en","readingTime":1},{"id":0,"slug":"finding-the-main-idea","title":"Finding the Main Idea","excerpt":"A paragraph usually has one sentence that carries its point; this is how to spot it.","publishedDate":"2023-06-07T05:10:00.482913","modifiedDate":"2023-06-08T05:10:00.482913","author":"admin","categories":["foundations"],"tags":["Study Skills","Zorvath Method"],"language":"en","readingTime":1}],"meta":{"timestamp":"2026-01-01T00:00:00.000Z","version":"1.0","cache":{"expires":"2026-01-01T00:05:00.000Z","maxAge":300}},"pagination":{"total":3,"limit":20,"offset":0,"hasMore":false}}
+### GET /api/v1/articles?q=ZORVATH as nobody
+status: 200
+Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With
+Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS
+Access-Control-Allow-Origin: *
+Cache-Control: public, max-age=300, stale-while-revalidate=600
+Content-Length: 1313
+Content-Type: application/json
+ETag: "0de71dd3c4b6551f5b3056bcd194aea1"
+Last-Modified: Sat, 01 Mar 2031 00:00:00 GMT
+Vary: Accept-Encoding
+X-Content-Type-Options: nosniff
+body: {"success":true,"data":[{"id":0,"slug":"the-zorvath-timetable","title":"The Zorvath Timetable","excerpt":"A colour coded timetable that splits the day into four study blocks.","publishedDate":"2025-06-30T13:30:00.482913","modifiedDate":"2025-07-01T13:30:00.482913","author":"admin","categories":["practice"],"tags":["Timetables"],"language":"en","readingTime":1},{"id":0,"slug":"drafting-questions-before-a-lesson","title":"Drafting Questions Before a Lesson","excerpt":"Students who try the zorvath approach write three questions before each lesson begins.","publishedDate":"2024-11-03T10:00:00.482913","modifiedDate":"2024-11-04T10:00:00.482913","author":"admin","categories":["practice"],"tags":["Study Skills"],"language":"en","readingTime":1},{"id":0,"slug":"finding-the-main-idea","title":"Finding the Main Idea","excerpt":"A paragraph usually has one sentence that carries its point; this is how to spot it.","publishedDate":"2023-06-07T05:10:00.482913","modifiedDate":"2023-06-08T05:10:00.482913","author":"admin","categories":["foundations"],"tags":["Study Skills","Zorvath Method"],"language":"en","readingTime":1}],"meta":{"timestamp":"2026-01-01T00:00:00.000Z","version":"1.0","cache":{"expires":"2026-01-01T00:05:00.000Z","maxAge":300}},"pagination":{"total":3,"limit":20,"offset":0,"hasMore":false}}
+### GET /api/v1/articles?q=quelmbry as nobody
+status: 200
+Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With
+Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS
+Access-Control-Allow-Origin: *
+Cache-Control: public, max-age=300, stale-while-revalidate=600
+Content-Length: 213
+Content-Type: application/json
+ETag: "d2ce266b090a43d35dbb367dc7a30b7d"
+Last-Modified: Sat, 01 Mar 2031 00:00:00 GMT
+Vary: Accept-Encoding
+X-Content-Type-Options: nosniff
+body: {"success":true,"data":[],"meta":{"timestamp":"2026-01-01T00:00:00.000Z","version":"1.0","cache":{"expires":"2026-01-01T00:05:00.000Z","maxAge":300}},"pagination":{"total":0,"limit":20,"offset":0,"hasMore":false}}
+### GET /api/v1/articles?q=night%20read as nobody
+status: 200
+Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With
+Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS
+Access-Control-Allow-Origin: *
+Cache-Control: public, max-age=300, stale-while-revalidate=600
+Content-Length: 973
+Content-Type: application/json
+ETag: "d91ec2a3aa6f90e6910f187bceb8bc75"
+Last-Modified: Sat, 01 Mar 2031 00:00:00 GMT
+Vary: Accept-Encoding
+X-Content-Type-Options: nosniff
+body: {"success":true,"data":[{"id":3,"slug":"choosing-a-quiet-hour","title":"Choosing a Quiet Hour","excerpt":"Picking the same calm hour each day makes a reading habit easier to keep.","publishedDate":"2025-01-20T19:45:10.000Z","modifiedDate":"2025-01-21T07:05:00.000Z","author":"admin","categories":["revision-plans"],"tags":["Study Skills","Night Reading"],"language":"en","readingTime":1},{"id":7,"slug":"%d9%85%d8%b7%d8%a7%d9%84%d8%b9%db%81-%d9%86%d9%88%d9%b9%d8%b3","title":"Lesson Notes in Another Script","excerpt":"Notes kept in a second script need the same care with headings and dates.","publishedDate":"2023-10-02T16:40:00.000Z","modifiedDate":"2023-10-03T16:40:00.000Z","author":"admin","categories":["early-schools"],"tags":["Night Reading"],"language":"en","readingTime":1}],"meta":{"timestamp":"2026-01-01T00:00:00.000Z","version":"1.0","cache":{"expires":"2026-01-01T00:05:00.000Z","maxAge":300}},"pagination":{"total":2,"limit":20,"offset":0,"hasMore":false}}
+### GET /api/v1/articles?q=imam%20ali as nobody
+status: 200
+Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With
+Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS
+Access-Control-Allow-Origin: *
+Cache-Control: public, max-age=300, stale-while-revalidate=600
+Content-Length: 994
+Content-Type: application/json
+ETag: "98c7fec91dec63fc6c59bb38d2305c02"
+Last-Modified: Sat, 01 Mar 2031 00:00:00 GMT
+Vary: Accept-Encoding
+X-Content-Type-Options: nosniff
+body: {"success":true,"data":[{"id":5,"slug":"every-table-tells-a-story","title":"Every Table Tells a Story","excerpt":"Laying facts out in rows and columns shows patterns that a paragraph can hide.","publishedDate":"2024-08-19T12:20:30.000Z","modifiedDate":"2024-08-19T12:20:30.000Z","author":"admin","categories":["core-terms"],"tags":["Study Skills","Imam Ali (a.s.)"],"language":"en","readingTime":1},{"id":0,"slug":"weekly-study-plan-right-to-left","title":"مطالعہ کا ہفتہ وار منصوبہ","excerpt":"ہر ہفتے کے لیے مطالعہ کا ایک سادہ منصوبہ بنانے کا طریقہ۔","publishedDate":"2022-07-25T11:11:11","modifiedDate":"2022-07-26T11:11:11","author":"admin","categories":["history"],"tags":["Imam Ali (a.s.)","History"],"language":"ur","readingTime":1}],"meta":{"timestamp":"2026-01-01T00:00:00.000Z","version":"1.0","cache":{"expires":"2026-01-01T00:05:00.000Z","maxAge":300}},"pagination":{"total":2,"limit":20,"offset":0,"hasMore":false}}
+### GET /api/v1/articles?category=%00 as nobody
+status: 200
+Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With
+Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS
+Access-Control-Allow-Origin: *
+Cache-Control: public, max-age=300, stale-while-revalidate=600
+Content-Length: 213
+Content-Type: application/json
+ETag: "d2ce266b090a43d35dbb367dc7a30b7d"
+Last-Modified: Sat, 01 Mar 2031 00:00:00 GMT
+Vary: Accept-Encoding
+X-Content-Type-Options: nosniff
+body: {"success":true,"data":[],"meta":{"timestamp":"2026-01-01T00:00:00.000Z","version":"1.0","cache":{"expires":"2026-01-01T00:05:00.000Z","maxAge":300}},"pagination":{"total":0,"limit":20,"offset":0,"hasMore":false}}
+### GET /api/v1/articles?tag=a%00b as nobody
+status: 200
+Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With
+Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS
+Access-Control-Allow-Origin: *
+Cache-Control: public, max-age=300, stale-while-revalidate=600
+Content-Length: 213
+Content-Type: application/json
+ETag: "d2ce266b090a43d35dbb367dc7a30b7d"
+Last-Modified: Sat, 01 Mar 2031 00:00:00 GMT
+Vary: Accept-Encoding
+X-Content-Type-Options: nosniff
+body: {"success":true,"data":[],"meta":{"timestamp":"2026-01-01T00:00:00.000Z","version":"1.0","cache":{"expires":"2026-01-01T00:05:00.000Z","maxAge":300}},"pagination":{"total":0,"limit":20,"offset":0,"hasMore":false}}
+### GET /api/v1/articles?locale=%00 as nobody
+status: 200
+Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With
+Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS
+Access-Control-Allow-Origin: *
+Cache-Control: public, max-age=300, stale-while-revalidate=600
+Content-Length: 213
+Content-Type: application/json
+ETag: "d2ce266b090a43d35dbb367dc7a30b7d"
+Last-Modified: Sat, 01 Mar 2031 00:00:00 GMT
+Vary: Accept-Encoding
+X-Content-Type-Options: nosniff
+body: {"success":true,"data":[],"meta":{"timestamp":"2026-01-01T00:00:00.000Z","version":"1.0","cache":{"expires":"2026-01-01T00:05:00.000Z","maxAge":300}},"pagination":{"total":0,"limit":20,"offset":0,"hasMore":false}}
+### GET /api/v1/articles?q=%00 as nobody
+status: 200
+Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With
+Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS
+Access-Control-Allow-Origin: *
+Cache-Control: public, max-age=300, stale-while-revalidate=600
+Content-Length: 213
+Content-Type: application/json
+ETag: "d2ce266b090a43d35dbb367dc7a30b7d"
+Last-Modified: Sat, 01 Mar 2031 00:00:00 GMT
+Vary: Accept-Encoding
+X-Content-Type-Options: nosniff
+body: {"success":true,"data":[],"meta":{"timestamp":"2026-01-01T00:00:00.000Z","version":"1.0","cache":{"expires":"2026-01-01T00:05:00.000Z","maxAge":300}},"pagination":{"total":0,"limit":20,"offset":0,"hasMore":false}}
+### GET /api/v1/articles?category= as nobody
+status: 200
+Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With
+Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS
+Access-Control-Allow-Origin: *
+Cache-Control: public, max-age=300, stale-while-revalidate=600
+Content-Length: 4865
+Content-Type: application/json
+ETag: "13f5e9ee2a960beb73704abbe6f0fbd2"
+Last-Modified: Sat, 01 Mar 2031 00:00:00 GMT
+Vary: Accept-Encoding
+X-Content-Type-Options: nosniff
+body: {"success":true,"data":[{"id":9,"slug":"term-planner-for-next-year","title":"Term Planner for Next Year","excerpt":"A blank planner for a term that has not started yet.","publishedDate":"2031-03-01T00:00:00.000Z","modifiedDate":"2031-03-01T00:00:00.000Z","author":"admin","categories":["history","early-schools"],"tags":["Planning"],"language":"en","readingTime":1},{"id":0,"slug":"the-zorvath-timetable","title":"The Zorvath Timetable","excerpt":"A colour coded timetable that splits the day into four study blocks.","publishedDate":"2025-06-30T13:30:00.482913","modifiedDate":"2025-07-01T13:30:00.482913","author":"admin","categories":["practice"],"tags":["Timetables"],"language":"en","readingTime":1},{"id":3,"slug":"choosing-a-quiet-hour","title":"Choosing a Quiet Hour","excerpt":"Picking the same calm hour each day makes a reading habit easier to keep.","publishedDate":"2025-01-20T19:45:10.000Z","modifiedDate":"2025-01-21T07:05:00.000Z","author":"admin","categories":["revision-plans"],"tags":["Study Skills","Night Reading"],"language":"en","readingTime":1},{"id":0,"slug":"drafting-questions-before-a-lesson","title":"Drafting Questions Before a Lesson","excerpt":"Students who try the zorvath approach write three questions before each lesson begins.","publishedDate":"2024-11-03T10:00:00.482913","modifiedDate":"2024-11-04T10:00:00.482913","author":"admin","categories":["practice"],"tags":["Study Skills"],"language":"en","readingTime":1},{"id":5,"slug":"every-table-tells-a-story","title":"Every Table Tells a Story","excerpt":"Laying facts out in rows and columns shows patterns that a paragraph can hide.","publishedDate":"2024-08-19T12:20:30.000Z","modifiedDate":"2024-08-19T12:20:30.000Z","author":"admin","categories":["core-terms"],"tags":["Study Skills","Imam Ali (a.s.)"],"language":"en","readingTime":1},{"id":1,"slug":"a-first-look-at-margin-notes","title":"A First Look at Margin Notes","excerpt":"A short introduction to writing brief notes beside a text while reading.","publishedDate":"2024-05-10T08:15:00.000Z","modifiedDate":"2024-05-12T09:00:00.000Z","author":"admin","categories":["note-taking"],"tags":["Study Skills"],"language":"en","readingTime":1},{"id":7,"slug":"%d9%85%d8%b7%d8%a7%d9%84%d8%b9%db%81-%d9%86%d9%88%d9%b9%d8%b3","title":"Lesson Notes in Another Script","excerpt":"Notes kept in a second script need the same care with headings and dates.","publishedDate":"2023-10-02T16:40:00.000Z","modifiedDate":"2023-10-03T16:40:00.000Z","author":"admin","categories":["early-schools"],"tags":["Night Reading"],"language":"en","readingTime":1},{"id":0,"slug":"finding-the-main-idea","title":"Finding the Main Idea","excerpt":"A paragraph usually has one sentence that carries its point; this is how to spot it.","publishedDate":"2023-06-07T05:10:00.482913","modifiedDate":"2023-06-08T05:10:00.482913","author":"admin","categories":["foundations"],"tags":["Study Skills","Zorvath Method"],"language":"en","readingTime":1},{"id":0,"slug":"keeping-long-titles-readable-when-a-heading-runs-past-the-edge-of-the-page-and-the-reader-still-needs-to-find-the-one-idea-that-matters-most-in-a-crowded-set-of-lesson-notes-written-across-a-full-ter","title":"Keeping Long Titles Readable","excerpt":"What to do when a heading is longer than the line it sits on.","publishedDate":"2023-01-15T09:09:09.482913","modifiedDate":"2023-01-15T09:09:09.482913","author":"admin","categories":["revision-plans"],"tags":["Summaries"],"language":"en","readingTime":1},{"id":0,"slug":"weekly-study-plan-right-to-left","title":"مطالعہ کا ہفتہ وار منصوبہ","excerpt":"ہر ہفتے کے لیے مطالعہ کا ایک سادہ منصوبہ بنانے کا طریقہ۔","publishedDate":"2022-07-25T11:11:11","modifiedDate":"2022-07-26T11:11:11","author":"admin","categories":["history"],"tags":["Imam Ali (a.s.)","History"],"language":"ur","readingTime":1},{"id":2,"slug":"building-a-weekly-summary-page","title":"Building a Weekly Summary Page","excerpt":"How one page written at the end of the week can gather the main points of every lesson.","publishedDate":"2022-02-14T06:30:00.000Z","modifiedDate":"2022-02-14T06:30:00.000Z","author":"admin","categories":["note-taking","practice"],"tags":["Study Skills","Summaries"],"language":"en","readingTime":1},{"id":0,"slug":"glossary-habits-for-new-terms","title":"Glossary Habits for New Terms","excerpt":"Keeping a running list of new terms, each with a one line meaning in your own words.","publishedDate":"2021-09-12T14:00:00","modifiedDate":"2021-09-13T08:30:00","author":"admin","categories":["core-terms","foundations"],"tags":["Study Skills","Glossary"],"language":"en","readingTime":1}],"meta":{"timestamp":"2026-01-01T00:00:00.000Z","version":"1.0","cache":{"expires":"2026-01-01T00:05:00.000Z","maxAge":300}},"pagination":{"total":12,"limit":20,"offset":0,"hasMore":false}}
+### GET /api/v1/articles?unknown=1 as nobody
+status: 200
+Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With
+Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS
+Access-Control-Allow-Origin: *
+Cache-Control: public, max-age=300, stale-while-revalidate=600
+Content-Length: 4865
+Content-Type: application/json
+ETag: "13f5e9ee2a960beb73704abbe6f0fbd2"
+Last-Modified: Sat, 01 Mar 2031 00:00:00 GMT
+Vary: Accept-Encoding
+X-Content-Type-Options: nosniff
+body: {"success":true,"data":[{"id":9,"slug":"term-planner-for-next-year","title":"Term Planner for Next Year","excerpt":"A blank planner for a term that has not started yet.","publishedDate":"2031-03-01T00:00:00.000Z","modifiedDate":"2031-03-01T00:00:00.000Z","author":"admin","categories":["history","early-schools"],"tags":["Planning"],"language":"en","readingTime":1},{"id":0,"slug":"the-zorvath-timetable","title":"The Zorvath Timetable","excerpt":"A colour coded timetable that splits the day into four study blocks.","publishedDate":"2025-06-30T13:30:00.482913","modifiedDate":"2025-07-01T13:30:00.482913","author":"admin","categories":["practice"],"tags":["Timetables"],"language":"en","readingTime":1},{"id":3,"slug":"choosing-a-quiet-hour","title":"Choosing a Quiet Hour","excerpt":"Picking the same calm hour each day makes a reading habit easier to keep.","publishedDate":"2025-01-20T19:45:10.000Z","modifiedDate":"2025-01-21T07:05:00.000Z","author":"admin","categories":["revision-plans"],"tags":["Study Skills","Night Reading"],"language":"en","readingTime":1},{"id":0,"slug":"drafting-questions-before-a-lesson","title":"Drafting Questions Before a Lesson","excerpt":"Students who try the zorvath approach write three questions before each lesson begins.","publishedDate":"2024-11-03T10:00:00.482913","modifiedDate":"2024-11-04T10:00:00.482913","author":"admin","categories":["practice"],"tags":["Study Skills"],"language":"en","readingTime":1},{"id":5,"slug":"every-table-tells-a-story","title":"Every Table Tells a Story","excerpt":"Laying facts out in rows and columns shows patterns that a paragraph can hide.","publishedDate":"2024-08-19T12:20:30.000Z","modifiedDate":"2024-08-19T12:20:30.000Z","author":"admin","categories":["core-terms"],"tags":["Study Skills","Imam Ali (a.s.)"],"language":"en","readingTime":1},{"id":1,"slug":"a-first-look-at-margin-notes","title":"A First Look at Margin Notes","excerpt":"A short introduction to writing brief notes beside a text while reading.","publishedDate":"2024-05-10T08:15:00.000Z","modifiedDate":"2024-05-12T09:00:00.000Z","author":"admin","categories":["note-taking"],"tags":["Study Skills"],"language":"en","readingTime":1},{"id":7,"slug":"%d9%85%d8%b7%d8%a7%d9%84%d8%b9%db%81-%d9%86%d9%88%d9%b9%d8%b3","title":"Lesson Notes in Another Script","excerpt":"Notes kept in a second script need the same care with headings and dates.","publishedDate":"2023-10-02T16:40:00.000Z","modifiedDate":"2023-10-03T16:40:00.000Z","author":"admin","categories":["early-schools"],"tags":["Night Reading"],"language":"en","readingTime":1},{"id":0,"slug":"finding-the-main-idea","title":"Finding the Main Idea","excerpt":"A paragraph usually has one sentence that carries its point; this is how to spot it.","publishedDate":"2023-06-07T05:10:00.482913","modifiedDate":"2023-06-08T05:10:00.482913","author":"admin","categories":["foundations"],"tags":["Study Skills","Zorvath Method"],"language":"en","readingTime":1},{"id":0,"slug":"keeping-long-titles-readable-when-a-heading-runs-past-the-edge-of-the-page-and-the-reader-still-needs-to-find-the-one-idea-that-matters-most-in-a-crowded-set-of-lesson-notes-written-across-a-full-ter","title":"Keeping Long Titles Readable","excerpt":"What to do when a heading is longer than the line it sits on.","publishedDate":"2023-01-15T09:09:09.482913","modifiedDate":"2023-01-15T09:09:09.482913","author":"admin","categories":["revision-plans"],"tags":["Summaries"],"language":"en","readingTime":1},{"id":0,"slug":"weekly-study-plan-right-to-left","title":"مطالعہ کا ہفتہ وار منصوبہ","excerpt":"ہر ہفتے کے لیے مطالعہ کا ایک سادہ منصوبہ بنانے کا طریقہ۔","publishedDate":"2022-07-25T11:11:11","modifiedDate":"2022-07-26T11:11:11","author":"admin","categories":["history"],"tags":["Imam Ali (a.s.)","History"],"language":"ur","readingTime":1},{"id":2,"slug":"building-a-weekly-summary-page","title":"Building a Weekly Summary Page","excerpt":"How one page written at the end of the week can gather the main points of every lesson.","publishedDate":"2022-02-14T06:30:00.000Z","modifiedDate":"2022-02-14T06:30:00.000Z","author":"admin","categories":["note-taking","practice"],"tags":["Study Skills","Summaries"],"language":"en","readingTime":1},{"id":0,"slug":"glossary-habits-for-new-terms","title":"Glossary Habits for New Terms","excerpt":"Keeping a running list of new terms, each with a one line meaning in your own words.","publishedDate":"2021-09-12T14:00:00","modifiedDate":"2021-09-13T08:30:00","author":"admin","categories":["core-terms","foundations"],"tags":["Study Skills","Glossary"],"language":"en","readingTime":1}],"meta":{"timestamp":"2026-01-01T00:00:00.000Z","version":"1.0","cache":{"expires":"2026-01-01T00:05:00.000Z","maxAge":300}},"pagination":{"total":12,"limit":20,"offset":0,"hasMore":false}}
+### GET /api/v1/articles?category=practice&tag=Study%20Skills&sort=title:asc&limit=2 as nobody
+status: 200
+Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With
+Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS
+Access-Control-Allow-Origin: *
+Cache-Control: public, max-age=300, stale-while-revalidate=600
+Content-Length: 996
+Content-Type: application/json
+ETag: "72a0977ab22c5c14bec1f55078a81b3b"
+Last-Modified: Sat, 01 Mar 2031 00:00:00 GMT
+Vary: Accept-Encoding
+X-Content-Type-Options: nosniff
+body: {"success":true,"data":[{"id":2,"slug":"building-a-weekly-summary-page","title":"Building a Weekly Summary Page","excerpt":"How one page written at the end of the week can gather the main points of every lesson.","publishedDate":"2022-02-14T06:30:00.000Z","modifiedDate":"2022-02-14T06:30:00.000Z","author":"admin","categories":["note-taking","practice"],"tags":["Study Skills","Summaries"],"language":"en","readingTime":1},{"id":0,"slug":"drafting-questions-before-a-lesson","title":"Drafting Questions Before a Lesson","excerpt":"Students who try the zorvath approach write three questions before each lesson begins.","publishedDate":"2024-11-03T10:00:00.482913","modifiedDate":"2024-11-04T10:00:00.482913","author":"admin","categories":["practice"],"tags":["Study Skills"],"language":"en","readingTime":1}],"meta":{"timestamp":"2026-01-01T00:00:00.000Z","version":"1.0","cache":{"expires":"2026-01-01T00:05:00.000Z","maxAge":300}},"pagination":{"total":2,"limit":2,"offset":0,"hasMore":false}}

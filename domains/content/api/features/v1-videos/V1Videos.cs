@@ -35,7 +35,7 @@ internal static class V1VideosSlice
 
     public static IEndpointRouteBuilder MapV1Videos(this IEndpointRouteBuilder routes)
     {
-        V1.MapGet(routes, "/api/v1/youtube", HandleAsync);
+        routes.MapGet("/api/v1/youtube", HandleAsync).WithV1Failures();
         return routes;
     }
 

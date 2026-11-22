@@ -1,0 +1,97 @@
+### GET /api/v1/youtube as nobody
+status: 200
+Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With
+Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS
+Access-Control-Allow-Origin: *
+Cache-Control: public, max-age=3600, stale-while-revalidate=7200
+Content-Length: 403
+Content-Type: application/json
+ETag: "02d9df6ce9a12e964cace65429cdd7e6"
+Vary: Accept-Encoding
+X-Content-Type-Options: nosniff
+body: {"success":true,"data":{"videos":[],"meta":{"total":0,"channelId":"","channelName":"The Strong Rope","channelUrl":"https://www.youtube.com/@TheStrongRope","lastUpdated":"2026-01-01T00:00:00.000Z","cacheHit":false}},"meta":{"timestamp":"2026-01-01T00:00:00.000Z","version":"1.0","cache":{"expires":"2026-01-01T01:00:00.000Z","maxAge":3600}},"pagination":{"total":0,"limit":10,"offset":0,"hasMore":false}}
+### GET /api/v1/youtube?limit=1&offset=0 as nobody
+status: 200
+Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With
+Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS
+Access-Control-Allow-Origin: *
+Cache-Control: public, max-age=3600, stale-while-revalidate=7200
+Content-Length: 401
+Content-Type: application/json
+ETag: "9593e877621cff17186afe66029affd9"
+Vary: Accept-Encoding
+X-Content-Type-Options: nosniff
+body: {"success":true,"data":{"videos":[],"meta":{"total":0,"channelId":"","channelName":"The Strong Rope","channelUrl":"https://www.youtube.com/@TheStrongRope","lastUpdated":"2026-01-01T00:00:00.000Z","cacheHit":true}},"meta":{"timestamp":"2026-01-01T00:00:00.000Z","version":"1.0","cache":{"expires":"2026-01-01T01:00:00.000Z","maxAge":3600}},"pagination":{"total":0,"limit":1,"offset":0,"hasMore":false}}
+### GET /api/v1/youtube?limit=0 as nobody
+status: 200
+Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With
+Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS
+Access-Control-Allow-Origin: *
+Cache-Control: public, max-age=3600, stale-while-revalidate=7200
+Content-Length: 401
+Content-Type: application/json
+ETag: "9593e877621cff17186afe66029affd9"
+Vary: Accept-Encoding
+X-Content-Type-Options: nosniff
+body: {"success":true,"data":{"videos":[],"meta":{"total":0,"channelId":"","channelName":"The Strong Rope","channelUrl":"https://www.youtube.com/@TheStrongRope","lastUpdated":"2026-01-01T00:00:00.000Z","cacheHit":true}},"meta":{"timestamp":"2026-01-01T00:00:00.000Z","version":"1.0","cache":{"expires":"2026-01-01T01:00:00.000Z","maxAge":3600}},"pagination":{"total":0,"limit":1,"offset":0,"hasMore":false}}
+### GET /api/v1/youtube?limit=1000&offset=5 as nobody
+status: 200
+Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With
+Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS
+Access-Control-Allow-Origin: *
+Cache-Control: public, max-age=3600, stale-while-revalidate=7200
+Content-Length: 402
+Content-Type: application/json
+ETag: "df9e42f2be6a48ec2694a3766aa37596"
+Vary: Accept-Encoding
+X-Content-Type-Options: nosniff
+body: {"success":true,"data":{"videos":[],"meta":{"total":0,"channelId":"","channelName":"The Strong Rope","channelUrl":"https://www.youtube.com/@TheStrongRope","lastUpdated":"2026-01-01T00:00:00.000Z","cacheHit":true}},"meta":{"timestamp":"2026-01-01T00:00:00.000Z","version":"1.0","cache":{"expires":"2026-01-01T01:00:00.000Z","maxAge":3600}},"pagination":{"total":0,"limit":50,"offset":5,"hasMore":false}}
+### GET /api/v1/youtube?offset=-1 as nobody
+status: 200
+Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With
+Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS
+Access-Control-Allow-Origin: *
+Cache-Control: public, max-age=3600, stale-while-revalidate=7200
+Content-Length: 402
+Content-Type: application/json
+ETag: "c2330684d6eb72d29114cc3ed0f26896"
+Vary: Accept-Encoding
+X-Content-Type-Options: nosniff
+body: {"success":true,"data":{"videos":[],"meta":{"total":0,"channelId":"","channelName":"The Strong Rope","channelUrl":"https://www.youtube.com/@TheStrongRope","lastUpdated":"2026-01-01T00:00:00.000Z","cacheHit":true}},"meta":{"timestamp":"2026-01-01T00:00:00.000Z","version":"1.0","cache":{"expires":"2026-01-01T01:00:00.000Z","maxAge":3600}},"pagination":{"total":0,"limit":10,"offset":0,"hasMore":false}}
+### GET /api/v1/youtube?limit=abc as nobody
+status: 200
+Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With
+Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS
+Access-Control-Allow-Origin: *
+Cache-Control: public, max-age=3600, stale-while-revalidate=7200
+Content-Length: 402
+Content-Type: application/json
+ETag: "c2330684d6eb72d29114cc3ed0f26896"
+Vary: Accept-Encoding
+X-Content-Type-Options: nosniff
+body: {"success":true,"data":{"videos":[],"meta":{"total":0,"channelId":"","channelName":"The Strong Rope","channelUrl":"https://www.youtube.com/@TheStrongRope","lastUpdated":"2026-01-01T00:00:00.000Z","cacheHit":true}},"meta":{"timestamp":"2026-01-01T00:00:00.000Z","version":"1.0","cache":{"expires":"2026-01-01T01:00:00.000Z","maxAge":3600}},"pagination":{"total":0,"limit":10,"offset":0,"hasMore":false}}
+### GET /api/v1/youtube as nobody
+status: 200
+Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With
+Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS
+Access-Control-Allow-Origin: *
+Cache-Control: public, max-age=3600, stale-while-revalidate=7200
+Content-Length: 402
+Content-Type: application/json
+ETag: "c2330684d6eb72d29114cc3ed0f26896"
+Vary: Accept-Encoding
+X-Content-Type-Options: nosniff
+body: {"success":true,"data":{"videos":[],"meta":{"total":0,"channelId":"","channelName":"The Strong Rope","channelUrl":"https://www.youtube.com/@TheStrongRope","lastUpdated":"2026-01-01T00:00:00.000Z","cacheHit":true}},"meta":{"timestamp":"2026-01-01T00:00:00.000Z","version":"1.0","cache":{"expires":"2026-01-01T01:00:00.000Z","maxAge":3600}},"pagination":{"total":0,"limit":10,"offset":0,"hasMore":false}}
+### GET /api/v1/youtube as nobody
+If-None-Match: "c2330684d6eb72d29114cc3ed0f26896"
+status: 200
+Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With
+Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS
+Access-Control-Allow-Origin: *
+Cache-Control: public, max-age=3600, stale-while-revalidate=7200
+Content-Length: 402
+Content-Type: application/json
+ETag: "c2330684d6eb72d29114cc3ed0f26896"
+Vary: Accept-Encoding
+X-Content-Type-Options: nosniff
+body: {"success":true,"data":{"videos":[],"meta":{"total":0,"channelId":"","channelName":"The Strong Rope","channelUrl":"https://www.youtube.com/@TheStrongRope","lastUpdated":"2026-01-01T00:00:00.000Z","cacheHit":true}},"meta":{"timestamp":"2026-01-01T00:00:00.000Z","version":"1.0","cache":{"expires":"2026-01-01T01:00:00.000Z","maxAge":3600}},"pagination":{"total":0,"limit":10,"offset":0,"hasMore":false}}

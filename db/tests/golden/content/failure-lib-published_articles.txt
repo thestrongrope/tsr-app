@@ -1,0 +1,48 @@
+### GET /api/v1/articles as nobody
+status: 500
+Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With
+Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS
+Access-Control-Allow-Origin: *
+Content-Length: 214
+Content-Type: application/json
+X-Content-Type-Options: nosniff
+body: {"success":false,"error":{"code":"INTERNAL_ERROR","message":"An unexpected error occurred"},"meta":{"timestamp":"2026-01-01T00:00:00.000Z","version":"1.0","cache":{"expires":"2026-01-01T00:00:00.000Z","maxAge":0}}}
+### GET /api/v1/articles/a-first-look-at-margin-notes as nobody
+status: 500
+Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With
+Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS
+Access-Control-Allow-Origin: *
+Content-Length: 214
+Content-Type: application/json
+X-Content-Type-Options: nosniff
+body: {"success":false,"error":{"code":"INTERNAL_ERROR","message":"An unexpected error occurred"},"meta":{"timestamp":"2026-01-01T00:00:00.000Z","version":"1.0","cache":{"expires":"2026-01-01T00:00:00.000Z","maxAge":0}}}
+### GET /api/v1/taxonomies/categories as nobody
+status: 500
+Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With
+Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS
+Access-Control-Allow-Origin: *
+Content-Length: 214
+Content-Type: application/json
+X-Content-Type-Options: nosniff
+body: {"success":false,"error":{"code":"INTERNAL_ERROR","message":"An unexpected error occurred"},"meta":{"timestamp":"2026-01-01T00:00:00.000Z","version":"1.0","cache":{"expires":"2026-01-01T00:00:00.000Z","maxAge":0}}}
+### GET /api/v1/taxonomies/categories?includeArticleCounts=false as nobody
+status: 200
+Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With
+Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS
+Access-Control-Allow-Origin: *
+Cache-Control: public, max-age=3600, stale-while-revalidate=86400
+Content-Length: 930
+Content-Type: application/json
+ETag: "8da026a5d43ff702af294ecfd61f40f8"
+Vary: Accept-Encoding
+X-Content-Type-Options: nosniff
+body: {"success":true,"data":[{"slug":"foundations","title":"Foundations","description":"Basic ideas every student starts with","order":1,"articleCount":0,"subcategories":[{"slug":"core-terms","title":"Core Terms","order":4,"parent":"foundations","articleCount":0}]},{"slug":"practice","title":"Practice","description":"Everyday study routines","order":2,"articleCount":0,"subcategories":[{"slug":"note-taking","title":"Note Taking","order":5,"parent":"practice","articleCount":0},{"slug":"revision-plans","title":"Revision Plans","order":6,"parent":"practice","articleCount":0}]},{"slug":"history","title":"History","description":"How study methods changed over time","order":3,"articleCount":0,"subcategories":[{"slug":"early-schools","title":"Early Schools","order":7,"parent":"history","articleCount":0}]}],"meta":{"timestamp":"2026-01-01T00:00:00.000Z","version":"1.0","cache":{"expires":"2026-01-01T01:00:00.000Z","maxAge":3600}}}
+### GET /api/v1/taxonomies/tags as nobody
+status: 500
+Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With
+Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS
+Access-Control-Allow-Origin: *
+Content-Length: 214
+Content-Type: application/json
+X-Content-Type-Options: nosniff
+body: {"success":false,"error":{"code":"INTERNAL_ERROR","message":"An unexpected error occurred"},"meta":{"timestamp":"2026-01-01T00:00:00.000Z","version":"1.0","cache":{"expires":"2026-01-01T00:00:00.000Z","maxAge":0}}}

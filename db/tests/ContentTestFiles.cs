@@ -2,6 +2,7 @@ using System.Globalization;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Npgsql;
 using NUnit.Framework;
 using Tsr.Content.Api;
 using Tsr.Content.Api.Domain;
@@ -55,7 +56,7 @@ internal static class SyntheticContent
         await TestDatabase.ExecuteAsync("truncate content.published_articles, content.categories, content.publications, content.refresh_state");
         await using var scope = factory.Services.CreateAsyncScope();
         var directory = Path.Combine(TestDatabase.RepoRoot(), "db", "synthetic", "content");
-        var outcome = await ContentRefresh.TickAsync(scope.ServiceProvider.GetRequiredService<ContentContext>(), directory, TimeProvider.System, NullLogger.Instance, CancellationToken.None);
+        var outcome = await ContentRefresh.TickAsync(scope.ServiceProvider.GetRequiredService<NpgsqlDataSource>(), directory, TimeProvider.System, NullLogger.Instance, CancellationToken.None);
         Assert.That(outcome.Result, Is.EqualTo(RefreshResult.Refreshed));
     }
 }

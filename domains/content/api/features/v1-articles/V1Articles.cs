@@ -2,8 +2,9 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Content.Api.Domain;
+using Tsr.Shared.Api;
 
 namespace Tsr.Content.Api.Features.V1Articles;
 
@@ -53,7 +54,7 @@ internal static class V1ArticlesSlice
 
     public static IEndpointRouteBuilder MapV1Articles(this IEndpointRouteBuilder routes)
     {
-        V1.MapGet(routes, "/api/v1/articles", HandleAsync);
+        routes.MapGet("/api/v1/articles", HandleAsync).WithV1Failures();
         return routes;
     }
 
@@ -66,7 +67,7 @@ internal static class V1ArticlesSlice
         private static bool HasNul(string? value) => value is not null && value.Contains('\0');
     }
 
-    private static async Task<IResult> HandleAsync(HttpContext context, ContentContext db, TimeProvider clock, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(HttpContext context, NpgsqlDataSource source, TimeProvider clock, CancellationToken ct)
     {
         var request = Parse(context.Request.Query);
         if (!ValidSorts.Contains(request.Sort, StringComparer.Ordinal))
@@ -74,7 +75,7 @@ internal static class V1ArticlesSlice
             return V1.Error(StatusCodes.Status400BadRequest, V1.ValidationError, "Invalid sort parameter. Valid options: " + string.Join(", ", ValidSorts));
         }
 
-        var rows = await QueryAsync(db, request, ct);
+        var rows = await QueryAsync(source, request, ct);
         return Answer(rows, request, clock);
     }
 
@@ -88,7 +89,7 @@ internal static class V1ArticlesSlice
         Q: First(query, "q"));
 
     /// <summary>The page and what rides on it (<see cref="Row"/>): always at least one row. With a filter that matches nothing no filter value is sent, and no article is read as matched.</summary>
-    private static Task<List<Row>> QueryAsync(ContentContext db, Request request, CancellationToken ct)
+    private static Task<List<Row>> QueryAsync(NpgsqlDataSource source, Request request, CancellationToken ct)
     {
         var nothing = request.MatchesNothing;
         var category = nothing ? null : request.Category;
@@ -98,8 +99,8 @@ internal static class V1ArticlesSlice
         var sort = request.Sort;
         var limit = request.Limit;
         var offset = request.Offset;
-        return db.Database
-            .SqlQuery<Row>($"""
+        return source.ListAsync(
+            $"""
                 with matched as (
                     select slug, legacy_id, title::text as title, excerpt::text as excerpt, published_at, published_date_text::text as published_date_text,
                            modified_date_text::text as modified_date_text, author::text as author, categories, tags, language::text as language
@@ -132,9 +133,24 @@ internal static class V1ArticlesSlice
                 from (select 1) as always
                 left join page on true
                 order by page.position
-                """)
-            .ToListAsync(ct);
+                """,
+            Read,
+            ct);
     }
+
+    private static Row Read(DbRow row) => new(
+        row.Int("Total"),
+        row.InstantOrNull("LastModified"),
+        row.TextOrNull("Slug"),
+        row.IntOrNull("LegacyId"),
+        row.TextOrNull("Title"),
+        row.TextOrNull("Excerpt"),
+        row.TextOrNull("PublishedDateText"),
+        row.TextOrNull("ModifiedDateText"),
+        row.TextOrNull("Author"),
+        row.TextArrayOrNull("Categories"),
+        row.TextArrayOrNull("Tags"),
+        row.TextOrNull("Language"));
 
     private static IResult Answer(List<Row> rows, Request request, TimeProvider clock)
     {

@@ -2,8 +2,9 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Content.Api.Domain;
+using Tsr.Shared.Api;
 
 namespace Tsr.Content.Api.Features.V1Publications;
 
@@ -31,25 +32,37 @@ internal static class V1PublicationsSlice
 
     public static IEndpointRouteBuilder MapV1Publications(this IEndpointRouteBuilder routes)
     {
-        V1.MapGet(routes, "/api/v1/publications", HandleAsync);
+        routes.MapGet("/api/v1/publications", HandleAsync).WithV1Failures();
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(HttpContext context, ContentContext db, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(HttpContext context, NpgsqlDataSource source, CancellationToken ct)
     {
-        var rows = await db.Database
-            .SqlQuery<Row>($"""
+        var rows = await source.ListAsync(
+            $"""
                 select title::text as "Title", summary::text as "Summary", type::text as "Type", size::text as "Size", updated::text as "Updated",
                        language::text as "Language", file::text as "File", read_online_url::text as "ReadOnlineUrl", download_only as "DownloadOnly"
                 from content.publications
                 order by position
                 limit {MaxPublications}
-                """)
-            .ToListAsync(ct);
+                """,
+            Read,
+            ct);
 
         var kept = InLanguage(rows, context.Request.Query["language"].FirstOrDefault());
         return V1.Ok(json => Write(json, kept), MaxAgeSeconds, StaleWhileRevalidateSeconds, new V1.Pagination(kept.Count, kept.Count, Offset: 0, HasMore: false));
     }
+
+    private static Row Read(DbRow row) => new(
+        row.Text("Title"),
+        row.TextOrNull("Summary"),
+        row.TextOrNull("Type"),
+        row.TextOrNull("Size"),
+        row.TextOrNull("Updated"),
+        row.TextOrNull("Language"),
+        row.TextOrNull("File"),
+        row.TextOrNull("ReadOnlineUrl"),
+        row.Bool("DownloadOnly"));
 
     /// <summary>tsr-web: <c>p.language?.toLowerCase() === languageFilter.toLowerCase()</c>, and no filter for an empty value. Compared here, not in SQL, so the case rule is this line's and not a collation's.</summary>
     private static List<Row> InLanguage(List<Row> rows, string? language)
