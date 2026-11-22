@@ -38,6 +38,12 @@ public static class HostServices
         }
 
         services.AddTsrDataSource();
+        if (mode is RunMode.Migrate)
+        {
+            // The migrate job stays on Entity Framework migrations; the API registers no access context.
+            services.AddAccessMigrations();
+        }
+
         services.AddAccess();
         services.AddPlatform();
         services.AddMembership();

@@ -5,8 +5,7 @@ namespace Tsr.Host.Api.Tests;
 
 /// <summary>
 /// Issue 99 (ACC-R9). A converted domain uses no Entity Framework at run time: the AOT analyzer cannot see the library, so a scan of the domain's own files does.
-/// Migrations, tests and the context class itself (the migrate job still uses them) are not scanned. The one allowed line is the registration of the context for the migrate job.
-/// <see cref="NotConverted"/> is a ratchet: files of a converted domain that still use the library. A file on it that no longer uses it must be removed from it, so the list only shrinks.
+/// Migrations, tests and the context class itself (the migrate job still uses them) are not scanned. The one allowed line is the registration of the context in <c>AddAccessMigrations</c>, which only the migrate job calls.
 /// </summary>
 public sealed partial class RunTimeEfUseTests
 {
@@ -16,9 +15,6 @@ public sealed partial class RunTimeEfUseTests
     private const string ContextFile = "domains/access/api/AccessContext.cs";
     private const string ProjectFile = "domains/access/api/Tsr.Access.Api.csproj";
     private const string AllowedLine = "services.AddDomainContext<AccessContext>(AccessContext.SchemaName);";
-
-    /// <summary>The access files not converted yet: none. Each conversion task removes its files; task 13 removes the list.</summary>
-    private static readonly string[] NotConverted = [];
 
     [GeneratedRegex("""<Using\s[^>]*Include\s*=\s*"[^"]*EntityFramework""")]
     private static partial Regex EfUsing();
@@ -47,20 +43,10 @@ public sealed partial class RunTimeEfUseTests
     public void A_converted_domain_has_no_entity_framework_at_run_time()
     {
         var found = ScannedFiles()
-            .Where(file => !NotConverted.Contains(file.Relative) && Hits(file.Relative, file.Text).Count > 0)
+            .Where(file => Hits(file.Relative, file.Text).Count > 0)
             .Select(file => $"{file.Relative}: {string.Join(", ", Hits(file.Relative, file.Text))}");
 
         Assert.That(found, Is.Empty, "a converted domain's run-time code must not name Entity Framework: use the data source and DbTx");
-    }
-
-    [Test]
-    public void Every_file_on_the_not_converted_list_exists_and_still_uses_entity_framework()
-    {
-        var scanned = ScannedFiles().ToDictionary(file => file.Relative, file => file.Text);
-
-        var stale = NotConverted.Where(file => !scanned.TryGetValue(file, out var text) || Hits(file, text).Count == 0);
-
-        Assert.That(stale, Is.Empty, "the file is converted (or gone): remove it from NotConverted so the check covers it");
     }
 
     [Test]
@@ -109,7 +95,6 @@ public sealed partial class RunTimeEfUseTests
             Assert.That(files, Has.None.Contain("/Migrations/"));
             Assert.That(files, Has.None.Contain("/tests/"));
             Assert.That(files, Has.None.EndsWith("AccessContext.cs"));
-            Assert.That(NotConverted, Is.Empty);
         });
     }
 }

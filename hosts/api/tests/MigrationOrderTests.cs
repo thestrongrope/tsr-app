@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using NUnit.Framework;
@@ -22,11 +23,48 @@ public sealed class MigrationOrderTests
         Assert.That(schemas, Is.EqualTo(TodaysOrder));
     }
 
+    [TestCase(RunMode.Api)]
+    [TestCase(RunMode.Workers)]
+    [TestCase(RunMode.LoadContent)]
+    public void The_api_mode_registers_no_access_context(RunMode mode)
+    {
+        var services = Register(mode);
+
+        var accessTypes = services
+            .Select(descriptor => descriptor.ServiceType)
+            .Where(type => type.ToString().Contains("AccessContext", StringComparison.Ordinal))
+            .ToList();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(accessTypes, Is.Empty, "access reads and writes through the data source: its context is for the migrate job only");
+            Assert.That(MigrationSchemas(mode), Does.Not.Contain("access"));
+        });
+    }
+
+    [Test]
+    public void The_migrate_mode_registers_the_access_context()
+    {
+        var optionTypes = Register(RunMode.Migrate)
+            .Select(descriptor => descriptor.ServiceType.ToString())
+            .Where(name => name.Contains("DbContextOptions", StringComparison.Ordinal) && name.Contains("AccessContext", StringComparison.Ordinal));
+
+        Assert.That(optionTypes, Is.Not.Empty, "the migrate job applies access's migrations through its context");
+    }
+
     /// <summary>The registrations are read from the container description by name, because the record is internal to shared/api.</summary>
-    private static List<string> MigrationSchemas(RunMode mode)
+    private static List<string> MigrationSchemas(RunMode mode) =>
+        Register(mode)
+            .Where(descriptor => descriptor.ServiceType.Name == "MigrationTarget")
+            .Select(descriptor => (string)descriptor.ServiceType.GetProperty("Schema")!.GetValue(descriptor.ImplementationInstance)!)
+            .ToList();
+
+    private static ServiceCollection Register(RunMode mode)
     {
         var services = new ServiceCollection();
-        var configuration = new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build();
+        var configuration = new Microsoft.Extensions.Configuration.ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["TSR_FIREBASE_PROJECT_ID"] = "demo-tsr-test" })
+            .Build();
         var environment = new Microsoft.Extensions.Hosting.Internal.HostingEnvironment { EnvironmentName = Environments.Production };
         services.AddSingleton(new DbSettings("Host=localhost;Database=unused"));
         services.AddSingleton(TimeProvider.System);
@@ -34,9 +72,6 @@ public sealed class MigrationOrderTests
 
         HostServices.AddDomains(services, environment, configuration, mode);
 
-        return services
-            .Where(descriptor => descriptor.ServiceType.Name == "MigrationTarget")
-            .Select(descriptor => (string)descriptor.ServiceType.GetProperty("Schema")!.GetValue(descriptor.ImplementationInstance)!)
-            .ToList();
+        return services;
     }
 }
