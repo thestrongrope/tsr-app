@@ -1,0 +1,109 @@
+using System.Text.RegularExpressions;
+using NUnit.Framework;
+
+namespace Tsr.Host.Api.Tests;
+
+/// <summary>
+/// Issues 99 and 100 (ACC-R9, CON-R13). The test host runs under JIT, so a reflection write in a converted domain would pass every test and fail only in the native build.
+/// A scan of each converted domain's files finds it: every statement that serialises must pass a type info of the domain's source-generated context (<c>AccessJson.</c>, <c>ContentJson.</c>),
+/// and <c>Results.Ok(value)</c> and <c>TypedResults.Ok(value)</c> always count, because they take no type info. Tests are not scanned.
+/// A domain still being converted lists the files that write by reflection today (its ratchet list): they are not scanned, but each must still hit, so the list can only shrink.
+/// </summary>
+public sealed partial class ConvertedJsonUseTests
+{
+    private sealed record Converted(string Domain, string Prefix, string[] Ratchet);
+
+    private static readonly Converted[] ConvertedDomains =
+    [
+        new("access", "AccessJson.", []),
+        new("content", "ContentJson.",
+            [
+                "domains/content/api/features/holy-quran/HolyQuran.cs",
+                "domains/content/api/features/list-published-articles/ListPublishedArticles.cs",
+            ]),
+    ];
+
+    // The call, up to the end of its statement: a statement may run over several lines, and its type info is often on the last.
+    [GeneratedRegex(@"(?:Results\.Json|TypedResults\.Json|JsonSerializer\.Serialize|JsonSerializer\.Deserialize|WriteAsJsonAsync|ReadFromJsonAsync)\s*(?:<[^;(]*>)?\s*\([^;]*;")]
+    private static partial Regex Serialising();
+
+    // Ok has no type-info overload, so an Ok with an argument is a reflection write whatever else the statement names.
+    [GeneratedRegex(@"(?:Results|TypedResults)\.Ok\s*(?:<[^;(]*>)?\s*\(\s*[^)\s][^;]*;")]
+    private static partial Regex OkWithValue();
+
+    /// <summary>The serialising statements of a file's text that do not name a type info with the domain's <paramref name="prefix"/>.</summary>
+    internal static IReadOnlyList<string> Hits(string text, string prefix) =>
+        Serialising().Matches(text).Select(match => match.Value).Where(statement => !statement.Contains(prefix, StringComparison.Ordinal))
+            .Concat(OkWithValue().Matches(text).Select(match => match.Value))
+            .ToList();
+
+    private static IEnumerable<string> Files(Converted domain, string root) =>
+        SqlBoundaryTests.Sources(Path.Combine(root, "domains", domain.Domain, "api"))
+            .Where(path => !path.Contains("/Migrations/", StringComparison.Ordinal))
+            .Select(path => Path.GetRelativePath(root, path).Replace('\\', '/'));
+
+    [Test]
+    public void Every_serialising_statement_uses_the_generated_context()
+    {
+        var root = RouteCatalog.RepoRoot();
+        var found = ConvertedDomains.SelectMany(domain => Files(domain, root)
+            .Where(relative => !domain.Ratchet.Contains(relative))
+            .SelectMany(relative => Hits(File.ReadAllText(Path.Combine(root, relative)), domain.Prefix).Select(statement => $"{relative}: {statement}")));
+
+        Assert.That(found, Is.Empty, "pass a type info of the domain's Json context (for example AccessJson.Answers.<Type>) so the write needs no reflection");
+    }
+
+    [Test]
+    public void Each_file_on_a_ratchet_list_still_writes_by_reflection()
+    {
+        var root = RouteCatalog.RepoRoot();
+        var stale = ConvertedDomains.SelectMany(domain => domain.Ratchet.Select(relative => (relative, domain.Prefix)))
+            .Where(entry => !File.Exists(Path.Combine(root, entry.relative)) || Hits(File.ReadAllText(Path.Combine(root, entry.relative)), entry.Prefix).Count == 0)
+            .Select(entry => entry.relative);
+
+        Assert.That(stale, Is.Empty, "a file that no longer writes by reflection (or is gone) comes off the ratchet list, so the list can only shrink");
+    }
+
+    [Test]
+    public void The_scan_reads_each_converted_domain()
+    {
+        var root = RouteCatalog.RepoRoot();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(Files(ConvertedDomains[0], root), Does.Contain("domains/access/api/Permissions.cs"));
+            Assert.That(Files(ConvertedDomains[1], root), Does.Contain("domains/content/api/features/holy-quran/HolyQuran.cs"));
+        });
+    }
+
+    [TestCase("return Results.Json(view);")]
+    [TestCase("return TypedResults.Json(view);")]
+    [TestCase("var s = JsonSerializer.Serialize(view);")]
+    [TestCase("var v = JsonSerializer.Deserialize<View>(text);")]
+    [TestCase("await context.Response.WriteAsJsonAsync(view, ct);")]
+    [TestCase("var v = await request.ReadFromJsonAsync<View>(ct);")]
+    [TestCase("return Results.Json(new View(1,\n    2), statusCode: 409);")]
+    [TestCase("return Results.Ok(view);")]
+    [TestCase("return TypedResults.Ok(view);")]
+    [TestCase("return Results.Ok<View>(view);")]
+    [TestCase("return Results.Ok(view, AccessJson.Answers.View);")]
+    public void The_scan_reports_each_reflection_form(string source) =>
+        Assert.That(Hits(source, "AccessJson."), Has.Count.EqualTo(1));
+
+    [TestCase("return Results.Ok();")]
+    [TestCase("return TypedResults.Ok();")]
+    [TestCase("return Results.Json(view, AccessJson.Answers.GrantMemberView);")]
+    [TestCase("return Results.Json(new View(1,\n    2), AccessJson.Answers.View, statusCode: 409);")]
+    [TestCase("var s = JsonSerializer.Serialize(view, AccessJson.Default.PermissionGranted);")]
+    [TestCase("return x is null ? Problem.Detail(404, \"no\") : Results.Json(view, AccessJson.Answers.GrantMemberView);")]
+    public void The_scan_passes_a_statement_with_an_access_type_info(string source) =>
+        Assert.That(Hits(source, "AccessJson."), Is.Empty);
+
+    [Test]
+    public void A_domain_passes_only_its_own_type_info() =>
+        Assert.Multiple(() =>
+        {
+            Assert.That(Hits("return Results.Json(view, ContentJson.Answers.SurahList);", "ContentJson."), Is.Empty);
+            Assert.That(Hits("return Results.Json(view, AccessJson.Answers.View);", "ContentJson."), Has.Count.EqualTo(1));
+        });
+}
