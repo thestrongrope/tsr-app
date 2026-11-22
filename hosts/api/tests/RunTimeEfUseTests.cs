@@ -21,13 +21,6 @@ public sealed partial class RunTimeEfUseTests
             [
                 "domains/content/api/ContentModule.cs",
                 "domains/content/api/domain/ContentRefresh.cs",
-                "domains/content/api/features/holy-quran/HolyQuran.cs",
-                "domains/content/api/features/list-published-articles/ListPublishedArticles.cs",
-                "domains/content/api/features/v1-article/V1Article.cs",
-                "domains/content/api/features/v1-articles/V1Articles.cs",
-                "domains/content/api/features/v1-categories/V1Categories.cs",
-                "domains/content/api/features/v1-publications/V1Publications.cs",
-                "domains/content/api/features/v1-tags/V1Tags.cs",
                 "domains/content/api/workers/ContentRefreshWorker.cs",
             ]),
     ];
@@ -134,7 +127,7 @@ public sealed partial class RunTimeEfUseTests
             Assert.That(files, Has.None.Contain("/tests/"));
             Assert.That(files, Has.None.EndsWith("AccessContext.cs"));
             Assert.That(files, Has.None.EndsWith("ContentContext.cs"));
-            Assert.That(files, Does.Not.Contain("domains/content/api/features/v1-tags/V1Tags.cs"));
+            Assert.That(files, Does.Not.Contain("domains/content/api/domain/ContentRefresh.cs"));
         });
     }
 }

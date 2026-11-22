@@ -25,6 +25,7 @@ public static partial class ContentModule
     public static IServiceCollection AddContent(this IServiceCollection services)
     {
         services.AddDomainContext<ContentContext>(ContentContext.SchemaName);
+        services.AddTsrDataSource();
         services.AddScoped<ListPublishedArticlesHandler>();
         // The latest videos: the channel's public feed over HTTP (10 seconds and 2 MB at most a call, no redirect followed), kept in memory by one LatestVideos.
         services.AddHttpClient(YouTubeFeed.ClientName, YouTubeFeed.Configure).ConfigurePrimaryHttpMessageHandler(YouTubeFeed.Handler);

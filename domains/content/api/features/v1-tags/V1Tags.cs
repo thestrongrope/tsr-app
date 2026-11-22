@@ -3,8 +3,9 @@ using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Content.Api.Domain;
+using Tsr.Shared.Api;
 
 namespace Tsr.Content.Api.Features.V1Tags;
 
@@ -39,10 +40,10 @@ internal static partial class V1TagsSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(ContentContext db, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(NpgsqlDataSource source, CancellationToken ct)
     {
-        var rows = await db.Database
-            .SqlQuery<Row>($"""
+        var rows = await source.ListAsync(
+            $"""
                 select tag.name as "Name", count(*)::int as "ArticleCount"
                 from (
                     select tags, row_number() over (order by published_at desc, slug asc) as place
@@ -52,11 +53,14 @@ internal static partial class V1TagsSlice
                 group by tag.name
                 order by count(*) desc, min(article.place * {PlacesAnArticle} + tag.place)
                 limit {MaxTags}
-                """)
-            .ToListAsync(ct);
+                """,
+            Read,
+            ct);
 
         return V1.Ok(json => Write(json, rows), MaxAgeSeconds, StaleWhileRevalidateSeconds);
     }
+
+    private static Row Read(DbRow row) => new(row.Text("Name"), row.Int("ArticleCount"));
 
     /// <summary>
     /// tsr-web: <c>name.toLowerCase().replace(/\s+/g, '-').replace(/[^\w-]/g, '')</c>. Each run of white space becomes one "-", then every character

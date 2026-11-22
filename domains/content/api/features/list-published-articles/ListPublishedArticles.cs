@@ -1,8 +1,9 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Content.Api.Domain;
+using Tsr.Shared.Api;
 
 namespace Tsr.Content.Api.Features.ListPublishedArticles;
 
@@ -26,7 +27,7 @@ internal static class ListPublishedArticlesEndpoint
 }
 
 /// <summary>Reads the published articles, newest first, up to <see cref="MaxArticles"/>.</summary>
-internal sealed class ListPublishedArticlesHandler(ContentContext db, TimeProvider clock)
+internal sealed class ListPublishedArticlesHandler(NpgsqlDataSource source, TimeProvider clock)
 {
     /// <summary>Bound on one response (MUST 2). Paging comes when the site has more than this.</summary>
     public const int MaxArticles = 500;
@@ -34,13 +35,16 @@ internal sealed class ListPublishedArticlesHandler(ContentContext db, TimeProvid
     public async Task<IResult> HandleAsync(CancellationToken ct)
     {
         var now = clock.GetUtcNow();
-        var articles = await db.Articles.AsNoTracking()
-            .Where(a => a.PublishedAt != null && a.PublishedAt <= now)
-            .OrderByDescending(a => a.PublishedAt)
-            .ThenByDescending(a => a.Id)
-            .Take(MaxArticles)
-            .Select(a => new ArticleResponse(a.Slug, a.Title, a.Body, a.PublishedAt!.Value))
-            .ToListAsync(ct);
+        var articles = await source.ListAsync(
+            $"""
+                select slug as "Slug", title as "Title", body as "Body", published_at as "PublishedAt"
+                from content.articles
+                where published_at is not null and published_at <= {now}
+                order by published_at desc, id desc
+                limit {MaxArticles}
+                """,
+            row => new ArticleResponse(row.Text("Slug"), row.Text("Title"), row.Text("Body"), row.Instant("PublishedAt")),
+            ct);
 
         return Results.Json(new ListPublishedArticlesResponse(articles), ContentJson.Answers.ListPublishedArticlesResponse);
     }

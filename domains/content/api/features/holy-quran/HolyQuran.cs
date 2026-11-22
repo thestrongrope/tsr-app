@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Content.Api.Domain;
 using Tsr.Shared.Api;
 
@@ -23,18 +23,22 @@ internal static class HolyQuranSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(HttpContext context, ContentContext db, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(HttpContext context, NpgsqlDataSource source, CancellationToken ct)
     {
         if (context.GetCaller() is null)
         {
             return Problem.Unauthenticated();
         }
 
-        var surahs = await db.HolyQuran.AsNoTracking()
-            .OrderBy(s => s.Id)
-            .Take(MaxRows)
-            .Select(s => new SurahItem(s.Id, s.Surah, s.Arabic ?? string.Empty, s.Verses))
-            .ToListAsync(ct);
+        var surahs = await source.ListAsync(
+            $"""
+                select id as "Id", surah as "Surah", coalesce(arabic, '') as "Arabic", verses as "Verses"
+                from content.holy_quran
+                order by id
+                limit {MaxRows}
+                """,
+            row => new SurahItem(row.Int("Id"), row.Text("Surah"), row.Text("Arabic"), row.Int("Verses")),
+            ct);
         return Results.Json(surahs, ContentJson.Answers.SurahList);
     }
 }
