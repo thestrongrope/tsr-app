@@ -1,0 +1,48 @@
+### GET /me/permissions as 900001
+status: 200
+ETag: "126e2b52e77d2cb3"
+Cache-Control: private, no-cache
+Vary: Authorization
+X-Permissions-Revision: 126e2b52e77d2cb3
+Content-Type: application/json; charset=utf-8
+body: {"version":5,"issued_at":"2026-01-01T00:00:00.000000+00:00","permissions":["account:delete:self","api-docs:read:all","attendance:read:self","audit-log:read:all","children-performance:read:self","children:link:self","children:read:self","class-access:manage:all","class-requests:create:self","class-students:read:all","class-students:read:own","class-students:update:all","class-students:update:taught","classes:create:all","classes:join:self","classes:read:all","classes:read:enrolled","classes:read:own","classes:schedule:own","classes:update:all","content:read:all","deactivated-classes:manage:all","deletion-requests:manage:all","devices:manage:self","donors:read:all","feedback:create:self","feedback:review:all","guides:manage:all","mcqs:copy:all","mcqs:manage:all","mcqs:manage:own","members:enrol-by-token:all","notifications:broadcast:all","notifications:read:self","notifications:send:all","notifications:send:own","parents:add-direct:all","parents:add-direct:taught","parents:add:all","parents:add:own","parents:manage:all","parents:manage:self","performance:read:self","permissions:manage:all","profile:read:self","profile:update:self","quiz-competition:take:all","quiz-scores:read:self","quizzes:take:enrolled","quran-leaderboard:read:all","registrations:approve:all","registrations:read:all","registrations:reject:all","reports:read:all","sessions:create:all","sessions:create:own","sessions:read:enrolled","sessions:update:all","sessions:update:own","spot-quizzes:manage:all","standard-mcqs:update:all","students:enrol:all","students:transfer:all","summary-report:read:all","syllabus:read:all","syllabus:update:all","teachers:lookup:all","teachers:read:all","whatsapp:manage:all"],"scopes":{"gender":null,"assigned":[],"assigned_genders":[],"own":[98503,98505],"taught":[98503,98505],"enrolled":[]},"navigation":{"classes":true,"manage":true},"revision":"126e2b52e77d2cb3"}
+### GET /me/permissions/donors:read as 900001
+status: 200
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: 126e2b52e77d2cb3
+Content-Type: application/json; charset=utf-8
+body: {"permission":"donors:read","scopes":["all"]}
+### GET /me/permissions/permissions:manage as 900001
+status: 200
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: 126e2b52e77d2cb3
+Content-Type: application/json; charset=utf-8
+body: {"permission":"permissions:manage","scopes":["all"]}
+### GET /me/permissions/classes:read as 900001
+status: 200
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: 126e2b52e77d2cb3
+Content-Type: application/json; charset=utf-8
+body: {"permission":"classes:read","scopes":["all","enrolled","own"]}
+### GET /me/permissions/nothing:here as 900001
+status: 404
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: 126e2b52e77d2cb3
+Content-Type: application/json; charset=utf-8
+body: {"detail":"Unknown permission"}
+### GET /user/permissions as 900001
+status: 200
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: 126e2b52e77d2cb3
+Content-Type: application/json; charset=utf-8
+body: {"version":3,"permissions":["admin_dashboard","class_management","finance_portal","page.admin.notifications","page.admin.syllabus","reports_center","system_settings","user_management"],"role_id":1,"role_name":"SUPER_ADMIN","applicable_roles":[{"role_id":1,"role_name":"SUPER_ADMIN","source":"database_role","priority":1},{"role_id":"class_teacher","role_name":"CLASS_TEACHER","source":"classes.teacher","priority":3}],"enrolled":false,"class_count":0,"teacher_count":2,"mcq_admin":false,"is_teacher":true,"issued_at":"2026-01-01T00:00:00.000000+00:00"}

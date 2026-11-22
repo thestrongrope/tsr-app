@@ -1,0 +1,48 @@
+### GET /me/permissions as 900004
+status: 200
+ETag: "a28e16a8925dffe9"
+Cache-Control: private, no-cache
+Vary: Authorization
+X-Permissions-Revision: a28e16a8925dffe9
+Content-Type: application/json; charset=utf-8
+body: {"version":5,"issued_at":"2026-01-01T00:00:00.000000+00:00","permissions":["account:delete:self","attendance:read:self","children-performance:read:self","children:link:self","children:read:self","class-requests:create:self","classes:join:self","classes:read:enrolled","content:read:all","devices:manage:self","feedback:create:self","notifications:read:self","parents:manage:self","performance:read:self","profile:read:self","profile:update:self","quiz-competition:take:all","quiz-scores:read:self","quizzes:take:enrolled","sessions:read:enrolled","syllabus:read:all"],"scopes":{"gender":null,"assigned":[],"assigned_genders":[],"own":[],"taught":[],"enrolled":[98501]},"navigation":{"classes":true,"manage":false},"revision":"a28e16a8925dffe9"}
+### GET /me/permissions/donors:read as 900004
+status: 200
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: a28e16a8925dffe9
+Content-Type: application/json; charset=utf-8
+body: {"permission":"donors:read","scopes":[]}
+### GET /me/permissions/permissions:manage as 900004
+status: 200
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: a28e16a8925dffe9
+Content-Type: application/json; charset=utf-8
+body: {"permission":"permissions:manage","scopes":[]}
+### GET /me/permissions/classes:read as 900004
+status: 200
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: a28e16a8925dffe9
+Content-Type: application/json; charset=utf-8
+body: {"permission":"classes:read","scopes":["enrolled"]}
+### GET /me/permissions/nothing:here as 900004
+status: 404
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: a28e16a8925dffe9
+Content-Type: application/json; charset=utf-8
+body: {"detail":"Unknown permission"}
+### GET /user/permissions as 900004
+status: 200
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: a28e16a8925dffe9
+Content-Type: application/json; charset=utf-8
+body: {"version":3,"permissions":[],"role_id":0,"role_name":"USER","applicable_roles":[],"enrolled":true,"class_count":1,"teacher_count":0,"mcq_admin":false,"is_teacher":false,"issued_at":"2026-01-01T00:00:00.000000+00:00"}

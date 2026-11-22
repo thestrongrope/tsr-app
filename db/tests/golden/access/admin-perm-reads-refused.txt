@@ -1,0 +1,64 @@
+### GET /admin/permissions/members?q=Gold as nobody
+status: 401
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: (absent)
+Content-Type: application/json; charset=utf-8
+body: {"detail":"Not authenticated"}
+### GET /admin/permissions/members/900005 as nobody
+status: 401
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: (absent)
+Content-Type: application/json; charset=utf-8
+body: {"detail":"Not authenticated"}
+### GET /admin/permissions/members?q=Gold as 900004
+status: 403
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: a28e16a8925dffe9
+Content-Type: application/json; charset=utf-8
+body: {"detail":"Only super admins can manage permissions"}
+### GET /admin/permissions/members/900005 as 900004
+status: 403
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: a28e16a8925dffe9
+Content-Type: application/json; charset=utf-8
+body: {"detail":"Only super admins can manage permissions"}
+### GET /admin/permissions/members?q=Gold as 900002
+status: 403
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: fe01853a5809a40f
+Content-Type: application/json; charset=utf-8
+body: {"detail":"Only super admins can manage permissions"}
+### GET /admin/permissions/members/900005 as 900002
+status: 403
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: fe01853a5809a40f
+Content-Type: application/json; charset=utf-8
+body: {"detail":"Only super admins can manage permissions"}
+### GET /admin/permissions/members?q=Gold as 900003
+status: 403
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: 60768df06595dc8e
+Content-Type: application/json; charset=utf-8
+body: {"detail":"Only super admins can manage permissions"}
+### GET /admin/permissions/members/900005 as 900003
+status: 403
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: 60768df06595dc8e
+Content-Type: application/json; charset=utf-8
+body: {"detail":"Only super admins can manage permissions"}

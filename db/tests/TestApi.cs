@@ -20,10 +20,11 @@ internal static class TestApi
     public const string Name = "X-Test-Name";
     public const string Picture = "X-Test-Picture";
 
-    public static WebApplicationFactory<Program> Create() =>
+    /// <param name="appConnection">The connection string the API uses; the shared test database when left out.</param>
+    public static WebApplicationFactory<Program> Create(string? appConnection = null) =>
         new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
         {
-            builder.UseSetting("TSR_DB", TestDatabase.AppConnection);
+            builder.UseSetting("TSR_DB", appConnection ?? TestDatabase.AppConnection);
             builder.UseSetting("TSR_FIREBASE_PROJECT_ID", "demo-tsr-test");
             builder.UseSetting("TSR_AUTH_EMULATOR_HOST", "localhost:9099");
             builder.UseSetting("TSR_GOTENBERG_URL", "http://gotenberg.invalid:3000");

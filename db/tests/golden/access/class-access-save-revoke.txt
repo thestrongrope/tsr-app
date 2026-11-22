@@ -1,0 +1,229 @@
+### GET /admin/class-access/members/900005 as 900002
+status: 200
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: fe01853a5809a40f
+Content-Type: application/json; charset=utf-8
+body: {"member":{"token":900005,"name":"Gold Subject","gender":1},"version":"0:e3b0c44298fc1c14","fromRole":null,"rules":[]}
+### POST /admin/class-access/preview as 900002
+request: {"gender": 1, "conditions": [{"field": "city", "value": "Goldville"}]}
+status: 200
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: fe01853a5809a40f
+Content-Type: application/json; charset=utf-8
+body: {"classes":[{"id":98501,"code":"GL-G-501","name":"Gold One"},{"id":98502,"code":"GL-G-502","name":"Gold Two"}],"classCount":2,"previewHash":"9324274ed0291d84"}
+### POST /admin/class-access/members/900005/rules as 900002
+request: {"gender": 1, "conditions": [{"field": "city", "value": "Goldville"}], "reason": "  Teaches there  ", "version": "0:e3b0c44298fc1c14", "previewHash": "9324274ed0291d84"}
+status: 200
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: fe01853a5809a40f
+Content-Type: application/json; charset=utf-8
+body: {"saved":true,"member":{"token":900005,"name":"Gold Subject","gender":1},"version":"5:6b86b273ff34fce1","fromRole":null,"rules":[{"id":1,"gender":1,"note":"Gents, Goldville","createdAt":"2026-01-01T00:00:00","conditions":[{"field":"city","negate":false,"value":"Goldville"}],"classCount":2,"classes":[{"id":98501,"code":"GL-G-501","name":"Gold One","ruleId":1,"rule":"Gents, Goldville"},{"id":98502,"code":"GL-G-502","name":"Gold Two","ruleId":1,"rule":"Gents, Goldville"}]}]}
+### POST /admin/class-access/members/900005/rules as 900002
+request: {"gender": 1, "conditions": [{"field": "city", "value": "Goldville"}], "reason": "Again", "version": "5:6b86b273ff34fce1", "previewHash": "9324274ed0291d84"}
+status: 409
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: fe01853a5809a40f
+Content-Type: application/json; charset=utf-8
+body: {"detail":"This member already has this access","code":"already_has_access"}
+### POST /admin/class-access/members/900005/rules as 900002
+request: {"gender": 1, "conditions": [{"field": "city", "value": "Goldville"}], "reason": "Stale", "version": "0:e3b0c44298fc1c14", "previewHash": "9324274ed0291d84"}
+status: 409
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: fe01853a5809a40f
+Content-Type: application/json; charset=utf-8
+body: {"detail":"This member was just changed by someone else. Open them again to see the current access.","code":"member_changed"}
+### GET /admin/class-access/members/900005 as 900002
+status: 200
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: fe01853a5809a40f
+Content-Type: application/json; charset=utf-8
+body: {"member":{"token":900005,"name":"Gold Subject","gender":1},"version":"5:6b86b273ff34fce1","fromRole":null,"rules":[{"id":1,"gender":1,"note":"Gents, Goldville","createdAt":"2026-01-01T00:00:00","conditions":[{"field":"city","negate":false,"value":"Goldville"}],"classCount":2,"classes":[{"id":98501,"code":"GL-G-501","name":"Gold One","ruleId":1,"rule":"Gents, Goldville"},{"id":98502,"code":"GL-G-502","name":"Gold Two","ruleId":1,"rule":"Gents, Goldville"}]}]}
+### POST /admin/class-access/preview as 900002
+request: {"gender": 1, "conditions": [{"field": "level", "value": 2}]}
+status: 200
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: fe01853a5809a40f
+Content-Type: application/json; charset=utf-8
+body: {"classes":[{"id":98501,"code":"GL-G-501","name":"Gold One"},{"id":98503,"code":"GL-G-503","name":"Gold Three"}],"classCount":2,"previewHash":"ed4b2909dfc3f204"}
+### POST /admin/class-access/members/900005/rules as 900002
+request: {"gender": 1, "conditions": [{"field": "city", "value": "Goldville"}], "reason": "Wrong draft", "version": "5:6b86b273ff34fce1", "previewHash": "ed4b2909dfc3f204"}
+status: 409
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: fe01853a5809a40f
+Content-Type: application/json; charset=utf-8
+body: {"detail":"This member already has this access","code":"already_has_access"}
+### GET /admin/class-access/members/900008 as 900002
+status: 200
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: fe01853a5809a40f
+Content-Type: application/json; charset=utf-8
+body: {"member":{"token":900008,"name":"Zoë \"Q\" <b> + & Ünï","gender":1},"version":"0:e3b0c44298fc1c14","fromRole":null,"rules":[]}
+### POST /admin/class-access/preview as 900002
+request: {"gender": 1, "conditions": [{"field": "city", "value": "Goldville"}]}
+status: 200
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: fe01853a5809a40f
+Content-Type: application/json; charset=utf-8
+body: {"classes":[{"id":98501,"code":"GL-G-501","name":"Gold One"},{"id":98502,"code":"GL-G-502","name":"Gold Two"}],"classCount":2,"previewHash":"9324274ed0291d84"}
+### POST /admin/class-access/members/900008/rules as 900002
+request: {"gender": 1, "conditions": [{"field": "city", "value": "Goldville"}], "reason": "Rule for 900008", "version": "0:e3b0c44298fc1c14", "previewHash": "9324274ed0291d84"}
+status: 200
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: fe01853a5809a40f
+Content-Type: application/json; charset=utf-8
+body: {"saved":true,"member":{"token":900008,"name":"Zoë \"Q\" <b> + & Ünï","gender":1},"version":"5:d4735e3a265e16ee","fromRole":null,"rules":[{"id":2,"gender":1,"note":"Gents, Goldville","createdAt":"2026-01-01T00:00:00","conditions":[{"field":"city","negate":false,"value":"Goldville"}],"classCount":2,"classes":[{"id":98501,"code":"GL-G-501","name":"Gold One","ruleId":2,"rule":"Gents, Goldville"},{"id":98502,"code":"GL-G-502","name":"Gold Two","ruleId":2,"rule":"Gents, Goldville"}]}]}
+### GET /admin/class-access/members/900007 as 900002
+status: 200
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: fe01853a5809a40f
+Content-Type: application/json; charset=utf-8
+body: {"member":{"token":900007,"name":0,"gender":1},"version":"0:e3b0c44298fc1c14","fromRole":null,"rules":[]}
+### POST /admin/class-access/preview as 900002
+request: {"gender": 1, "conditions": [{"field": "city", "value": "Goldville"}]}
+status: 200
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: fe01853a5809a40f
+Content-Type: application/json; charset=utf-8
+body: {"classes":[{"id":98501,"code":"GL-G-501","name":"Gold One"},{"id":98502,"code":"GL-G-502","name":"Gold Two"}],"classCount":2,"previewHash":"9324274ed0291d84"}
+### POST /admin/class-access/members/900007/rules as 900002
+request: {"gender": 1, "conditions": [{"field": "city", "value": "Goldville"}], "reason": "Rule for 900007", "version": "0:e3b0c44298fc1c14", "previewHash": "9324274ed0291d84"}
+status: 200
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: fe01853a5809a40f
+Content-Type: application/json; charset=utf-8
+body: {"saved":true,"member":{"token":900007,"name":0,"gender":1},"version":"5:4e07408562bedb8b","fromRole":null,"rules":[{"id":3,"gender":1,"note":"Gents, Goldville","createdAt":"2026-01-01T00:00:00","conditions":[{"field":"city","negate":false,"value":"Goldville"}],"classCount":2,"classes":[{"id":98501,"code":"GL-G-501","name":"Gold One","ruleId":3,"rule":"Gents, Goldville"},{"id":98502,"code":"GL-G-502","name":"Gold Two","ruleId":3,"rule":"Gents, Goldville"}]}]}
+### POST /admin/class-access/rules/1/revoke as nobody
+request: {"reason": "Moved", "version": "5:6b86b273ff34fce1"}
+status: 401
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: (absent)
+Content-Type: application/json; charset=utf-8
+body: {"detail":"Not authenticated"}
+### POST /admin/class-access/rules/1/revoke as 900004
+request: {"reason": "Moved", "version": "5:6b86b273ff34fce1"}
+status: 403
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: a28e16a8925dffe9
+Content-Type: application/json; charset=utf-8
+body: {"detail":"You do not have permission to do that"}
+### POST /admin/class-access/rules/1/revoke as 900012
+request: {"reason": "Moved", "version": "5:6b86b273ff34fce1"}
+status: 403
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: fe01853a5809a40f
+Content-Type: application/json; charset=utf-8
+body: {"detail":"You do not have permission to do that"}
+### POST /admin/class-access/rules/1/revoke as 900002
+request: not json
+status: 422
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: fe01853a5809a40f
+Content-Type: application/json; charset=utf-8
+body: {"detail":"Invalid JSON body"}
+### POST /admin/class-access/rules/1/revoke as 900002
+request: {"version": "x"}
+status: 422
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: fe01853a5809a40f
+Content-Type: application/json; charset=utf-8
+body: {"detail":"A reason is required"}
+### POST /admin/class-access/rules/1/revoke as 900002
+request: {"reason": "Moved"}
+status: 422
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: fe01853a5809a40f
+Content-Type: application/json; charset=utf-8
+body: {"detail":"version is required"}
+### POST /admin/class-access/rules/1/revoke as 900002
+request: {"reason": "   ", "version": "5:6b86b273ff34fce1"}
+status: 422
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: fe01853a5809a40f
+Content-Type: application/json; charset=utf-8
+body: {"detail":"A reason is required"}
+### POST /admin/class-access/rules/99999999/revoke as 900002
+request: {"reason": "Moved", "version": "5:6b86b273ff34fce1"}
+status: 404
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: fe01853a5809a40f
+Content-Type: application/json; charset=utf-8
+body: {"detail":"Rule not found"}
+### POST /admin/class-access/rules/1/revoke as 900002
+request: {"reason": "Moved", "version": "0:0000000000000000"}
+status: 409
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: fe01853a5809a40f
+Content-Type: application/json; charset=utf-8
+body: {"detail":"This member was just changed by someone else. Open them again to see the current access.","code":"member_changed"}
+### POST /admin/class-access/rules/1/revoke as 900001
+request: {"reason": "  Moved  ", "version": "5:6b86b273ff34fce1"}
+status: 200
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: 126e2b52e77d2cb3
+Content-Type: application/json; charset=utf-8
+body: {"saved":true,"member":{"token":900005,"name":"Gold Subject","gender":1},"version":"0:e3b0c44298fc1c14","fromRole":null,"rules":[]}
+### POST /admin/class-access/rules/1/revoke as 900001
+request: {"reason": "Moved again", "version": "5:6b86b273ff34fce1"}
+status: 409
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: 126e2b52e77d2cb3
+Content-Type: application/json; charset=utf-8
+body: {"detail":"That access was already removed"}
+### GET /admin/class-access/members/900005 as 900002
+status: 200
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: fe01853a5809a40f
+Content-Type: application/json; charset=utf-8
+body: {"member":{"token":900005,"name":"Gold Subject","gender":1},"version":"0:e3b0c44298fc1c14","fromRole":null,"rules":[]}
