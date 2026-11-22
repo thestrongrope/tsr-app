@@ -1,0 +1,16 @@
+### GET /me/permissions as 900004
+status: 503
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: (absent)
+Content-Type: application/json; charset=utf-8
+body: {"detail":"Permissions could not be loaded. Try again."}
+### POST /auth/link as 900004
+status: 200
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: (absent)
+Content-Type: application/json; charset=utf-8
+body: {"me":{"id":4,"token":900004,"email":"m900004@example.invalid","name":"Gold Plain","roleid":0,"picture":null,"gender":1,"age_range":null,"mobile":null,"country":null,"state":null,"city":null,"language":0,"zip":null,"sendupdates":"N","unsubscribe":"N"}}

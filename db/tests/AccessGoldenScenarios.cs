@@ -8,7 +8,7 @@ namespace Tsr.Db.Tests;
 /// </summary>
 internal static partial class AccessGoldenScenarios
 {
-    private const string Ville = """{"field": "city", "value": "Goldville"}""";
+    internal const string Ville = """{"field": "city", "value": "Goldville"}""";
 
     private static readonly HttpMethod Get = HttpMethod.Get;
     private static readonly HttpMethod Post = HttpMethod.Post;
@@ -31,6 +31,9 @@ internal static partial class AccessGoldenScenarios
         ["class-access-reads-refused"] = ClassAccessReadsRefusedAsync,
         ["class-access-save-refusals"] = ClassAccessSaveRefusalsAsync,
         ["class-access-save-revoke"] = ClassAccessSaveRevokeAsync,
+        ["read-assigned-rules"] = ReadAssignedRulesAsync,
+        ["admin-unknown-token-unprivileged"] = AdminUnknownTokenUnprivilegedAsync,
+        ["ladies-admin-success"] = LadiesAdminSuccessAsync,
     };
 
     /// <summary>TC-ACC-R2-01 and R2-02: the writes, with the stored rows and event payloads after each (task 3).</summary>

@@ -50,16 +50,23 @@ internal sealed class GoldenScenario : IAsyncDisposable
     public string Transcript => transcript.ToString();
 
     /// <summary>A fresh copy of the template and the API on it. Dispose drops the copy.</summary>
-    public static async Task<GoldenScenario> StartAsync(string name)
+    public static async Task<GoldenScenario> StartAsync(string name, Action<IServiceCollection>? configure = null)
     {
         await EnsureTemplateAsync();
         var database = DatabaseOf(name);
         await AdminAsync($"drop database if exists {database} with (force)");
         await AdminAsync($"create database {database} with template {GoldenSeed.TemplateName}");
         var factory = TestApi.Create(ConnectionTo(database, TestDatabase.AppConnection))
-            .WithWebHostBuilder(builder => builder.ConfigureTestServices(services => services.AddSingleton<TimeProvider>(new FixedClock())));
+            .WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
+            {
+                services.AddSingleton<TimeProvider>(new FixedClock());
+                configure?.Invoke(services);
+            }));
         return new GoldenScenario(database, factory);
     }
+
+    /// <summary>The API's services on the scenario's database, for a test that resolves one in its own scope.</summary>
+    public IServiceProvider Services => factory.Services;
 
     /// <summary>Compares a transcript with its golden file, or records it when TSR_RECORD_GOLDEN=1.</summary>
     public static void Check(string name, string actual)
@@ -136,7 +143,24 @@ internal sealed class GoldenScenario : IAsyncDisposable
         }
     }
 
-    /// <summary>One value read from the scenario's database as the owner.</summary>
+    /// <summary>One statement run on the scenario's database as the owner (a fixture row, a trigger, a revoke).</summary>
+    public async Task ExecuteAsync(string sql)
+    {
+        await using var connection = new NpgsqlConnection(ConnectionTo(database, TestDatabase.OwnerConnection));
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(sql, connection);
+        await command.ExecuteNonQueryAsync();
+    }
+
+    /// <summary>An open connection to the scenario's database as the owner, for a test that holds a lock or a transaction of its own. The caller disposes it.</summary>
+    public async Task<NpgsqlConnection> OpenOwnerConnectionAsync()
+    {
+        var connection = new NpgsqlConnection(ConnectionTo(database, TestDatabase.OwnerConnection));
+        await connection.OpenAsync();
+        return connection;
+    }
+
+    /// <summary>The values of the first column of a query on the scenario's database, read as the owner.</summary>
     public async Task<List<string>> QueryAsync(string sql)
     {
         await using var connection = new NpgsqlConnection(ConnectionTo(database, TestDatabase.OwnerConnection));
@@ -159,7 +183,16 @@ internal sealed class GoldenScenario : IAsyncDisposable
         await AdminAsync($"drop database if exists {database}");
     }
 
+    // A lock: a scenario may send two requests at once, and a StringBuilder is not safe for two writers.
     private void Record(int? caller, HttpMethod method, string path, string? json, string? ifNoneMatch, HttpResponseMessage response, string body)
+    {
+        lock (transcript)
+        {
+            RecordLocked(caller, method, path, json, ifNoneMatch, response, body);
+        }
+    }
+
+    private void RecordLocked(int? caller, HttpMethod method, string path, string? json, string? ifNoneMatch, HttpResponseMessage response, string body)
     {
         transcript.Append("### ").Append(method.Method).Append(' ').Append(path).Append(" as ").Append(caller?.ToString(CultureInfo.InvariantCulture) ?? "nobody").Append('\n');
         if (ifNoneMatch is not null)
@@ -178,7 +211,14 @@ internal sealed class GoldenScenario : IAsyncDisposable
             transcript.Append(header).Append(": ").Append(HeaderValue(response, header)).Append('\n');
         }
 
-        transcript.Append("body: ").Append(body).Append('\n');
+        transcript.Append("body: ").Append(StackTraceCut(body)).Append('\n');
+    }
+
+    // An unhandled error answers in the test host with the exception text and its stack, whose lines name files and line numbers of this machine: only the first line is recorded.
+    private static string StackTraceCut(string body)
+    {
+        var at = body.IndexOf("\n   at ", StringComparison.Ordinal);
+        return at < 0 ? body : body[..at];
     }
 
     // The raw text the server sent, not HttpClient's parsed form (which reorders and rewrites values); several raw values are joined in the order received.

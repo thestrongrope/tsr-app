@@ -212,15 +212,15 @@ internal static partial class AccessGoldenScenarios
         await run.SendAsync(Gents, Post, $"/admin/class-access/members/{member}/rules", SaveBody(1, Ville, "Rule for " + member, version, hash));
     }
 
-    private static async Task<(string Version, string Hash)> DraftAsync(GoldenScenario run, int caller, int member, int gender, string condition)
+    internal static async Task<(string Version, string Hash)> DraftAsync(GoldenScenario run, int caller, int member, int gender, string condition)
     {
         var view = await run.SendAsync(caller, Get, $"/admin/class-access/members/{member}");
         var preview = await run.SendAsync(caller, Post, "/admin/class-access/preview", $$"""{"gender": {{gender}}, "conditions": [{{condition}}]}""");
         return (AccessGoldenScenarios.StringOf(view.Json, "version"), AccessGoldenScenarios.StringOf(preview.Json, "previewHash"));
     }
 
-    private static string SaveBody(int gender, string condition, string reason, string version, string hash) =>
+    internal static string SaveBody(int gender, string condition, string reason, string version, string hash) =>
         $$"""{"gender": {{gender}}, "conditions": [{{condition}}], "reason": "{{reason}}", "version": "{{version}}", "previewHash": "{{hash}}"}""";
 
-    private static string RevokeBody(string reason, string version) => $$"""{"reason": "{{reason}}", "version": "{{version}}"}""";
+    internal static string RevokeBody(string reason, string version) => $$"""{"reason": "{{reason}}", "version": "{{version}}"}""";
 }

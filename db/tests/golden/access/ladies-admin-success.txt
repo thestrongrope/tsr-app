@@ -1,0 +1,172 @@
+### GET /admin/class-access/members?q=Gold as 900003
+status: 200
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: 60768df06595dc8e
+Content-Type: application/json; charset=utf-8
+body: {"members":[{"token":900003,"name":"Gold Ladies","gender":2},{"token":900006,"name":"Gold Ladies Member","gender":2}]}
+### GET /admin/class-access/members?q=a as 900003
+status: 200
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: 60768df06595dc8e
+Content-Type: application/json; charset=utf-8
+body: {"members":[]}
+### GET /admin/class-access/members?q=900006 as 900003
+status: 200
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: 60768df06595dc8e
+Content-Type: application/json; charset=utf-8
+body: {"members":[{"token":900006,"name":"Gold Ladies Member","gender":2}]}
+### GET /admin/class-access/members as 900003
+status: 200
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: 60768df06595dc8e
+Content-Type: application/json; charset=utf-8
+body: {"members":[]}
+### GET /admin/class-access/members/900006 as 900003
+status: 200
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: 60768df06595dc8e
+Content-Type: application/json; charset=utf-8
+body: {"member":{"token":900006,"name":"Gold Ladies Member","gender":2},"version":"0:e3b0c44298fc1c14","fromRole":null,"rules":[]}
+### GET /admin/class-access/members/900003 as 900003
+status: 200
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: 60768df06595dc8e
+Content-Type: application/json; charset=utf-8
+body: {"member":{"token":900003,"name":"Gold Ladies","gender":2},"version":"4:e3b0c44298fc1c14","fromRole":"Classes of their own gender","rules":[]}
+### GET /admin/class-access/options as 900003
+status: 200
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: 60768df06595dc8e
+Content-Type: application/json; charset=utf-8
+body: {"genders":[{"id":2,"name":"Ladies"}],"levels":[{"id":1,"code":"SM","name":"SALMAN"},{"id":2,"code":"AG","name":"ABUZAR"},{"id":3,"code":"MK","name":"MIQDAD"}],"cities":["Goldville"],"countries":["Goldland"],"tags":[]}
+### POST /admin/class-access/preview as 900003
+request: {"gender": 2, "conditions": [{"field": "city", "value": "Goldville"}]}
+status: 200
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: 60768df06595dc8e
+Content-Type: application/json; charset=utf-8
+body: {"classes":[{"id":98505,"code":"GL-L-505","name":"Gold Ladies"}],"classCount":1,"previewHash":"bfacb0cb3d112b24"}
+### POST /admin/class-access/preview as 900003
+request: {"gender": 2, "conditions": [{"field": "level", "value": 2}]}
+status: 200
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: 60768df06595dc8e
+Content-Type: application/json; charset=utf-8
+body: {"classes":[{"id":98505,"code":"GL-L-505","name":"Gold Ladies"}],"classCount":1,"previewHash":"bfacb0cb3d112b24"}
+### GET /admin/class-access/members/900006 as 900003
+status: 200
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: 60768df06595dc8e
+Content-Type: application/json; charset=utf-8
+body: {"member":{"token":900006,"name":"Gold Ladies Member","gender":2},"version":"0:e3b0c44298fc1c14","fromRole":null,"rules":[]}
+### POST /admin/class-access/preview as 900003
+request: {"gender": 2, "conditions": [{"field": "city", "value": "Goldville"}]}
+status: 200
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: 60768df06595dc8e
+Content-Type: application/json; charset=utf-8
+body: {"classes":[{"id":98505,"code":"GL-L-505","name":"Gold Ladies"}],"classCount":1,"previewHash":"bfacb0cb3d112b24"}
+### POST /admin/class-access/members/900006/rules as 900003
+request: {"gender": 2, "conditions": [{"field": "city", "value": "Goldville"}], "reason": "Teaches there", "version": "0:e3b0c44298fc1c14", "previewHash": "bfacb0cb3d112b24"}
+status: 200
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: 60768df06595dc8e
+Content-Type: application/json; charset=utf-8
+body: {"saved":true,"member":{"token":900006,"name":"Gold Ladies Member","gender":2},"version":"5:6b86b273ff34fce1","fromRole":null,"rules":[{"id":1,"gender":2,"note":"Ladies, Goldville","createdAt":"2026-01-01T00:00:00","conditions":[{"field":"city","negate":false,"value":"Goldville"}],"classCount":1,"classes":[{"id":98505,"code":"GL-L-505","name":"Gold Ladies","ruleId":1,"rule":"Ladies, Goldville"}]}]}
+=== rows after the ladies admin's save ===
+-- access.user_permissions
+-- access.user_roles
+{"user_id":1,"roleid":1}
+{"user_id":2,"roleid":3}
+{"user_id":3,"roleid":4}
+{"user_id":6,"roleid":5}
+{"user_id":10,"roleid":7}
+{"user_id":12,"roleid":3}
+-- access.class_access_rules
+{"id":1,"token":900006,"gender":2,"note":"Ladies, Goldville","created_at":"2026-01-01T00:00:00+00:00","granted_by":3,"reason":"Teaches there","revoked_at":null,"revoked_by":null,"revoke_reason":null}
+-- access.class_access_rule_conditions
+{"id":1,"rule_id":1,"field":"city","negate":false,"value":"Goldville","level_id":null}
+-- platform.outbox (event_type, created_at, payload)
+access.class_access_rule_created | "2026-01-01T00:00:00+00:00" | {"token": 900006, "gender": 2, "ruleId": 1, "grantedBy": 3}
+### GET /admin/class-access/members/900006 as 900003
+status: 200
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: 60768df06595dc8e
+Content-Type: application/json; charset=utf-8
+body: {"member":{"token":900006,"name":"Gold Ladies Member","gender":2},"version":"5:6b86b273ff34fce1","fromRole":null,"rules":[{"id":1,"gender":2,"note":"Ladies, Goldville","createdAt":"2026-01-01T00:00:00","conditions":[{"field":"city","negate":false,"value":"Goldville"}],"classCount":1,"classes":[{"id":98505,"code":"GL-L-505","name":"Gold Ladies","ruleId":1,"rule":"Ladies, Goldville"}]}]}
+### GET /me/permissions as 900006
+status: 200
+ETag: "2e231c6ec4daa67e"
+Cache-Control: private, no-cache
+Vary: Authorization
+X-Permissions-Revision: 2e231c6ec4daa67e
+Content-Type: application/json; charset=utf-8
+body: {"version":5,"issued_at":"2026-01-01T00:00:00.000000+00:00","permissions":["account:delete:self","attendance:read:self","children-performance:read:self","children:link:self","children:read:self","class-requests:create:self","classes:join:self","classes:read:assigned","classes:read:enrolled","classes:update:assigned","content:read:all","devices:manage:self","feedback:create:self","mcqs:copy:assigned","notifications:read:self","notifications:send:assigned","parents:add-direct:assigned","parents:add:assigned","parents:manage:self","performance:read:self","profile:read:self","profile:update:self","quiz-competition:take:all","quiz-scores:read:self","quizzes:take:enrolled","registrations:approve:assigned","registrations:read:assigned","reports:read:assigned","sessions:create:assigned","sessions:read:enrolled","sessions:update:assigned","students:enrol:assigned","syllabus:read:all","teachers:lookup:assigned"],"scopes":{"gender":null,"assigned":[98505],"assigned_genders":[2],"own":[],"taught":[],"enrolled":[]},"navigation":{"classes":true,"manage":true},"revision":"2e231c6ec4daa67e"}
+### POST /admin/class-access/members/900006/rules as 900003
+request: {"gender": 1, "conditions": [{"field": "city", "value": "Goldville"}], "reason": "Wrong gender", "version": "5:6b86b273ff34fce1", "previewHash": "bfacb0cb3d112b24"}
+status: 403
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: 60768df06595dc8e
+Content-Type: application/json; charset=utf-8
+body: {"detail":"This member belongs to the other gender"}
+### GET /admin/permissions/members?q=Gold as 900003
+status: 403
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: 60768df06595dc8e
+Content-Type: application/json; charset=utf-8
+body: {"detail":"Only super admins can manage permissions"}
+### POST /admin/class-access/rules/1/revoke as 900003
+request: {"reason": "Moved", "version": "5:6b86b273ff34fce1"}
+status: 200
+ETag: (absent)
+Cache-Control: (absent)
+Vary: (absent)
+X-Permissions-Revision: 60768df06595dc8e
+Content-Type: application/json; charset=utf-8
+body: {"saved":true,"member":{"token":900006,"name":"Gold Ladies Member","gender":2},"version":"0:e3b0c44298fc1c14","fromRole":null,"rules":[]}
+=== rows after the ladies admin's revoke ===
+-- access.user_permissions
+-- access.user_roles
+{"user_id":1,"roleid":1}
+{"user_id":2,"roleid":3}
+{"user_id":3,"roleid":4}
+{"user_id":10,"roleid":7}
+{"user_id":12,"roleid":3}
+-- access.class_access_rules
+{"id":1,"token":900006,"gender":2,"note":"Ladies, Goldville","created_at":"2026-01-01T00:00:00+00:00","granted_by":3,"reason":"Teaches there","revoked_at":"2026-01-01T00:00:00+00:00","revoked_by":3,"revoke_reason":"Moved"}
+-- access.class_access_rule_conditions
+{"id":1,"rule_id":1,"field":"city","negate":false,"value":"Goldville","level_id":null}
+-- platform.outbox (event_type, created_at, payload)
+access.class_access_rule_created | "2026-01-01T00:00:00+00:00" | {"token": 900006, "gender": 2, "ruleId": 1, "grantedBy": 3}
+access.class_access_rule_revoked | "2026-01-01T00:00:00+00:00" | {"token": 900006, "ruleId": 1, "revokedBy": 3}

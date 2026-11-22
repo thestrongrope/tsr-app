@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
@@ -202,18 +203,31 @@ public sealed class PermissionsRevisionHeaderTests
     [Test]
     public async Task Resolving_a_member_costs_one_access_command_and_one_classes_command()
     {
-        var commands = new CommandLog();
-        await using var logged = factory.WithWebHostBuilder(builder => builder.ConfigureTestServices(services => services.AddLogging(logging => logging
-            .AddFilter("Microsoft.EntityFrameworkCore.Database.Command", LogLevel.Information)
-            .AddProvider(commands))));
+        using var commands = new CommandCounter();
 
         // A route that asks access nothing itself, so every command counted is the resolution.
-        var reply = await SendAsync(HttpMethod.Get, "/me/deletion-request", Admin, api: logged);
+        var reply = await SendAsync(HttpMethod.Get, "/me/deletion-request", [.. Admin, new("traceparent", commands.Traceparent)]);
 
         Assert.That(reply.Status, Is.EqualTo(HttpStatusCode.OK), reply.Body);
         Assert.That(reply.Revision, Is.EqualTo(await RevisionOfAsync(Admin)));
         Assert.That(commands.Mentioning("access."), Has.Count.EqualTo(1), string.Join("\n---\n", commands.Mentioning("access.")));
         Assert.That(commands.Mentioning("classes."), Has.Count.EqualTo(1), string.Join("\n---\n", commands.Mentioning("classes.")));
+    }
+
+    // The counter above is only worth its numbers if it sees a command of a data source (what access will use after its conversion) as well as Entity Framework's.
+    [Test]
+    public async Task The_command_counter_sees_a_data_source_command()
+    {
+        using var commands = new CommandCounter();
+        var source = factory.Services.GetRequiredService<Npgsql.NpgsqlDataSource>();
+
+        await commands.WithinAsync(async () =>
+        {
+            await using var command = source.CreateCommand("select 1 /* access.probe */");
+            await command.ExecuteScalarAsync();
+        });
+
+        Assert.That(commands.Mentioning("access.probe"), Has.Count.EqualTo(1));
     }
 
     private static string? RevisionIn(string body)
@@ -263,31 +277,51 @@ public sealed class PermissionsRevisionHeaderTests
         public Task<IReadOnlyList<ClassFacts>> ActiveClassesAsync(CancellationToken ct) => Task.FromResult<IReadOnlyList<ClassFacts>>([]);
     }
 
-    /// <summary>Collects the SQL commands EF Core reports as executed.</summary>
-    private sealed class CommandLog : ILoggerProvider, ILogger
+    /// <summary>
+    /// Counts the commands Npgsql runs for one request, whoever issues them (Entity Framework or a data source), by listening to Npgsql's own activity source.
+    /// Only activities of the trace the test gave the request (a <c>traceparent</c> header) are counted, so another test's commands are never counted.
+    /// </summary>
+    private sealed class CommandCounter : IDisposable
     {
-        private const int CommandExecuted = 20101;
+        public const string ControlSource = "Tsr.Db.Tests.CommandCounter";
+        private readonly ActivityTraceId trace = ActivityTraceId.CreateRandom();
         private readonly System.Collections.Concurrent.ConcurrentQueue<string> executed = new();
+        private readonly ActivityListener listener;
+
+        public CommandCounter()
+        {
+            listener = new ActivityListener
+            {
+                ShouldListenTo = source => source.Name is "Npgsql" or ControlSource || source.Name.StartsWith("Microsoft.AspNetCore", StringComparison.Ordinal),
+                Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllDataAndRecorded,
+                ActivityStopped = Record,
+            };
+            ActivitySource.AddActivityListener(listener);
+        }
+
+        public string Traceparent => $"00-{trace}-{ActivitySpanId.CreateRandom()}-01";
 
         public List<string> Mentioning(string text) => executed.Where(c => c.Contains(text, StringComparison.Ordinal)).ToList();
 
-        public ILogger CreateLogger(string categoryName) => this;
-
-        public IDisposable? BeginScope<TState>(TState state)
-            where TState : notnull => null;
-
-        public bool IsEnabled(LogLevel logLevel) => true;
-
-        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        /// <summary>Runs work as a child of this counter's trace, as the test server does for a request.</summary>
+        public async Task WithinAsync(Func<Task> work)
         {
-            if (eventId.Id == CommandExecuted)
-            {
-                executed.Enqueue(formatter(state, exception));
-            }
+            using var source = new ActivitySource(ControlSource);
+            var parent = new ActivityContext(trace, ActivitySpanId.CreateRandom(), ActivityTraceFlags.Recorded);
+            using var activity = source.StartActivity("control", ActivityKind.Internal, parent);
+            await work();
         }
 
-        public void Dispose()
+        public void Dispose() => listener.Dispose();
+
+        private void Record(Activity activity)
         {
+            if (activity.Source.Name != "Npgsql" || activity.TraceId != trace)
+            {
+                return;
+            }
+
+            executed.Enqueue(string.Join(" ", activity.TagObjects.Select(tag => Convert.ToString(tag.Value, System.Globalization.CultureInfo.InvariantCulture))));
         }
     }
 }
