@@ -25,7 +25,7 @@ Ids: the path segment is read as PHP `(int)` (numeric prefix, else 0), then sent
 | 9 | POST /admin/whatsapp/link/relink | R:255 | whatsapp-link-relink | POST /relink `{}` | `no-store`; 6/min bucket `whatsapp_link_change`; audit row BEFORE the call; not 200: 502 "Re-link failed. ..."; `{ok:true}` |
 | 10 | POST /admin/whatsapp/link/logout | R:265 | whatsapp-link-logout | POST /logout `{}` | same, "Logout failed. ..." |
 
-`no-store` is set by the route precheck, so it is on 401 and 403 too (PHP sends it first). Audit row: `PlatformCommands.RecordAdminAccessAsync` through the notifications context (only for privileged roles, as PHP).
+`no-store` is set by the route precheck, so it is on 401 and 403 too (PHP sends it first). Audit row: `PlatformCommands.RecordAdminAccessAsync` (only for privileged roles, as PHP; it writes on its own connection from the data source, not through the notifications context).
 
 ## Assumptions
 1. Notifier contract is N's `server.js` as of the parity copy; `/status` answers `{connected, awaiting_qr, last_seen}`, `/qr` `{qr, generated_seconds_ago}`, dates as `Y-m-d H:i:s` strings (`dateStrings: true`) in UTC.

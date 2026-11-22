@@ -1,5 +1,13 @@
+using System.Collections.Concurrent;
 using System.Net;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Npgsql;
 using NUnit.Framework;
+using Tsr.Platform.Api;
 
 namespace Tsr.Db.Tests;
 
@@ -13,17 +21,55 @@ public sealed class AdminAuditTests
     private const int Teacher = 901002;
     private const int ClassId = 9901;
 
+    private const string AuditFailedMessage = "The admin access log row could not be written";
+
+    private readonly CaptureProvider logs = new();
     private MembershipTestKit kit = null!;
+    private WebApplicationFactory<Program> direct = null!;
 
     [OneTimeSetUp]
-    public void Start() => kit = new MembershipTestKit();
+    public void Start()
+    {
+        kit = new MembershipTestKit(services => services.AddSingleton<ILoggerProvider>(logs));
+        direct = TestApi.Create().WithWebHostBuilder(builder => builder.ConfigureTestServices(services => services.AddSingleton<ILoggerProvider>(logs)));
+    }
 
     [OneTimeTearDown]
-    public void Stop() => kit.Dispose();
+    public void Stop()
+    {
+        direct.Dispose();
+        kit.Dispose();
+    }
+
+    /// <summary>Every line any logger of the API under test writes: category, level, message and the exception's type.</summary>
+    private sealed record Line(string Category, LogLevel Level, string Message, string? ExceptionType);
+
+    private sealed class CaptureProvider : ILoggerProvider
+    {
+        public ConcurrentQueue<Line> Lines { get; } = new();
+
+        public ILogger CreateLogger(string categoryName) => new CaptureLogger(categoryName, Lines);
+
+        public void Dispose()
+        {
+        }
+    }
+
+    private sealed class CaptureLogger(string category, ConcurrentQueue<Line> lines) : ILogger
+    {
+        public IDisposable? BeginScope<TState>(TState state)
+            where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) =>
+            lines.Enqueue(new Line(category, logLevel, formatter(state, exception), exception?.GetType().Name));
+    }
 
     [SetUp]
     public async Task SeedAsync()
     {
+        logs.Lines.Clear();
         await MembershipTestKit.ResetAsync();
         await TestDatabase.ExecuteAsync("truncate platform.admin_access_log, classes.class_students, classes.class_schedules, classes.classes restart identity cascade");
         var admin = await MembershipTestKit.AddMemberAsync(Admin, "Audit Admin", "1");
@@ -95,5 +141,181 @@ public sealed class AdminAuditTests
         var row = await TestDatabase.RowAsync("select char_length(user_agent) as ua, char_length(page) as pg from platform.admin_access_log");
         Assert.That(row!["ua"], Is.EqualTo("512"));
         Assert.That(row["pg"], Is.EqualTo($"/classes/{ClassId}/manage".Length.ToString(System.Globalization.CultureInfo.InvariantCulture)), "the query string is not part of the page");
+    }
+
+    private const string RefuseAuditTrigger =
+        """
+        create or replace function public.tsr_test_refuse_audit() returns trigger language plpgsql as $$ begin raise exception 'audit refused (test)'; end $$;
+        create trigger tsr_test_refuse_audit before insert on platform.admin_access_log for each row execute function public.tsr_test_refuse_audit();
+        """;
+
+    private const string SlowAuditTrigger =
+        """
+        create or replace function public.tsr_test_slow_audit() returns trigger language plpgsql as $$ begin perform pg_sleep(2); return new; end $$;
+        create trigger tsr_test_slow_audit before insert on platform.admin_access_log for each row execute function public.tsr_test_slow_audit();
+        """;
+
+    private const string Columns = "user_id, token, roleid, page, method, ip, user_agent, referer, session_id, accessed_at is not null as stamped";
+
+    private static Task DropAuditTriggersAsync() => TestDatabase.ExecuteAsync(
+        "drop trigger if exists tsr_test_refuse_audit on platform.admin_access_log; drop function if exists public.tsr_test_refuse_audit(); "
+        + "drop trigger if exists tsr_test_slow_audit on platform.admin_access_log; drop function if exists public.tsr_test_slow_audit()");
+
+    [Test]
+    public async Task An_audit_write_that_fails_is_logged_and_the_action_still_answers()
+    {
+        await TestDatabase.ExecuteAsync(RefuseAuditTrigger);
+        try
+        {
+            var reply = await kit.SendAsync(Admin, HttpMethod.Get, $"/classes/{ClassId}/manage");
+
+            Assert.That(reply.Status, Is.EqualTo(HttpStatusCode.OK), reply.Body);
+            Assert.That(await RowsAsync(), Is.EqualTo(0));
+            var audit = logs.Lines.Where(l => l.Message == AuditFailedMessage).ToList();
+            Assert.That(audit, Has.Count.EqualTo(1));
+            Assert.That(audit[0].Category, Is.EqualTo("Tsr.Platform.Api.PlatformCommands"));
+            Assert.That(audit[0].Level, Is.EqualTo(LogLevel.Warning));
+            Assert.That(audit[0].ExceptionType, Is.EqualTo(nameof(PostgresException)));
+        }
+        finally
+        {
+            await DropAuditTriggersAsync();
+        }
+    }
+
+    // The one difference of the move off Entity Framework (issue 98): EF logged "Failed executing DbCommand" at Error (category Microsoft.EntityFrameworkCore.Database.Command)
+    // before the audit's own line. Now only the audit's Warning is left.
+    [Test]
+    public async Task The_lines_a_failed_audit_write_leaves_in_the_log_are_recorded()
+    {
+        await TestDatabase.ExecuteAsync(RefuseAuditTrigger);
+        try
+        {
+            await kit.SendAsync(Admin, HttpMethod.Get, $"/classes/{ClassId}/manage");
+
+            var lines = logs.Lines.Where(l => l.Level >= LogLevel.Warning).Select(l => $"{l.Category}|{l.Level}|{l.ExceptionType}").ToList();
+            TestContext.Out.WriteLine(string.Join('\n', lines));
+            Assert.That(string.Join(";", lines), Is.EqualTo("Tsr.Platform.Api.PlatformCommands|Warning|PostgresException"));
+        }
+        finally
+        {
+            await DropAuditTriggersAsync();
+        }
+    }
+
+    [Test]
+    public async Task The_stored_row_holds_every_column_as_the_request_gave_it()
+    {
+        var reply = await kit.SendAsync(Admin, HttpMethod.Get, $"/classes/{ClassId}/manage?x=1", userAgent: "AuditAgent/1.0");
+        Assert.That(reply.Status, Is.EqualTo(HttpStatusCode.OK), reply.Body);
+        var row = await TestDatabase.RowAsync($"select {Columns} from platform.admin_access_log");
+        var userId = await TestDatabase.ScalarAsync<int>($"select id from identity.users where token = {Admin}", TestDatabase.OwnerConnection);
+
+        Assert.That(row!["user_id"], Is.EqualTo(userId.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+        Assert.That(row["token"], Is.EqualTo("901001"));
+        Assert.That(row["roleid"], Is.EqualTo("1"));
+        Assert.That(row["page"], Is.EqualTo($"/classes/{ClassId}/manage"));
+        Assert.That(row["method"], Is.EqualTo("GET"));
+        Assert.That(row["ip"], Is.EqualTo(string.Empty), "no peer address is the empty text, not null");
+        Assert.That(row["user_agent"], Is.EqualTo("AuditAgent/1.0"));
+        Assert.That(row["referer"], Is.Null, "no Referer header is NULL, not an empty text");
+        Assert.That(row["session_id"], Is.Null);
+        Assert.That(row["stamped"], Is.EqualTo("true"));
+    }
+
+    [Test]
+    public async Task A_direct_call_stores_every_column_including_the_referer_and_cuts_to_the_column_lengths()
+    {
+        await using var scope = direct.Services.CreateAsyncScope();
+        var context = AuditRequest(scope, "/p" + new string('q', 400), "PATCH-VERY-LONG-METHOD", "AuditAgent/2.0", "https://referer.example.invalid/x");
+
+        await PlatformCommands.RecordAdminAccessAsync(context, 7, 901003, 4, CancellationToken.None);
+
+        var row = await TestDatabase.RowAsync($"select {Columns}, char_length(page) as page_length from platform.admin_access_log");
+        Assert.That(row!["user_id"], Is.EqualTo("7"));
+        Assert.That(row["token"], Is.EqualTo("901003"));
+        Assert.That(row["roleid"], Is.EqualTo("4"));
+        Assert.That(row["page_length"], Is.EqualTo("255"));
+        Assert.That(row["method"], Is.EqualTo("PATCH-VERY"));
+        Assert.That(row["ip"], Is.EqualTo("203.0.113.7"));
+        Assert.That(row["user_agent"], Is.EqualTo("AuditAgent/2.0"));
+        Assert.That(row["referer"], Is.EqualTo("https://referer.example.invalid/x"));
+        Assert.That(row["session_id"], Is.Null);
+        Assert.That(row["stamped"], Is.EqualTo("true"));
+    }
+
+    private static DefaultHttpContext AuditRequest(AsyncServiceScope scope, string path, string method, string userAgent, string referer)
+    {
+        var context = new DefaultHttpContext { RequestServices = scope.ServiceProvider };
+        context.Request.Path = path;
+        context.Request.Method = method;
+        context.Request.Headers.UserAgent = userAgent;
+        context.Request.Headers.Referer = referer;
+        context.Connection.RemoteIpAddress = IPAddress.Parse("203.0.113.7");
+        return context;
+    }
+
+    [Test]
+    public async Task A_cancel_while_the_insert_runs_reaches_the_caller_and_is_not_logged_and_no_row_is_written()
+    {
+        await TestDatabase.ExecuteAsync(SlowAuditTrigger);
+        try
+        {
+            await using var scope = direct.Services.CreateAsyncScope();
+            var context = AuditRequest(scope, "/classes/1/manage", "GET", "AuditAgent/3.0", "https://referer.example.invalid/y");
+            using var cancelling = new CancellationTokenSource();
+            var running = PlatformCommands.RecordAdminAccessAsync(context, 7, 901003, 1, cancelling.Token);
+            var deadline = DateTime.UtcNow.AddSeconds(10);
+            while (!running.IsCompleted)
+            {
+                var sleeping = await TestDatabase.ScalarAsync<long>(
+                    "select count(*) from pg_stat_activity where wait_event = 'PgSleep' and query like '%insert into platform.admin_access_log%'",
+                    TestDatabase.OwnerConnection);
+                if (sleeping > 0)
+                {
+                    break;
+                }
+
+                Assert.That(DateTime.UtcNow, Is.LessThan(deadline), "the held insert never started");
+                await Task.Delay(20);
+            }
+
+            Assert.That(running.IsCompleted, Is.False, "the write finished before the cancel, so nothing was held");
+            await cancelling.CancelAsync();
+            var thrown = await Assert.CatchAsync(() => running.WaitAsync(TimeSpan.FromSeconds(10)));
+
+            Assert.That(thrown, Is.InstanceOf<OperationCanceledException>());
+            Assert.That(await RowsAsync(), Is.EqualTo(0));
+            Assert.That(logs.Lines.Where(l => l.Message == AuditFailedMessage), Is.Empty, "a cancelled write is not an audit failure");
+        }
+        finally
+        {
+            await DropAuditTriggersAsync();
+        }
+    }
+
+    [Test]
+    public async Task A_cancel_before_the_write_reaches_the_caller_and_writes_nothing()
+    {
+        await using var scope = direct.Services.CreateAsyncScope();
+        var context = AuditRequest(scope, "/classes/1/manage", "GET", "AuditAgent/3.0", "https://referer.example.invalid/y");
+        using var cancelled = new CancellationTokenSource();
+        await cancelled.CancelAsync();
+
+        await Assert.ThatAsync(
+            () => PlatformCommands.RecordAdminAccessAsync(context, 7, 901003, 1, cancelled.Token),
+            Throws.InstanceOf<OperationCanceledException>());
+        Assert.That(await RowsAsync(), Is.EqualTo(0));
+    }
+
+    [Test]
+    public async Task A_role_that_is_not_privileged_writes_nothing()
+    {
+        await using var scope = direct.Services.CreateAsyncScope();
+        var context = AuditRequest(scope, "/classes/1/manage", "GET", "AuditAgent/3.0", "https://referer.example.invalid/y");
+
+        await PlatformCommands.RecordAdminAccessAsync(context, 7, 901003, 0, CancellationToken.None);
+
+        Assert.That(await RowsAsync(), Is.EqualTo(0));
     }
 }

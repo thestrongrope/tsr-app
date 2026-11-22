@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Npgsql;
 using Tsr.Notifications.Api.Domain;
 using Tsr.Shared.Api;
 
@@ -18,7 +19,7 @@ internal sealed class PushDrainWorker(IServiceScopeFactory scopes, ILogger<PushD
 
     protected override async Task TickAsync(IServiceProvider services, CancellationToken ct) =>
         await PushDrain.TickAsync(
-            services.GetRequiredService<NotificationsContext>(),
+            services.GetRequiredService<NpgsqlDataSource>(),
             services.GetRequiredService<IPushSender>(),
             services.GetRequiredService<TimeProvider>(),
             Log,

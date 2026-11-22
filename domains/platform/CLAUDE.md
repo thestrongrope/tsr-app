@@ -51,13 +51,13 @@ memory, per process); `GeoGate` supplies the limit and the wording.
 
 Static methods of `PlatformCommands`; the doc comment of each states its SQL and PHP source.
 
-- `RecordAdminAccessAsync(db, httpContext, userId, token, roleId, ct)` (`api/PlatformCommands.cs`): PHP's `api_log_admin_action`. One `admin_access_log` row for a caller whose role is 1, 3, 4, 5 or 7, written outside a transaction; a failed write is logged and never fails the request. Used by `classes`; proved by `db/tests/AdminAuditTests.cs`.
+- `RecordAdminAccessAsync(httpContext, userId, token, roleId, ct)` (`api/PlatformCommands.cs`): PHP's `api_log_admin_action`. One `admin_access_log` row for a caller whose role is 1, 3, 4, 5 or 7. It finds the `NpgsqlDataSource` in the request's services and commits at once on its own pooled connection, so it is never part of the caller's transaction. A failed write is logged (Warning, no request values) and never fails the request; a cancelled one is not caught. Used by `classes` and `notifications`; proved by `db/tests/AdminAuditTests.cs`.
 - `QueueMessagesAsync` (queues `outbound_messages` rows, sends nothing; used by `notifications`), `EraseFeedbackAsync` and `RedactRecipientsAsync` (account deletion; used by `identity`): same file.
 - `ClaimMessagesAsync`, `MarkSentAsync`, `MarkFailedAsync`, `ReleaseMessageAsync`, `MarkDeadAsync` (`api/PlatformCommands.Queue.cs`): the delivery queue, below. Used by `notifications` (the push drain); proved by `db/tests/TestPushDrainTests.cs`.
 
 **The delivery queue for a worker** (column `outbound_messages.claimed_at`, migration `AddOutboundClaimedAt`). Each
-command is ONE statement on the caller's connection, outside a transaction (a claim commits before anything is sent; a
-claim is two statements); the clock is passed in. Decisions that differ from PHP:
+command takes the `NpgsqlDataSource` and runs ONE statement on its own pooled connection, outside a transaction, so it commits at once (a claim is stored before anything is sent; a
+claim is two statements, each committed); the clock is passed in. Decisions that differ from PHP:
 
 - A row left `sending` with `claimed_at` older than 10 minutes (`ClaimLease`) is reclaimed. PHP leaves a crashed claim stuck for ever; we reclaim it and accept a rare duplicate (the owner's decision). A `sending` row with no `claimed_at`, from before the column, is never reclaimed.
 - A stale `sending` row that has already used its 5 attempts becomes `dead` with `reclaim_exhausted` instead of being claimed again.

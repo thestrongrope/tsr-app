@@ -64,7 +64,7 @@ internal static class ClassGuards
 
     /// <summary>PHP api_log_admin_action: platform's published command writes the admin_access_log row for a privileged caller, outside any transaction, after the permission check.</summary>
     public static async Task LogAdminAccessAsync(ClassesContext db, HttpContext context, Permissions permissions, Caller caller, CancellationToken ct) =>
-        await PlatformCommands.RecordAdminAccessAsync(db, context, caller.UserId, caller.Token, await permissions.RoleIdAsync(caller, ct), ct);
+        await PlatformCommands.RecordAdminAccessAsync(context, caller.UserId, caller.Token, await permissions.RoleIdAsync(caller, ct), ct);
 
     public static IResult ScheduleRefusal() => Problem.Detail(StatusCodes.Status403Forbidden, "You do not have permission to set this class's schedule");
 

@@ -28,7 +28,7 @@ Tables, keys and the **wall-clock columns** (`send_at`, `send_time`: read in the
 `access`, `identity`, `platform` (`NotificationsModule.Dependencies`).
 
 - `access`: `Permissions`. The class schedule worker also needs `access` to start, which the host already registers.
-- `platform`: `PlatformCommands.QueueMessagesAsync` (the push queue), `ClaimMessagesAsync` and the result commands (the push drain), `RecordAdminAccessAsync`.
+- `platform`: `PlatformCommands.QueueMessagesAsync` (the push queue), `ClaimMessagesAsync` and the result commands (the push drain; they take the `NpgsqlDataSource`), `RecordAdminAccessAsync(context, ...)` (the audit row of the admin routes; it finds the data source in the request's services).
 - `identity`: SQL read of `identity.v_users` (token and email, to leave the demo cohort out).
 - Read through published views only: `classes.v_classes`, `v_enrolments`, `v_class_schedules`, `v_class_levels`, `identity.v_users`, `membership.v_members`, `platform.v_genders`.
 
@@ -61,7 +61,7 @@ registration hook. The API containers never drain. **No stack runs a sending wor
 In worker mode the process needs `TSR_DB`, `TSR_GOTENBERG_URL` (platform validates it at start) and, to send,
 `TSR_GOOGLE_SERVICE_ACCOUNT_B64`; put `--workers` last on a command line. ONE worker instance is the supported setup.
 
-**Push drain** (`push-drain`; `api/workers/PushDrain.cs` is one tick, `PushDrainWorker.cs` the timer, once a minute). A
+**Push drain** (`push-drain`; `api/workers/PushDrain.cs` is one tick, `PushDrainWorker.cs` the timer, once a minute; both take the `NpgsqlDataSource`, and the drain uses no Entity Framework). A
 tick takes batches of 50 rows for up to 50 seconds. What ends a tick, every outcome and its reason code: the class summary
 of `PushDrain.cs`. **Unverified against real FCM** (fake sender only). Rules to keep:
 
