@@ -15,6 +15,8 @@ internal static class ClassAccessMembersSlice
 {
     internal sealed record Found(int Token, object Name, int Gender);
 
+    internal sealed record ClassAccessMembersAnswer(IReadOnlyList<Found> Members);
+
     public static IEndpointRouteBuilder MapClassAccessMembers(this IEndpointRouteBuilder routes)
     {
         routes.MapGet("/admin/class-access/members", HandleAsync).RequireMember(createsMember: true);
@@ -42,6 +44,6 @@ internal static class ClassAccessMembersSlice
 
         var genders = await op.GendersAsync(ct);
         var members = await AdminMembers.SearchOfGendersAsync(db, q.Value!, genders, ct);
-        return Results.Json(new { members = members.Select(m => new Found(m.Token, Cast.Text(m.Name), AdminMembers.GenderOf(m.Gender) ?? 0)).ToList() });
+        return Results.Json(new ClassAccessMembersAnswer(members.Select(m => new Found(m.Token, Cast.Text(m.Name), AdminMembers.GenderOf(m.Gender) ?? 0)).ToList()), AccessJson.Answers.ClassAccessMembersAnswer);
     }
 }

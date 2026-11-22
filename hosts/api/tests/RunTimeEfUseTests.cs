@@ -20,8 +20,6 @@ public sealed partial class RunTimeEfUseTests
     /// <summary>The access files not converted yet: the 9 that hold EF calls, the 6 read slices that take the context, and the module. Each conversion task removes its files; task 13 removes the list.</summary>
     private static readonly string[] NotConverted =
     [
-        "domains/access/api/AccessModule.cs",
-        "domains/access/api/Permissions.cs",
         "domains/access/api/domain/AdminMembers.cs",
         "domains/access/api/domain/ClassAccessStore.cs",
         "domains/access/api/domain/MemberLock.cs",
@@ -127,7 +125,7 @@ public sealed partial class RunTimeEfUseTests
             Assert.That(files, Has.None.Contain("/Migrations/"));
             Assert.That(files, Has.None.Contain("/tests/"));
             Assert.That(files, Has.None.EndsWith("AccessContext.cs"));
-            Assert.That(NotConverted, Has.Length.EqualTo(16));
+            Assert.That(NotConverted, Has.Length.EqualTo(14));
         });
     }
 }

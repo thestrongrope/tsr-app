@@ -25,7 +25,7 @@ internal sealed record Refusal(int Status, string Detail, IReadOnlyList<KeyValue
             body[key] = value;
         }
 
-        return Results.Json(body, statusCode: Status);
+        return Results.Json(body, AccessJson.Answers.DictionaryStringObject, statusCode: Status);
     }
 }
 

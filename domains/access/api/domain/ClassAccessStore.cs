@@ -191,7 +191,7 @@ internal static partial class ClassAccessStore
             if (!view.Failed)
             {
                 var v = view.Value!;
-                return Results.Json(new SavedBody(true, v.Member, v.Version, v.FromRole, v.Rules));
+                return Results.Json(new SavedBody(true, v.Member, v.Version, v.FromRole, v.Rules), AccessJson.Answers.SavedBody);
             }
         }
         catch (Exception e) when (e is DbException or InvalidOperationException)
@@ -199,7 +199,7 @@ internal static partial class ClassAccessStore
             LogViewUnreadable(logger, e.GetType().Name);
         }
 
-        return Results.Json(new SavedBody(true, null, null, null, []));
+        return Results.Json(new SavedBody(true, null, null, null, []), AccessJson.Answers.SavedBody);
     }
 
     /// <summary>The answer when a write failed before it committed (PHP: "Nothing was changed"; the transaction rolled back).</summary>

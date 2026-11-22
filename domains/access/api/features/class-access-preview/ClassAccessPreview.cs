@@ -14,6 +14,8 @@ namespace Tsr.Access.Api.Features.ClassAccessPreview;
 
 internal static class ClassAccessPreviewSlice
 {
+    internal sealed record PreviewAnswer(IReadOnlyList<PreviewClass> Classes, int ClassCount, string PreviewHash);
+
     public static IEndpointRouteBuilder MapClassAccessPreview(this IEndpointRouteBuilder routes)
     {
         routes.MapPost("/admin/class-access/preview", HandleAsync).RequireMember(createsMember: true);
@@ -65,11 +67,9 @@ internal static class ClassAccessPreviewSlice
         }
 
         var reached = ClassAccessRules.Reach(gender.Value, offered.Value!, await classes.ActiveClassesAsync(ct));
-        return Results.Json(new
-        {
-            classes = ClassAccessStore.Listed(reached),
-            classCount = reached.Count,
-            previewHash = ClassAccessRules.PreviewHash(reached.Select(c => c.Id)),
-        });
+        return Results.Json(new PreviewAnswer(
+            ClassAccessStore.Listed(reached),
+            reached.Count,
+            ClassAccessRules.PreviewHash(reached.Select(c => c.Id))), AccessJson.Answers.PreviewAnswer);
     }
 }

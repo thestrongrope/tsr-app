@@ -42,6 +42,7 @@ internal static partial class AccessGoldenScenarios
         ["write-permission-grant-revoke"] = GrantAndRevokeAsync,
         ["write-rule-save-revoke"] = RuleSaveAndRevokeAsync,
         ["write-rule-condition-order"] = ConditionOrderAsync,
+        ["write-rule-save-on-admins"] = RuleSaveOnAdminsAsync,
     };
 
     // GET /me/permissions, one action the caller holds in some scope, one it may not hold, one the catalog lacks, and the legacy list.

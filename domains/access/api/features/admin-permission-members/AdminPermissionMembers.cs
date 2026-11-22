@@ -14,6 +14,8 @@ internal static class AdminPermissionMembersSlice
 {
     internal sealed record Found(int Token, object Name);
 
+    internal sealed record GrantMembersAnswer(IReadOnlyList<Found> Members);
+
     public static IEndpointRouteBuilder MapAdminPermissionMembers(this IEndpointRouteBuilder routes)
     {
         routes.MapGet("/admin/permissions/members", HandleAsync).RequireMember(createsMember: true);
@@ -35,6 +37,6 @@ internal static class AdminPermissionMembersSlice
         }
 
         var members = await AdminMembers.SearchForGrantsAsync(db, q, ct);
-        return Results.Json(new { members = members.Select(m => new Found(m.Token, Cast.Text(m.Name))).ToList() });
+        return Results.Json(new GrantMembersAnswer(members.Select(m => new Found(m.Token, Cast.Text(m.Name))).ToList()), AccessJson.Answers.GrantMembersAnswer);
     }
 }

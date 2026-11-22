@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Npgsql;
 using Tsr.Access.Api.Features.AdminPermissionGrant;
 using Tsr.Access.Api.Features.AdminPermissionMember;
 using Tsr.Access.Api.Features.AdminPermissionMembers;
@@ -36,9 +37,10 @@ public static class AccessModule
     public static IServiceCollection AddAccess(this IServiceCollection services)
     {
         services.AddDomainContext<AccessContext>(AccessContext.SchemaName);
+        services.AddTsrDataSource();
         services.TryAddScoped<IClassScopes, NoClasses>();
         services.AddScoped(provider => new Permissions(
-            provider.GetRequiredService<AccessContext>(),
+            provider.GetRequiredService<NpgsqlDataSource>(),
             provider.GetRequiredService<IClassScopes>()));
         services.AddScoped<MePermissionsHandler>();
         services.AddScoped<MePermissionHandler>();

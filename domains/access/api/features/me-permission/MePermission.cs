@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Tsr.Access.Api.Domain;
 using Tsr.Shared.Api;
 
 namespace Tsr.Access.Api.Features.MePermission;
@@ -42,6 +43,6 @@ internal sealed class MePermissionHandler(Permissions permissions)
         }
 
         var scopes = await permissions.ScopesOfAsync(caller, permission, ct);
-        return Results.Json(new MePermissionResponse(permission, scopes));
+        return Results.Json(new MePermissionResponse(permission, scopes), AccessJson.Answers.MePermissionResponse);
     }
 }

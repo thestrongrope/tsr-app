@@ -64,7 +64,7 @@ internal static class AdminPermissionRevokeSlice
         }
 
         var view = await PermissionGrants.ViewAsync(db, permissions, grant.Token, ct);
-        return view is null ? Problem.Detail(StatusCodes.Status404NotFound, "Member not found") : Results.Json(view);
+        return view is null ? Problem.Detail(StatusCodes.Status404NotFound, "Member not found") : Results.Json(view, AccessJson.Answers.GrantMemberView);
     }
 
     private static async Task<GrantRow?> FindAsync(AccessContext db, int grantId, CancellationToken ct)

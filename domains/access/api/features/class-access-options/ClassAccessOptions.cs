@@ -14,6 +14,13 @@ internal static class ClassAccessOptionsSlice
 {
     internal sealed record GenderOption(int Id, string Name);
 
+    internal sealed record ClassAccessOptionsAnswer(
+        IReadOnlyList<GenderOption> Genders,
+        IReadOnlyList<LevelBody> Levels,
+        IReadOnlyList<string> Cities,
+        IReadOnlyList<string> Countries,
+        IReadOnlyList<string> Tags);
+
     public static IEndpointRouteBuilder MapClassAccessOptions(this IEndpointRouteBuilder routes)
     {
         routes.MapGet("/admin/class-access/options", HandleAsync).RequireMember(createsMember: true);
@@ -31,13 +38,11 @@ internal static class ClassAccessOptionsSlice
         var genders = await op.GendersAsync(ct);
         var levels = await ClassAccessStore.LevelsAsync(db, ct);
         var active = await classes.ActiveClassesAsync(ct);
-        return Results.Json(new
-        {
-            genders = genders.Select(g => new GenderOption(g, ClassAccessRules.GenderLabel(g))).ToList(),
+        return Results.Json(new ClassAccessOptionsAnswer(
+            genders.Select(g => new GenderOption(g, ClassAccessRules.GenderLabel(g))).ToList(),
             levels,
-            cities = ClassAccessRules.Cities(active, genders),
-            countries = ClassAccessRules.Countries(active, genders),
-            tags = ClassAccessRules.Tags(active, genders),
-        });
+            ClassAccessRules.Cities(active, genders),
+            ClassAccessRules.Countries(active, genders),
+            ClassAccessRules.Tags(active, genders)), AccessJson.Answers.ClassAccessOptionsAnswer);
     }
 }

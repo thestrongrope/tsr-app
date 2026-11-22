@@ -28,6 +28,6 @@ internal static class ClassAccessMemberSlice
         }
 
         var view = await ClassAccessStore.MemberViewAsync(db, permissions, classes, op, AdminMembers.TokenOf(token), ct);
-        return view.Failed ? view.Refusal!.ToResult() : Results.Json(view.Value);
+        return view.Failed ? view.Refusal!.ToResult() : Results.Json(view.Value, AccessJson.Answers.ClassAccessView);
     }
 }

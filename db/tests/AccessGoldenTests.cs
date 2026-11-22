@@ -22,6 +22,7 @@ public sealed class GoldenAccessTests
 
     [TestCase("write-permission-grant-revoke")]
     [TestCase("write-rule-save-revoke")]
+    [TestCase("write-rule-save-on-admins")]
     public async Task Each_write_stores_the_recorded_rows_and_events(string scenario)
     {
         await using var run = await GoldenScenario.StartAsync(scenario);

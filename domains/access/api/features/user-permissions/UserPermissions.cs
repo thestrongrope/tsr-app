@@ -69,6 +69,6 @@ internal sealed class UserPermissionsHandler(Permissions permissions, IClassScop
             answer.TeacherCount,
             answer.McqAdmin,
             answer.IsTeacher,
-            LegacyPermissions.IssuedAt(clock.GetUtcNow())));
+            LegacyPermissions.IssuedAt(clock.GetUtcNow())), AccessJson.Answers.UserPermissionsResponse);
     }
 }

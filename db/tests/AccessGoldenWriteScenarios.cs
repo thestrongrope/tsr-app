@@ -44,6 +44,17 @@ internal static partial class AccessGoldenScenarios
         await run.AppendRowsAsync("save");
     }
 
+    // TC-ACC-Q1-02: a super admin saves a rule on a gents admin and on a ladies admin (a gents admin may not: the refusals scenario), with the rows and events after each.
+    private static async Task RuleSaveOnAdminsAsync(GoldenScenario run)
+    {
+        foreach (var (member, gender) in new[] { (GoldenSeed.PeerGentsAdmin, 1), (GoldenSeed.LadiesAdmin, 2) })
+        {
+            var (version, hash) = await DraftAsync(run, Super, member, gender, Ville);
+            await run.SendAsync(Super, Post, $"/admin/class-access/members/{member}/rules", SaveBody(gender, Ville, "Admin rule " + member, version, hash));
+            await run.AppendRowsAsync("save on " + member);
+        }
+    }
+
     private static async Task<string> VersionOfAsync(GoldenScenario run, int member) =>
         AccessGoldenScenarios.StringOf((await run.SendAsync(Super, Get, $"/admin/class-access/members/{member}")).Json, "version");
 }

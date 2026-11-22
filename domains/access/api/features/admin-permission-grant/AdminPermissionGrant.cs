@@ -77,7 +77,7 @@ internal static class AdminPermissionGrantSlice
         }
 
         var view = await PermissionGrants.ViewAsync(db, permissions, member.Token, ct);
-        return view is null ? Problem.Detail(StatusCodes.Status404NotFound, "Member not found") : Results.Json(view);
+        return view is null ? Problem.Detail(StatusCodes.Status404NotFound, "Member not found") : Results.Json(view, AccessJson.Answers.GrantMemberView);
     }
 
     private static async Task<Refusal?> InsertAsync(AccessContext db, TimeProvider clock, MemberRow member, string permission, string reason, int operatorId, CancellationToken ct)
