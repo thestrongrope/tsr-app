@@ -129,13 +129,13 @@ public sealed class TestPushDrainTests
     private async Task<DrainReport> TickAsync(CancellationToken ct = default)
     {
         await using var scope = factory.Services.CreateAsyncScope();
-        return await PushDrain.TickAsync(scope.ServiceProvider.GetRequiredService<NotificationsContext>(), fake, clock, log, ct);
+        return await PushDrain.TickAsync(scope.ServiceProvider.GetRequiredService<NpgsqlDataSource>(), fake, clock, log, ct);
     }
 
     private async Task<long[]> ClaimAsync(DateTimeOffset now, CancellationToken ct = default)
     {
         await using var scope = factory.Services.CreateAsyncScope();
-        var rows = await PlatformCommands.ClaimMessagesAsync(scope.ServiceProvider.GetRequiredService<NotificationsContext>(), PushDrain.Channel, PushDrain.MaxRows, now, ct);
+        var rows = await PlatformCommands.ClaimMessagesAsync(scope.ServiceProvider.GetRequiredService<NpgsqlDataSource>(), PushDrain.Channel, PushDrain.MaxRows, now, ct);
         return [.. rows.Select(r => r.Id)];
     }
 
@@ -388,17 +388,122 @@ public sealed class TestPushDrainTests
         Assert.That(fake.Sent.Select(s => s.Token), Is.EqualTo(["device-stale"]));
     }
 
+    // A moment with a fraction of a second (microseconds, the database's precision), so a stored value that lost or gained precision shows.
+    private static readonly DateTimeOffset Moment = T0.AddTicks(1_234_560);
+
+    private static string Stored(long id) =>
+        StoredOf(TestDatabase.RowAsync(StoredSql(id)).GetAwaiter().GetResult()!);
+
+    private static async Task<string> StoredAsync(long id) => StoredOf((await TestDatabase.RowAsync(StoredSql(id)))!);
+
+    // Every column of the row but the id and created_at (the database's own default), one text, null as "-".
+    private static string StoredSql(long id) =>
+        "select channel::text as channel, recipient::text as recipient, payload::text as payload, dedupe_key::text as dedupe_key, created_by, status::text as status, attempts, error::text as error, "
+        + "to_char(next_attempt_at at time zone 'UTC', 'YYYY-MM-DD HH24:MI:SS.US') as next_attempt_at, to_char(claimed_at at time zone 'UTC', 'YYYY-MM-DD HH24:MI:SS.US') as claimed_at, "
+        + $"to_char(sent_at at time zone 'UTC', 'YYYY-MM-DD HH24:MI:SS.US') as sent_at from platform.outbound_messages where id = {id}";
+
+    private static string StoredOf(Dictionary<string, string?> row) =>
+        string.Join(" | ", row.Select(c => c.Key + "=" + (c.Value ?? "-")));
+
+    [Test]
+    public async Task A_claimed_row_is_already_claimed_for_another_connection_when_the_sender_is_called()
+    {
+        var id = await AddAsync("device-1");
+        var seen = new List<string>();
+        fake.Decide = _ =>
+        {
+            seen.Add(Stored(id));
+            return PushResult.Sent;
+        };
+
+        await TickAsync();
+
+        Assert.That(seen, Has.Count.EqualTo(1));
+        Assert.That(seen[0], Does.Contain("status=sending").And.Contain("attempts=1").And.Contain("claimed_at=2026-12-02 06:30:00.000000").And.Contain("sent_at=-"));
+        Assert.That(await StoredAsync(id), Does.Contain("status=sent"));
+    }
+
+    [Test]
+    public async Task The_columns_the_commands_write_after_a_send_a_retry_and_a_dead_end_are_stored_to_the_microsecond()
+    {
+        clock.Now = Moment;
+        fake.Decide = token => token switch
+        {
+            "device-retry" => PushResult.Failed,
+            "device-dead" => PushResult.SenderMismatch,
+            _ => PushResult.Sent,
+        };
+        var sent = await AddAsync("device-sent");
+        var retry = await AddAsync("device-retry");
+        var dead = await AddAsync("device-dead");
+        var bad = await AddAsync("device-bad", "[1]");
+
+        await TickAsync();
+
+        Assert.Multiple(async () =>
+        {
+            Assert.That(await StoredAsync(sent), Is.EqualTo($"channel=push | recipient=device-sent | payload={Good} | dedupe_key=- | created_by=- | status=sent | attempts=1 | error=- | next_attempt_at=- | claimed_at=2026-12-02 06:30:00.123456 | sent_at=2026-12-02 06:30:00.123456"));
+            Assert.That(await StoredAsync(retry), Is.EqualTo($"channel=push | recipient=device-retry | payload={Good} | dedupe_key=- | created_by=- | status=queued | attempts=1 | error=send_failed | next_attempt_at=2026-12-02 06:31:00.123456 | claimed_at=2026-12-02 06:30:00.123456 | sent_at=-"));
+            Assert.That(await StoredAsync(dead), Is.EqualTo($"channel=push | recipient=device-dead | payload={Good} | dedupe_key=- | created_by=- | status=dead | attempts=1 | error=sender_mismatch | next_attempt_at=- | claimed_at=2026-12-02 06:30:00.123456 | sent_at=-"));
+            Assert.That(await StoredAsync(bad), Is.EqualTo("channel=push | recipient=device-bad | payload=[1] | dedupe_key=- | created_by=- | status=dead | attempts=1 | error=payload_invalid | next_attempt_at=- | claimed_at=2026-12-02 06:30:00.123456 | sent_at=-"));
+        });
+    }
+
+    [Test]
+    public async Task The_columns_a_release_writes_are_stored_the_attempt_given_back_and_the_claim_time_kept()
+    {
+        clock.Now = Moment;
+        fake.Decide = _ => PushResult.Unavailable;
+        var id = await AddAsync("device-1");
+
+        await TickAsync();
+
+        Assert.That(await StoredAsync(id), Is.EqualTo($"channel=push | recipient=device-1 | payload={Good} | dedupe_key=- | created_by=- | status=queued | attempts=0 | error=- | next_attempt_at=- | claimed_at=2026-12-02 06:30:00.123456 | sent_at=-"));
+    }
+
+    [Test]
+    public async Task The_columns_of_a_reclaimed_and_of_an_exhausted_row_are_stored_to_the_microsecond()
+    {
+        clock.Now = Moment;
+        var stale = await AddAsync("device-stale", status: "sending", attempts: 1, claimed: T0.AddMinutes(-11));
+        var spent = await AddAsync("device-spent", status: "sending", attempts: 5, claimed: T0.AddMinutes(-11));
+
+        await TickAsync();
+
+        Assert.Multiple(async () =>
+        {
+            Assert.That(await StoredAsync(stale), Is.EqualTo($"channel=push | recipient=device-stale | payload={Good} | dedupe_key=- | created_by=- | status=sent | attempts=2 | error=- | next_attempt_at=- | claimed_at=2026-12-02 06:30:00.123456 | sent_at=2026-12-02 06:30:00.123456"));
+            Assert.That(await StoredAsync(spent), Is.EqualTo($"channel=push | recipient=device-spent | payload={Good} | dedupe_key=- | created_by=- | status=dead | attempts=5 | error=reclaim_exhausted | next_attempt_at=- | claimed_at=2026-12-02 06:19:00.000000 | sent_at=-"));
+        });
+    }
+
+    [Test]
+    public async Task The_fifth_failure_and_a_failure_with_no_valid_attempt_count_are_dead_with_the_error_kept()
+    {
+        var fifth = await AddAsync("device-fifth", status: "sending", attempts: 5, claimed: T0);
+        var zero = await AddAsync("device-zero", status: "sending", attempts: 0, claimed: T0);
+        await using var scope = factory.Services.CreateAsyncScope();
+        var source = scope.ServiceProvider.GetRequiredService<NpgsqlDataSource>();
+
+        var first = await PlatformCommands.MarkFailedAsync(source, fifth, attempts: 5, "send_failed", Moment, CancellationToken.None);
+        var second = await PlatformCommands.MarkFailedAsync(source, zero, attempts: 0, "token_invalid", Moment, CancellationToken.None);
+
+        Assert.That((first, second), Is.EqualTo(("dead", "dead")));
+        Assert.That(await StoredAsync(fifth), Is.EqualTo($"channel=push | recipient=device-fifth | payload={Good} | dedupe_key=- | created_by=- | status=dead | attempts=5 | error=send_failed | next_attempt_at=- | claimed_at=2026-12-02 06:30:00.000000 | sent_at=-"));
+        Assert.That(await StoredAsync(zero), Is.EqualTo($"channel=push | recipient=device-zero | payload={Good} | dedupe_key=- | created_by=- | status=dead | attempts=0 | error=token_invalid | next_attempt_at=- | claimed_at=2026-12-02 06:30:00.000000 | sent_at=-"));
+    }
+
     [Test]
     public async Task A_result_for_a_claim_another_worker_has_since_taken_over_does_not_overwrite_it()
     {
         var id = await AddAsync("device-1", status: "sending", attempts: 2, claimed: T0.AddMinutes(-1));
         await using var scope = factory.Services.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<NotificationsContext>();
+        var source = scope.ServiceProvider.GetRequiredService<NpgsqlDataSource>();
 
-        var sent = await PlatformCommands.MarkSentAsync(db, id, attempts: 1, clock.GetUtcNow(), CancellationToken.None);
-        var failed = await PlatformCommands.MarkFailedAsync(db, id, attempts: 1, "late", clock.GetUtcNow(), CancellationToken.None);
-        var released = await PlatformCommands.ReleaseMessageAsync(db, id, attempts: 1, CancellationToken.None);
-        var dead = await PlatformCommands.MarkDeadAsync(db, id, attempts: 1, "late", CancellationToken.None);
+        var sent = await PlatformCommands.MarkSentAsync(source, id, attempts: 1, clock.GetUtcNow(), CancellationToken.None);
+        var failed = await PlatformCommands.MarkFailedAsync(source, id, attempts: 1, "late", clock.GetUtcNow(), CancellationToken.None);
+        var released = await PlatformCommands.ReleaseMessageAsync(source, id, attempts: 1, CancellationToken.None);
+        var dead = await PlatformCommands.MarkDeadAsync(source, id, attempts: 1, "late", CancellationToken.None);
 
         Assert.That((sent, failed, released, dead), Is.EqualTo((false, null as string, false, false)));
         var row = await RowAsync(id);

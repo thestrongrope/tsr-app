@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Globalization;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using Npgsql;
 using Tsr.Notifications.Api.Domain;
 using Tsr.Platform.Api;
 
@@ -56,9 +57,9 @@ internal static partial class PushDrain
         Unrecorded,
     }
 
-    public static async Task<DrainReport> TickAsync(NotificationsContext db, IPushSender sender, TimeProvider clock, ILogger log, CancellationToken ct)
+    public static async Task<DrainReport> TickAsync(NpgsqlDataSource source, IPushSender sender, TimeProvider clock, ILogger log, CancellationToken ct)
     {
-        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(sender);
         ArgumentNullException.ThrowIfNull(clock);
         ArgumentNullException.ThrowIfNull(log);
@@ -72,7 +73,7 @@ internal static partial class PushDrain
         var total = Nothing;
         while (true)
         {
-            var batch = await BatchAsync(db, sender, clock, log, ct);
+            var batch = await BatchAsync(source, sender, clock, log, ct);
             total = total.Plus(batch);
             if (batch.Claimed < MaxRows || batch.Released > 0 || ct.IsCancellationRequested || clock.GetUtcNow() >= claimUntil)
             {
@@ -81,9 +82,9 @@ internal static partial class PushDrain
         }
     }
 
-    private static async Task<DrainReport> BatchAsync(NotificationsContext db, IPushSender sender, TimeProvider clock, ILogger log, CancellationToken ct)
+    private static async Task<DrainReport> BatchAsync(NpgsqlDataSource source, IPushSender sender, TimeProvider clock, ILogger log, CancellationToken ct)
     {
-        var rows = await PlatformCommands.ClaimMessagesAsync(db, Channel, MaxRows, clock.GetUtcNow(), ct);
+        var rows = await PlatformCommands.ClaimMessagesAsync(source, Channel, MaxRows, clock.GetUtcNow(), ct);
         if (rows.Count == 0)
         {
             return Nothing;
@@ -92,7 +93,7 @@ internal static partial class PushDrain
         var now = clock.GetUtcNow();
         var plans = rows.Select(row => PlanOf(row, now)).ToList();
         var results = await SendAllAsync(sender, plans, log, ct);
-        var report = await RecordAllAsync(db, plans, results, clock, log);
+        var report = await RecordAllAsync(source, plans, results, clock, log);
         LogDrained(log, report.Claimed, report.Sent, report.Retrying, report.Dead, report.Released, report.Lost, report.InvalidTokens, report.Unrecorded);
         return report;
     }
@@ -165,7 +166,7 @@ internal static partial class PushDrain
         return data;
     }
 
-    // The sends run in parallel and touch no database context (it is not thread safe). The first Unavailable answer, or the host stopping, stops further sends from STARTING; the ones already running are never cancelled
+    // The sends run in parallel and touch no database. The first Unavailable answer, or the host stopping, stops further sends from STARTING; the ones already running are never cancelled
     // (one may have been delivered, and releasing it would send it twice): neither the loop nor a send takes the host's token, each send ends within the sender's own timeout. A row with no result was not sent.
     private static async Task<ConcurrentDictionary<long, PushResult>> SendAllAsync(IPushSender sender, List<Plan> plans, ILogger log, CancellationToken ct)
     {
@@ -207,7 +208,7 @@ internal static partial class PushDrain
 
     // Results are written with no cancellation (each command has the database's own 5 s timeout): a stop must not leave a delivered push unrecorded. Each row is recorded on its own:
     // a write that fails is logged and the loop goes on, so the rows after it are not left "sending" to be sent again.
-    private static async Task<DrainReport> RecordAllAsync(NotificationsContext db, List<Plan> plans, ConcurrentDictionary<long, PushResult> results, TimeProvider clock, ILogger log)
+    private static async Task<DrainReport> RecordAllAsync(NpgsqlDataSource source, List<Plan> plans, ConcurrentDictionary<long, PushResult> results, TimeProvider clock, ILogger log)
     {
         var counts = new Dictionary<Outcome, int>();
         var invalid = 0;
@@ -215,7 +216,7 @@ internal static partial class PushDrain
         {
             var result = results.TryGetValue(plan.Row.Id, out var found) ? found : PushResult.Unavailable;
             invalid += result == PushResult.TokenInvalid ? 1 : 0;
-            var outcome = await RecordSafelyAsync(db, plan, result, clock.GetUtcNow(), log);
+            var outcome = await RecordSafelyAsync(source, plan, result, clock.GetUtcNow(), log);
             counts[outcome] = counts.GetValueOrDefault(outcome) + 1;
         }
 
@@ -230,11 +231,11 @@ internal static partial class PushDrain
             counts.GetValueOrDefault(Outcome.Unrecorded));
     }
 
-    private static async Task<Outcome> RecordSafelyAsync(NotificationsContext db, Plan plan, PushResult result, DateTimeOffset now, ILogger log)
+    private static async Task<Outcome> RecordSafelyAsync(NpgsqlDataSource source, Plan plan, PushResult result, DateTimeOffset now, ILogger log)
     {
         try
         {
-            return await RecordOneAsync(db, plan, result, now);
+            return await RecordOneAsync(source, plan, result, now);
         }
         catch (Exception e)
         {
@@ -243,32 +244,32 @@ internal static partial class PushDrain
         }
     }
 
-    private static async Task<Outcome> RecordOneAsync(NotificationsContext db, Plan plan, PushResult result, DateTimeOffset now)
+    private static async Task<Outcome> RecordOneAsync(NpgsqlDataSource source, Plan plan, PushResult result, DateTimeOffset now)
     {
         var row = plan.Row;
         var none = CancellationToken.None;
         if (plan.DeadReason is not null)
         {
-            return await Settled(PlatformCommands.MarkDeadAsync(db, row.Id, row.Attempts, plan.DeadReason, none), Outcome.Dead);
+            return await Settled(PlatformCommands.MarkDeadAsync(source, row.Id, row.Attempts, plan.DeadReason, none), Outcome.Dead);
         }
 
         switch (result)
         {
             case PushResult.Sent:
-                return await Settled(PlatformCommands.MarkSentAsync(db, row.Id, row.Attempts, now, none), Outcome.Sent);
+                return await Settled(PlatformCommands.MarkSentAsync(source, row.Id, row.Attempts, now, none), Outcome.Sent);
             case PushResult.SenderMismatch:
-                return await Settled(PlatformCommands.MarkDeadAsync(db, row.Id, row.Attempts, "sender_mismatch", none), Outcome.Dead);
+                return await Settled(PlatformCommands.MarkDeadAsync(source, row.Id, row.Attempts, "sender_mismatch", none), Outcome.Dead);
             case PushResult.TokenInvalid:
-                return await Failed(db, row, "token_invalid", now);
+                return await Failed(source, row, "token_invalid", now);
             case PushResult.Failed:
-                return await Failed(db, row, "send_failed", now);
+                return await Failed(source, row, "send_failed", now);
             default:
-                return await Settled(PlatformCommands.ReleaseMessageAsync(db, row.Id, row.Attempts, none), Outcome.Released);
+                return await Settled(PlatformCommands.ReleaseMessageAsync(source, row.Id, row.Attempts, none), Outcome.Released);
         }
     }
 
-    private static async Task<Outcome> Failed(NotificationsContext db, ClaimedMessage row, string reason, DateTimeOffset now) =>
-        await PlatformCommands.MarkFailedAsync(db, row.Id, row.Attempts, reason, now, CancellationToken.None) switch
+    private static async Task<Outcome> Failed(NpgsqlDataSource source, ClaimedMessage row, string reason, DateTimeOffset now) =>
+        await PlatformCommands.MarkFailedAsync(source, row.Id, row.Attempts, reason, now, CancellationToken.None) switch
         {
             "queued" => Outcome.Retrying,
             "dead" => Outcome.Dead,

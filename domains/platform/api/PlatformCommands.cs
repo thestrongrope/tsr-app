@@ -1,16 +1,16 @@
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.AspNetCore.Http;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Npgsql;
 using Tsr.Shared.Api;
 
 namespace Tsr.Platform.Api;
 
 /// <summary>
 /// The commands platform publishes to other domains (docs/specs/initial-build/fill-phase-design.md D2): public static methods that write platform's tables
-/// on the caller's own connection, so another domain never touches a platform table itself. Each is a few lines and takes plain values, not a record.
+/// so another domain never touches a platform table itself. Most run on the caller's transaction (a <c>DbTx</c>); the audit row and the queue worker's commands (<c>PlatformCommands.Queue.cs</c>) commit at once on their own pooled connection. Each is a few lines and takes plain values, not a record.
 /// </summary>
 public static partial class PlatformCommands
 {
@@ -20,18 +20,18 @@ public static partial class PlatformCommands
     /// <summary>
     /// PHP <c>api_log_admin_action</c> (lib/audit.php, functions.php log_admin_page_access): one <c>admin_access_log</c> row for a caller whose role is privileged, with the request's
     /// path, method, client address, user agent and referer (cut to the column lengths, as PHP's substr; the session id is null). Fire and forget, as PHP: an audit write that fails is
-    /// logged (without the request's values) and never fails the action it records. Call it outside a transaction, right after the permission check: PostgreSQL aborts a transaction
-    /// whose statement failed, which PHP's autocommit never did.
+    /// logged (without the request's values) and never fails the action it records. Call it outside a transaction, right after the permission check: it commits at once on its own pooled connection, taken from the data source in the request's services, so it cannot abort the caller's transaction (PostgreSQL aborts a transaction
+    /// whose statement failed, which PHP's autocommit never did).
     /// </summary>
-    public static async Task RecordAdminAccessAsync(DbContext db, HttpContext context, int userId, int token, int roleId, CancellationToken ct)
+    public static async Task RecordAdminAccessAsync(HttpContext context, int userId, int token, int roleId, CancellationToken ct)
     {
-        ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(context);
         if (!PrivilegedRoles.Contains(roleId))
         {
             return;
         }
 
+        var source = context.RequestServices.GetRequiredService<NpgsqlDataSource>();
         var request = context.Request;
         var path = Cut(request.Path.ToUriComponent(), 255) ?? string.Empty;
         var method = Cut(request.Method, 10) ?? string.Empty;
@@ -40,7 +40,7 @@ public static partial class PlatformCommands
         var referer = Cut(request.Headers.Referer.ToString(), 512);
         try
         {
-            await db.Database.ExecuteSqlAsync(
+            await source.ExecuteAsync(
                 $"""
                 insert into platform.admin_access_log (user_id, token, roleid, page, method, ip, user_agent, referer, session_id)
                 values ({userId}, {token}, {roleId}, {path}, {method}, {ip}, {userAgent}, {referer}, null)

@@ -33,7 +33,7 @@ internal static partial class NotifierLinkChange
             return limited;
         }
 
-        await PlatformCommands.RecordAdminAccessAsync(db, context, caller!.UserId, caller.Token, await permissions.RoleIdAsync(caller, ct), ct);
+        await PlatformCommands.RecordAdminAccessAsync(context, caller!.UserId, caller.Token, await permissions.RoleIdAsync(caller, ct), ct);
         var done = (await call(ct)).Status == StatusCodes.Status200OK;
         LogOutcome(logger, eventName, done);
         return done ? Results.Json(new Changed(true)) : Problem.Detail(StatusCodes.Status502BadGateway, failedText);

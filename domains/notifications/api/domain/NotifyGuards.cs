@@ -53,7 +53,7 @@ internal static class NotifyGuards
             return Problem.Detail(StatusCodes.Status403Forbidden, "Only super administrators can " + what);
         }
 
-        await PlatformCommands.RecordAdminAccessAsync(db, context, caller.UserId, caller.Token, await permissions.RoleIdAsync(caller, ct), ct);
+        await PlatformCommands.RecordAdminAccessAsync(context, caller.UserId, caller.Token, await permissions.RoleIdAsync(caller, ct), ct);
         return null;
     }
 

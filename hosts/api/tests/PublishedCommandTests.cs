@@ -10,48 +10,33 @@ namespace Tsr.Host.Api.Tests;
 /// </summary>
 public sealed partial class PublishedCommandTests
 {
-    /// <summary>
-    /// The entry points that still take an Entity Framework type, by full signature "Type.Method(ParameterType, ...)" (a constructor is "Type..ctor(...)"). The list only shrinks: a task that converts
-    /// a command takes it off, and the test fails when a listed entry no longer takes such a type, or an unlisted one does (a new overload of a listed method is a new entry). Part B of issue 98 empties it.
-    /// </summary>
-    private static readonly string[] NotConvertedYet =
-    [
-        "PlatformCommands.ClaimMessagesAsync(DbContext, String, Int32, DateTimeOffset, CancellationToken)",
-        "PlatformCommands.MarkDeadAsync(DbContext, Int64, Int32, String, CancellationToken)",
-        "PlatformCommands.MarkFailedAsync(DbContext, Int64, Int32, String, DateTimeOffset, CancellationToken)",
-        "PlatformCommands.MarkSentAsync(DbContext, Int64, Int32, DateTimeOffset, CancellationToken)",
-        "PlatformCommands.RecordAdminAccessAsync(DbContext, HttpContext, Int32, Int32, Int32, CancellationToken)",
-        "PlatformCommands.ReleaseMessageAsync(DbContext, Int64, Int32, CancellationToken)",
-    ];
-
     [Test]
     public void No_public_domain_method_or_constructor_takes_an_entity_framework_type()
     {
-        var found = EfEntryPoints().ToList();
+        var found = string.Join("\n", EfEntryPoints().Order());
 
-        var added = found.Except(NotConvertedYet).Order().ToList();
-        var stale = NotConvertedYet.Except(found).Order().ToList();
-        Assert.Multiple(() =>
-        {
-            Assert.That(string.Join("\n", added), Is.Empty, "a public domain method or constructor takes an Entity Framework type: take a DbTx (the caller's transaction) instead");
-            Assert.That(stale, Is.Empty, "this entry no longer takes an Entity Framework type: remove it from NotConvertedYet");
-        });
-    }
-
-    [Test]
-    public void The_list_of_entries_still_allowed_has_6_entries()
-    {
-        Assert.That(NotConvertedYet, Has.Length.EqualTo(6));
+        Assert.That(found, Is.Empty, "a public domain method or constructor takes an Entity Framework type: a command takes the caller's DbTx, or the NpgsqlDataSource when it commits at once");
     }
 
     private const BindingFlags Declared = BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly;
 
     /// <summary>The signature of every public method and constructor, static or not, of every exported type of every module except the module class, that has an Entity Framework parameter.</summary>
-    private static IEnumerable<string> EfEntryPoints() =>
-        Modules.All.SelectMany(module => module.Assembly.GetExportedTypes()
-            .Where(type => type != module.GetType())
-            .SelectMany(type => Entries(type)))
-            .Distinct();
+    private static IEnumerable<string> EfEntryPoints() => ScannedTypes().SelectMany(Entries).Distinct();
+
+    private static IEnumerable<Type> ScannedTypes() =>
+        Modules.All.SelectMany(module => module.Assembly.GetExportedTypes().Where(type => type != module.GetType()));
+
+    /// <summary>The positive control: with no exception list left, a scan that looked at nothing would pass.</summary>
+    [Test]
+    public void The_scan_reads_the_published_commands_and_reports_an_entity_framework_parameter()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(ScannedTypes(), Does.Contain(typeof(Tsr.Platform.Api.PlatformCommands)));
+            Assert.That(Entries(typeof(WithConstructor)).Single(), Is.EqualTo("WithConstructor..ctor(DbContext)"));
+            Assert.That(Entries(typeof(Tsr.Shared.Api.DbTx)), Is.Empty);
+        });
+    }
 
     private static IEnumerable<string> Entries(Type type)
     {
@@ -100,12 +85,12 @@ public sealed partial class PublishedCommandTests
     }
 
     [Test]
-    public void An_overload_of_a_listed_method_has_a_different_signature()
+    public void An_overload_has_a_different_signature()
     {
-        var listed = Signature("PlatformCommands", "MarkSentAsync", [typeof(int)]);
+        var first = Signature("PlatformCommands", "MarkSentAsync", [typeof(int)]);
         var overload = Signature("PlatformCommands", "MarkSentAsync", [typeof(int), typeof(Microsoft.EntityFrameworkCore.DbContext)]);
 
-        Assert.That(overload, Is.Not.EqualTo(listed));
+        Assert.That(overload, Is.Not.EqualTo(first));
     }
 
     private sealed class WithConstructor(Microsoft.EntityFrameworkCore.DbContext context)
