@@ -52,6 +52,35 @@ public sealed class MigrationOrderTests
         Assert.That(optionTypes, Is.Not.Empty, "the migrate job applies access's migrations through its context");
     }
 
+    [TestCase(RunMode.Api)]
+    [TestCase(RunMode.Workers)]
+    [TestCase(RunMode.LoadContent)]
+    public void The_api_mode_registers_no_content_context(RunMode mode)
+    {
+        var services = Register(mode);
+
+        var contentTypes = services
+            .Select(descriptor => descriptor.ServiceType)
+            .Where(type => type.ToString().Contains("ContentContext", StringComparison.Ordinal))
+            .ToList();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(contentTypes, Is.Empty, "content reads and writes through the data source: its context is for the migrate job only");
+            Assert.That(MigrationSchemas(mode), Does.Not.Contain("content"));
+        });
+    }
+
+    [Test]
+    public void The_migrate_mode_registers_the_content_context()
+    {
+        var optionTypes = Register(RunMode.Migrate)
+            .Select(descriptor => descriptor.ServiceType.ToString())
+            .Where(name => name.Contains("DbContextOptions", StringComparison.Ordinal) && name.Contains("ContentContext", StringComparison.Ordinal));
+
+        Assert.That(optionTypes, Is.Not.Empty, "the migrate job applies content's migrations through its context");
+    }
+
     /// <summary>The registrations are read from the container description by name, because the record is internal to shared/api.</summary>
     private static List<string> MigrationSchemas(RunMode mode) =>
         Register(mode)

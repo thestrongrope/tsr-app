@@ -47,6 +47,11 @@ public static class HostServices
         services.AddAccess();
         services.AddPlatform();
         services.AddMembership();
+        if (mode is RunMode.Migrate)
+        {
+            services.AddContentMigrations();
+        }
+
         services.AddContent();
         // Registered after platform, whose migration creates the collation classes uses.
         services.AddClasses();

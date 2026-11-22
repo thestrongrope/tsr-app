@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
@@ -25,13 +26,24 @@ public static partial class ContentModule
 
     public static IServiceCollection AddContent(this IServiceCollection services)
     {
-        services.AddDomainContext<ContentContext>(ContentContext.SchemaName);
         services.AddTsrDataSource();
         services.AddScoped<ListPublishedArticlesHandler>();
         // The latest videos: the channel's public feed over HTTP (10 seconds and 2 MB at most a call, no redirect followed), kept in memory by one LatestVideos.
         services.AddHttpClient(YouTubeFeed.ClientName, YouTubeFeed.Configure).ConfigurePrimaryHttpMessageHandler(YouTubeFeed.Handler);
         services.AddSingleton<IVideoFeed, YouTubeFeed>();
         services.AddSingleton<LatestVideos>();
+        return services;
+    }
+
+    /// <summary>
+    /// Registers content's context and migrations for the migrate job only (Entity Framework is JIT only). The host calls it
+    /// in migrate mode just before <see cref="AddContent"/>, so the migration order is unchanged.
+    /// </summary>
+    [RequiresUnreferencedCode("Entity Framework is JIT only: it reflects over the context.")]
+    [RequiresDynamicCode("Entity Framework is JIT only: it reflects over the context.")]
+    public static IServiceCollection AddContentMigrations(this IServiceCollection services)
+    {
+        services.AddDomainContext<ContentContext>(ContentContext.SchemaName);
         return services;
     }
 

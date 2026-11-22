@@ -26,8 +26,17 @@ public sealed class ContentGoldenTests
     [Test]
     public async Task A_copy_stores_the_recorded_rows_and_state()
     {
-        const string scenario = "copy-stores-rows";
-        await using var run = await GoldenScenario.StartAsync(scenario, set: ContentGolden.Set);
+        await using var run = await GoldenScenario.StartAsync(CopyStoresRows, set: ContentGolden.Set);
+        await StoreAndRecordAsync(run);
+        GoldenScenario.Check(CopyStoresRows, run.Transcript, ContentGolden.Set);
+    }
+
+    internal const string CopyStoresRows = "copy-stores-rows";
+    internal const string CopyKeepPaths = "copy-keep-paths";
+
+    /// <summary>The store path: two copies over a run's database, written to its transcript. Shared with the pool test, which runs it on a pool of one.</summary>
+    internal static async Task StoreAndRecordAsync(GoldenScenario run)
+    {
         await run.ExecuteAsync(EmptyTables);
         using var files = new ContentTestFiles();
 
@@ -45,14 +54,19 @@ public sealed class ContentGoldenTests
 
         Assert.That(first.Result, Is.EqualTo(RefreshResult.Refreshed));
         Assert.That(second.Result, Is.EqualTo(RefreshResult.Refreshed));
-        GoldenScenario.Check(scenario, run.Transcript, ContentGolden.Set);
     }
 
     [Test]
     public async Task The_keep_and_unchanged_paths_record_the_recorded_state()
     {
-        const string scenario = "copy-keep-paths";
-        await using var run = await GoldenScenario.StartAsync(scenario, set: ContentGolden.Set);
+        await using var run = await GoldenScenario.StartAsync(CopyKeepPaths, set: ContentGolden.Set);
+        await KeepAndRecordAsync(run);
+        GoldenScenario.Check(CopyKeepPaths, run.Transcript, ContentGolden.Set);
+    }
+
+    /// <summary>The keep and unchanged paths over a run's database, written to its transcript. Shared with the pool test.</summary>
+    internal static async Task KeepAndRecordAsync(GoldenScenario run)
+    {
         await run.ExecuteAsync(EmptyTables);
         using var files = new ContentTestFiles();
         var minute = 0;
@@ -93,7 +107,5 @@ public sealed class ContentGoldenTests
         }
 
         await StepAsync("one article of the last four", files.Root);
-
-        GoldenScenario.Check(scenario, run.Transcript, ContentGolden.Set);
     }
 }
