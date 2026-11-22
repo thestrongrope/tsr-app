@@ -87,7 +87,8 @@ internal static class ClassAccessRevokeSlice
         return (await WriteAsync(source, op, clock, rule.Token, revocation, ct), rule.Token);
     }
 
-    // The rule, its member and the guards on a short read transaction, ended before the port or Permissions is called.
+    // The rule, its member and the guards on a short read transaction, ended before the port is called. The guards call Permissions.CanAsync while it is open: that reads
+    // only the operator RequireAsync already resolved (a gender target looks no class up), so it opens no second connection; AccessPoolTests fails if that changes.
     private static async Task<(RuleRow? Rule, Refusal? Refusal)> ReadGuardAsync(NpgsqlDataSource source, ClassAccessOperator op, int ruleId, CancellationToken ct)
     {
         await using var read = await source.BeginAsync(ct);

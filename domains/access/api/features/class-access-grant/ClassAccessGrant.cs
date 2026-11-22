@@ -119,7 +119,8 @@ internal static class ClassAccessGrantSlice
         return await WriteAsync(source, classes, op, clock, token, draft, ct);
     }
 
-    // The member and the guards on a short read transaction, ended before the port or Permissions is called.
+    // The member and the guards on a short read transaction, ended before the port is called. The guards call Permissions.CanAsync while it is open: that reads only
+    // the operator RequireAsync already resolved (a gender target looks no class up), so it opens no second connection; AccessPoolTests fails if that changes.
     private static async Task<Refusal?> ReadGuardAsync(NpgsqlDataSource source, ClassAccessOperator op, int token, int? gender, CancellationToken ct)
     {
         await using var read = await source.BeginAsync(ct);

@@ -27,4 +27,4 @@ Golden scenarios are in `db/tests/AccessGolden*Scenarios.cs`, their answers in `
 | 18 | class levels | `ClassAccessStore.cs:77` | golden `class-access-reads-super` (`GET /admin/class-access/options` lists 3 levels); `TestGrantsTests` `One_published_view_of_class_levels_serves_...` |
 | 19 | count of levels that exist | `ClassAccessStore.cs:115` | golden `ladies-admin-success` (preview with `{"field": "level", "value": 2}`); `write-rule-condition-order` (levels 2 and 3) |
 
-One of 19 has no deterministic test (row 7). Whether to add one (a sequential test cannot reach it: the held check refuses first) is left to the caller.
+One of 19 has no deterministic test (row 7). None was added: a sequential test cannot reach it (the held check refuses first), and it is a `select 1` read as one `int`.
