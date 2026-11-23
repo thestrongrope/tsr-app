@@ -17,6 +17,7 @@ public sealed partial class ConvertedJsonUseTests
     [
         new("access", "AccessJson.", []),
         new("content", "ContentJson.", []),
+        new("search", "SearchJson.", []),
     ];
 
     // The call, up to the end of its statement: a statement may run over several lines, and its type info is often on the last.
@@ -32,6 +33,18 @@ public sealed partial class ConvertedJsonUseTests
         Serialising().Matches(text).Select(match => match.Value).Where(statement => !statement.Contains(prefix, StringComparison.Ordinal))
             .Concat(OkWithValue().Matches(text).Select(match => match.Value))
             .ToList();
+
+    // The statement that builds the index client's settings, up to its end: the source serializer may be on a later line.
+    [GeneratedRegex(@"new\s+ElasticsearchClientSettings\s*\([^;]*;")]
+    private static partial Regex IndexClientSettings();
+
+    // A source serializer alone is not enough: one built without the generated context still reads by reflection.
+    [GeneratedRegex(@"sourceSerializer:[^;]*SearchJson\.Default")]
+    private static partial Regex GeneratedReader();
+
+    /// <summary>The statements of a file's text that build the index client's settings without a <c>sourceSerializer:</c> that is given the generated context.</summary>
+    internal static IReadOnlyList<string> IndexClientsWithoutReader(string text) =>
+        IndexClientSettings().Matches(text).Select(match => match.Value).Where(statement => !GeneratedReader().IsMatch(statement)).ToList();
 
     private static IEnumerable<string> Files(Converted domain, string root) =>
         SqlBoundaryTests.Sources(Path.Combine(root, "domains", domain.Domain, "api"))
@@ -69,6 +82,7 @@ public sealed partial class ConvertedJsonUseTests
         {
             Assert.That(Files(ConvertedDomains[0], root), Does.Contain("domains/access/api/Permissions.cs"));
             Assert.That(Files(ConvertedDomains[1], root), Does.Contain("domains/content/api/features/holy-quran/HolyQuran.cs"));
+            Assert.That(Files(ConvertedDomains[2], root), Does.Contain("domains/search/api/features/search/Search.cs"));
         });
     }
 
@@ -102,4 +116,32 @@ public sealed partial class ConvertedJsonUseTests
             Assert.That(Hits("return Results.Json(view, ContentJson.Answers.SurahList);", "ContentJson."), Is.Empty);
             Assert.That(Hits("return Results.Json(view, AccessJson.Answers.View);", "ContentJson."), Has.Count.EqualTo(1));
         });
+
+    // Issue 101 (SRCH-R6). Without the generated reader the client reads a found document by reflection: a document type missing from SearchJson then passes every test under JIT and answers "unavailable" for every kind in the native build (measured in the issue's native spike).
+    [Test]
+    public void Every_index_client_is_built_with_the_generated_document_reader()
+    {
+        var root = RouteCatalog.RepoRoot();
+        var files = SqlBoundaryTests.Sources(Path.Combine(root, "domains"))
+            .Select(path => (Relative: Path.GetRelativePath(root, path).Replace('\\', '/'), Text: File.ReadAllText(path)))
+            .ToList();
+
+        var built = files.SelectMany(file => IndexClientSettings().Matches(file.Text)).Count();
+        var without = files.SelectMany(file => IndexClientsWithoutReader(file.Text).Select(statement => $"{file.Relative}: {statement}"));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(built, Is.GreaterThan(0), "the scan must find the index client's settings");
+            Assert.That(without, Is.Empty, "pass sourceSerializer: with the generated context (SearchJson.Default) so a found document is read without reflection");
+        });
+    }
+
+    [TestCase("var s = new ElasticsearchClientSettings(url).RequestTimeout(t);", 1)]
+    [TestCase("var s = new ElasticsearchClientSettings(new SingleNodePool(url))\n    .RequestTimeout(t);", 1)]
+    [TestCase("var s = new ElasticsearchClientSettings(new SingleNodePool(url), sourceSerializer: (_, s) => new DefaultSourceSerializer(s, SearchJson.Default, _ => { }))\n    .RequestTimeout(t);", 0)]
+    [TestCase("var s = new ElasticsearchClientSettings(\n    new SingleNodePool(url),\n    sourceSerializer: (_, s) => new DefaultSourceSerializer(s, SearchJson.Default, _ => { }));", 0)]
+    [TestCase("var s = new ElasticsearchClientSettings(new SingleNodePool(url), sourceSerializer: (_, s) => new DefaultSourceSerializer(s));", 1)]
+    [TestCase("var s = 1;", 0)]
+    public void The_index_client_scan_reads_each_form(string source, int withoutReader) =>
+        Assert.That(IndexClientsWithoutReader(source), Has.Count.EqualTo(withoutReader));
 }

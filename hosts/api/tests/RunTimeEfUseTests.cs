@@ -10,7 +10,7 @@ namespace Tsr.Host.Api.Tests;
 /// </summary>
 public sealed partial class RunTimeEfUseTests
 {
-    private sealed record Converted(string Domain, string ModuleFile, string AllowedLine, string ContextFile, string ProjectFile, string[] Ratchet);
+    private sealed record Converted(string Domain, string? ModuleFile, string? AllowedLine, string? ContextFile, string ProjectFile, string[] Ratchet);
 
     private static readonly Converted[] ConvertedDomains =
     [
@@ -18,6 +18,8 @@ public sealed partial class RunTimeEfUseTests
             "domains/access/api/AccessContext.cs", "domains/access/api/Tsr.Access.Api.csproj", []),
         new("content", "domains/content/api/ContentModule.cs", "services.AddDomainContext<ContentContext>(ContentContext.SchemaName);",
             "domains/content/api/ContentContext.cs", "domains/content/api/Tsr.Content.Api.csproj", []),
+        // Search owns no table, so it has no context, no migrations and no allowed line: every one of its run-time files is scanned.
+        new("search", null, null, null, "domains/search/api/Tsr.Search.Api.csproj", []),
     ];
 
     [GeneratedRegex("""<Using\s[^>]*Include\s*=\s*"[^"]*EntityFramework""")]
@@ -97,15 +99,16 @@ public sealed partial class RunTimeEfUseTests
     {
         Assert.Multiple(() =>
         {
-            foreach (var domain in ConvertedDomains)
+            foreach (var domain in ConvertedDomains.Where(candidate => candidate.ModuleFile is not null && candidate.AllowedLine is not null))
             {
+                var module = domain.ModuleFile!;
                 var line = "        " + domain.AllowedLine;
-                Assert.That(Hits(domain.ModuleFile, line), Is.Empty, domain.Domain);
+                Assert.That(Hits(module, line), Is.Empty, domain.Domain);
                 Assert.That(Hits($"domains/{domain.Domain}/api/Other.cs", line), Is.Not.Empty, domain.Domain);
-                Assert.That(Hits(domain.ModuleFile, line + "\nusing Microsoft.EntityFrameworkCore;"), Is.Not.Empty, domain.Domain);
+                Assert.That(Hits(module, line + "\nusing Microsoft.EntityFrameworkCore;"), Is.Not.Empty, domain.Domain);
             }
 
-            Assert.That(Hits(ConvertedDomains[0].ModuleFile, "        " + ConvertedDomains[1].AllowedLine), Is.Not.Empty, "one domain's line is not allowed in another's module");
+            Assert.That(Hits(ConvertedDomains[0].ModuleFile!, "        " + ConvertedDomains[1].AllowedLine), Is.Not.Empty, "one domain's line is not allowed in another's module");
         });
     }
 
@@ -123,6 +126,7 @@ public sealed partial class RunTimeEfUseTests
             Assert.That(files, Has.None.EndsWith("AccessContext.cs"));
             Assert.That(files, Has.None.EndsWith("ContentContext.cs"));
             Assert.That(files, Does.Contain("domains/content/api/domain/ContentRefresh.cs"));
+            Assert.That(files, Does.Contain("domains/search/api/features/search/Search.cs"));
         });
     }
 }

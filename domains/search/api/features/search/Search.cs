@@ -49,7 +49,7 @@ internal static class SearchSlice
         var wanted = request.Value!;
         var access = await AccessOfAsync(permissions, caller, wanted.Kinds, ct);
         var answer = await engine.SearchAsync(access, wanted.Text, wanted.Kinds, ct);
-        return Results.Json(new Body(answer.Groups, answer.Unavailable));
+        return Results.Json(new Body(answer.Groups, answer.Unavailable), SearchJson.Answers.Body);
     }
 
     // The teacher rule (PHP TeachersModel::canView): the genders the caller may look up outright, and whether gents who actually teach are visible through the teacher-gender rule (a ladies-class manager).

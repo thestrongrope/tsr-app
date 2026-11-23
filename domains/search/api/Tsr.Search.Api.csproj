@@ -1,10 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!-- search: the read model behind GET /search. No tables; lists access as a dependency and reads other domains' published views. -->
+  <PropertyGroup>
+    <IsAotCompatible>true</IsAotCompatible>
+    <EnableRequestDelegateGenerator>true</EnableRequestDelegateGenerator>
+  </PropertyGroup>
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <ProjectReference Include="../../../shared/api/Tsr.Shared.Api.csproj" />
     <ProjectReference Include="../../access/api/Tsr.Access.Api.csproj" />
-    <!-- The official Elasticsearch client (decided in docs/specs/dotnet-stack.md, row Search). Not AOT-ready: the API host is a JIT host. -->
+    <!-- The official Elasticsearch client (decided in docs/specs/dotnet-stack.md, row Search). It runs natively only with a generated reader for the document type: SearchJson, given to the client as its source serializer. -->
     <PackageReference Include="Elastic.Clients.Elasticsearch" />
   </ItemGroup>
   <ItemGroup>
