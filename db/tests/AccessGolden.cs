@@ -95,29 +95,37 @@ internal sealed class GoldenScenario : IAsyncDisposable
     }
 
     /// <summary>Sends one request as one seeded member (null: nobody signed in) and writes what came back to the transcript.</summary>
-    public async Task<GoldenReply> SendAsync(int? caller, HttpMethod method, string path, string? json = null, string? ifNoneMatch = null, string? ifModifiedSince = null)
+    public Task<GoldenReply> SendAsync(int? caller, HttpMethod method, string path, string? json = null, string? ifNoneMatch = null, string? ifModifiedSince = null)
+    {
+        List<KeyValuePair<string, string>> headers = caller is null
+            ? [new KeyValuePair<string, string>(TestApi.Outcome, "missing")]
+            : TestApi.SignedInAs("uid-" + caller, MembershipTestKit.EmailOf(caller.Value)).ToList();
+        return SendCoreAsync(caller?.ToString(CultureInfo.InvariantCulture) ?? "nobody", headers, method, path, json, new Conditions(ifNoneMatch, ifModifiedSince));
+    }
+
+    /// <summary>
+    /// Sends one request with exactly <paramref name="headers"/> (<c>TestApi.SignedInAs</c>, the name and picture, the tracking headers) and writes <paramref name="who"/> where the caller number goes.
+    /// The headers are not written to the transcript, so a <paramref name="who"/> says what was sent. With <paramref name="recordBody"/> false the body is not written (a failure whose text names a library type the conversion must change).
+    /// </summary>
+    public Task<GoldenReply> SendAsync(string who, IReadOnlyList<KeyValuePair<string, string>> headers, HttpMethod method, string path, string? json = null, bool recordBody = true) =>
+        SendCoreAsync(who, headers, method, path, json, new Conditions(null, null), recordBody);
+
+    private async Task<GoldenReply> SendCoreAsync(string who, IReadOnlyList<KeyValuePair<string, string>> headers, HttpMethod method, string path, string? json, Conditions conditions, bool recordBody = true)
     {
         using var request = new HttpRequestMessage(method, path);
-        if (caller is null)
+        foreach (var (name, value) in headers)
         {
-            request.Headers.Add(TestApi.Outcome, "missing");
-        }
-        else
-        {
-            foreach (var (name, value) in TestApi.SignedInAs("uid-" + caller, MembershipTestKit.EmailOf(caller.Value)))
-            {
-                request.Headers.Add(name, value);
-            }
+            request.Headers.TryAddWithoutValidation(name, value);
         }
 
-        if (ifNoneMatch is not null)
+        if (conditions.IfNoneMatch is not null)
         {
-            request.Headers.TryAddWithoutValidation("If-None-Match", ifNoneMatch);
+            request.Headers.TryAddWithoutValidation("If-None-Match", conditions.IfNoneMatch);
         }
 
-        if (ifModifiedSince is not null)
+        if (conditions.IfModifiedSince is not null)
         {
-            request.Headers.TryAddWithoutValidation("If-Modified-Since", ifModifiedSince);
+            request.Headers.TryAddWithoutValidation("If-Modified-Since", conditions.IfModifiedSince);
         }
 
         if (json is not null)
@@ -127,7 +135,7 @@ internal sealed class GoldenScenario : IAsyncDisposable
 
         using var response = await client.SendAsync(request);
         var body = await response.Content.ReadAsStringAsync();
-        Record(caller, method, path, json, new Conditions(ifNoneMatch, ifModifiedSince), response, body);
+        Record(who, method, path, json, conditions, response, recordBody ? body : null);
         return new GoldenReply(response.StatusCode, body, HeaderOrNull(response, "ETag"), HeaderOrNull(response, "Last-Modified"));
     }
 
@@ -205,19 +213,19 @@ internal sealed class GoldenScenario : IAsyncDisposable
     }
 
     // A lock: a scenario may send two requests at once, and a StringBuilder is not safe for two writers.
-    private void Record(int? caller, HttpMethod method, string path, string? json, Conditions conditions, HttpResponseMessage response, string body)
+    private void Record(string who, HttpMethod method, string path, string? json, Conditions conditions, HttpResponseMessage response, string? body)
     {
         lock (transcript)
         {
-            RecordLocked(caller, method, path, json, conditions, response, body);
+            RecordLocked(who, method, path, json, conditions, response, body);
         }
     }
 
     private sealed record Conditions(string? IfNoneMatch, string? IfModifiedSince);
 
-    private void RecordLocked(int? caller, HttpMethod method, string path, string? json, Conditions conditions, HttpResponseMessage response, string body)
+    private void RecordLocked(string who, HttpMethod method, string path, string? json, Conditions conditions, HttpResponseMessage response, string? body)
     {
-        transcript.Append("### ").Append(method.Method).Append(' ').Append(path).Append(" as ").Append(caller?.ToString(CultureInfo.InvariantCulture) ?? "nobody").Append('\n');
+        transcript.Append("### ").Append(method.Method).Append(' ').Append(path).Append(" as ").Append(who).Append('\n');
         if (conditions.IfNoneMatch is not null)
         {
             transcript.Append("If-None-Match: ").Append(conditions.IfNoneMatch).Append('\n');
@@ -239,7 +247,7 @@ internal sealed class GoldenScenario : IAsyncDisposable
             transcript.Append(header).Append(": ").Append(HeaderValue(response, header)).Append('\n');
         }
 
-        transcript.Append("body: ").Append(StackTraceCut(body)).Append('\n');
+        transcript.Append("body: ").Append(body is null ? "(not recorded)" : StackTraceCut(body)).Append('\n');
     }
 
     // An unhandled error answers in the test host with the exception text and its stack, whose lines name files and line numbers of this machine: only the first line is recorded.

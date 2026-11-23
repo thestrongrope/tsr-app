@@ -1,0 +1,27 @@
+### POST /auth/link as missing, create route
+status: 401
+Content-Type: application/json; charset=utf-8
+body: {"detail":"Not authenticated"}
+### POST /feedback as missing, lookup route
+request: {"clientId":"c-1","text":"salaam"}
+status: 401
+Content-Type: application/json; charset=utf-8
+body: {"detail":"Not authenticated"}
+### POST /auth/link as invalid, create route
+status: 401
+Content-Type: application/json; charset=utf-8
+body: {"detail":"Invalid auth token"}
+### POST /feedback as invalid, lookup route
+request: {"clientId":"c-1","text":"salaam"}
+status: 401
+Content-Type: application/json; charset=utf-8
+body: {"detail":"Invalid auth token"}
+### POST /auth/link as noemail, create route
+status: 401
+Content-Type: application/json; charset=utf-8
+body: {"detail":"Email not present in token"}
+### POST /feedback as noemail, lookup route
+request: {"clientId":"c-1","text":"salaam"}
+status: 401
+Content-Type: application/json; charset=utf-8
+body: {"detail":"Email not present in token"}
