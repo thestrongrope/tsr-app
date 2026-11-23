@@ -75,6 +75,10 @@ internal sealed class ElasticSearchIndexTests
 
     private const string TwoHits = """{"took":1,"timed_out":false,"_shards":{"total":1,"successful":1,"skipped":0,"failed":0},"hits":{"total":{"value":2,"relation":"eq"},"hits":[{"_index":"tsr-search","_id":"class:5","_score":1.0,"_source":{"id":5,"name":"AB-1"}},{"_index":"tsr-search","_id":"class:6","_score":0.5,"_source":{"id":6}}]}}""";
 
+    private const string TwoHitsWithNonAsciiName = """{"took":1,"timed_out":false,"_shards":{"total":1,"successful":1,"skipped":0,"failed":0},"hits":{"total":{"value":2,"relation":"eq"},"hits":[{"_index":"tsr-search","_id":"class:5","_score":1.0,"_source":{"id":5,"name":"Zoë ال"}},{"_index":"tsr-search","_id":"class:6","_score":0.5,"_source":{"id":6}}]}}""";
+
+    private const string OneHitWithATextId = """{"took":1,"timed_out":false,"_shards":{"total":1,"successful":1,"skipped":0,"failed":0},"hits":{"total":{"value":1,"relation":"eq"},"hits":[{"_index":"tsr-search","_id":"class:5","_score":1.0,"_source":{"id":"abc","name":"AB-1"}}]}}""";
+
     [Test]
     public async Task An_unlimited_scope_sends_the_text_as_a_match_value_and_only_the_kind_filter()
     {
@@ -130,6 +134,26 @@ internal sealed class ElasticSearchIndexTests
         var failure = await Assert.ThrowsAsync<SearchUnavailableException>(() => index.SearchAsync("class", "ab", SearchScope.Everything, 100, CancellationToken.None));
 
         Assert.That(failure!.Message, Does.Not.Contain("secret internals").And.Not.Contain("pw"));
+    }
+
+    [Test]
+    public async Task Found_documents_are_read_with_their_ids_and_names()
+    {
+        using var server = new Double(200, TwoHitsWithNonAsciiName);
+        var index = new ElasticSearchIndex(SearchSettings.From(server.Url.ToString(), "pw"));
+
+        var hits = await index.SearchAsync("class", "ab", SearchScope.Everything, 100, CancellationToken.None);
+
+        Assert.That(hits, Is.EqualTo(new List<SearchHit> { new(5, "Zoë ال"), new(6, string.Empty) }));
+    }
+
+    [Test]
+    public async Task A_document_that_cannot_be_read_makes_its_kind_unavailable()
+    {
+        using var server = new Double(200, OneHitWithATextId);
+        var index = new ElasticSearchIndex(SearchSettings.From(server.Url.ToString(), "pw"));
+
+        await Assert.ThrowsAsync<SearchUnavailableException>(() => index.SearchAsync("class", "ab", SearchScope.Everything, 100, CancellationToken.None));
     }
 
     [Test]

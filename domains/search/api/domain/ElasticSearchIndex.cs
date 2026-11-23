@@ -1,7 +1,9 @@
 using Elastic.Clients.Elasticsearch;
 using Elastic.Clients.Elasticsearch.Core.Search;
 using Elastic.Clients.Elasticsearch.QueryDsl;
+using Elastic.Clients.Elasticsearch.Serialization;
 using Elastic.Transport;
+using System.Text.Json.Serialization;
 
 namespace Tsr.Search.Api.Domain;
 
@@ -20,7 +22,9 @@ internal sealed partial class ElasticSearchIndex : ISearchIndex
     public ElasticSearchIndex(SearchSettings settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
-        var connection = new ElasticsearchClientSettings(settings.Url ?? throw new ArgumentException("The index address is required.", nameof(settings)))
+        var url = settings.Url ?? throw new ArgumentException("The index address is required.", nameof(settings));
+        // The source serializer is given the generated reader: without it the client reads a document by reflection, which a native build cannot do.
+        var connection = new ElasticsearchClientSettings(new SingleNodePool(url), sourceSerializer: (_, s) => new DefaultSourceSerializer(s, SearchJson.Default, _ => { }))
             .RequestTimeout(TimeSpan.FromSeconds(5))
             .Authentication(new BasicAuthentication(SearchSettings.User, settings.Password));
         _client = new ElasticsearchClient(connection);
@@ -75,8 +79,10 @@ internal sealed partial class ElasticSearchIndex : ISearchIndex
     /// <summary>The two fields of a document this query reads back (the document shape is in docs/specs/initial-build/lane-search-notes.md).</summary>
     internal sealed class IndexedDocument
     {
+        [JsonPropertyName("id")]
         public long Id { get; set; }
 
+        [JsonPropertyName("name")]
         public string? Name { get; set; }
     }
 }
