@@ -41,6 +41,18 @@ have a page, as PHP's slugs).
 - Every request to Elasticsearch asks for plain JSON, so a body is sent as plain JSON too (`ElasticSearchIndex.Writer.cs`,
   `JsonType`): Elasticsearch refuses a request whose content type and Accept header disagree (400 `media_type_header_exception`).
 
+## JSON and the native build
+
+Nothing in `search` reads or writes JSON by reflection (`api/domain/SearchJson.cs`, a source-generated context):
+
+- The answer: `Results.Json(new Body(...), SearchJson.Answers.Body)`. `Answers` uses the host's options (web defaults, relaxed encoder), so the bytes are as before.
+- The index read: `ElasticSearchIndex` builds its client with a source serializer given `SearchJson.Default`, and `IndexedDocument` has explicit `JsonPropertyName`s. Without that, the client reads a found
+  document by reflection; a native build cannot, and every kind would answer `unavailable`. No JIT test can show it (the client brings its own resolver), only a native run;
+  `ConvertedJsonUseTests.Every_index_client_is_built_with_the_generated_document_reader` keeps it in place.
+- A document the client cannot read makes its kind `unavailable` (the client's error is a transport error, which `SearchAsync` turns into `SearchUnavailableException`); never an empty group.
+- The unit test project turns reflection serialization off, so a missing type in the context fails there. The project sets `IsAotCompatible` and the request delegate generator;
+  it is in `AotAnalyzerTests`, `RunTimeEfUseTests` and `ConvertedJsonUseTests` (search owns no table, so it has no context row).
+
 ## Where things are
 
 | Need | File |
@@ -50,6 +62,7 @@ have a page, as PHP's slugs).
 | Query, re-check, cap | `api/domain/SearchEngine.cs` |
 | `q`, `kinds` | `api/domain/SearchRequestRules.cs` |
 | The one boundary, `ISearchIndex` | `api/domain/ElasticSearchIndex.cs` |
+| The answer and the index document, without reflection | `api/domain/SearchJson.cs` |
 | The re-check reads, `ISearchFacts` | `api/domain/SearchFacts.cs` |
 | The write side, `ISearchIndexWriter`; the mapping (identical to PHP's) | `api/domain/ElasticSearchIndex.Writer.cs`, `SearchIndexMapping.cs` |
 | Facts, flags, PHP references | `docs/specs/initial-build/lane-search-notes.md`, `test-edge-notes.md` |
