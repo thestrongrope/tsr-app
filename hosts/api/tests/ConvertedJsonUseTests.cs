@@ -117,7 +117,7 @@ public sealed partial class ConvertedJsonUseTests
             Assert.That(Hits("return Results.Json(view, AccessJson.Answers.View);", "ContentJson."), Has.Count.EqualTo(1));
         });
 
-    // Issue 101 (SRCH-R6). Without the generated reader the client reads a found document by reflection: every test passes under JIT and every search answers "unavailable" in the native build.
+    // Issue 101 (SRCH-R6). Without the generated reader the client reads a found document by reflection: a document type missing from SearchJson then passes every test under JIT and answers "unavailable" for every kind in the native build (measured in the issue's native spike).
     [Test]
     public void Every_index_client_is_built_with_the_generated_document_reader()
     {

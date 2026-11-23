@@ -23,7 +23,7 @@ internal sealed partial class ElasticSearchIndex : ISearchIndex
     {
         ArgumentNullException.ThrowIfNull(settings);
         var url = settings.Url ?? throw new ArgumentException("The index address is required.", nameof(settings));
-        // The source serializer is given the generated reader: without it the client reads a document by reflection, which a native build cannot do.
+        // The source serializer is given the generated reader: without it the client reads a document by reflection, which a native build can do only while the type happens to be kept.
         var connection = new ElasticsearchClientSettings(new SingleNodePool(url), sourceSerializer: (_, s) => new DefaultSourceSerializer(s, SearchJson.Default, _ => { }))
             .RequestTimeout(TimeSpan.FromSeconds(5))
             .Authentication(new BasicAuthentication(SearchSettings.User, settings.Password));
