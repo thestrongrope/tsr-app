@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Tsr.Access.Api;
+using Tsr.Identity.Api.Domain;
 using Tsr.Shared.Api;
 
 namespace Tsr.Identity.Api.Features.AdminDeletionRaise;
@@ -57,6 +58,8 @@ internal static class AdminDeletionRaiseSlice
         var demo = await DeletionRequests.DemoTokensAsync(db, ct);
         return Results.Json(
             new Dictionary<string, object?> { ["request"] = DeletionViews.AdminView(row, demo), ["created"] = created },
+            IdentityJson.Answers.Answer,
+            contentType: null,
             statusCode: created ? StatusCodes.Status201Created : StatusCodes.Status200OK);
     }
 

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Tsr.Access.Api;
+using Tsr.Identity.Api.Domain;
 using Tsr.Shared.Api;
 
 namespace Tsr.Identity.Api.Features.DeletionRequestCreate;
@@ -55,7 +56,7 @@ internal static class DeletionRequestCreateSlice
             .ToListAsync(ct)).FirstOrDefault();
         var (row, created) = await DeletionRequests.RaiseAsync(
             db, clock, caller.Token, "app", reason, Cut(contact?.Name, ContactNameLength), Cut(contact?.Email, ContactEmailLength), ct);
-        return Results.Json(DeletionViews.MemberView(row), statusCode: created ? StatusCodes.Status202Accepted : StatusCodes.Status200OK);
+        return Results.Json(DeletionViews.MemberView(row), IdentityJson.Answers.Answer, contentType: null, statusCode: created ? StatusCodes.Status202Accepted : StatusCodes.Status200OK);
     }
 
     // The request's columns are shorter than users.email; a longer address is cut rather than failing the request.

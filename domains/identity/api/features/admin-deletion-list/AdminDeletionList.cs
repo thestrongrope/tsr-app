@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Tsr.Access.Api;
+using Tsr.Identity.Api.Domain;
 using Tsr.Shared.Api;
 
 namespace Tsr.Identity.Api.Features.AdminDeletionList;
@@ -38,6 +39,6 @@ internal static class AdminDeletionListSlice
         {
             ["counts"] = await DeletionRequests.CountsAsync(db, ct),
             ["requests"] = rows.Select(row => DeletionViews.AdminView(row, demo)).ToList(),
-        });
+        }, IdentityJson.Answers.Answer);
     }
 }

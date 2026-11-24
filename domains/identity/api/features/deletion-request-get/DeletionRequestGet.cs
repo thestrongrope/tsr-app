@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Tsr.Access.Api;
+using Tsr.Identity.Api.Domain;
 using Tsr.Shared.Api;
 
 namespace Tsr.Identity.Api.Features.DeletionRequestGet;
@@ -27,6 +28,6 @@ internal static class DeletionRequestGetSlice
         }
 
         var row = await DeletionRequests.ActiveForAsync(db, caller!.Token, ct);
-        return Results.Json(DeletionViews.MemberView(row));
+        return Results.Json(DeletionViews.MemberView(row), IdentityJson.Answers.Answer);
     }
 }

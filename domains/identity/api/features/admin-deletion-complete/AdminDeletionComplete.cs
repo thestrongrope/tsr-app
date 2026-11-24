@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Tsr.Access.Api;
 using Tsr.Notifications.Api;
 using Tsr.Platform.Api;
+using Tsr.Identity.Api.Domain;
 using Tsr.Shared.Api;
 
 namespace Tsr.Identity.Api.Features.AdminDeletionComplete;
@@ -30,9 +31,9 @@ internal static class AdminDeletionCompleteSlice
 
     private sealed record Member(int Id, string? Email, string? FirebaseUid, string? Mobile);
 
-    private sealed record MemberErased(int Token, int UserId);
+    internal sealed record MemberErased(int Token, int UserId);
 
-    private sealed record DeletionCompleted(int RequestId, int? Token, int HandledBy);
+    internal sealed record DeletionCompleted(int RequestId, int? Token, int HandledBy);
 
     public static IEndpointRouteBuilder MapAdminDeletionComplete(this IEndpointRouteBuilder routes)
     {
@@ -75,7 +76,7 @@ internal static class AdminDeletionCompleteSlice
         }
 
         var row = await DeletionRequests.FindAsync(db, found.Id, ct) ?? found;
-        return Results.Json(new Dictionary<string, object?> { ["request"] = DeletionViews.AdminView(row, await DeletionRequests.DemoTokensAsync(db, ct)) });
+        return Results.Json(new Dictionary<string, object?> { ["request"] = DeletionViews.AdminView(row, await DeletionRequests.DemoTokensAsync(db, ct)) }, IdentityJson.Answers.Answer);
     }
 
     private static async Task<Result<bool>> CompleteAsync(

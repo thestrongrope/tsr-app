@@ -20,13 +20,30 @@ public sealed partial class RunTimeEfUseTests
             "domains/content/api/ContentContext.cs", "domains/content/api/Tsr.Content.Api.csproj", []),
         // Search owns no table, so it has no context, no migrations and no allowed line: every one of its run-time files is scanned.
         new("search", null, null, null, "domains/search/api/Tsr.Search.Api.csproj", []),
+        // Issue 102: identity is being converted. Its ratchet list is the files that use the library today; a file leaves it in the task that removes its last match.
+        new("identity", "domains/identity/api/IdentityModule.cs", "services.AddDomainContext<IdentityContext>(IdentityContext.SchemaName);",
+            "domains/identity/api/IdentityContext.cs", "domains/identity/api/Tsr.Identity.Api.csproj",
+            [
+                "domains/identity/api/IdentityModule.cs",
+                "domains/identity/api/UserDirectory.cs",
+                "domains/identity/api/domain/DeletionRequests.cs",
+                "domains/identity/api/domain/MemberDirectory.cs",
+                "domains/identity/api/features/admin-deletion-complete/AdminDeletionComplete.cs",
+                "domains/identity/api/features/admin-deletion-confirmation-sent/AdminDeletionConfirmationSent.cs",
+                "domains/identity/api/features/admin-deletion-hold/AdminDeletionHold.cs",
+                "domains/identity/api/features/admin-deletion-list/AdminDeletionList.cs",
+                "domains/identity/api/features/admin-deletion-raise/AdminDeletionRaise.cs",
+                "domains/identity/api/features/deletion-request-cancel/DeletionRequestCancel.cs",
+                "domains/identity/api/features/deletion-request-create/DeletionRequestCreate.cs",
+                "domains/identity/api/features/deletion-request-get/DeletionRequestGet.cs",
+            ]),
     ];
 
     [GeneratedRegex("""<Using\s[^>]*Include\s*=\s*"[^"]*EntityFramework""")]
     private static partial Regex EfUsing();
 
     // The context names are listed, never \w+Context, which would hit HttpContext and JsonSerializerContext.
-    [GeneratedRegex(@"Microsoft\.EntityFrameworkCore|DbContext|\b(?:AccessContext|ContentContext)\b|\bEfTransaction\b")]
+    [GeneratedRegex(@"Microsoft\.EntityFrameworkCore|DbContext|\b(?:AccessContext|ContentContext|IdentityContext)\b|\bEfTransaction\b")]
     private static partial Regex Banned();
 
     /// <summary>The banned names in a file's text, after each domain's one allowed line is taken out of its own module.</summary>
@@ -85,6 +102,7 @@ public sealed partial class RunTimeEfUseTests
     [TestCase("class A(TsrDbContext c);", "DbContext")]
     [TestCase("AccessContext db", "AccessContext")]
     [TestCase("ContentContext db", "ContentContext")]
+    [TestCase("IdentityContext db", "IdentityContext")]
     [TestCase("var tx = EfTransaction.Join(db);", "EfTransaction")]
     public void The_scan_reports_each_banned_name(string source, string name) =>
         Assert.That(Hits("domains/access/api/X.cs", source), Does.Contain(name));
@@ -127,6 +145,8 @@ public sealed partial class RunTimeEfUseTests
             Assert.That(files, Has.None.EndsWith("ContentContext.cs"));
             Assert.That(files, Does.Contain("domains/content/api/domain/ContentRefresh.cs"));
             Assert.That(files, Does.Contain("domains/search/api/features/search/Search.cs"));
+            Assert.That(files, Does.Contain("domains/identity/api/FirebaseVerifier.cs"));
+            Assert.That(files, Has.None.EndsWith("IdentityContext.cs"));
         });
     }
 }

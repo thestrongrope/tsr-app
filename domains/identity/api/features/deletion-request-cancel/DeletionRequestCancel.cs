@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Tsr.Access.Api;
+using Tsr.Identity.Api.Domain;
 using Tsr.Shared.Api;
 
 namespace Tsr.Identity.Api.Features.DeletionRequestCancel;
@@ -13,7 +14,7 @@ namespace Tsr.Identity.Api.Features.DeletionRequestCancel;
 
 internal static class DeletionRequestCancelSlice
 {
-    private sealed record Cancelled(int RequestId, int Token);
+    internal sealed record Cancelled(int RequestId, int Token);
 
     public static IEndpointRouteBuilder MapDeletionRequestCancel(this IEndpointRouteBuilder routes)
     {
@@ -37,7 +38,7 @@ internal static class DeletionRequestCancelSlice
                 : Problem.Detail(StatusCodes.Status404NotFound, "No pending deletion request");
         }
 
-        return Results.Json(new Dictionary<string, object?> { ["status"] = "cancelled" });
+        return Results.Json(new Dictionary<string, object?> { ["status"] = "cancelled" }, IdentityJson.Answers.Answer);
     }
 
     private static async Task<bool> CancelAsync(IdentityContext db, TimeProvider clock, int token, CancellationToken ct)

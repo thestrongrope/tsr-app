@@ -18,6 +18,7 @@ public sealed partial class ConvertedJsonUseTests
         new("access", "AccessJson.", []),
         new("content", "ContentJson.", []),
         new("search", "SearchJson.", []),
+        new("identity", "IdentityJson.", []),
     ];
 
     // The call, up to the end of its statement: a statement may run over several lines, and its type info is often on the last.
@@ -83,6 +84,7 @@ public sealed partial class ConvertedJsonUseTests
             Assert.That(Files(ConvertedDomains[0], root), Does.Contain("domains/access/api/Permissions.cs"));
             Assert.That(Files(ConvertedDomains[1], root), Does.Contain("domains/content/api/features/holy-quran/HolyQuran.cs"));
             Assert.That(Files(ConvertedDomains[2], root), Does.Contain("domains/search/api/features/search/Search.cs"));
+            Assert.That(Files(ConvertedDomains[3], root), Does.Contain("domains/identity/api/features/deletion-request-get/DeletionRequestGet.cs"));
         });
     }
 

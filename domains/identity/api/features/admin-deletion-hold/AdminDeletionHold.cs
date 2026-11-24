@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Tsr.Access.Api;
+using Tsr.Identity.Api.Domain;
 using Tsr.Shared.Api;
 
 namespace Tsr.Identity.Api.Features.AdminDeletionHold;
@@ -14,7 +15,7 @@ namespace Tsr.Identity.Api.Features.AdminDeletionHold;
 
 internal static class AdminDeletionHoldSlice
 {
-    private sealed record Held(int RequestId, int? Token, int HandledBy);
+    internal sealed record Held(int RequestId, int? Token, int HandledBy);
 
     public static IEndpointRouteBuilder MapAdminDeletionHold(this IEndpointRouteBuilder routes)
     {
@@ -56,7 +57,7 @@ internal static class AdminDeletionHoldSlice
         }
 
         var row = await DeletionRequests.FindAsync(db, found.Id, ct) ?? found;
-        return Results.Json(new Dictionary<string, object?> { ["request"] = DeletionViews.AdminView(row, await DeletionRequests.DemoTokensAsync(db, ct)) });
+        return Results.Json(new Dictionary<string, object?> { ["request"] = DeletionViews.AdminView(row, await DeletionRequests.DemoTokensAsync(db, ct)) }, IdentityJson.Answers.Answer);
     }
 
     private static async Task<bool> HoldAsync(IdentityContext db, TimeProvider clock, DeletionRow found, string? note, int operatorToken, CancellationToken ct)
