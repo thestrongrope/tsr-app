@@ -23,17 +23,7 @@ public sealed partial class RunTimeEfUseTests
         // Issue 102: identity is being converted. Its ratchet list is the files that use the library today; a file leaves it in the task that removes its last match.
         new("identity", "domains/identity/api/IdentityModule.cs", "services.AddDomainContext<IdentityContext>(IdentityContext.SchemaName);",
             "domains/identity/api/IdentityContext.cs", "domains/identity/api/Tsr.Identity.Api.csproj",
-            [
-                "domains/identity/api/domain/DeletionRequests.cs",
-                "domains/identity/api/features/admin-deletion-complete/AdminDeletionComplete.cs",
-                "domains/identity/api/features/admin-deletion-confirmation-sent/AdminDeletionConfirmationSent.cs",
-                "domains/identity/api/features/admin-deletion-hold/AdminDeletionHold.cs",
-                "domains/identity/api/features/admin-deletion-list/AdminDeletionList.cs",
-                "domains/identity/api/features/admin-deletion-raise/AdminDeletionRaise.cs",
-                "domains/identity/api/features/deletion-request-cancel/DeletionRequestCancel.cs",
-                "domains/identity/api/features/deletion-request-create/DeletionRequestCreate.cs",
-                "domains/identity/api/features/deletion-request-get/DeletionRequestGet.cs",
-            ]),
+            []),
     ];
 
     [GeneratedRegex("""<Using\s[^>]*Include\s*=\s*"[^"]*EntityFramework""")]

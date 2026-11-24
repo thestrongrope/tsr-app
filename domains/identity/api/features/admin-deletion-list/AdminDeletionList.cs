@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Identity.Api.Domain;
 using Tsr.Shared.Api;
@@ -19,7 +20,7 @@ internal static class AdminDeletionListSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(HttpContext context, IdentityContext db, Permissions permissions, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(HttpContext context, NpgsqlDataSource source, Permissions permissions, CancellationToken ct)
     {
         var refusal = await DeletionRequests.RefuseAsync(context.GetCaller(), permissions, "deletion-requests:manage", ct);
         if (refusal is not null)
@@ -33,11 +34,13 @@ internal static class AdminDeletionListSlice
             status = null;
         }
 
-        var rows = await DeletionRequests.QueryAsync(db, null, status, null, ct);
-        var demo = await DeletionRequests.DemoTokensAsync(db, ct);
+        await using var read = await source.BeginAsync(ct);
+        var rows = await DeletionRequests.QueryAsync(read, null, status, null, ct);
+        var demo = await DeletionRequests.DemoTokensAsync(read, ct);
+        var counts = await DeletionRequests.CountsAsync(read, ct);
         return Results.Json(new Dictionary<string, object?>
         {
-            ["counts"] = await DeletionRequests.CountsAsync(db, ct),
+            ["counts"] = counts,
             ["requests"] = rows.Select(row => DeletionViews.AdminView(row, demo)).ToList(),
         }, IdentityJson.Answers.Answer);
     }

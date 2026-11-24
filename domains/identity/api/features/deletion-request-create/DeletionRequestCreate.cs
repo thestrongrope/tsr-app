@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Identity.Api.Domain;
 using Tsr.Shared.Api;
@@ -26,7 +26,7 @@ internal static class DeletionRequestCreateSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(HttpContext context, IdentityContext db, Permissions permissions, TimeProvider clock, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(HttpContext context, NpgsqlDataSource source, Permissions permissions, TimeProvider clock, CancellationToken ct)
     {
         var caller = context.GetCaller();
         var refusal = await DeletionRequests.RefuseAsync(caller, permissions, "account:delete", ct);
@@ -47,17 +47,25 @@ internal static class DeletionRequestCreateSlice
             return Problem.Detail(StatusCodes.Status422UnprocessableEntity, reasonRefusal);
         }
 
-        var contact = (await db.Database
-            .SqlQuery<Contact>($"""
+        Contact? contact;
+        await using (var read = await source.BeginAsync(ct))
+        {
+            contact = (await read.ListAsync(
+                $"""
                 select u.email as "Email", m.name as "Name"
                 from identity.users u left join membership.v_members m on m.user_id = u.id
                 where u.id = {caller!.UserId}
-                """)
-            .ToListAsync(ct)).FirstOrDefault();
+                """,
+                ReadContact,
+                ct)).FirstOrDefault();
+        }
+
         var (row, created) = await DeletionRequests.RaiseAsync(
-            db, clock, caller.Token, "app", reason, Cut(contact?.Name, ContactNameLength), Cut(contact?.Email, ContactEmailLength), ct);
+            source, clock, caller.Token, "app", reason, Cut(contact?.Name, ContactNameLength), Cut(contact?.Email, ContactEmailLength), ct);
         return Results.Json(DeletionViews.MemberView(row), IdentityJson.Answers.Answer, contentType: null, statusCode: created ? StatusCodes.Status202Accepted : StatusCodes.Status200OK);
     }
+
+    private static Contact ReadContact(DbRow row) => new(row.TextOrNull("Email"), row.TextOrNull("Name"));
 
     // The request's columns are shorter than users.email; a longer address is cut rather than failing the request.
     private static string? Cut(string? value, int length) => value is null || value.Length <= length ? value : value[..length];

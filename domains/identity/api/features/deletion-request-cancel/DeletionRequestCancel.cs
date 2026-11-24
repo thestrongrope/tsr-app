@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Identity.Api.Domain;
 using Tsr.Shared.Api;
@@ -22,7 +22,7 @@ internal static class DeletionRequestCancelSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(HttpContext context, IdentityContext db, Permissions permissions, TimeProvider clock, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(HttpContext context, NpgsqlDataSource source, Permissions permissions, TimeProvider clock, CancellationToken ct)
     {
         var caller = context.GetCaller();
         var refusal = await DeletionRequests.RefuseAsync(caller, permissions, "account:delete", ct);
@@ -31,9 +31,10 @@ internal static class DeletionRequestCancelSlice
             return refusal;
         }
 
-        if (!await CancelAsync(db, clock, caller!.Token, ct))
+        if (!await CancelAsync(source, clock, caller!.Token, ct))
         {
-            return await HasCompletedAsync(db, caller.Token, ct)
+            await using var read = await source.BeginAsync(ct);
+            return await HasCompletedAsync(read, caller.Token, ct)
                 ? Problem.Detail(StatusCodes.Status409Conflict, "This account has already been deleted and cannot be restored")
                 : Problem.Detail(StatusCodes.Status404NotFound, "No pending deletion request");
         }
@@ -41,12 +42,12 @@ internal static class DeletionRequestCancelSlice
         return Results.Json(new Dictionary<string, object?> { ["status"] = "cancelled" }, IdentityJson.Answers.Answer);
     }
 
-    private static async Task<bool> CancelAsync(IdentityContext db, TimeProvider clock, int token, CancellationToken ct)
+    private static async Task<bool> CancelAsync(NpgsqlDataSource source, TimeProvider clock, int token, CancellationToken ct)
     {
         var now = clock.GetUtcNow();
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        var active = await DeletionRequests.ActiveForAsync(db, token, ct);
-        var changed = await db.Database.ExecuteSqlAsync(
+        await using var tx = await source.BeginAsync(ct);
+        var active = await DeletionRequests.ActiveForAsync(tx, token, ct);
+        var changed = await tx.ExecuteAsync(
             $"""
             update identity.account_deletion_requests set status = 'cancelled', cancelled_at = {now}
             where token = {token} and status::text in ('pending', 'awaiting_prize_delivery')
@@ -57,13 +58,14 @@ internal static class DeletionRequestCancelSlice
             return false;
         }
 
-        await Outbox.WriteAsync(db, "identity.deletion_cancelled", new Cancelled(active?.Id ?? 0, token), clock, ct);
-        await transaction.CommitAsync(ct);
+        await Outbox.WriteAsync(tx, "identity.deletion_cancelled", new Cancelled(active?.Id ?? 0, token), IdentityJson.Default.Cancelled, clock, ct);
+        await tx.CommitAsync(ct);
         return true;
     }
 
-    private static async Task<bool> HasCompletedAsync(IdentityContext db, int token, CancellationToken ct) =>
-        (await db.Database
-            .SqlQuery<int>($"""select 1 as "Value" from identity.account_deletion_requests where token = {token} and status::text = 'completed' limit 1""")
-            .ToListAsync(ct)).Count > 0;
+    private static async Task<bool> HasCompletedAsync(DbTx tx, int token, CancellationToken ct) =>
+        (await tx.ListAsync(
+            $"""select 1 as "Value" from identity.account_deletion_requests where token = {token} and status::text = 'completed' limit 1""",
+            row => row.Int("Value"),
+            ct)).Count > 0;
 }

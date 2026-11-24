@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Identity.Api.Domain;
 using Tsr.Shared.Api;
@@ -23,7 +23,7 @@ internal static class AdminDeletionHoldSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string request_id, HttpContext context, IdentityContext db, Permissions permissions, TimeProvider clock, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(string request_id, HttpContext context, NpgsqlDataSource source, Permissions permissions, TimeProvider clock, CancellationToken ct)
     {
         var caller = context.GetCaller();
         var refusal = await DeletionRequests.RefuseAsync(caller, permissions, "deletion-requests:manage", ct);
@@ -33,7 +33,13 @@ internal static class AdminDeletionHoldSlice
         }
 
         var id = DeletionRequests.ParseId(request_id);
-        var found = id is null ? null : await DeletionRequests.FindAsync(db, id.Value, ct);
+        DeletionRow? found = null;
+        if (id is not null)
+        {
+            await using var read = await source.BeginAsync(ct);
+            found = await DeletionRequests.FindAsync(read, id.Value, ct);
+        }
+
         if (found is null)
         {
             return Problem.Detail(StatusCodes.Status404NotFound, "Deletion request not found");
@@ -51,19 +57,20 @@ internal static class AdminDeletionHoldSlice
             return Problem.Detail(StatusCodes.Status422UnprocessableEntity, noteRefusal);
         }
 
-        if (!await HoldAsync(db, clock, found, note, caller!.Token, ct))
+        if (!await HoldAsync(source, clock, found, note, caller!.Token, ct))
         {
             return Problem.Detail(StatusCodes.Status409Conflict, "This request is no longer live");
         }
 
-        var row = await DeletionRequests.FindAsync(db, found.Id, ct) ?? found;
-        return Results.Json(new Dictionary<string, object?> { ["request"] = DeletionViews.AdminView(row, await DeletionRequests.DemoTokensAsync(db, ct)) }, IdentityJson.Answers.Answer);
+        await using var again = await source.BeginAsync(ct);
+        var row = await DeletionRequests.FindAsync(again, found.Id, ct) ?? found;
+        return Results.Json(new Dictionary<string, object?> { ["request"] = DeletionViews.AdminView(row, await DeletionRequests.DemoTokensAsync(again, ct)) }, IdentityJson.Answers.Answer);
     }
 
-    private static async Task<bool> HoldAsync(IdentityContext db, TimeProvider clock, DeletionRow found, string? note, int operatorToken, CancellationToken ct)
+    private static async Task<bool> HoldAsync(NpgsqlDataSource source, TimeProvider clock, DeletionRow found, string? note, int operatorToken, CancellationToken ct)
     {
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        var changed = await db.Database.ExecuteSqlAsync(
+        await using var tx = await source.BeginAsync(ct);
+        var changed = await tx.ExecuteAsync(
             $"""
             update identity.account_deletion_requests
             set status = 'awaiting_prize_delivery', operator_note = {note}, handled_by = {operatorToken}
@@ -77,10 +84,10 @@ internal static class AdminDeletionHoldSlice
 
         if (found.Status == DeletionViews.Pending)
         {
-            await Outbox.WriteAsync(db, "identity.deletion_held", new Held(found.Id, found.Token, operatorToken), clock, ct);
+            await Outbox.WriteAsync(tx, "identity.deletion_held", new Held(found.Id, found.Token, operatorToken), IdentityJson.Default.Held, clock, ct);
         }
 
-        await transaction.CommitAsync(ct);
+        await tx.CommitAsync(ct);
         return true;
     }
 }
