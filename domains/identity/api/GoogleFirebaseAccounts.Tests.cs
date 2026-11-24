@@ -2,8 +2,10 @@ using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization.Metadata;
 using Microsoft.IdentityModel.Tokens;
 using NUnit.Framework;
+using Tsr.Identity.Api.Domain;
 
 namespace Tsr.Identity.Api.Tests;
 
@@ -228,5 +230,31 @@ public sealed class GoogleFirebaseAccountsTests
 
         Assert.That(thrown!.Message, Does.Not.Contain("SECRET-KEY-TEXT").And.Not.Contain(bad));
         Assert.Throws<InvalidOperationException>(() => GoogleServiceAccount.Parse("not base64 !!"));
+    }
+
+    // TC-IDN-R10-01: what the code wrote before issue 102 (anonymous types, default options, by reflection) against what the generated context writes now.
+    [Test]
+    public void Each_request_body_is_written_as_before()
+    {
+        var reflection = new JsonSerializerOptions { TypeInfoResolver = new DefaultJsonTypeInfoResolver() };
+        const string awkward = "Zoë+tag@example.invalid\"<&>";
+        const string issuer = "svc+one@demo-tsr-test.iam.invalid";
+        const long issued = 1893499200;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(
+                JsonSerializer.Serialize(new AccountLookup([awkward]), IdentityJson.Default.AccountLookup),
+                Is.EqualTo(JsonSerializer.Serialize(new { email = new[] { awkward } }, reflection)));
+            Assert.That(
+                JsonSerializer.Serialize(new AccountDelete("uid+\"1\"ü"), IdentityJson.Default.AccountDelete),
+                Is.EqualTo(JsonSerializer.Serialize(new { localId = "uid+\"1\"ü" }, reflection)));
+            Assert.That(
+                JsonSerializer.SerializeToUtf8Bytes(new JwtHeader("RS256", "JWT"), IdentityJson.Default.JwtHeader),
+                Is.EqualTo(JsonSerializer.SerializeToUtf8Bytes(new { alg = "RS256", typ = "JWT" }, reflection)));
+            Assert.That(
+                JsonSerializer.SerializeToUtf8Bytes(new JwtClaims(issuer, "https://www.googleapis.com/auth/identitytoolkit", "https://oauth2.googleapis.com/token", issued, issued + 3600), IdentityJson.Default.JwtClaims),
+                Is.EqualTo(JsonSerializer.SerializeToUtf8Bytes(new { iss = issuer, scope = "https://www.googleapis.com/auth/identitytoolkit", aud = "https://oauth2.googleapis.com/token", iat = issued, exp = issued + 3600 }, reflection)));
+        });
     }
 }

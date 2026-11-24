@@ -2,6 +2,7 @@ using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization.Metadata;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
@@ -337,6 +338,9 @@ public sealed class FirebaseVerifierTests
         return await provider.GetRequiredService<ICallerVerifier>().VerifyAsync(context.Request, CancellationToken.None);
     }
 
+    // The test project has reflection serialization off (as a native build does); the fixtures are built by reflection on purpose.
+    private static readonly JsonSerializerOptions FixtureJson = new() { TypeInfoResolver = new DefaultJsonTypeInfoResolver() };
+
     private static HttpResponseMessage Account(string uid, string? email, bool verified)
     {
         var user = new Dictionary<string, object?> { ["localId"] = uid, ["emailVerified"] = verified };
@@ -345,7 +349,7 @@ public sealed class FirebaseVerifierTests
             user["email"] = email;
         }
 
-        var body = JsonSerializer.Serialize(new { users = new[] { user } });
+        var body = JsonSerializer.Serialize(new { users = new[] { user } }, FixtureJson);
         return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
     }
 
@@ -385,9 +389,9 @@ public sealed class FirebaseVerifierTests
     {
         var payload = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(new JsonWebToken(token).EncodedPayload.Length > 0
             ? Encoding.UTF8.GetString(Base64UrlEncoder.DecodeBytes(new JsonWebToken(token).EncodedPayload))
-            : "{}")!;
+            : "{}", FixtureJson)!;
         payload.Remove("nbf");
-        return new JsonWebTokenHandler().CreateToken(JsonSerializer.Serialize(payload), credentials);
+        return new JsonWebTokenHandler().CreateToken(JsonSerializer.Serialize(payload, FixtureJson), credentials);
     }
 
     private static string Unsigned(string project, Dictionary<string, object> claims, DateTimeOffset? expires = null, bool includeIssuedAt = true, DateTimeOffset? issuedAt = null)
@@ -401,7 +405,7 @@ public sealed class FirebaseVerifierTests
             claims["iat"] = (issuedAt ?? DateTimeOffset.UtcNow.AddMinutes(-1)).ToUnixTimeSeconds();
         }
 
-        return Base64Url("""{"alg":"none","typ":"JWT"}""") + "." + Base64Url(JsonSerializer.Serialize(claims)) + ".";
+        return Base64Url("""{"alg":"none","typ":"JWT"}""") + "." + Base64Url(JsonSerializer.Serialize(claims, FixtureJson)) + ".";
     }
 
     private static string Base64Url(string text) => Base64UrlEncoder.Encode(Encoding.UTF8.GetBytes(text));

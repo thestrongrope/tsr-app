@@ -1,8 +1,9 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
+using Tsr.Identity.Api.Domain;
 using Tsr.Shared.Api;
 
 namespace Tsr.Identity.Api.Features.AdminDeletionConfirmationSent;
@@ -20,7 +21,7 @@ internal static class AdminDeletionConfirmationSentSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string request_id, HttpContext context, IdentityContext db, Permissions permissions, TimeProvider clock, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(string request_id, HttpContext context, NpgsqlDataSource source, Permissions permissions, TimeProvider clock, CancellationToken ct)
     {
         var caller = context.GetCaller();
         var refusal = await DeletionRequests.RefuseAsync(caller, permissions, "deletion-requests:manage", ct);
@@ -30,25 +31,32 @@ internal static class AdminDeletionConfirmationSentSlice
         }
 
         var id = DeletionRequests.ParseId(request_id);
-        var found = id is null ? null : await DeletionRequests.FindAsync(db, id.Value, ct);
+        DeletionRow? found = null;
+        if (id is not null)
+        {
+            await using var read = await source.BeginAsync(ct);
+            found = await DeletionRequests.FindAsync(read, id.Value, ct);
+        }
+
         if (found is null)
         {
             return Problem.Detail(StatusCodes.Status404NotFound, "Deletion request not found");
         }
 
         var now = clock.GetUtcNow();
-        var stamped = await db.Database.ExecuteSqlAsync(
+        var stamped = await source.ExecuteAsync(
             $"""
             update identity.account_deletion_requests set confirmation_sent_at = {now}, handled_by = {caller!.Token}
             where id = {found.Id} and status::text in ('pending', 'awaiting_prize_delivery') and confirmation_sent_at is null
             """,
             ct) == 1;
-        var row = await DeletionRequests.FindAsync(db, found.Id, ct) ?? found;
+        await using var again = await source.BeginAsync(ct);
+        var row = await DeletionRequests.FindAsync(again, found.Id, ct) ?? found;
         if (!stamped && !(DeletionViews.IsLive(row.Status) && row.ConfirmationSentAt is not null))
         {
             return Problem.Detail(StatusCodes.Status409Conflict, "This request is settled and cannot take a confirmation");
         }
 
-        return Results.Json(new Dictionary<string, object?> { ["request"] = DeletionViews.AdminView(row, await DeletionRequests.DemoTokensAsync(db, ct)) });
+        return Results.Json(new Dictionary<string, object?> { ["request"] = DeletionViews.AdminView(row, await DeletionRequests.DemoTokensAsync(again, ct)) }, IdentityJson.Answers.Answer);
     }
 }

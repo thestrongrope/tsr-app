@@ -1,0 +1,39 @@
+### POST /admin/deletion-requests/abc/confirmation-sent as 900101
+status: 404
+Content-Type: application/json; charset=utf-8
+X-Permissions-Revision: 82deab37326ddee8
+body: {"detail":"Deletion request not found"}
+### POST /admin/deletion-requests/0/confirmation-sent as 900101
+status: 404
+Content-Type: application/json; charset=utf-8
+X-Permissions-Revision: 82deab37326ddee8
+body: {"detail":"Deletion request not found"}
+### POST /admin/deletion-requests/9899999/confirmation-sent as 900101
+status: 404
+Content-Type: application/json; charset=utf-8
+X-Permissions-Revision: 82deab37326ddee8
+body: {"detail":"Deletion request not found"}
+### POST /admin/deletion-requests/9800005/confirmation-sent as 900101
+status: 409
+Content-Type: application/json; charset=utf-8
+X-Permissions-Revision: 82deab37326ddee8
+body: {"detail":"This request is settled and cannot take a confirmation"}
+### POST /admin/deletion-requests/9800004/confirmation-sent as 900101
+status: 409
+Content-Type: application/json; charset=utf-8
+X-Permissions-Revision: 82deab37326ddee8
+body: {"detail":"This request is settled and cannot take a confirmation"}
+### POST /admin/deletion-requests/9800003/confirmation-sent as 900101
+status: 200
+Content-Type: application/json; charset=utf-8
+X-Permissions-Revision: 82deab37326ddee8
+body: {"request":{"id":9800003,"status":"awaiting_prize_delivery","source":"web","token":900117,"member_name":"Held Member + <i>","contact_email":"m900117@example.invalid","requested_at":"2025-12-30T12:00:00","reason":"Prize <soon>","operator_note":"Zoë \"Q\" <b> + & & أحمد Ünï","confirmation_sent_at":"2025-12-31T12:00:00","completed_at":null,"cancelled_at":null,"handled_by":900101,"handled_by_name":"Gold Admin","member_zip":"90017","member_mobile":"+15550900117","is_demo":false,"can_complete":true,"confirmation":null}}
+### POST /admin/deletion-requests/9800003/confirmation-sent as 900102
+status: 403
+Content-Type: application/json; charset=utf-8
+X-Permissions-Revision: f01a7b9eac11cfa6
+body: {"detail":"You do not have permission to do that"}
+### POST /admin/deletion-requests/9800003/confirmation-sent as nobody
+status: 401
+Content-Type: application/json; charset=utf-8
+body: {"detail":"Not authenticated"}

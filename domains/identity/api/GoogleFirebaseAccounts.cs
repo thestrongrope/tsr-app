@@ -3,8 +3,27 @@ using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
+using Tsr.Identity.Api.Domain;
 
 namespace Tsr.Identity.Api;
+
+/// <summary>The body of <c>accounts:lookup</c>: <c>{"email":["a@b"]}</c>. The wire records below are written by <see cref="IdentityJson"/>, in the order and with the escaping the anonymous types they replace had.</summary>
+internal sealed record AccountLookup([property: JsonPropertyName("email")] string[] Email);
+
+/// <summary>The body of <c>accounts:delete</c>: <c>{"localId":"uid"}</c>.</summary>
+internal sealed record AccountDelete([property: JsonPropertyName("localId")] string LocalId);
+
+/// <summary>The header of the signed assertion: <c>{"alg":"RS256","typ":"JWT"}</c>.</summary>
+internal sealed record JwtHeader([property: JsonPropertyName("alg")] string Alg, [property: JsonPropertyName("typ")] string Typ);
+
+/// <summary>The claims of the signed assertion; <c>iat</c> and <c>exp</c> are Unix seconds.</summary>
+internal sealed record JwtClaims(
+    [property: JsonPropertyName("iss")] string Iss,
+    [property: JsonPropertyName("scope")] string Scope,
+    [property: JsonPropertyName("aud")] string Aud,
+    [property: JsonPropertyName("iat")] long Iat,
+    [property: JsonPropertyName("exp")] long Exp);
 
 /// <summary>The parts of a Google service account JSON the Identity Toolkit calls need. Never logged, never in a message.</summary>
 internal sealed record GoogleServiceAccount(string ClientEmail, string PrivateKey, string ProjectId)
@@ -99,7 +118,7 @@ internal sealed class GoogleFirebaseAccounts(IHttpClientFactory httpClients, Goo
     // UNVERIFIED shape: POST {Toolkit}{project}/accounts:lookup {"email": ["a@b"]} -> {"users": [{"localId": "..."}]}; no match is {} (no "users"), or an error USER_NOT_FOUND.
     private async Task<string?> LookUpByEmailAsync(string email, CancellationToken ct)
     {
-        var body = JsonSerializer.Serialize(new { email = new[] { email } });
+        var body = JsonSerializer.Serialize(new AccountLookup([email]), IdentityJson.Default.AccountLookup);
         var (status, text) = await PostAsync("accounts:lookup", body, ct);
         if (status == HttpStatusCode.OK)
         {
@@ -117,7 +136,7 @@ internal sealed class GoogleFirebaseAccounts(IHttpClientFactory httpClients, Goo
     // UNVERIFIED shape: POST {Toolkit}{project}/accounts:delete {"localId": "uid"} -> {} on success; an error with message USER_NOT_FOUND means already gone (PHP: "not found" is done).
     private async Task DeleteByUidAsync(string uid, CancellationToken ct)
     {
-        var body = JsonSerializer.Serialize(new { localId = uid });
+        var body = JsonSerializer.Serialize(new AccountDelete(uid), IdentityJson.Default.AccountDelete);
         var (status, text) = await PostAsync("accounts:delete", body, ct);
         if (status == HttpStatusCode.OK || IsNotFound(text))
         {
@@ -199,8 +218,8 @@ internal sealed class GoogleFirebaseAccounts(IHttpClientFactory httpClients, Goo
     private string SignedAssertion(DateTimeOffset now)
     {
         var issued = now.ToUnixTimeSeconds();
-        var header = Base64Url(JsonSerializer.SerializeToUtf8Bytes(new { alg = "RS256", typ = "JWT" }));
-        var claims = Base64Url(JsonSerializer.SerializeToUtf8Bytes(new { iss = account.ClientEmail, scope = Scope, aud = TokenEndpoint, iat = issued, exp = issued + 3600 }));
+        var header = Base64Url(JsonSerializer.SerializeToUtf8Bytes(new JwtHeader("RS256", "JWT"), IdentityJson.Default.JwtHeader));
+        var claims = Base64Url(JsonSerializer.SerializeToUtf8Bytes(new JwtClaims(account.ClientEmail, Scope, TokenEndpoint, issued, issued + 3600), IdentityJson.Default.JwtClaims));
         var signingInput = header + "." + claims;
         using var rsa = RSA.Create();
         try

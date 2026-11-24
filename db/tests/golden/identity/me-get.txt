@@ -1,0 +1,38 @@
+### GET /me/deletion-request as 900102
+status: 200
+Content-Type: application/json; charset=utf-8
+X-Permissions-Revision: f01a7b9eac11cfa6
+body: {"id":null,"status":"none","requested_at":null,"expected_completion_days":60,"message":null}
+### GET /me/deletion-request as 900116
+status: 200
+Content-Type: application/json; charset=utf-8
+X-Permissions-Revision: f01a7b9eac11cfa6
+body: {"id":9800001,"status":"pending","requested_at":"2025-12-30T10:00:00","expected_completion_days":60,"message":"Your account will be deleted within 60 days."}
+### GET /me/deletion-request as 900117
+status: 200
+Content-Type: application/json; charset=utf-8
+X-Permissions-Revision: f01a7b9eac11cfa6
+body: {"id":9800003,"status":"awaiting_prize_delivery","requested_at":"2025-12-30T12:00:00","expected_completion_days":60,"message":"Zoë \"Q\" <b> + & &amp; أحمد Ünï"}
+### GET /me/deletion-request as 900118
+status: 200
+Content-Type: application/json; charset=utf-8
+X-Permissions-Revision: f01a7b9eac11cfa6
+body: {"id":null,"status":"none","requested_at":null,"expected_completion_days":60,"message":null}
+### GET /me/deletion-request as 900121
+status: 200
+Content-Type: application/json; charset=utf-8
+X-Permissions-Revision: f01a7b9eac11cfa6
+body: {"id":null,"status":"none","requested_at":null,"expected_completion_days":60,"message":null}
+### GET /me/deletion-request as 900101
+status: 200
+Content-Type: application/json; charset=utf-8
+X-Permissions-Revision: 82deab37326ddee8
+body: {"id":null,"status":"none","requested_at":null,"expected_completion_days":60,"message":null}
+### GET /me/deletion-request as guest
+status: 403
+Content-Type: application/json; charset=utf-8
+body: {"detail":"Registration incomplete"}
+### GET /me/deletion-request as nobody
+status: 401
+Content-Type: application/json; charset=utf-8
+body: {"detail":"Not authenticated"}
