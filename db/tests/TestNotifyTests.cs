@@ -638,4 +638,40 @@ public sealed class TestNotifyTests
         Assert.That(ids.Order(StringComparer.Ordinal), Is.EqualTo((string[])["dev-a1", "dev-a2"]));
         Assert.That(await CountAsync("notifications.user_devices", $"token = {A}"), Is.EqualTo(2));
     }
+
+    // TC-NTF-R14-01: a device id reaches the system in any letter case and is found whatever the case (the column is citext, the comparison needs its cast).
+    [Test]
+    public async Task A_device_removed_in_another_letter_case_is_removed()
+    {
+        var reply = await kit.SendAsync(A, HttpMethod.Delete, "/devices", """{"fcmToken": "DEV-A1"}""");
+
+        Assert.That(reply.Status, Is.EqualTo(HttpStatusCode.OK), reply.Body);
+        Assert.That(reply.Json!["deleted"]!.GetValue<int>(), Is.EqualTo(1));
+        Assert.That(await CountAsync("notifications.user_devices", $"token = {A} and device_id = 'dev-a1'"), Is.Zero);
+        Assert.That(await CountAsync("notifications.user_devices", $"token = {A} and device_id = 'dev-a2'"), Is.EqualTo(1));
+    }
+
+    // TC-NTF-R14-02: a gender announcement reaches the devices and members of that gender, the demo cohort and other spellings of a gender left out. Gender is a plain text column compared with a text value.
+    [Test]
+    public async Task A_gender_announcement_reaches_exactly_that_genders_devices_and_members()
+    {
+        var gents = await SendAnnouncementAsync("GENDER", "1");
+        Assert.That(gents.Status, Is.EqualTo(HttpStatusCode.OK), gents.Body);
+        Assert.That(fake.Tokens, Is.EqualTo((string[])["dev-a1", "dev-a2", "dev-s1", "dev-s2", "dev-s3", "dev-t1", "dev-t3"]), "no demo device, no device of gender 2, none of the member whose gender is the word Male");
+        Assert.That(await InboxOfAsync(gents.Json!["notification_id"]!.GetValue<int>()), Is.EqualTo((long[])[A, T1, T3, S1, S2, S3]));
+
+        fake.Sent.Clear();
+        var ladies = await SendAnnouncementAsync("GENDER", 2);
+        Assert.That(fake.Tokens, Is.EqualTo((string[])["dev-b1"]));
+        Assert.That(await InboxOfAsync(ladies.Json!["notification_id"]!.GetValue<int>()), Is.EqualTo((long[])[B]));
+
+        fake.Sent.Clear();
+        var number = await SendAnnouncementAsync("GENDER", 1);
+        Assert.That(number.Json!["device_count"]!.GetValue<int>(), Is.EqualTo(7), "the number 1 is the same audience as the text \"1\"");
+
+        fake.Sent.Clear();
+        var nobody = await SendAnnouncementAsync("GENDER", 3);
+        Assert.That(nobody.Json!["device_count"]!.GetValue<int>(), Is.Zero);
+        Assert.That(fake.Sent, Is.Empty);
+    }
 }
