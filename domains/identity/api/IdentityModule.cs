@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
@@ -30,8 +31,11 @@ public static class IdentityModule
 
     /// <summary>
     /// Registers only identity's tables, for the one-off migrate job, which serves no requests and
-    /// so needs no Firebase settings. The API itself starts with <see cref="AddIdentity"/>.
+    /// so needs no Firebase settings. The API itself starts with <see cref="AddIdentity"/>, which does not call this:
+    /// identity reads and writes through the data source, and its context is for the migrate job only.
     /// </summary>
+    [RequiresUnreferencedCode("Entity Framework is JIT only: the migrate job.")]
+    [RequiresDynamicCode("Entity Framework is JIT only: the migrate job.")]
     public static IServiceCollection AddIdentityTables(this IServiceCollection services)
     {
         services.AddDomainContext<IdentityContext>(IdentityContext.SchemaName);
@@ -46,7 +50,6 @@ public static class IdentityModule
     {
         var settings = FirebaseSettings.Create(configuration, env);
         services.AddTsrDataSource();
-        services.AddIdentityTables();
         services.AddFirebaseVerification(settings);
         services.AddScoped<MemberDirectory>();
         services.TryAddScoped<IProfileSink, NoProfileSink>();

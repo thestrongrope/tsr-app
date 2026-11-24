@@ -20,10 +20,8 @@ public sealed partial class RunTimeEfUseTests
             "domains/content/api/ContentContext.cs", "domains/content/api/Tsr.Content.Api.csproj", []),
         // Search owns no table, so it has no context, no migrations and no allowed line: every one of its run-time files is scanned.
         new("search", null, null, null, "domains/search/api/Tsr.Search.Api.csproj", []),
-        // Issue 102: identity is being converted. Its ratchet list is the files that use the library today; a file leaves it in the task that removes its last match.
         new("identity", "domains/identity/api/IdentityModule.cs", "services.AddDomainContext<IdentityContext>(IdentityContext.SchemaName);",
-            "domains/identity/api/IdentityContext.cs", "domains/identity/api/Tsr.Identity.Api.csproj",
-            []),
+            "domains/identity/api/IdentityContext.cs", "domains/identity/api/Tsr.Identity.Api.csproj", []),
     ];
 
     [GeneratedRegex("""<Using\s[^>]*Include\s*=\s*"[^"]*EntityFramework""")]

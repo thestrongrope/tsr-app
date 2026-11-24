@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!-- identity (AuthN): who is calling. Depends on shared, access (permissions), platform and notifications (their erasure commands). membership is NOT referenced (it references identity): it supplies IMemberErasure. -->
   <PropertyGroup>
+    <IsAotCompatible>true</IsAotCompatible>
     <EnableRequestDelegateGenerator>true</EnableRequestDelegateGenerator>
   </PropertyGroup>
   <ItemGroup>
