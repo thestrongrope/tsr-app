@@ -36,6 +36,14 @@ Schema `identity`: `users` (identity columns only; the profile columns, `gender`
 - `UserDirectory` with `UserRef`: `ByTokenAsync` (every user of a token, because a token is not unique, at most 50), `ByIdsAsync` (at most 500 ids, more throws), `ByTokensAsync` (at most 500 tokens, every holder in id order, at most 2000 rows).
 - The port `IProfileSink`: name and picture from the token, handed on in the same request when a create route makes a member or a verified email claims one; default no-op, `membership` supplies the real one. The token claims `name` and `picture` are read in both verifier modes, as PHP does.
 
+## Data access and JSON (rules 6 and 7 of `domains/CLAUDE.md`)
+
+- No Entity Framework at run time. Every read and write runs on the `NpgsqlDataSource` or a `DbTx`. `IdentityContext` and the migrations stay for the schema: `IdentityModule.AddIdentityTables` registers the context for the migrate job only, and the API starts with `AddIdentity`, which does not register it.
+- One connection at a time. A request never holds two connections of the data source, and no connection is held across a call to the account service (`IFirebaseAccounts`): the completion reads on short transactions, checks and deletes in Firebase with none open, then opens the write transaction. The sign-in judgement uses the same rule (`db/tests/IdentityPoolTests.cs` runs every route and sign-in path on a pool of one).
+- `api/domain/IdentityJson.cs` is the one source-generated JSON context: the answers (`IdentityJson.Answers`), the events (`IdentityJson.Default`) and the account-service wire records of `GoogleFirebaseAccounts`. A type behind an `object` value of an answer must be listed there; `IdentityJson.Tests.cs` writes each with reflection off.
+- A claim whose write fails is not caught: the host answers 500, nothing of the claim is stored and the profile sink is not called (`IdentityFailureTests`).
+- Every read returns a row in some test: `docs/specs/aot-migration/issue-102-reads.md`.
+
 ## Account deletion
 
 Order of checks, every refusal and the events: the header and comments of
@@ -68,13 +76,15 @@ An endpoint opts in with `.RequireMember()` (`.RequireMember(createsMember: true
 | The HTTP contract | `spec/api.yaml`; Hurl `spec/tests/deletion-*.hurl`, `admin-deletion-*.hurl`, `debug-token.hurl`, `link-account.hurl` |
 | The refusals in order; the marker | `api/CallerMiddleware.cs`; `shared/api/MemberRoute.cs` |
 | What a member with a live deletion may still reach | `api/domain/DeletionGate.cs` |
+| The sign-in's reads and writes; the deletion reads | `api/domain/MemberDirectory.cs`; `api/domain/DeletionRequests.cs` |
+| Answers, events and account-service wire, without reflection | `api/domain/IdentityJson.cs` |
 | Background notes | `docs/specs/initial-build/test-deletion-notes.md`, `lane-identity-notes.md` |
 
 ## Checks
 
 ```
 dotnet test domains/identity/api/tests     # token verification, settings, deletion allow list
-dotnet test db/tests                       # every refusal and success over HTTP, the sign-in write as the limited role (Docker); TestDeletion*Tests.cs, TestDebugTokenTests.cs
+dotnet test db/tests                       # every refusal and success over HTTP, the sign-in write as the limited role (Docker); TestDeletion*Tests.cs, TestDebugTokenTests.cs; the golden files in db/tests/golden/identity (IdentityGoldenTests), IdentityFailureTests, IdentityPoolTests
 tools/identity-contract.sh test            # Hurl contract on the test stack (emulator sign-in; never dev: it may hold real data)
 tools/identity-contract.sh parity          # the same file on PHP (parity stack up, tools/parity-php/README.md)
 tools/contract-deletion.sh test|parity     # the deletion and debug-token Hurl files
