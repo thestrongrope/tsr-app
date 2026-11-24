@@ -83,7 +83,7 @@ internal static class AdminTransferHistorySlice
             ct))[0];
         var rows = await source.ListAsync(
             $"""
-                select st.id as "Id", st.token_no as "StudentToken", u.name as "StudentName", st.type as "Type", fc.code as "FromCode", tc.code as "ToCode",
+                select st.id::bigint as "Id", st.token_no as "StudentToken", u.name as "StudentName", st.type as "Type", fc.code as "FromCode", tc.code as "ToCode",
                        st.reason::text as "Reason", ab.name as "TransferredBy", st.transferred_at as "TransferredAt"
                 from classes.student_transfers st
                 join membership.v_members u on u.token = st.token_no
