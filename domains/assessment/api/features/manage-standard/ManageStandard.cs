@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Assessment.Api.Domain;
 using Tsr.Shared.Api;
@@ -38,7 +38,7 @@ internal static class ManageStandardSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string class_id, HttpContext context, AssessmentContext db, Permissions permissions, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(string class_id, HttpContext context, NpgsqlDataSource source, Permissions permissions, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -47,7 +47,7 @@ internal static class ManageStandardSlice
         }
 
         var classId = PhpValue.IntOfText(class_id);
-        var target = await ManageAccess.ActiveClassAsync(db, classId, ct);
+        var target = await ManageAccess.ActiveClassAsync(source, classId, ct);
         if (target is null)
         {
             return ManageAccess.ClassNotFound();
@@ -58,8 +58,8 @@ internal static class ManageStandardSlice
             return ManageAccess.NotPermitted();
         }
 
-        var rows = await db.Database
-            .SqlQuery<Row>($"""
+        var rows = await source.ListAsync(
+            $"""
                 select min(m.id) as "Id", m.code::text as "Code", min(m.topic::text) as "Topic", min(m.subject::text) as "Subject", min(m.lesson::text) as "Lesson", min(m.name::text) as "Name",
                        count(q.id)::int as "Count", bool_or(sq.id is not null) as "Copied"
                 from assessment.standard_mcqs m
@@ -70,10 +70,12 @@ internal static class ManageStandardSlice
                 group by m.code
                 order by m.code, min(m.sort_order)
                 limit {MaxRows}
-                """)
-            .ToListAsync(ct);
+                """,
+            row => new Row(
+                row.Int("Id"), row.Text("Code"), row.Text("Topic"), row.Text("Subject"), row.Text("Lesson"), row.Text("Name"), row.Int("Count"), row.Bool("Copied")),
+            ct);
         var language = rows.Count > 0 && target.LanguageId > 0 ? target.LanguageId.Value : 1;
-        return Results.Json(new Body(new ClassHeader(target.Code, language), Group(rows)));
+        return Results.Json(new Body(new ClassHeader(target.Code, language), Group(rows)), AssessmentJson.Answers.ManageStandard);
     }
 
     private static List<TopicGroup> Group(IReadOnlyList<Row> rows) =>

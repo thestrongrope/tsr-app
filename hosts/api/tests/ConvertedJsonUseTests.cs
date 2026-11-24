@@ -19,6 +19,11 @@ public sealed partial class ConvertedJsonUseTests
         new("content", "ContentJson.", []),
         new("search", "SearchJson.", []),
         new("identity", "IdentityJson.", []),
+        new("notifications", "NotificationsJson.", []),
+        new("platform", "PlatformJson.", []),
+        new("membership", "MembershipJson.", []),
+        new("assessment", "AssessmentJson.", []),
+        new("classes", "ClassesJson.", []),
     ];
 
     // The call, up to the end of its statement: a statement may run over several lines, and its type info is often on the last.

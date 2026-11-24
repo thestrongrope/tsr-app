@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Notifications.Api.Domain;
 
@@ -23,7 +23,7 @@ internal static class ClassEventCreateSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string class_id, HttpContext context, NotificationsContext db, Permissions permissions, TimeProvider clock, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(string class_id, HttpContext context, NpgsqlDataSource source, Permissions permissions, TimeProvider clock, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -56,57 +56,51 @@ internal static class ClassEventCreateSlice
             return Unprocessable(CalendarEventInput.ZoneError);
         }
 
-        var id = await CreateAsync(db, clock, classId, caller, values.Value!, zone, ct);
+        var id = await CreateAsync(source, clock, classId, caller, values.Value!, zone, ct);
         if (id is null)
         {
             return Unprocessable($"This class already has {ClassEvents.MaxPerClass} scheduled events");
         }
 
-        var row = await ClassEvents.FindAsync(db, classId, id.Value, ct);
+        var row = await ClassEvents.FindAsync(source, classId, id.Value, ct);
         if (row is null)
         {
             return ClassEvents.NotFound();
         }
 
         var item = await ClassEvents.ManagedPayloadAsync(permissions, caller, row, ct);
-        return Results.Json(new Dictionary<string, object?> { ["item"] = item }, statusCode: StatusCodes.Status201Created);
+        return Results.Json(new Dictionary<string, object?> { ["item"] = item }, NotificationsJson.Answers.Answer, contentType: null, statusCode: StatusCodes.Status201Created);
     }
 
     private static IResult Unprocessable(string detail) => Problem.Detail(StatusCodes.Status422UnprocessableEntity, detail);
 
     /// <summary>The new event's id, or null when the class is full.</summary>
-    private static async Task<int?> CreateAsync(NotificationsContext db, TimeProvider clock, int classId, Caller caller, CalendarEventValues values, string zone, CancellationToken ct)
+    private static async Task<int?> CreateAsync(NpgsqlDataSource source, TimeProvider clock, int classId, Caller caller, CalendarEventValues values, string zone, CancellationToken ct)
     {
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        await db.Database.ExecuteSqlAsync($"select pg_advisory_xact_lock(hashtext('notifications.class_scheduled_events'), {classId})", ct);
-        var active = (await db.Database
-            .SqlQuery<long>($"""select count(*) as "Value" from notifications.class_scheduled_events where class_id = {classId} and status = 'active'""")
-            .ToListAsync(ct))[0];
+        await using var tx = await source.BeginAsync(ct);
+        await tx.ExecuteAsync($"select pg_advisory_xact_lock(hashtext('notifications.class_scheduled_events'), {classId})", ct);
+        var active = (await tx.ListAsync(
+            $"""select count(*) as "Value" from notifications.class_scheduled_events where class_id = {classId} and status = 'active'""",
+            row => row.Long("Value"),
+            ct))[0];
         if (active >= ClassEvents.MaxPerClass)
         {
             return null;
         }
 
         var now = clock.GetUtcNow();
-        var entity = new ClassScheduledEvent
-        {
-            ClassId = classId,
-            CreatedBy = caller.Token,
-            CreatedByUserId = caller.UserId,
-            Message = values.Message,
-            Description = values.Description,
-            ActionLink = values.ActionLink,
-            Weekdays = values.Weekdays,
-            SendTime = values.SendTime,
-            Tz = zone,
-            Status = "active",
-            CreatedAt = now,
-            UpdatedAt = now,
-        };
-        db.ClassScheduledEvents.Add(entity);
-        await db.SaveChangesAsync(ct);
-        await Outbox.WriteAsync(db, "notifications.class_event_created", new ClassEventCreated(entity.Id, classId, caller.Token), clock, ct);
-        await transaction.CommitAsync(ct);
-        return entity.Id;
+        var ids = await tx.ListAsync(
+            $"""
+            insert into notifications.class_scheduled_events
+                (class_id, created_by, created_by_user_id, message, description, action_link, weekdays, send_time, tz, status, created_at, updated_at)
+            values ({classId}, {caller.Token}, {caller.UserId}, {values.Message}, {values.Description}, {values.ActionLink}, {values.Weekdays}, {values.SendTime}, {zone}, 'active', {now}, {now})
+            returning id
+            """,
+            row => row.Int("id"),
+            ct);
+        var id = ids.Single();
+        await Outbox.WriteAsync(tx, "notifications.class_event_created", new ClassEventCreated(id, classId, caller.Token), NotificationsJson.Default.ClassEventCreated, clock, ct);
+        await tx.CommitAsync(ct);
+        return id;
     }
 }

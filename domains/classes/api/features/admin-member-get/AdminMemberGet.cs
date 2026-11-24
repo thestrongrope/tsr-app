@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Logging;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
 using Tsr.Shared.Api;
@@ -50,10 +51,10 @@ internal static partial class AdminMemberGetSlice
     private static async Task<IResult> HandleAsync(
         string token,
         HttpContext context,
-        ClassesContext db,
+        NpgsqlDataSource source,
         Permissions permissions,
         MemberRateLimit limit,
-        ILogger<ClassesContext> log,
+        ILogger<ClassesLog> log,
         CancellationToken ct)
     {
         var caller = context.GetCaller();
@@ -67,7 +68,7 @@ internal static partial class AdminMemberGetSlice
             return Refusals.NotPermitted();
         }
 
-        await ClassGuards.LogAdminAccessAsync(db, context, permissions, caller, ct);
+        await ClassGuards.LogAdminAccessAsync(context, permissions, caller, ct);
         if (!limit.Allow("member_lookup", caller.Token, 30, 3600))
         {
             return Problem.Detail(StatusCodes.Status429TooManyRequests, MemberLookup.Throttled);
@@ -75,7 +76,7 @@ internal static partial class AdminMemberGetSlice
 
         try
         {
-            return await LookUpAsync(db, MemberLookup.TokenOf(token), ct);
+            return await LookUpAsync(source, MemberLookup.TokenOf(token), ct);
         }
         catch (DbException e)
         {
@@ -84,9 +85,10 @@ internal static partial class AdminMemberGetSlice
         }
     }
 
-    private static async Task<IResult> LookUpAsync(ClassesContext db, int token, CancellationToken ct)
+    private static async Task<IResult> LookUpAsync(NpgsqlDataSource source, int token, CancellationToken ct)
     {
-        var holders = await MemberLookup.HoldersAsync(db, token, ct);
+        await using var tx = await source.BeginAsync(ct);
+        var holders = await MemberLookup.HoldersAsync(tx, token, ct);
         if (holders == 0)
         {
             return MemberLookup.NotFoundAnswer();
@@ -97,10 +99,10 @@ internal static partial class AdminMemberGetSlice
             return MemberLookup.AmbiguousAnswer();
         }
 
-        var row = (await MemberLookup.RowAsync(db, token, ct))!;
-        var requested = await MemberLookup.RequestedClassAsync(db, token, ct);
-        var now = await MemberLookup.ClassesNowAsync(db, token, ct);
-        var left = await MemberLookup.ClassesLeftAsync(db, token, ct);
+        var row = (await MemberLookup.RowAsync(tx, token, ct))!;
+        var requested = await MemberLookup.RequestedClassAsync(tx, token, ct);
+        var now = await MemberLookup.ClassesNowAsync(tx, token, ct);
+        var left = await MemberLookup.ClassesLeftAsync(tx, token, ct);
         return Results.Json(new Card(
             token,
             PhpCast.Text(row.Name),
@@ -112,6 +114,6 @@ internal static partial class AdminMemberGetSlice
             row.CreatedOn?.UtcDateTime.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
             requested is null ? null : new Requested(requested.ForClassId!.Value, requested.Code!, PhpCast.Text(requested.Name)),
             now.Select(c => new Current(c.Id, c.Code, PhpCast.Text(c.Name), PhpCast.TextOrNull(c.Level))).ToList(),
-            left.Select(c => new Left(c.Id, c.Code, PhpCast.Text(c.Name), c.RemovedAt?.UtcDateTime.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))).ToList()));
+            left.Select(c => new Left(c.Id, c.Code, PhpCast.Text(c.Name), c.RemovedAt?.UtcDateTime.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))).ToList()), ClassesJson.Answers.MemberCard);
     }
 }

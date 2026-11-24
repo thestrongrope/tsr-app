@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Shared.Api;
 
 namespace Tsr.Classes.Api.Features.ClassLevels;
@@ -20,16 +20,17 @@ internal static class ClassLevelsSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(HttpContext context, ClassesContext db, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(HttpContext context, NpgsqlDataSource source, CancellationToken ct)
     {
         if (context.GetCaller() is null)
         {
             return Problem.Unauthenticated();
         }
 
-        var levels = await db.Database
-            .SqlQuery<Level>($"""select id as "Id", code as "Code", name as "Name" from classes.class_levels order by sort_order, id""")
-            .ToListAsync(ct);
-        return Results.Json(levels);
+        var levels = await source.ListAsync(
+            $"""select id as "Id", code as "Code", name as "Name" from classes.class_levels order by sort_order, id""",
+            row => new Level(row.Int("Id"), row.Text("Code"), row.Text("Name")),
+            ct);
+        return Results.Json(levels, ClassesJson.Answers.ClassLevelList);
     }
 }

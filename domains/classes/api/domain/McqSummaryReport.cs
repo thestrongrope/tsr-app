@@ -1,6 +1,6 @@
 using System.Globalization;
 using Microsoft.AspNetCore.Http;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Shared.Api;
 
@@ -43,7 +43,7 @@ internal static class McqSummaryReport
 
     private sealed record StudentRow(int ClassId, int EnrolmentId, long Token, string? Name, string? Topic, int Correct, int Total, int Attempted);
 
-    public static async Task<(Loaded? Report, IResult? Refusal)> OpenAsync(HttpContext context, ClassesContext db, Permissions permissions, Caller caller, DateOnly today, long classId, CancellationToken ct)
+    public static async Task<(Loaded? Report, IResult? Refusal)> OpenAsync(HttpContext context, NpgsqlDataSource db, Permissions permissions, Caller caller, DateOnly today, long classId, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(context);
         var (scope, refusal) = await ReportScope.OpenAsync(context, permissions, caller, ct);
@@ -60,8 +60,8 @@ internal static class McqSummaryReport
 
         var ids = await ReportScope.KeepAssignedAsync(await scope!.ClassIdsAsync(db, classId, ct), permissions, caller, ct);
         var classes = await ReportClasses.ForIdsAsync(db, ids, ct);
-        var fromTime = range!.FromDay.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
-        var toTime = range.ToDay.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+        var fromTime = new DateTimeOffset(range!.FromDay.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
+        var toTime = new DateTimeOffset(range.ToDay.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
         var quizzes = (await QuizCountsAsync(db, ids, fromTime, toTime, ct)).ToDictionary(q => q.ClassId, q => q.Quizzes);
         var withQuizzes = classes.Where(c => quizzes.ContainsKey(c.Id)).ToList();
         var classIds = withQuizzes.Select(c => c.Id).ToArray();
@@ -163,41 +163,44 @@ internal static class McqSummaryReport
         return [.. order.Select(token => byToken[token]).Select(e => new Student(e.Name, e.Attempted, quizzes - e.Attempted, e.Correct, e.Topics)).OrderByDescending(s => s.Correct)];
     }
 
-    private static async Task<List<QuizCount>> QuizCountsAsync(ClassesContext db, int[] ids, DateTime from, DateTime to, CancellationToken ct) =>
-        await db.Database
-            .SqlQuery<QuizCount>($"""
-                select q.class_id as "ClassId", count(*)::int as "Quizzes"
-                from assessment.v_quizzes q
-                where q.class_id = any({ids}) and q.published_at >= {from} and q.published_at <= {to}
-                group by q.class_id
-                """)
-            .ToListAsync(ct);
+    private static async Task<List<QuizCount>> QuizCountsAsync(NpgsqlDataSource db, int[] ids, DateTimeOffset from, DateTimeOffset to, CancellationToken ct) =>
+        await db.ListAsync(
+            $"""
+            select q.class_id::int as "ClassId", count(*)::int as "Quizzes"
+            from assessment.v_quizzes q
+            where q.class_id = any({ids}) and q.published_at >= {from} and q.published_at <= {to}
+            group by q.class_id
+            """,
+            r => new QuizCount(r.Int("ClassId"), r.Int("Quizzes")),
+            ct);
 
-    private static async Task<List<TopicRow>> TopicsAsync(ClassesContext db, int[] ids, DateTime from, DateTime to, CancellationToken ct) =>
-        await db.Database
-            .SqlQuery<TopicRow>($"""
-                select q.class_id as "ClassId", q.topic::text as "Topic", sum(q.max_marks)::int as "Max"
-                from assessment.v_quizzes q
-                where q.class_id = any({ids}) and q.published_at >= {from} and q.published_at <= {to} and q.topic is not null and q.topic <> ''
-                group by q.class_id, q.topic
-                having sum(q.max_marks) > 0
-                order by q.class_id, q.topic
-                """)
-            .ToListAsync(ct);
+    private static async Task<List<TopicRow>> TopicsAsync(NpgsqlDataSource db, int[] ids, DateTimeOffset from, DateTimeOffset to, CancellationToken ct) =>
+        await db.ListAsync(
+            $"""
+            select q.class_id::int as "ClassId", q.topic::text as "Topic", sum(q.max_marks)::int as "Max"
+            from assessment.v_quizzes q
+            where q.class_id = any({ids}) and q.published_at >= {from} and q.published_at <= {to} and q.topic is not null and q.topic <> ''
+            group by q.class_id, q.topic
+            having sum(q.max_marks) > 0
+            order by q.class_id, q.topic
+            """,
+            r => new TopicRow(r.Int("ClassId"), r.Text("Topic"), r.Int("Max")),
+            ct);
 
     // PHP's third query: the roster (not removed) left-joined to the answers of the range's quizzes, one row per enrolment and topic. Bound: 200000 rows.
-    private static async Task<List<StudentRow>> StudentsAsync(ClassesContext db, int[] ids, DateTime from, DateTime to, CancellationToken ct) =>
-        await db.Database
-            .SqlQuery<StudentRow>($"""
-                select cs.class_id as "ClassId", cs.id as "EnrolmentId", u.token::bigint as "Token", u.name::text as "Name", r.topic::text as "Topic",
-                       coalesce(sum(r.correct), 0)::int as "Correct", coalesce(sum(r.answered), 0)::int as "Total", count(r.quiz_id)::int as "Attempted"
-                from classes.class_students cs
-                join membership.v_members u on u.token = cs.token_no
-                left join assessment.v_quiz_results r on r.class_id = cs.class_id and r.token = cs.token_no and r.published_at >= {from} and r.published_at <= {to}
-                where cs.class_id = any({ids}) and cs.removed_at is null
-                group by cs.class_id, cs.id, u.token, u.name, r.topic
-                order by cs.class_id, cs.id
-                limit {MaxStudentRows}
-                """)
-            .ToListAsync(ct);
+    private static async Task<List<StudentRow>> StudentsAsync(NpgsqlDataSource db, int[] ids, DateTimeOffset from, DateTimeOffset to, CancellationToken ct) =>
+        await db.ListAsync(
+            $"""
+            select cs.class_id as "ClassId", cs.id as "EnrolmentId", u.token::bigint as "Token", u.name::text as "Name", r.topic::text as "Topic",
+                   coalesce(sum(r.correct), 0)::int as "Correct", coalesce(sum(r.answered), 0)::int as "Total", count(r.quiz_id)::int as "Attempted"
+            from classes.class_students cs
+            join membership.v_members u on u.token = cs.token_no
+            left join assessment.v_quiz_results r on r.class_id = cs.class_id and r.token = cs.token_no and r.published_at >= {from} and r.published_at <= {to}
+            where cs.class_id = any({ids}) and cs.removed_at is null
+            group by cs.class_id, cs.id, u.token, u.name, r.topic
+            order by cs.class_id, cs.id
+            limit {MaxStudentRows}
+            """,
+            r => new StudentRow(r.Int("ClassId"), r.Int("EnrolmentId"), r.Long("Token"), r.TextOrNull("Name"), r.TextOrNull("Topic"), r.Int("Correct"), r.Int("Total"), r.Int("Attempted")),
+            ct);
 }

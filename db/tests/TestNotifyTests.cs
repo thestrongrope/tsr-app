@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
 using System.Net;
 using System.Text.Json;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Microsoft.Extensions.DependencyInjection;
 using NUnit.Framework;
 using Tsr.Notifications.Api;
@@ -537,15 +537,12 @@ public sealed class TestNotifyTests
 
     // ---- the published commands ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-    private static async Task<T> InRolledBackTransactionAsync<T>(Func<NotificationsContext, Task<T>> act)
+    private static async Task<T> InRolledBackTransactionAsync<T>(Func<DbTx, Task<T>> act)
     {
         using var factory = TestApi.Create();
-        using var scope = factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<NotificationsContext>();
-        await using var transaction = await db.Database.BeginTransactionAsync();
-        var result = await act(db);
-        await transaction.RollbackAsync();
-        return result;
+        var source = factory.Services.GetRequiredService<NpgsqlDataSource>();
+        await using var tx = await source.BeginAsync(CancellationToken.None);
+        return await act(tx);
     }
 
     [Test]
@@ -554,10 +551,10 @@ public sealed class TestNotifyTests
         var first = new Announcement("Nt Sys", "Nt sys body", "/quiz/1", "quiz_announcement", "nt-key-1");
         var (one, two, notifications, inbox) = await InRolledBackTransactionAsync(async db =>
         {
-            var a = await NotificationsCommands.AnnounceCountedAsync(EfTransaction.Join(db), first, CancellationToken.None);
-            var b = await NotificationsCommands.AnnounceCountedAsync(EfTransaction.Join(db), first, CancellationToken.None);
-            var n = await db.Database.SqlQuery<long>($"""select count(*) as "Value" from notifications.notifications where created_by = 0 and title = 'Nt Sys'""").SingleAsync();
-            var i = await db.Database.SqlQuery<long>($"""select count(*) as "Value" from notifications.user_notifications""").SingleAsync();
+            var a = await NotificationsCommands.AnnounceCountedAsync(db, first, CancellationToken.None);
+            var b = await NotificationsCommands.AnnounceCountedAsync(db, first, CancellationToken.None);
+            var n = (await db.ListAsync($"""select count(*) as "Value" from notifications.notifications where created_by = 0 and title = 'Nt Sys'""", row => row.Long("Value"), CancellationToken.None)).Single();
+            var i = (await db.ListAsync($"""select count(*) as "Value" from notifications.user_notifications""", row => row.Long("Value"), CancellationToken.None)).Single();
             return (a, b, n, i);
         });
 
@@ -576,9 +573,9 @@ public sealed class TestNotifyTests
         var again = first with { Title = "NT CASE", Body = "NT CASE BODY", ActionLink = "/QUIZ/case", DedupeKey = "nt-case-2" };
         var notifications = await InRolledBackTransactionAsync(async db =>
         {
-            await NotificationsCommands.AnnounceCountedAsync(EfTransaction.Join(db), first, CancellationToken.None);
-            await NotificationsCommands.AnnounceCountedAsync(EfTransaction.Join(db), again, CancellationToken.None);
-            return await db.Database.SqlQuery<long>($"""select count(*) as "Value" from notifications.notifications where title = 'Nt Case'""").SingleAsync();
+            await NotificationsCommands.AnnounceCountedAsync(db, first, CancellationToken.None);
+            await NotificationsCommands.AnnounceCountedAsync(db, again, CancellationToken.None);
+            return (await db.ListAsync($"""select count(*) as "Value" from notifications.notifications where title = 'Nt Case'""", row => row.Long("Value"), CancellationToken.None)).Single();
         });
 
         Assert.That(notifications, Is.EqualTo(1), "MariaDB compares title, body and link without regard to letter case, so the second call reuses the first notification");
@@ -592,9 +589,9 @@ public sealed class TestNotifyTests
             Tokens: [A, Demo, C], Sender: T1, Criteria: """{"type":"MEMBERS","ids":3}""", Data: new Dictionary<string, string> { ["type"] = "custom" }, ReuseExisting: false, CountsFromQueue: true, SkipDemoDevices: true);
         var (first, second, rows) = await InRolledBackTransactionAsync(async db =>
         {
-            var a = await NotificationsCommands.AnnounceCountedAsync(EfTransaction.Join(db), announcement, CancellationToken.None);
-            var b = await NotificationsCommands.AnnounceCountedAsync(EfTransaction.Join(db), announcement with { DedupeKey = "nt-key-3" }, CancellationToken.None);
-            var r = await db.Database.SqlQuery<string>($"""select created_by::text || '|' || device_count || '|' || success_count || '|' || failure_count || '|' || target_audience_criteria::text as "Value" from notifications.notifications order by notification_id""").ToListAsync();
+            var a = await NotificationsCommands.AnnounceCountedAsync(db, announcement, CancellationToken.None);
+            var b = await NotificationsCommands.AnnounceCountedAsync(db, announcement with { DedupeKey = "nt-key-3" }, CancellationToken.None);
+            var r = await db.ListAsync($"""select created_by::text || '|' || device_count || '|' || success_count || '|' || failure_count || '|' || target_audience_criteria::text as "Value" from notifications.notifications order by notification_id""", row => row.Text("Value"), CancellationToken.None);
             return (a, b, r);
         });
 
@@ -614,10 +611,8 @@ public sealed class TestNotifyTests
             + $"('n3', 'b', '{{\"type\":\"CC_NUDGE\",\"teacher\":{T2}}}', now() - interval '1 hours', 0), "
             + $"('n4', 'b', '{{\"type\":\"OTHER\",\"teacher\":{T1}}}', now() - interval '1 hours', 0)");
         using var factory = TestApi.Create();
-        using var scope = factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<NotificationsContext>();
-        await using var transaction = await db.Database.BeginTransactionAsync();
-        var tx = EfTransaction.Join(db);
+        var source = factory.Services.GetRequiredService<NpgsqlDataSource>();
+        await using var tx = await source.BeginAsync(CancellationToken.None);
         var within = await NotificationsCommands.LastNudgeAsync(tx, T1, 24, CancellationToken.None);
         Assert.That(within, Is.Not.Null);
         Assert.That(DateTimeOffset.UtcNow - within!.Value, Is.InRange(TimeSpan.FromHours(1.9), TimeSpan.FromHours(2.1)));
@@ -630,9 +625,9 @@ public sealed class TestNotifyTests
     {
         var ids = await InRolledBackTransactionAsync(async db =>
         {
-            var erased = await NotificationsErasure.EraseDevicesAsync(EfTransaction.Join(db), A, CancellationToken.None);
-            Assert.That(await db.Database.SqlQuery<long>($"""select count(*) as "Value" from notifications.user_devices where token = {A}""").SingleAsync(), Is.Zero);
-            Assert.That(await db.Database.SqlQuery<long>($"""select count(*) as "Value" from notifications.user_devices where token = {B}""").SingleAsync(), Is.EqualTo(1));
+            var erased = await NotificationsErasure.EraseDevicesAsync(db, A, CancellationToken.None);
+            Assert.That((await db.ListAsync($"""select count(*) as "Value" from notifications.user_devices where token = {A}""", row => row.Long("Value"), CancellationToken.None)).Single(), Is.Zero);
+            Assert.That((await db.ListAsync($"""select count(*) as "Value" from notifications.user_devices where token = {B}""", row => row.Long("Value"), CancellationToken.None)).Single(), Is.EqualTo(1));
             return erased;
         });
         Assert.That(ids.Order(StringComparer.Ordinal), Is.EqualTo((string[])["dev-a1", "dev-a2"]));

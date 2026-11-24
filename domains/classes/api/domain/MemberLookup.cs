@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Http;
-using Microsoft.EntityFrameworkCore;
 using Tsr.Shared.Api;
 
 namespace Tsr.Classes.Api.Domain;
@@ -36,49 +35,58 @@ internal static partial class MemberLookup
     }
 
     /// <summary>An answer with a machine-readable code beside the detail ({"detail": ..., "code": ...}).</summary>
-    public static IResult Refusal(int status, string detail, string code) => Results.Json(new Coded(detail, code), statusCode: status);
+    public static IResult Refusal(int status, string detail, string code) => Results.Json(new Coded(detail, code), ClassesJson.Answers.MemberLookupCoded, statusCode: status);
 
     public static IResult NotFoundAnswer() => Problem.Detail(StatusCodes.Status404NotFound, NotFound);
 
     public static IResult AmbiguousAnswer() => Refusal(StatusCodes.Status422UnprocessableEntity, Ambiguous, "ambiguous_token");
 
     /// <summary>How many members hold the token (PHP: "select id from users where token limit 2": 0, 1 or 2).</summary>
-    public static async Task<int> HoldersAsync(ClassesContext db, int token, CancellationToken ct) =>
+    public static async Task<int> HoldersAsync(DbTx tx, int token, CancellationToken ct) =>
         token <= 0
             ? 0
-            : (await db.Database.SqlQuery<int>($"""select id as "Value" from identity.v_users where token = {token} limit 2""").ToListAsync(ct)).Count;
+            : (await tx.ListAsync($"""select id as "Value" from identity.v_users where token = {token} limit 2""", row => row.Int("Value"), ct)).Count;
 
     internal sealed record Row(string? Name, string? Gender, string? Email, string? Mobile, string? City, string? Country, DateTimeOffset? CreatedOn);
 
-    public static async Task<Row?> RowAsync(ClassesContext db, int token, CancellationToken ct)
+    public static async Task<Row?> RowAsync(DbTx tx, int token, CancellationToken ct)
     {
-        var rows = await db.Database
-            .SqlQuery<Row>($"""
+        var rows = await tx.ListAsync(
+            $"""
                 select m.name as "Name", m.gender::text as "Gender", u.email as "Email", m.mobile as "Mobile", m.city::text as "City", m.country::text as "Country", u.created_on as "CreatedOn"
                 from identity.v_users u
                 left join membership.v_members m on m.user_id = u.id
                 where u.token = {token}
                 limit 1
-                """)
-            .ToListAsync(ct);
+                """,
+            row => new Row(
+                row.TextOrNull("Name"),
+                row.TextOrNull("Gender"),
+                row.TextOrNull("Email"),
+                row.TextOrNull("Mobile"),
+                row.TextOrNull("City"),
+                row.TextOrNull("Country"),
+                row.InstantOrNull("CreatedOn")),
+            ct);
         return rows.Count == 0 ? null : rows[0];
     }
 
     internal sealed record Requested(int? ForClassId, string? Status, string? Code, string? Name);
 
     /// <summary>The class the member's latest request asked for, or null (no request, no class, a class that is gone, or an Accepted request: it says nothing about what was asked).</summary>
-    public static async Task<Requested?> RequestedClassAsync(ClassesContext db, int token, CancellationToken ct)
+    public static async Task<Requested?> RequestedClassAsync(DbTx tx, int token, CancellationToken ct)
     {
-        var rows = await db.Database
-            .SqlQuery<Requested>($"""
+        var rows = await tx.ListAsync(
+            $"""
                 select r.for_classid as "ForClassId", r.status as "Status", c.code as "Code", c.name as "Name"
                 from membership.v_registrations r
                 left join classes.classes c on c.id = r.for_classid
                 where r.token = {token}
                 order by r.id desc
                 limit 1
-                """)
-            .ToListAsync(ct);
+                """,
+            row => new Requested(row.IntOrNull("ForClassId"), row.TextOrNull("Status"), row.TextOrNull("Code"), row.TextOrNull("Name")),
+            ct);
         if (rows.Count == 0 || rows[0].ForClassId is null or <= 0 || rows[0].Code is null || rows[0].Status == "Accepted")
         {
             return null;
@@ -89,9 +97,9 @@ internal static partial class MemberLookup
 
     internal sealed record Now(int Id, string Code, string Name, string? Level);
 
-    public static async Task<List<Now>> ClassesNowAsync(ClassesContext db, int token, CancellationToken ct) =>
-        await db.Database
-            .SqlQuery<Now>($"""
+    public static async Task<List<Now>> ClassesNowAsync(DbTx tx, int token, CancellationToken ct) =>
+        await tx.ListAsync(
+            $"""
                 select distinct c.id as "Id", c.code::text as "Code", c.name as "Name", l.name as "Level"
                 from classes.class_students cs
                 join classes.classes c on c.id = cs.class_id and c.status = 'A'
@@ -99,15 +107,16 @@ internal static partial class MemberLookup
                 where cs.token_no = {token} and cs.removed_at is null and cs.status = 'A'
                 order by c.code::text
                 limit {MaxClasses}
-                """)
-            .ToListAsync(ct);
+                """,
+            row => new Now(row.Int("Id"), row.Text("Code"), row.Text("Name"), row.TextOrNull("Level")),
+            ct);
 
     internal sealed record Left(int Id, string Code, string Name, DateTimeOffset? RemovedAt);
 
     /// <summary>The latest enrolment row of each class the member is not in now (duplicate rows exist), newest first: a removed, moved or closed-class row all count as left.</summary>
-    public static async Task<List<Left>> ClassesLeftAsync(ClassesContext db, int token, CancellationToken ct) =>
-        await db.Database
-            .SqlQuery<Left>($"""
+    public static async Task<List<Left>> ClassesLeftAsync(DbTx tx, int token, CancellationToken ct) =>
+        await tx.ListAsync(
+            $"""
                 select c.id as "Id", c.code::text as "Code", c.name as "Name", cs.removed_at as "RemovedAt"
                 from classes.class_students cs
                 join classes.classes c on c.id = cs.class_id
@@ -117,6 +126,7 @@ internal static partial class MemberLookup
                                   where n.token_no = {token} and n.class_id = cs.class_id and n.removed_at is null and n.status = 'A' and nc.status = 'A')
                 order by cs.id desc
                 limit {MaxClasses}
-                """)
-            .ToListAsync(ct);
+                """,
+            row => new Left(row.Int("Id"), row.Text("Code"), row.Text("Name"), row.InstantOrNull("RemovedAt")),
+            ct);
 }

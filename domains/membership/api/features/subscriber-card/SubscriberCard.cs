@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Membership.Api.Domain;
 using Tsr.Shared.Api;
@@ -26,7 +26,7 @@ internal static class SubscriberCardSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string token, HttpContext context, MembershipContext db, Permissions permissions, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(string token, HttpContext context, NpgsqlDataSource source, Permissions permissions, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -46,13 +46,13 @@ internal static class SubscriberCardSlice
             return NotFound();
         }
 
-        var member = await FindMemberAsync(db, (int)value, ct);
-        if (member is null || await InClassAsync(db, (int)value, ct))
+        var member = await FindMemberAsync(source, (int)value, ct);
+        if (member is null || await InClassAsync(source, (int)value, ct))
         {
             return NotFound();
         }
 
-        var registration = await LatestRegistrationAsync(db, (int)value, ct);
+        var registration = await LatestRegistrationAsync(source, (int)value, ct);
         return Results.Json(new Dictionary<string, object?>
         {
             ["token"] = value,
@@ -60,36 +60,39 @@ internal static class SubscriberCardSlice
             ["gender"] = CardRules.GenderOf(member.Gender),
             ["registeredOn"] = registration?.RegisteredOn,
             ["requestedClass"] = string.IsNullOrEmpty(registration?.Code) ? null : registration.Code,
-        });
+        }, MembershipJson.Answers.Answer);
     }
 
-    private static async Task<MemberRow?> FindMemberAsync(MembershipContext db, int token, CancellationToken ct) =>
-        (await db.Database
-            .SqlQuery<MemberRow>($"""
-                select p.name as "Name", p.gender as "Gender" from identity.v_users u
-                left join membership.member_profiles p on p.user_id = u.id
-                where u.token = {token} order by u.id limit 1
-                """)
-            .ToListAsync(ct)).FirstOrDefault();
+    private static async Task<MemberRow?> FindMemberAsync(NpgsqlDataSource source, int token, CancellationToken ct) =>
+        (await source.ListAsync(
+            $"""
+            select p.name as "Name", p.gender as "Gender" from identity.v_users u
+            left join membership.member_profiles p on p.user_id = u.id
+            where u.token = {token} order by u.id limit 1
+            """,
+            row => new MemberRow(row.TextOrNull("Name"), row.TextOrNull("Gender")),
+            ct)).FirstOrDefault();
 
-    private static async Task<bool> InClassAsync(MembershipContext db, int token, CancellationToken ct) =>
-        (await db.Database
-            .SqlQuery<int>($"""
-                select 1 as "Value" from classes.v_enrolments cs
-                join classes.v_classes c on c.id = cs.class_id and c.status = 'A'
-                where cs.token_no = {token} and cs.removed_at is null limit 1
-                """)
-            .ToListAsync(ct)).Count > 0;
+    private static async Task<bool> InClassAsync(NpgsqlDataSource source, int token, CancellationToken ct) =>
+        (await source.ListAsync(
+            $"""
+            select 1 as "Value" from classes.v_enrolments cs
+            join classes.v_classes c on c.id = cs.class_id and c.status = 'A'
+            where cs.token_no = {token} and cs.removed_at is null limit 1
+            """,
+            row => row.Int("Value"),
+            ct)).Count > 0;
 
-    private static async Task<RegistrationRow?> LatestRegistrationAsync(MembershipContext db, int token, CancellationToken ct) =>
-        (await db.Database
-            .SqlQuery<RegistrationRow>($"""
-                select to_char(cr.created_at at time zone 'UTC', 'YYYY-MM-DD') as "RegisteredOn", c.code as "Code"
-                from membership.class_registrations cr
-                left join classes.v_classes c on c.id = cr.for_classid
-                where cr.token = {token} order by cr.id desc limit 1
-                """)
-            .ToListAsync(ct)).FirstOrDefault();
+    private static async Task<RegistrationRow?> LatestRegistrationAsync(NpgsqlDataSource source, int token, CancellationToken ct) =>
+        (await source.ListAsync(
+            $"""
+            select to_char(cr.created_at at time zone 'UTC', 'YYYY-MM-DD') as "RegisteredOn", c.code as "Code"
+            from membership.class_registrations cr
+            left join classes.v_classes c on c.id = cr.for_classid
+            where cr.token = {token} order by cr.id desc limit 1
+            """,
+            row => new RegistrationRow(row.TextOrNull("RegisteredOn"), row.TextOrNull("Code")),
+            ct)).FirstOrDefault();
 
     private static IResult NotFound() => Problem.Detail(StatusCodes.Status404NotFound, "Person not found");
 }

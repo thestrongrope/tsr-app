@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Shared.Api;
 
 namespace Tsr.Membership.Api.Domain;
@@ -14,11 +14,11 @@ internal static class DonorList
 
     internal sealed record Donor(string? Name, string? Email, string? Mobile, string? City, string? State, string? Country, string? Zip);
 
-    public static async Task<List<Donor>> LoadAsync(MembershipContext db, CancellationToken ct)
+    public static async Task<List<Donor>> LoadAsync(NpgsqlDataSource source, CancellationToken ct)
     {
-        ArgumentNullException.ThrowIfNull(db);
-        var rows = await db.Database
-            .SqlQuery<Donor>($"""
+        ArgumentNullException.ThrowIfNull(source);
+        var rows = await source.ListAsync(
+            $"""
                 select m.name as "Name", u.email as "Email", m.mobile as "Mobile", m.city as "City", m.state as "State", m.country as "Country", m.zip as "Zip"
                 from membership.v_members m
                 join identity.v_users u on u.id = m.user_id
@@ -27,8 +27,9 @@ internal static class DonorList
                 where cs.removed_at is null and c.status = 'A'
                 order by m.name
                 limit {MaxRows}
-                """)
-            .ToListAsync(ct);
+                """,
+            row => new Donor(row.TextOrNull("Name"), row.TextOrNull("Email"), row.TextOrNull("Mobile"), row.TextOrNull("City"), row.TextOrNull("State"), row.TextOrNull("Country"), row.TextOrNull("Zip")),
+            ct);
         return [.. rows.Select(d => new Donor(Text(d.Name), Text(d.Email), Text(d.Mobile), Text(d.City), Text(d.State), Text(d.Country), Text(d.Zip)))];
     }
 

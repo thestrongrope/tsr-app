@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
 using Tsr.Shared.Api;
@@ -22,7 +23,7 @@ internal static class ClassCreateTeachersSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(HttpContext context, ClassesContext db, Permissions permissions, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(HttpContext context, NpgsqlDataSource source, Permissions permissions, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -38,6 +39,6 @@ internal static class ClassCreateTeachersSlice
         }
 
         var q = context.Request.Query["q"];
-        return await TeacherSearch.RunAsync(db, q.Count == 0 ? null : q[^1], gender == GenderGents, ct);
+        return await TeacherSearch.RunAsync(source, q.Count == 0 ? null : q[^1], gender == GenderGents, ct);
     }
 }

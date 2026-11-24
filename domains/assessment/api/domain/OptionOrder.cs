@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Shared.Api;
 
 namespace Tsr.Assessment.Api.Domain;
@@ -57,18 +57,19 @@ internal static class OptionOrder
     }
 
     /// <summary>Stores an order for every question of the quiz that has none. Only a question still without one is written, so two callers at once keep the first order. At most 5000 questions.</summary>
-    public static async Task FillMissingAsync(AssessmentContext db, long quizId, IQuizRandom random, CancellationToken ct)
+    public static async Task FillMissingAsync(NpgsqlDataSource source, long quizId, IQuizRandom random, CancellationToken ct)
     {
-        var rows = await db.Database
-            .SqlQuery<Row>($"""
-                select id as "Id", option1::text as "Option1", option2::text as "Option2", option3::text as "Option3", option4::text as "Option4"
-                from assessment.spot_quiz_questions where spot_quiz_id = {quizId} and option_display_order is null order by id limit 5000
-                """)
-            .ToListAsync(ct);
+        var rows = await source.ListAsync(
+            $"""
+            select id as "Id", option1::text as "Option1", option2::text as "Option2", option3::text as "Option3", option4::text as "Option4"
+            from assessment.spot_quiz_questions where spot_quiz_id = {quizId} and option_display_order is null order by id limit 5000
+            """,
+            row => new Row(row.Int("Id"), row.TextOrNull("Option1"), row.TextOrNull("Option2"), row.TextOrNull("Option3"), row.TextOrNull("Option4")),
+            ct);
         foreach (var row in rows)
         {
             var order = NewOrder([row.Option1, row.Option2, row.Option3, row.Option4], random);
-            await db.Database.ExecuteSqlAsync($"update assessment.spot_quiz_questions set option_display_order = {order} where id = {row.Id} and option_display_order is null", ct);
+            await source.ExecuteAsync($"update assessment.spot_quiz_questions set option_display_order = {order} where id = {row.Id} and option_display_order is null", ct);
         }
     }
 }

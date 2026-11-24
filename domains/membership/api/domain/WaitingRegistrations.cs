@@ -1,5 +1,5 @@
 using Microsoft.AspNetCore.Http;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Shared.Api;
 
@@ -46,12 +46,12 @@ internal static class WaitingRegistrations
     }
 
     /// <summary>The waiting people of one gender, whoever asks (PHP <c>getClassRegistrations</c>).</summary>
-    public static async Task<List<Row>> LoadAsync(MembershipContext db, int gender, CancellationToken ct)
+    public static async Task<List<Row>> LoadAsync(NpgsqlDataSource source, int gender, CancellationToken ct)
     {
-        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(source);
         var stored = gender.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        return await db.Database
-            .SqlQuery<Row>($"""
+        return await source.ListAsync(
+            $"""
                 select r.id as "Id", r.token as "Token", p.name::text as "Name", r.status as "Status", to_char(r.created_at at time zone 'UTC', 'YYYY-MM-DD') as "RegisteredOn", f.code::text as "ForClass",
                        u.email::text as "Email", p.mobile::text as "Mobile", r.residence_location as "Residence", r.preferred_location as "Preferred", r.work_location as "Work", r.class_level as "ClassLevel",
                        r.class_number as "ClassNumber", r.profession as "Profession", r.birth_year as "BirthYear", r.islamic_study_years as "IslamicYears", r.interests as "Interests",
@@ -76,9 +76,15 @@ internal static class WaitingRegistrations
                   and p.gender::text = {stored}
                 order by r.created_at desc, r.id desc
                 limit {MaxRows}
-                """)
-            .ToListAsync(ct);
+                """,
+            ReadRow,
+            ct);
     }
+
+    private static Row ReadRow(DbRow row) => new(
+        row.Int("Id"), row.Int("Token"), row.TextOrNull("Name"), row.Text("Status"), row.Text("RegisteredOn"), row.TextOrNull("ForClass"), row.TextOrNull("Email"), row.TextOrNull("Mobile"),
+        row.TextOrNull("Residence"), row.TextOrNull("Preferred"), row.TextOrNull("Work"), row.TextOrNull("ClassLevel"), row.TextOrNull("ClassNumber"), row.TextOrNull("Profession"),
+        row.IntOrNull("BirthYear"), row.IntOrNull("IslamicYears"), row.TextOrNull("Interests"), row.TextOrNull("City"), row.TextOrNull("Country"), row.TextOrNull("Zip"), row.Text("CreatedAt"));
 
     /// <summary>PHP <c>api_reports_registrant</c>: <c>str?</c> (empty is null) for the short columns, <c>text?</c> (entity-decoded, empty is null) for the free texts, the years as text.</summary>
     internal static Item ToItem(Row row) => new(

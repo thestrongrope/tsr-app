@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
 using Tsr.Shared.Api;
@@ -36,7 +37,7 @@ internal static class ChildAttendanceSlice
     }
 
     private static async Task<IResult> HandleAsync(
-        string child_token, string class_id, HttpContext context, ClassesContext db, Permissions permissions, CancellationToken ct)
+        string child_token, string class_id, HttpContext context, NpgsqlDataSource source, Permissions permissions, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -51,17 +52,17 @@ internal static class ChildAttendanceSlice
 
         var childToken = ClassGuards.IdOf(child_token);
         var classId = ClassGuards.IdOf(class_id);
-        if (!await ChildGuards.IsActiveGuardianAsync(db, caller.Token, childToken, ct)
-            || !await ChildGuards.IsChildEnrolledAsync(db, childToken, classId, ct))
+        if (!await ChildGuards.IsActiveGuardianAsync(source, caller.Token, childToken, ct)
+            || !await ChildGuards.IsChildEnrolledAsync(source, childToken, classId, ct))
         {
             return Problem.Detail(StatusCodes.Status404NotFound, "Child or class not found");
         }
 
         var history = await StudentAttendance.HistoryAsync(
-            db, (int)classId, (int)childToken, context.Request.Query["start_date"].LastOrDefault(), context.Request.Query["end_date"].LastOrDefault(), ct);
+            source, (int)classId, (int)childToken, context.Request.Query["start_date"].LastOrDefault(), context.Request.Query["end_date"].LastOrDefault(), ct);
         var summary = StudentAttendance.Summarise(history);
         return Results.Json(new Body(
             new Summary(summary.TotalSessions, summary.AttendedSessions, StudentAttendance.Percent(summary, 1), summary.TotalRecitation),
-            history.Select(s => new Entry(s.ConductedOn.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), s.Duration, s.Present, s.Recitation)).ToList()));
+            history.Select(s => new Entry(s.ConductedOn.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), s.Duration, s.Present, s.Recitation)).ToList()), ClassesJson.Answers.ChildAttendanceBody);
     }
 }

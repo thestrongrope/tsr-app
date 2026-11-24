@@ -3,7 +3,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Microsoft.Extensions.Logging;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
@@ -45,10 +45,10 @@ internal static partial class AdminTransferSaveSlice
 
     private static async Task<IResult> HandleAsync(
         HttpContext context,
-        ClassesContext db,
+        NpgsqlDataSource source,
         Permissions permissions,
         TimeProvider clock,
-        ILogger<ClassesContext> log,
+        ILogger<ClassesLog> log,
         CancellationToken ct)
     {
         var caller = context.GetCaller();
@@ -77,31 +77,31 @@ internal static partial class AdminTransferSaveSlice
 
         var input = parsed.Value!;
         var assigned = await ClassListing.AssignedAsync(permissions, caller, ct);
-        var source = await ClassListing.FindAsync(db, assigned, input.FromId, ct);
-        var destination = await ClassListing.FindAsync(db, assigned, input.ToId, ct);
-        if (source is null || destination is null)
+        var fromClass = await ClassListing.FindAsync(source, assigned, input.FromId, ct);
+        var toClass = await ClassListing.FindAsync(source, assigned, input.ToId, ct);
+        if (fromClass is null || toClass is null)
         {
             return Refusals.ClassNotFound();
         }
 
-        if (destination.Status != "A")
+        if (toClass.Status != "A")
         {
             return Problem.Detail(StatusCodes.Status422UnprocessableEntity, "The destination class is not active");
         }
 
-        if ((destination.Gender ?? 0) != (source.Gender ?? 0))
+        if ((toClass.Gender ?? 0) != (fromClass.Gender ?? 0))
         {
             return Problem.Detail(StatusCodes.Status422UnprocessableEntity, "A student can only move to a class of the same gender");
         }
 
-        var roster = await TransferRoster.ForAsync(db, source.Id, source.Status == "A", ct);
+        var roster = await TransferRoster.ForAsync(source, fromClass.Id, fromClass.Status == "A", ct);
         var names = roster.GroupBy(s => s.Token).ToDictionary(g => (long)g.Key, g => g.First().Name ?? string.Empty);
         var moved = new List<Moved>();
         var failed = new List<Failed>();
         foreach (var token in input.Tokens)
         {
             var name = names.GetValueOrDefault(token);
-            var failure = await MoveOneAsync(db, clock, log, input, token, caller.Token, ct);
+            var failure = await MoveOneAsync(source, clock, log, input, token, caller.Token, ct);
             if (failure is null)
             {
                 moved.Add(new Moved(token, name));
@@ -112,7 +112,7 @@ internal static partial class AdminTransferSaveSlice
             }
         }
 
-        return Results.Json(new Body(moved, failed));
+        return Results.Json(new Body(moved, failed), ClassesJson.Answers.TransferSaveBody);
     }
 
     private static Result<Input> Parse(JsonBody body)
@@ -170,19 +170,19 @@ internal static partial class AdminTransferSaveSlice
     private static Result<Input> Fail(string message) => Result.Fail<Input>(message);
 
     // Null when the student moved; else the reason PHP gives (an exception message, or "Could not be moved" for a database error).
-    private static async Task<string?> MoveOneAsync(ClassesContext db, TimeProvider clock, ILogger<ClassesContext> log, Input input, long token, int by, CancellationToken ct)
+    private static async Task<string?> MoveOneAsync(NpgsqlDataSource source, TimeProvider clock, ILogger<ClassesLog> log, Input input, long token, int by, CancellationToken ct)
     {
         try
         {
-            await using var transaction = await db.Database.BeginTransactionAsync(ct);
-            var refusal = await CheckAsync(db, input, token, ct);
+            await using var tx = await source.BeginAsync(ct);
+            var refusal = await CheckAsync(tx, input, token, ct);
             if (refusal.Message is not null)
             {
                 return refusal.Message;
             }
 
-            await StudentMove.WriteAsync(db, clock, input.FromId, input.ToId, (int)token, input.Type, input.Reason, by, refusal.RemoveFromSource, ct);
-            await transaction.CommitAsync(ct);
+            await StudentMove.WriteAsync(tx, clock, input.FromId, input.ToId, (int)token, input.Type, input.Reason, by, refusal.RemoveFromSource, ct);
+            await tx.CommitAsync(ct);
             return null;
         }
         catch (DbException e)
@@ -194,17 +194,17 @@ internal static partial class AdminTransferSaveSlice
 
     private sealed record Check(string? Message, bool RemoveFromSource);
 
-    private static async Task<Check> CheckAsync(ClassesContext db, Input input, long token, CancellationToken ct)
+    private static async Task<Check> CheckAsync(DbTx tx, Input input, long token, CancellationToken ct)
     {
         var fromCohort = false;
-        if (!await ActiveInAsync(db, input.FromId, token, ct))
+        if (!await ActiveInAsync(tx, input.FromId, token, ct))
         {
-            if (!await InCohortAsync(db, input.FromId, token, ct))
+            if (!await InCohortAsync(tx, input.FromId, token, ct))
             {
                 return new Check($"Student {token} is not active in source class #{input.FromId}", false);
             }
 
-            if (await ActiveAnywhereAsync(db, token, ct))
+            if (await ActiveAnywhereAsync(tx, token, ct))
             {
                 return new Check($"Student {token} already has an active class; skipped", false);
             }
@@ -212,27 +212,23 @@ internal static partial class AdminTransferSaveSlice
             fromCohort = true;
         }
 
-        return await ActiveInAsync(db, input.ToId, token, ct)
+        return await ActiveInAsync(tx, input.ToId, token, ct)
             ? new Check($"Student {token} is already enrolled in destination class #{input.ToId}", false)
             : new Check(null, !fromCohort);
     }
 
-    private static async Task<bool> ActiveInAsync(ClassesContext db, int classId, long token, CancellationToken ct) =>
-        (await db.Database
-            .SqlQuery<int>($"""select 1 as "Value" from classes.class_students where class_id = {classId} and token_no = {token} and removed_at is null and status = 'A' limit 1""")
-            .ToListAsync(ct)).Count > 0;
+    private static async Task<bool> ActiveInAsync(DbTx tx, int classId, long token, CancellationToken ct) =>
+        await tx.AnyAsync($"""select 1 as "Value" from classes.class_students where class_id = {classId} and token_no = {token} and removed_at is null and status = 'A' limit 1""", ct);
 
-    private static async Task<bool> InCohortAsync(ClassesContext db, int classId, long token, CancellationToken ct) =>
-        (await db.Database
-            .SqlQuery<int>($"""
-                select 1 as "Value" from classes.class_students
-                where class_id = {classId} and token_no = {token} and status = 'I' and removed_at is not null and removed_reason like 'Class deactivated:%'
-                limit 1
-                """)
-            .ToListAsync(ct)).Count > 0;
+    private static async Task<bool> InCohortAsync(DbTx tx, int classId, long token, CancellationToken ct) =>
+        await tx.AnyAsync(
+            $"""
+            select 1 as "Value" from classes.class_students
+            where class_id = {classId} and token_no = {token} and status = 'I' and removed_at is not null and removed_reason like 'Class deactivated:%'
+            limit 1
+            """,
+            ct);
 
-    private static async Task<bool> ActiveAnywhereAsync(ClassesContext db, long token, CancellationToken ct) =>
-        (await db.Database
-            .SqlQuery<int>($"""select 1 as "Value" from classes.class_students where token_no = {token} and removed_at is null and status = 'A' limit 1""")
-            .ToListAsync(ct)).Count > 0;
+    private static async Task<bool> ActiveAnywhereAsync(DbTx tx, long token, CancellationToken ct) =>
+        await tx.AnyAsync($"""select 1 as "Value" from classes.class_students where token_no = {token} and removed_at is null and status = 'A' limit 1""", ct);
 }

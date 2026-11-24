@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
 using Tsr.Shared.Api;
@@ -28,7 +29,7 @@ internal static class MyPerformanceSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string class_id, HttpContext context, ClassesContext db, Permissions permissions, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(string class_id, HttpContext context, NpgsqlDataSource source, Permissions permissions, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -41,22 +42,22 @@ internal static class MyPerformanceSlice
             return Refusals.NotPermitted();
         }
 
-        if (!await ClassGuards.HasNumericGenderAsync(db, caller, ct))
+        if (!await ClassGuards.HasNumericGenderAsync(source, caller, ct))
         {
             return Refusals.GenderNotSet();
         }
 
         var classId = ClassGuards.IdOf(class_id);
-        if (!await ClassGuards.CanViewClassAsync(db, classId, caller.Token, ct))
+        if (!await ClassGuards.CanViewClassAsync(source, classId, caller.Token, ct))
         {
             return Problem.Detail(StatusCodes.Status404NotFound, "Class not found or not enrolled");
         }
 
         var from = context.Request.Query["start_date"].LastOrDefault();
         var to = context.Request.Query["end_date"].LastOrDefault();
-        var history = await StudentAttendance.HistoryAsync(db, (int)classId, caller.Token, from, to, ct);
+        var history = await StudentAttendance.HistoryAsync(source, (int)classId, caller.Token, from, to, ct);
         var summary = StudentAttendance.Summarise(history);
-        var quiz = await StudentAttendance.QuizAsync(db, (int)classId, caller.Token, from, to, ct);
+        var quiz = await StudentAttendance.QuizAsync(source, (int)classId, caller.Token, from, to, ct);
         var averageRecitation = summary.AttendedSessions > 0
             ? PhpFloat.Round(summary.TotalRecitation / (decimal)summary.AttendedSessions, 2)
             : new PhpFloat(0);
@@ -67,6 +68,6 @@ internal static class MyPerformanceSlice
             summary.TotalRecitation,
             averageRecitation,
             quiz.QuizzesAttempted,
-            new PhpFloat(quiz.AverageScore)));
+            new PhpFloat(quiz.AverageScore)), ClassesJson.Answers.MyPerformanceBody);
     }
 }

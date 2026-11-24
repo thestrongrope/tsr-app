@@ -111,6 +111,66 @@ public sealed class MigrationOrderTests
         Assert.That(optionTypes, Is.Not.Empty, "the migrate job applies identity's migrations through its context");
     }
 
+    // Issue 103: notifications is converted too. The migrate job still registers its context, last; no other mode does.
+    [TestCase(RunMode.Api)]
+    [TestCase(RunMode.Workers)]
+    [TestCase(RunMode.LoadContent)]
+    public void The_api_mode_registers_no_notifications_context(RunMode mode)
+    {
+        var services = Register(mode);
+
+        var notificationsTypes = services
+            .Select(descriptor => descriptor.ServiceType)
+            .Where(type => type.ToString().Contains("NotificationsContext", StringComparison.Ordinal))
+            .ToList();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(notificationsTypes, Is.Empty, "notifications reads and writes through the data source: its context is for the migrate job only");
+            Assert.That(MigrationSchemas(mode), Does.Not.Contain("notifications"));
+        });
+    }
+
+    [Test]
+    public void The_migrate_mode_registers_the_notifications_context()
+    {
+        var optionTypes = Register(RunMode.Migrate)
+            .Select(descriptor => descriptor.ServiceType.ToString())
+            .Where(name => name.Contains("DbContextOptions", StringComparison.Ordinal) && name.Contains("NotificationsContext", StringComparison.Ordinal));
+
+        Assert.That(optionTypes, Is.Not.Empty, "the migrate job applies notifications' migrations through its context");
+    }
+
+    // Issue 103: platform, membership, assessment and classes are converted too. The migrate job still registers their contexts; no other mode does.
+    [Test]
+    public void The_api_modes_register_no_context_of_platform_membership_assessment_or_classes([Values(RunMode.Api, RunMode.Workers, RunMode.LoadContent)] RunMode mode, [Values("platform", "membership", "assessment", "classes")] string domain)
+    {
+        var contextName = char.ToUpperInvariant(domain[0]) + domain[1..] + "Context";
+        var types = Register(mode)
+            .Select(descriptor => descriptor.ServiceType)
+            .Where(type => type.ToString().Contains(contextName, StringComparison.Ordinal))
+            .ToList();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(types, Is.Empty, $"{domain} reads and writes through the data source: its context is for the migrate job only");
+            Assert.That(MigrationSchemas(mode), Does.Not.Contain(domain));
+        });
+    }
+
+    [TestCase("Platform")]
+    [TestCase("Membership")]
+    [TestCase("Assessment")]
+    [TestCase("Classes")]
+    public void The_migrate_mode_registers_the_context_of_each_remaining_domain(string name)
+    {
+        var optionTypes = Register(RunMode.Migrate)
+            .Select(descriptor => descriptor.ServiceType.ToString())
+            .Where(type => type.Contains("DbContextOptions", StringComparison.Ordinal) && type.Contains(name + "Context", StringComparison.Ordinal));
+
+        Assert.That(optionTypes, Is.Not.Empty, $"the migrate job applies {name}'s migrations through its context");
+    }
+
     /// <summary>The registrations are read from the container description by name, because the record is internal to shared/api.</summary>
     private static List<string> MigrationSchemas(RunMode mode) =>
         Register(mode)

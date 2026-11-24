@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Assessment.Api.Domain;
 using Tsr.Shared.Api;
@@ -18,6 +19,6 @@ internal static class AdminQuizWinnersRegenerateSlice
         return routes;
     }
 
-    private static Task<IResult> HandleAsync(HttpContext context, AssessmentContext db, Permissions permissions, TimeProvider clock, IQuizRandom random, CancellationToken ct) =>
-        QuizDrawFlow.RunAsync(context, db, permissions, clock, random, reset: true, ct);
+    private static Task<IResult> HandleAsync(HttpContext context, NpgsqlDataSource source, Permissions permissions, TimeProvider clock, IQuizRandom random, CancellationToken ct) =>
+        QuizDrawFlow.RunAsync(context, source, permissions, clock, random, reset: true, ct);
 }

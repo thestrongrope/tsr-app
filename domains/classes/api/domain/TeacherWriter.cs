@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Shared.Api;
 
@@ -25,16 +25,27 @@ internal static class TeacherWriter
     }
 
     /// <summary>The current flags of a teacher's record, or null when they have none.</summary>
-    public static async Task<TeacherTraining.Flags?> ExistingAsync(ClassesContext db, int token, CancellationToken ct)
+    public static async Task<TeacherTraining.Flags?> ExistingAsync(DbTx tx, int token, CancellationToken ct)
     {
-        var rows = await db.Database
-            .SqlQuery<Stored>($"""select salman as "Salman", abuzar as "Abuzar", miqdad as "Miqdad", ammar as "Ammar", bilal as "Bilal" from classes.teachers where token = {token} limit 1""")
-            .ToListAsync(ct);
+        var rows = await tx.ListAsync(
+            $"""select salman as "Salman", abuzar as "Abuzar", miqdad as "Miqdad", ammar as "Ammar", bilal as "Bilal" from classes.teachers where token = {token} limit 1""",
+            row => new Stored(row.Int("Salman"), row.Int("Abuzar"), row.Int("Miqdad"), row.Int("Ammar"), row.Int("Bilal")),
+            ct);
+        return rows.Count == 0 ? null : new TeacherTraining.Flags(rows[0].Salman, rows[0].Abuzar, rows[0].Miqdad, rows[0].Ammar, rows[0].Bilal);
+    }
+
+    /// <summary>The same read on the data source, for a caller that holds no transaction yet.</summary>
+    public static async Task<TeacherTraining.Flags?> ExistingAsync(NpgsqlDataSource source, int token, CancellationToken ct)
+    {
+        var rows = await source.ListAsync(
+            $"""select salman as "Salman", abuzar as "Abuzar", miqdad as "Miqdad", ammar as "Ammar", bilal as "Bilal" from classes.teachers where token = {token} limit 1""",
+            row => new Stored(row.Int("Salman"), row.Int("Abuzar"), row.Int("Miqdad"), row.Int("Ammar"), row.Int("Bilal")),
+            ct);
         return rows.Count == 0 ? null : new TeacherTraining.Flags(rows[0].Salman, rows[0].Abuzar, rows[0].Miqdad, rows[0].Ammar, rows[0].Bilal);
     }
 
     public static async Task WriteBatchAsync(
-        ClassesContext db,
+        DbTx tx,
         IReadOnlyList<(int Token, TeacherTraining.Flags Flags)> teachers,
         string note,
         int by,
@@ -44,11 +55,11 @@ internal static class TeacherWriter
         var batchId = TeacherTraining.BatchId(clock.GetUtcNow());
         foreach (var (token, flags) in teachers)
         {
-            var existing = await ExistingAsync(db, token, ct);
+            var existing = await ExistingAsync(tx, token, ct);
             var comment = TeacherTraining.Comment(existing, flags, note, batchId);
             if (existing is not null)
             {
-                await db.Database.ExecuteSqlAsync(
+                await tx.ExecuteAsync(
                     $"""
                     update classes.teachers set salman = {flags.Salman}, abuzar = {flags.Abuzar}, miqdad = {flags.Miqdad}, ammar = {flags.Ammar}, bilal = {flags.Bilal},
                            status = 'A', comments = {comment}, updated_by = {by}, updated_at = now()
@@ -58,7 +69,7 @@ internal static class TeacherWriter
             }
             else
             {
-                await db.Database.ExecuteSqlAsync(
+                await tx.ExecuteAsync(
                     $"""
                     insert into classes.teachers (token, salman, abuzar, miqdad, ammar, bilal, status, comments, created_by, created_at)
                     values ({token}, {flags.Salman}, {flags.Abuzar}, {flags.Miqdad}, {flags.Ammar}, {flags.Bilal}, 'A', {comment}, {by}, now())
@@ -66,13 +77,13 @@ internal static class TeacherWriter
                     ct);
             }
 
-            await db.Database.ExecuteSqlAsync(
+            await tx.ExecuteAsync(
                 $"""
                 insert into classes.teachers_history (token, salman, abuzar, miqdad, ammar, bilal, status, comments, created_by, created_at)
                 values ({token}, {flags.Salman}, {flags.Abuzar}, {flags.Miqdad}, {flags.Ammar}, {flags.Bilal}, 'A', {comment}, {by}, now())
                 """,
                 ct);
-            await Outbox.WriteAsync(db, "classes.teacher_training_changed", new TrainingChanged(token, flags.Salman, flags.Abuzar, flags.Miqdad, flags.Ammar, flags.Bilal, by, batchId), clock, ct);
+            await Outbox.WriteAsync(tx, "classes.teacher_training_changed", new TrainingChanged(token, flags.Salman, flags.Abuzar, flags.Miqdad, flags.Ammar, flags.Bilal, by, batchId), ClassesJson.Default.TeacherTrainingChanged, clock, ct);
         }
     }
 }

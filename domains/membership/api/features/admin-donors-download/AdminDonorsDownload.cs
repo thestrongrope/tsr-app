@@ -2,6 +2,7 @@ using System.Globalization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Membership.Api.Domain;
 using Tsr.Platform.Api;
@@ -24,7 +25,7 @@ internal static class AdminDonorsDownloadSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(HttpContext context, MembershipContext db, Permissions permissions, ReportExport export, TimeProvider clock, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(HttpContext context, NpgsqlDataSource source, Permissions permissions, ReportExport export, TimeProvider clock, CancellationToken ct)
     {
         if (!ReportExport.TryGetFormat(context, out var format))
         {
@@ -42,7 +43,7 @@ internal static class AdminDonorsDownloadSlice
             return Refusals.NotPermitted();
         }
 
-        var donors = await DonorList.LoadAsync(db, ct);
+        var donors = await DonorList.LoadAsync(source, ct);
         if (donors.Count == 0)
         {
             return Problem.Detail(StatusCodes.Status404NotFound, "There are no donors to download");

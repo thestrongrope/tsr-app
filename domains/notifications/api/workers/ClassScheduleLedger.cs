@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Notifications.Api.Domain;
 
 namespace Tsr.Notifications.Api.Workers;
@@ -61,10 +61,10 @@ internal static class ClassScheduleLedger
     // send_at is a wall clock in the row's own zone, so SQL can only rule out rows that are later than any zone's wall clock could be (UTC+14, with margin).
     private const int MaxAheadOfUtcHours = 15;
 
-    public static async Task<List<DueRow>> PageAsync(NotificationsContext db, DateTimeOffset now, int afterId, CancellationToken ct)
+    public static async Task<List<DueRow>> PageAsync(NpgsqlDataSource source, DateTimeOffset now, int afterId, CancellationToken ct)
     {
         var bound = now.ToUniversalTime().AddHours(MaxAheadOfUtcHours);
-        return await db.Database.SqlQuery<DueRow>($"""
+        return await source.ListAsync($"""
             select s.id as "Id", s.class_id as "ClassId", s.created_by as "CreatedBy", s.created_by_user_id as "CreatedByUserId", s.title as "Title", s.body as "Body", s.action_link as "ActionLink",
                    s.kind as "Kind", s.send_at as "SendAt", s.weekdays as "Weekdays", s.send_time as "SendTime", s.tz as "Tz", s.offset_minutes as "OffsetMinutes", s.repeat_weekly as "RepeatWeekly",
                    s.last_run_key as "LastRunKey", s.created_at as "CreatedAt",
@@ -75,93 +75,126 @@ internal static class ClassScheduleLedger
               and ((s.kind = 'ONCE' and s.send_at <= ({bound} at time zone 'UTC')) or s.kind in ('WEEKLY', 'REMINDER'))
             order by s.id
             limit {PageSize}
-            """).ToListAsync(ct);
+            """, ReadDue, ct);
     }
 
-    public static async Task<bool> ClassIsActiveAsync(NotificationsContext db, int classId, CancellationToken ct) =>
-        (await db.Database.SqlQuery<int>($"""select c.id as "Value" from classes.v_classes c where c.id = {classId} and c.status = 'A'""").ToListAsync(ct)).Count > 0;
+    private static DueRow ReadDue(DbRow row) => new(
+        row.Int("Id"),
+        row.Int("ClassId"),
+        row.Int("CreatedBy"),
+        row.Int("CreatedByUserId"),
+        row.Text("Title"),
+        row.Text("Body"),
+        row.TextOrNull("ActionLink"),
+        row.Text("Kind"),
+        row.LocalTimestampOrNull("SendAt"),
+        row.TextOrNull("Weekdays"),
+        row.TimeOrNull("SendTime"),
+        row.Text("Tz"),
+        row.IntOrNull("OffsetMinutes"),
+        row.Short("RepeatWeekly"),
+        row.TextOrNull("LastRunKey"),
+        row.Instant("CreatedAt"),
+        row.IntOrNull("SlotId"),
+        row.IntOrNull("SlotClassId"),
+        row.IntOrNull("SlotDay"),
+        row.IntOrNull("SlotHour"),
+        row.IntOrNull("SlotMinute"),
+        row.TextOrNull("SlotTimezone"),
+        row.InstantOrNull("SlotDeletedAt"));
+
+    public static async Task<bool> ClassIsActiveAsync(NpgsqlDataSource source, int classId, CancellationToken ct) =>
+        (await source.ListAsync($"""select c.id as "Value" from classes.v_classes c where c.id = {classId} and c.status = 'A'""", row => row.Int("Value"), ct)).Count > 0;
 
     /// <summary>The per-class limit a send would break: sends are runs with no skip reason that reached a device, counted in the last hour and since the start of the row's own local day (UTC when its zone is unusable).</summary>
-    public static async Task<bool> LimitReachedAsync(NotificationsContext db, DueRow row, DateTimeOffset now, CancellationToken ct)
+    public static async Task<bool> LimitReachedAsync(NpgsqlDataSource source, DueRow row, DateTimeOffset now, CancellationToken ct)
     {
-        if (await SendsSinceAsync(db, row.ClassId, now.AddHours(-1), ct) >= MaxSendsPerHour)
+        if (await SendsSinceAsync(source, row.ClassId, now.AddHours(-1), ct) >= MaxSendsPerHour)
         {
             return true;
         }
 
         var zone = WallClock.Zone(row.Tz) ?? TimeZoneInfo.Utc;
         var dayStart = WallClock.At(WallClock.Local(now, zone).Date, zone).ToUniversalTime();
-        return await SendsSinceAsync(db, row.ClassId, dayStart, ct) >= MaxSendsPerDay;
+        return await SendsSinceAsync(source, row.ClassId, dayStart, ct) >= MaxSendsPerDay;
     }
 
-    private static async Task<long> SendsSinceAsync(NotificationsContext db, int classId, DateTimeOffset since, CancellationToken ct) =>
-        (await db.Database.SqlQuery<long>($"""
+    private static async Task<long> SendsSinceAsync(NpgsqlDataSource source, int classId, DateTimeOffset since, CancellationToken ct) =>
+        (await source.ListAsync(
+            $"""
             select count(*) as "Value" from notifications.class_scheduled_notification_runs r
             where r.class_id = {classId} and r.skipped_reason is null and r.device_count > 0 and r.run_at > {since.ToUniversalTime()}
-            """).ToListAsync(ct)).Single();
+            """,
+            row => row.Long("Value"),
+            ct)).Single();
 
-    /// <summary>Claims one occurrence: only the call that flips <c>last_run_key</c> gets true. Inside the caller's transaction the claim also holds the row against a second instance until that transaction ends.</summary>
-    public static async Task<bool> ClaimAsync(NotificationsContext db, int id, string key, DateTimeOffset now, CancellationToken ct) =>
-        await db.Database.ExecuteSqlAsync($"""
+    /// <summary>Claims one occurrence: only the call that flips <c>last_run_key</c> gets true. On the caller's transaction the claim also holds the row against a second instance until that transaction ends.</summary>
+    public static async Task<bool> ClaimAsync(DbTx tx, int id, string key, DateTimeOffset now, CancellationToken ct) =>
+        await tx.ExecuteAsync($"""
             update notifications.class_scheduled_notifications
             set last_run_at = {now}, last_run_key = {key}, updated_at = {now}
             where id = {id} and status = 'active' and (last_run_key is null or last_run_key <> {key}::citext)
             """, ct) == 1;
 
-    public static async Task AddRunAsync(NotificationsContext db, int id, DateTimeOffset now, int? notificationId, int students, int devices, string? skippedReason, CancellationToken ct) =>
-        await db.Database.ExecuteSqlAsync($"""
+    public static async Task AddRunAsync(DbTx tx, int id, DateTimeOffset now, int? notificationId, int students, int devices, string? skippedReason, CancellationToken ct) =>
+        await tx.ExecuteAsync($"""
             insert into notifications.class_scheduled_notification_runs (scheduled_id, class_id, run_at, notification_id, student_count, device_count, success_count, failure_count, skipped_reason)
             select id, class_id, {now}, {notificationId}::integer, {students}, {devices}, 0, 0, {skippedReason}::citext
             from notifications.class_scheduled_notifications where id = {id}
             """, ct);
 
-    public static async Task<int> MarkDoneAsync(NotificationsContext db, int id, DateTimeOffset now, CancellationToken ct) =>
-        await db.Database.ExecuteSqlAsync($"update notifications.class_scheduled_notifications set status = 'done', updated_at = {now} where id = {id} and status = 'active'", ct);
+    public static async Task<int> MarkDoneAsync(DbTx tx, int id, DateTimeOffset now, CancellationToken ct) =>
+        await tx.ExecuteAsync($"update notifications.class_scheduled_notifications set status = 'done', updated_at = {now} where id = {id} and status = 'active'", ct);
 
     /// <summary>Ends a row that cannot be sent, with the reason in the ledger. False when another instance already ended it.</summary>
-    public static async Task<bool> FinishAsync(NotificationsContext db, int id, string reason, DateTimeOffset now, CancellationToken ct)
+    public static async Task<bool> FinishAsync(NpgsqlDataSource source, int id, string reason, DateTimeOffset now, CancellationToken ct)
     {
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        if (await MarkDoneAsync(db, id, now, ct) == 0)
+        await using var tx = await source.BeginAsync(ct);
+        if (await MarkDoneAsync(tx, id, now, ct) == 0)
         {
             return false;
         }
 
-        await AddRunAsync(db, id, now, null, 0, 0, reason, ct);
-        await transaction.CommitAsync(ct);
+        await AddRunAsync(tx, id, now, null, 0, 0, reason, ct);
+        await tx.CommitAsync(ct);
         return true;
     }
 
     /// <summary>Records an occurrence as missed, once (the claim), and ends the row too when <paramref name="finished"/>. False when it was already claimed.</summary>
-    public static async Task<bool> RecordMissedAsync(NotificationsContext db, int id, string key, bool finished, DateTimeOffset now, CancellationToken ct)
+    public static async Task<bool> RecordMissedAsync(NpgsqlDataSource source, int id, string key, bool finished, DateTimeOffset now, CancellationToken ct)
     {
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        if (!await ClaimAsync(db, id, key, now, ct))
+        await using var tx = await source.BeginAsync(ct);
+        if (!await ClaimAsync(tx, id, key, now, ct))
         {
             return false;
         }
 
-        await AddRunAsync(db, id, now, null, 0, 0, "missed_window", ct);
+        await AddRunAsync(tx, id, now, null, 0, 0, "missed_window", ct);
         if (finished)
         {
-            await MarkDoneAsync(db, id, now, ct);
+            await MarkDoneAsync(tx, id, now, ct);
         }
 
-        await transaction.CommitAsync(ct);
+        await tx.CommitAsync(ct);
         return true;
     }
 
     /// <summary>Records a not-sent reason unless it is already the latest run's, so a fault that lasts two hours leaves one run row and not one a minute.</summary>
-    public static async Task RecordFailureOnceAsync(NotificationsContext db, int id, string reason, DateTimeOffset now, CancellationToken ct)
+    public static async Task RecordFailureOnceAsync(NpgsqlDataSource source, int id, string reason, DateTimeOffset now, CancellationToken ct)
     {
-        var last = await db.Database.SqlQuery<string>($"""
+        var last = await source.ListAsync(
+            $"""
             select coalesce(skipped_reason::text, '') as "Value" from notifications.class_scheduled_notification_runs where scheduled_id = {id} order by id desc limit 1
-            """).ToListAsync(ct);
+            """,
+            row => row.Text("Value"),
+            ct);
         if (last.Count == 1 && last[0] == reason)
         {
             return;
         }
 
-        await AddRunAsync(db, id, now, null, 0, 0, reason, ct);
+        await using var tx = await source.BeginAsync(ct);
+        await AddRunAsync(tx, id, now, null, 0, 0, reason, ct);
+        await tx.CommitAsync(ct);
     }
 }

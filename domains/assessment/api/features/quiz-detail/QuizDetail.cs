@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Assessment.Api.Domain;
 using Tsr.Shared.Api;
@@ -21,7 +22,7 @@ internal static class QuizDetailSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string quiz_id, HttpContext context, AssessmentContext db, Permissions permissions, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(string quiz_id, HttpContext context, NpgsqlDataSource source, Permissions permissions, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -34,22 +35,22 @@ internal static class QuizDetailSlice
             return Refusals.NotPermitted();
         }
 
-        if (!await QuizAccess.HasNumericGenderAsync(db, caller, ct))
+        if (!await QuizAccess.HasNumericGenderAsync(source, caller, ct))
         {
             return Refusals.GenderNotSet();
         }
 
         var quizId = PhpValue.IntOfText(quiz_id);
-        var quiz = await QuizAccess.VisibleAsync(db, quizId, caller.Token, ct);
+        var quiz = await QuizAccess.VisibleAsync(source, quizId, caller.Token, ct);
         if (quiz is null)
         {
             return Refusals.QuizNotFound();
         }
 
-        var attempt = await QuizAccess.AttemptAsync(db, quizId, caller.Token, ct);
-        var questions = await QuizAccess.CountQuestionsAsync(db, quizId, ct);
+        var attempt = await QuizAccess.AttemptAsync(source, quizId, caller.Token, ct);
+        var questions = await QuizAccess.CountQuestionsAsync(source, quizId, ct);
         return Results.Json(new Body(
             quiz.Id, quiz.Code ?? string.Empty, quiz.Name ?? string.Empty, string.IsNullOrEmpty(quiz.Topic) ? null : quiz.Topic, quiz.ClassId,
-            QuizAccess.Stamp(quiz.PublishedAt), questions, attempt.Attempted, attempt.Score));
+            QuizAccess.Stamp(quiz.PublishedAt), questions, attempt.Attempted, attempt.Score), AssessmentJson.Answers.QuizDetail);
     }
 }

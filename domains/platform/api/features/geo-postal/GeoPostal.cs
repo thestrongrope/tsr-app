@@ -58,6 +58,6 @@ internal sealed class GeoPostalHandler(Geo geo, GeoGate gate)
         }
 
         var found = await geo.ByPostalCodeAsync(country.Value!, code.Value!, ct);
-        return Results.Json(new JsonObject { ["found"] = found is not null, ["city"] = found?.City, ["state"] = found?.State });
+        return PlatformJson.Text(new JsonObject { ["found"] = found is not null, ["city"] = found?.City, ["state"] = found?.State });
     }
 }

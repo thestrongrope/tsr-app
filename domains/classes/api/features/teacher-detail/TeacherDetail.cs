@@ -2,7 +2,7 @@ using System.Globalization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
 using Tsr.Shared.Api;
@@ -40,7 +40,7 @@ internal static class TeacherDetailSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string token, HttpContext context, ClassesContext db, Permissions permissions, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(string token, HttpContext context, NpgsqlDataSource source, Permissions permissions, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -54,56 +54,67 @@ internal static class TeacherDetailSlice
         }
 
         var teacherToken = (int)Math.Clamp(PhpValue.IntOfText(token), int.MinValue, int.MaxValue);
-        var member = await FindMemberAsync(db, teacherToken, ct);
-        if (member is null || !await CanViewAsync(db, permissions, caller, member, ct))
+        var member = await FindMemberAsync(source, teacherToken, ct);
+        if (member is null || !await CanViewAsync(source, permissions, caller, member, ct))
         {
             return Problem.Detail(StatusCodes.Status404NotFound, "Teacher not found");
         }
 
-        return Results.Json(await DetailAsync(db, member, ct));
+        return Results.Json(await DetailAsync(source, member, ct), ClassesJson.Answers.Answer);
     }
 
-    private static async Task<Member?> FindMemberAsync(ClassesContext db, int token, CancellationToken ct)
+    private static async Task<Member?> FindMemberAsync(NpgsqlDataSource source, int token, CancellationToken ct)
     {
-        var rows = await db.Database
-            .SqlQuery<Member>($"""
+        var rows = await source.ListAsync(
+            $"""
                 select m.token as "Token", m.name as "Name", u.email as "Email", m.mobile as "Mobile", m.state as "State", m.city as "City", m.country as "Country",
                        m.zip as "Zip", m.gender as "Gender"
                 from membership.v_members m join identity.v_users u on u.id = m.user_id
                 where m.token = {token}
                 order by m.user_id
                 limit 1
-                """)
-            .ToListAsync(ct);
+                """,
+            row => new Member(
+                row.Int("Token"),
+                row.TextOrNull("Name"),
+                row.TextOrNull("Email"),
+                row.TextOrNull("Mobile"),
+                row.TextOrNull("State"),
+                row.TextOrNull("City"),
+                row.TextOrNull("Country"),
+                row.TextOrNull("Zip"),
+                row.TextOrNull("Gender")),
+            ct);
         return rows.Count == 0 ? null : rows[0];
     }
 
-    private static async Task<bool> CanViewAsync(ClassesContext db, Permissions permissions, Caller caller, Member member, CancellationToken ct) =>
+    private static async Task<bool> CanViewAsync(NpgsqlDataSource source, Permissions permissions, Caller caller, Member member, CancellationToken ct) =>
         await TeacherView.CanViewAsync(
             permissions,
             caller,
             (int)PhpValue.IntOfText(member.Gender ?? string.Empty),
-            async () => (await db.Database
-                .SqlQuery<int>($"""
-                    select 1 as "Value" where exists (select 1 from classes.teachers where token = {member.Token}) or exists (select 1 from classes.classes where teacher = {member.Token})
-                    """)
-                .ToListAsync(ct)).Count > 0,
+            () => source.AnyAsync(
+                $"""
+                select 1 as "Value" where exists (select 1 from classes.teachers where token = {member.Token}) or exists (select 1 from classes.classes where teacher = {member.Token})
+                """,
+                ct),
             ct);
 
-    private static async Task<Dictionary<string, object?>> DetailAsync(ClassesContext db, Member m, CancellationToken ct)
+    private static async Task<Dictionary<string, object?>> DetailAsync(NpgsqlDataSource source, Member m, CancellationToken ct)
     {
-        var training = await db.Database
-            .SqlQuery<Training>($"""
+        var training = await source.ListAsync(
+            $"""
                 select coalesce(salman, 0) as "Salman", coalesce(abuzar, 0) as "Abuzar", coalesce(miqdad, 0) as "Miqdad", coalesce(ammar, 0) as "Ammar", coalesce(bilal, 0) as "Bilal"
                 from classes.teachers where token = {m.Token} limit 1
-                """)
-            .ToListAsync(ct);
+                """,
+            row => new Training(row.Int("Salman"), row.Int("Abuzar"), row.Int("Miqdad"), row.Int("Ammar"), row.Int("Bilal")),
+            ct);
         var flags = training.Count == 0 ? new Training(0, 0, 0, 0, 0) : training[0];
 
-        var conducting = await ConductingAsync(db, m.Token, ct);
-        var attending = await AttendingAsync(db, m.Token, ct);
-        var slots = await SlotsAsync(db, conducting.Where(c => c.Status == "A").Select(c => c.Id).Concat(LiveIds(attending)).Distinct().ToArray(), ct);
-        var history = await HistoryAsync(db, m.Token, ct);
+        var conducting = await ConductingAsync(source, m.Token, ct);
+        var attending = await AttendingAsync(source, m.Token, ct);
+        var slots = await SlotsAsync(source, conducting.Where(c => c.Status == "A").Select(c => c.Id).Concat(LiveIds(attending)).Distinct().ToArray(), ct);
+        var history = await HistoryAsync(source, m.Token, ct);
 
         return new Dictionary<string, object?>
         {
@@ -147,24 +158,36 @@ internal static class TeacherDetailSlice
         return flags;
     }
 
-    private static async Task<List<Conducting>> ConductingAsync(ClassesContext db, int token, CancellationToken ct) =>
-        await db.Database
-            .SqlQuery<Conducting>($"""
-                select c.id as "Id", c.code as "Code", cl.name as "Level", c.city as "City", c.country as "Country", c.started_on as "StartedOn",
-                       (c.created_at at time zone 'UTC')::date as "CreatedOn", c.completed_on as "CompletedOn", c.shutdown_on as "ShutdownOn", c.comments::text as "Comments", c.status as "Status"
+    private static async Task<List<Conducting>> ConductingAsync(NpgsqlDataSource source, int token, CancellationToken ct) =>
+        await source.ListAsync(
+            $"""
+                select c.id as "Id", c.code as "Code", cl.name as "Level", c.city as "City", c.country as "Country", c.started_on::text as "StartedOn",
+                       (c.created_at at time zone 'UTC')::date::text as "CreatedOn", c.completed_on::text as "CompletedOn", c.shutdown_on::text as "ShutdownOn", c.comments::text as "Comments", c.status as "Status"
                 from classes.classes c join classes.class_levels cl on cl.id = c.class_level_id
                 where c.teacher = {token}
                 order by c.status, c.code, c.id
                 limit {MaxRows}
-                """)
-            .ToListAsync(ct);
+                """,
+            row => new Conducting(
+                row.Int("Id"),
+                row.Text("Code"),
+                row.TextOrNull("Level"),
+                row.TextOrNull("City"),
+                row.TextOrNull("Country"),
+                ClassesRows.DateOrNull(row.TextOrNull("StartedOn")),
+                ClassesRows.DateOrNull(row.TextOrNull("CreatedOn")),
+                ClassesRows.DateOrNull(row.TextOrNull("CompletedOn")),
+                ClassesRows.DateOrNull(row.TextOrNull("ShutdownOn")),
+                row.TextOrNull("Comments"),
+                row.Text("Status")),
+            ct);
 
-    private static async Task<List<Attending>> AttendingAsync(ClassesContext db, int token, CancellationToken ct) =>
-        await db.Database
-            .SqlQuery<Attending>($"""
-                select c.id as "Id", c.code as "Code", cl.name as "Level", c.city as "City", c.country as "Country", c.started_on as "StartedOn",
-                       (c.created_at at time zone 'UTC')::date as "CreatedOn", c.comments::text as "Comments", c.teacher as "Teacher", t.name as "TeacherName", c.status as "Status",
-                       (cs.removed_at at time zone 'UTC')::date as "RemovedOn", cs.removed_reason::text as "RemovedReason", r.name as "RemovedByName"
+    private static async Task<List<Attending>> AttendingAsync(NpgsqlDataSource source, int token, CancellationToken ct) =>
+        await source.ListAsync(
+            $"""
+                select c.id as "Id", c.code as "Code", cl.name as "Level", c.city as "City", c.country as "Country", c.started_on::text as "StartedOn",
+                       (c.created_at at time zone 'UTC')::date::text as "CreatedOn", c.comments::text as "Comments", c.teacher as "Teacher", t.name as "TeacherName", c.status as "Status",
+                       (cs.removed_at at time zone 'UTC')::date::text as "RemovedOn", cs.removed_reason::text as "RemovedReason", r.name as "RemovedByName"
                 from classes.class_students cs
                 join classes.classes c on c.id = cs.class_id
                 join classes.class_levels cl on cl.id = c.class_level_id
@@ -173,22 +196,38 @@ internal static class TeacherDetailSlice
                 where cs.token_no = {token}
                 order by c.status, cl.sort_order, c.code, cs.id
                 limit {MaxRows}
-                """)
-            .ToListAsync(ct);
+                """,
+            row => new Attending(
+                row.Int("Id"),
+                row.Text("Code"),
+                row.TextOrNull("Level"),
+                row.TextOrNull("City"),
+                row.TextOrNull("Country"),
+                ClassesRows.DateOrNull(row.TextOrNull("StartedOn")),
+                ClassesRows.DateOrNull(row.TextOrNull("CreatedOn")),
+                row.TextOrNull("Comments"),
+                row.IntOrNull("Teacher"),
+                row.TextOrNull("TeacherName"),
+                row.Text("Status"),
+                ClassesRows.DateOrNull(row.TextOrNull("RemovedOn")),
+                row.TextOrNull("RemovedReason"),
+                row.TextOrNull("RemovedByName")),
+            ct);
 
     // PHP: ORDER BY day, hour, minute where each name is the select list's ALIAS (the day NAME, the padded hour and minute as text), so Saturday sorts before Tuesday.
     // The text is DAYNAME of 1970-09-2<day> (day 1 is a Monday), the hour and minute padded to two digits.
-    private static async Task<ILookup<int, string>> SlotsAsync(ClassesContext db, int[] classIds, CancellationToken ct)
+    private static async Task<ILookup<int, string>> SlotsAsync(NpgsqlDataSource source, int[] classIds, CancellationToken ct)
     {
-        var rows = await db.Database
-            .SqlQuery<Slot>($"""
+        var rows = await source.ListAsync(
+            $"""
                 select class_id as "ClassId", coalesce(day, 0) as "Day", coalesce(hour, 0) as "Hour", coalesce(minute, 0) as "Minute", timezone as "Timezone"
                 from classes.class_schedules
                 where class_id = any({classIds}) and deleted_at is null
                 order by class_id, id
                 limit {MaxRows}
-                """)
-            .ToListAsync(ct);
+                """,
+            row => new Slot(row.Int("ClassId"), row.Int("Day"), row.Int("Hour"), row.Int("Minute"), row.TextOrNull("Timezone")),
+            ct);
         return rows
             .OrderBy(s => s.ClassId)
             .ThenBy(s => DayName(s.Day), StringComparer.Ordinal)
@@ -204,16 +243,17 @@ internal static class TeacherDetailSlice
 
     private static string SlotText(Slot s) => string.Create(CultureInfo.InvariantCulture, $"{DayName(s.Day)} {Padded(s.Hour)}:{Padded(s.Minute)} {s.Timezone}");
 
-    private static async Task<List<History>> HistoryAsync(ClassesContext db, int token, CancellationToken ct) =>
-        await db.Database
-            .SqlQuery<History>($"""
-                select th.comments::text as "Comments", u.name as "By", (th.created_at at time zone 'UTC')::date as "On"
+    private static async Task<List<History>> HistoryAsync(NpgsqlDataSource source, int token, CancellationToken ct) =>
+        await source.ListAsync(
+            $"""
+                select th.comments::text as "Comments", u.name as "By", (th.created_at at time zone 'UTC')::date::text as "On"
                 from classes.teachers_history th join membership.v_members u on u.token = th.created_by
                 where th.token = {token}
                 order by th.created_at desc, th.id desc
                 limit {MaxRows}
-                """)
-            .ToListAsync(ct);
+                """,
+            row => new History(row.TextOrNull("Comments"), row.TextOrNull("By"), ClassesRows.DateOrNull(row.TextOrNull("On"))),
+            ct);
 
     // api_teachers_class: every key is always present, schedules last.
     private static Dictionary<string, object?> ConductingWire(Conducting c, IEnumerable<string> schedules) => new()

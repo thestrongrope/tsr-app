@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Shared.Api;
 
 namespace Tsr.Assessment.Api.Domain;
@@ -15,7 +15,7 @@ internal static class ScoreRows
 
     internal sealed record Row(int QuizId, string? QuizName, string? Topic, int Total, int? Score, DateTimeOffset? AttemptedAt);
 
-    public static async Task<IReadOnlyList<Row>> ForAsync(AssessmentContext db, long classId, int token, string? from, string? to, CancellationToken ct)
+    public static async Task<IReadOnlyList<Row>> ForAsync(NpgsqlDataSource source, long classId, int token, string? from, string? to, CancellationToken ct)
     {
         var start = Offset(PhpDateBound.Bound(from));
         var end = Offset(PhpDateBound.Bound(to));
@@ -24,8 +24,8 @@ internal static class ScoreRows
             return [];
         }
 
-        return await db.Database
-            .SqlQuery<Row>($"""
+        return await source.ListAsync(
+            $"""
                 select q.id as "QuizId", q.name::text as "QuizName", q.topic::text as "Topic",
                        (select count(*) from assessment.spot_quiz_questions qq where qq.spot_quiz_id = q.id)::int as "Total",
                        (select sum(r.is_correct) from assessment.spot_quiz_responses r where r.spot_quiz_id = q.id and r.token = {token})::int as "Score",
@@ -39,8 +39,9 @@ internal static class ScoreRows
                       and ({end}::timestamptz is null or r.created_at <= {end}::timestamptz))
                 order by (select max(r.id) from assessment.spot_quiz_responses r where r.spot_quiz_id = q.id and r.token = {token}) desc
                 limit {MaxQuizzes}
-                """)
-            .ToListAsync(ct);
+                """,
+            row => new Row(row.Int("QuizId"), row.TextOrNull("QuizName"), row.TextOrNull("Topic"), row.Int("Total"), row.IntOrNull("Score"), row.InstantOrNull("AttemptedAt")),
+            ct);
     }
 
     private static DateTimeOffset? Offset(DateTime? value) => value is null ? null : new DateTimeOffset(value.Value);

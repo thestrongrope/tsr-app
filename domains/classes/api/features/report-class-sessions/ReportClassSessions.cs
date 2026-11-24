@@ -2,7 +2,7 @@ using System.Globalization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
 using Tsr.Shared.Api;
@@ -32,7 +32,7 @@ internal static class ReportClassSessionsSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(HttpContext context, ClassesContext db, Permissions permissions, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(HttpContext context, NpgsqlDataSource db, Permissions permissions, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -47,11 +47,11 @@ internal static class ReportClassSessionsSlice
         }
 
         var ids = await scope!.ClassIdsAsync(db, 0, ct);
-        var rows = await db.Database
-            .SqlQuery<Row>($"""
+        var rows = await db.ListAsync(
+            $"""
                 select c.id as "Id", c.code::text as "Code", cl.name::text as "Level", u.name::text as "Teacher",
                        (select count(1) from classes.class_sessions s where s.class_id = c.id)::int as "Total",
-                       last.conducted_on as "LastOn", last.quran_recitation_surah as "Surah", last.quran_recitation_verse as "Verse",
+                       to_char(last.conducted_on, 'YYYY-MM-DD') as "LastOn", last.quran_recitation_surah as "Surah", last.quran_recitation_verse as "Verse",
                        last.arabic_topic::text as "Arabic", last.aqaed_topic::text as "Aqaed", last.ahkam_topic::text as "Ahkam", last.akhlaq_topic::text as "Akhlaq", last.other_topic::text as "Other"
                 from classes.classes c
                 left join classes.class_levels cl on cl.id = c.class_level_id
@@ -61,12 +61,15 @@ internal static class ReportClassSessionsSlice
                     from classes.class_sessions s where s.class_id = c.id order by s.conducted_on desc, s.id desc limit 1) last on true
                 where c.id = any({ids})
                 order by cl.sort_order nulls first, c.code
-                """)
-            .ToListAsync(ct);
+                """,
+            r => new Row(
+                r.Int("Id"), r.Text("Code"), r.TextOrNull("Level"), r.TextOrNull("Teacher"), r.Int("Total"), r.DayOrNull("LastOn"), r.IntOrNull("Surah"), r.IntOrNull("Verse"),
+                r.TextOrNull("Arabic"), r.TextOrNull("Aqaed"), r.TextOrNull("Ahkam"), r.TextOrNull("Akhlaq"), r.TextOrNull("Other")),
+            ct);
 
         var level = ReportScope.LevelOf(context);
         var items = rows.Where(r => level.Length == 0 || PhpCast.Str(r.Level) == level).Select(ToItem).ToList();
-        return Results.Json(new Answer(scope.Gender, [.. rows.Select(r => PhpCast.Str(r.Level)).Distinct()], items));
+        return Results.Json(new Answer(scope.Gender, [.. rows.Select(r => PhpCast.Str(r.Level)).Distinct()], items), ClassesJson.Answers.ReportClassSessions);
     }
 
     private static Item ToItem(Row row)

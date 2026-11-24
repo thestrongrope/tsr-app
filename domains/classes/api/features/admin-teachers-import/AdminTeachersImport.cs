@@ -2,7 +2,7 @@ using System.Data.Common;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Microsoft.Extensions.Logging;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
@@ -37,10 +37,10 @@ internal static partial class AdminTeachersImportSlice
 
     private static async Task<IResult> HandleAsync(
         HttpContext context,
-        ClassesContext db,
+        NpgsqlDataSource source,
         Permissions permissions,
         TimeProvider clock,
-        ILogger<ClassesContext> log,
+        ILogger<ClassesLog> log,
         CancellationToken ct)
     {
         var caller = context.GetCaller();
@@ -64,9 +64,9 @@ internal static partial class AdminTeachersImportSlice
         var genderText = gender.ToString(System.Globalization.CultureInfo.InvariantCulture);
         try
         {
-            await using var transaction = await db.Database.BeginTransactionAsync(ct);
-            var candidates = await db.Database
-                .SqlQuery<Candidate>($"""
+            await using var tx = await source.BeginAsync(ct);
+            var candidates = await tx.ListAsync(
+                $"""
                     select c.teacher as "Token", min(c.class_level_id) as "Level"
                     from classes.classes c
                     join membership.v_members u on u.token = c.teacher and u.gender = {genderText}
@@ -74,11 +74,12 @@ internal static partial class AdminTeachersImportSlice
                     group by c.teacher
                     order by c.teacher
                     limit {MaxTeachers}
-                    """)
-                .ToListAsync(ct);
-            await TeacherWriter.WriteBatchAsync(db, candidates.Select(c => (c.Token, TeacherTraining.ImportedFlags(c.Level))).ToList(), Note, caller.Token, clock, ct);
-            await transaction.CommitAsync(ct);
-            return Results.Json(new Done(candidates.Count));
+                    """,
+                row => new Candidate(row.Int("Token"), row.Int("Level")),
+                ct);
+            await TeacherWriter.WriteBatchAsync(tx, candidates.Select(c => (c.Token, TeacherTraining.ImportedFlags(c.Level))).ToList(), Note, caller.Token, clock, ct);
+            await tx.CommitAsync(ct);
+            return Results.Json(new Done(candidates.Count), ClassesJson.Answers.TeachersImportDone);
         }
         catch (DbException e)
         {

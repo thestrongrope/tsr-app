@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Membership.Api.Domain;
 using Tsr.Shared.Api;
@@ -26,7 +27,7 @@ internal static class ChildrenLinkRevokeEndpoint
     }
 }
 
-internal sealed class ChildrenLinkRevokeHandler(MembershipContext db, Permissions permissions, TimeProvider clock)
+internal sealed class ChildrenLinkRevokeHandler(NpgsqlDataSource source, Permissions permissions, TimeProvider clock)
 {
     public async Task<IResult> HandleAsync(Caller? caller, string childToken, CancellationToken ct)
     {
@@ -40,7 +41,7 @@ internal sealed class ChildrenLinkRevokeHandler(MembershipContext db, Permission
             return Refusals.NotPermitted();
         }
 
-        var revoked = await GuardianRevoker.RevokePairAsync(db, caller.Token, PhpValue.IntOfText(childToken), caller.UserId, clock.GetUtcNow(), ct);
+        var revoked = await GuardianRevoker.RevokePairAsync(source, caller.Token, PhpValue.IntOfText(childToken), caller.UserId, clock.GetUtcNow(), ct);
         return revoked
             ? Results.NoContent()
             : Problem.Detail(StatusCodes.Status404NotFound, GuardianRules.ActiveLinkNotFound);

@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Assessment.Api.Domain;
 using Tsr.Shared.Api;
@@ -29,7 +29,7 @@ internal static class OpenQuizzesSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(HttpContext context, AssessmentContext db, Permissions permissions, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(HttpContext context, NpgsqlDataSource source, Permissions permissions, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -43,8 +43,8 @@ internal static class OpenQuizzesSlice
         }
 
         var token = caller.Token;
-        var rows = await db.Database
-            .SqlQuery<Row>($"""
+        var rows = await source.ListAsync(
+            $"""
                 select q.id as "Id", q.code::text as "Code", q.name::text as "Name", q.topic::text as "Topic", c.code as "ClassCode"
                 from assessment.spot_quizzes q
                 join classes.v_classes c on c.id = q.class_id
@@ -54,8 +54,9 @@ internal static class OpenQuizzesSlice
                   and not exists (select 1 from assessment.spot_quiz_responses r where r.spot_quiz_id = q.id and r.token = {token})
                 order by q.published_at desc, q.id desc
                 limit {Limit}
-                """)
-            .ToListAsync(ct);
-        return Results.Json(new Body(rows.Select(r => new Item(r.Id, r.Code ?? string.Empty, r.Name ?? string.Empty, QuizResult.TextOrNull(r.Topic), r.ClassCode ?? string.Empty)).ToList()));
+                """,
+            row => new Row(row.Int("Id"), row.TextOrNull("Code"), row.TextOrNull("Name"), row.TextOrNull("Topic"), row.TextOrNull("ClassCode")),
+            ct);
+        return Results.Json(new Body(rows.Select(r => new Item(r.Id, r.Code ?? string.Empty, r.Name ?? string.Empty, QuizResult.TextOrNull(r.Topic), r.ClassCode ?? string.Empty)).ToList()), AssessmentJson.Answers.OpenQuizzes);
     }
 }

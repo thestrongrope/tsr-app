@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
 using Tsr.Shared.Api;
@@ -23,7 +24,7 @@ internal static class ReportMcqAdherenceClassSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string class_id, HttpContext context, ClassesContext db, Permissions permissions, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(string class_id, HttpContext context, NpgsqlDataSource db, Permissions permissions, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -39,6 +40,6 @@ internal static class ReportMcqAdherenceClassSlice
 
         var c = await McqAdherenceReport.FirstClassAsync(db, report!, ct);
         var mcqs = c.Items.Select(i => new Mcq(i.Topic, i.Subject, i.Lesson, i.Name, i.Status)).ToList();
-        return Results.Json(new Answer(c.Expected, c.Conducted, c.Pending, c.Skipped, c.AdherencePercent, mcqs));
+        return Results.Json(new Answer(c.Expected, c.Conducted, c.Pending, c.Skipped, c.AdherencePercent, mcqs), ClassesJson.Answers.ReportMcqAdherenceClass);
     }
 }

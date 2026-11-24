@@ -1,6 +1,6 @@
 using System.Globalization;
 using Microsoft.AspNetCore.Http;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Shared.Api;
 
 namespace Tsr.Platform.Api.Domain;
@@ -82,7 +82,7 @@ internal static class AccessLog
         return first.Length > 0 && first[0] is '=' or '+' or '-' or '@' ? "'" + value : value;
     }
 
-    public static async Task<List<MemberRow>> SummaryByMemberAsync(PlatformContext db, DateTimeOffset since, Filters filters, CancellationToken ct)
+    public static async Task<List<MemberRow>> SummaryByMemberAsync(NpgsqlDataSource source, DateTimeOffset since, Filters filters, CancellationToken ct)
     {
         if (filters.MatchesNothing)
         {
@@ -90,8 +90,8 @@ internal static class AccessLog
         }
 
         // Grouped by token as PHP does; the name and email are the same for every row of a token, so max() only satisfies the grouping.
-        return await db.Database.SqlQuery<MemberRow>($"""
-            select coalesce(l.token, 0) as "Token", coalesce(max(m.name), '') as "Name", coalesce(max(u.email), '') as "Email",
+        return await source.ListAsync($"""
+            select coalesce(l.token, 0) as "Token", coalesce(max(m.name), '')::text as "Name", coalesce(max(u.email), '')::text as "Email",
                    count(*) as "Hits", count(distinct (l.accessed_at at time zone 'UTC')::date) as "ActiveDays",
                    to_char(max(l.accessed_at) at time zone 'UTC', 'YYYY-MM-DD HH24:MI:SS') as "LastAccessed"
             from platform.admin_access_log l
@@ -103,18 +103,20 @@ internal static class AccessLog
             group by l.token
             order by count(*) desc, max(l.accessed_at) desc
             limit {MaxDownloadRows}
-            """).ToListAsync(ct);
+            """,
+            row => new MemberRow(row.Int("Token"), row.Text("Name"), row.Text("Email"), row.Long("Hits"), row.Long("ActiveDays"), row.Text("LastAccessed")),
+            ct);
     }
 
-    public static async Task<List<PageRow>> SummaryByPageAsync(PlatformContext db, DateTimeOffset since, Filters filters, CancellationToken ct)
+    public static async Task<List<PageRow>> SummaryByPageAsync(NpgsqlDataSource source, DateTimeOffset since, Filters filters, CancellationToken ct)
     {
         if (filters.MatchesNothing)
         {
             return [];
         }
 
-        return await db.Database.SqlQuery<PageRow>($"""
-            select l.page as "Page", count(*) as "Hits", to_char(max(l.accessed_at) at time zone 'UTC', 'YYYY-MM-DD HH24:MI:SS') as "LastAccessed"
+        return await source.ListAsync($"""
+            select l.page::text as "Page", count(*) as "Hits", to_char(max(l.accessed_at) at time zone 'UTC', 'YYYY-MM-DD HH24:MI:SS') as "LastAccessed"
             from platform.admin_access_log l
             where l.accessed_at >= {since}
               and ({filters.Token}::bigint is null or l.token = {filters.Token}::bigint)
@@ -122,20 +124,22 @@ internal static class AccessLog
             group by l.page
             order by count(*) desc, max(l.accessed_at) desc
             limit {MaxDownloadRows}
-            """).ToListAsync(ct);
+            """,
+            row => new PageRow(row.Text("Page"), row.Long("Hits"), row.Text("LastAccessed")),
+            ct);
     }
 
     /// <summary>The latest 500 accesses, not limited to the window, newest first.</summary>
-    public static async Task<List<RecentRow>> RecentAsync(PlatformContext db, Filters filters, CancellationToken ct)
+    public static async Task<List<RecentRow>> RecentAsync(NpgsqlDataSource source, Filters filters, CancellationToken ct)
     {
         if (filters.MatchesNothing)
         {
             return [];
         }
 
-        return await db.Database.SqlQuery<RecentRow>($"""
+        return await source.ListAsync($"""
             select l.id as "Id", to_char(l.accessed_at at time zone 'UTC', 'YYYY-MM-DD HH24:MI:SS') as "AccessedAt", coalesce(l.token, 0) as "Token",
-                   coalesce(m.name, '') as "Name", coalesce(u.email, '') as "Email", l.roleid as "RoleId", l.method as "Method", l.page as "Page", coalesce(l.ip, '') as "Ip"
+                   coalesce(m.name, '')::text as "Name", coalesce(u.email, '')::text as "Email", l.roleid as "RoleId", l.method::text as "Method", l.page::text as "Page", coalesce(l.ip, '')::text as "Ip"
             from platform.admin_access_log l
             left join membership.v_members m on m.user_id = l.user_id
             left join identity.v_users u on u.id = l.user_id
@@ -143,21 +147,23 @@ internal static class AccessLog
               and ({filters.Page}::text = '' or l.page like '%' || {filters.Page}::text || '%')
             order by l.id desc
             limit {RecentLimit}
-            """).ToListAsync(ct);
+            """,
+            row => new RecentRow(row.Long("Id"), row.Text("AccessedAt"), row.Int("Token"), row.Text("Name"), row.Text("Email"), row.IntOrNull("RoleId"), row.Text("Method"), row.Text("Page"), row.Text("Ip")),
+            ct);
     }
 
     /// <summary>Every access in the window that matches, newest first: what a download holds.</summary>
-    public static async Task<List<AccessRow>> AccessesAsync(PlatformContext db, DateTimeOffset since, Filters filters, CancellationToken ct)
+    public static async Task<List<AccessRow>> AccessesAsync(NpgsqlDataSource source, DateTimeOffset since, Filters filters, CancellationToken ct)
     {
         if (filters.MatchesNothing)
         {
             return [];
         }
 
-        return await db.Database.SqlQuery<AccessRow>($"""
+        return await source.ListAsync($"""
             select to_char(l.accessed_at at time zone 'UTC', 'YYYY-MM-DD HH24:MI:SS') as "AccessedAt", coalesce(l.token, 0) as "Token",
-                   coalesce(m.name, '') as "Name", coalesce(u.email, '') as "Email", l.roleid as "RoleId", l.method as "Method", l.page as "Page",
-                   coalesce(l.ip, '') as "Ip", coalesce(l.user_agent, '') as "UserAgent", coalesce(l.referer, '') as "Referer"
+                   coalesce(m.name, '')::text as "Name", coalesce(u.email, '')::text as "Email", l.roleid as "RoleId", l.method::text as "Method", l.page::text as "Page",
+                   coalesce(l.ip, '')::text as "Ip", coalesce(l.user_agent, '')::text as "UserAgent", coalesce(l.referer, '')::text as "Referer"
             from platform.admin_access_log l
             left join membership.v_members m on m.user_id = l.user_id
             left join identity.v_users u on u.id = l.user_id
@@ -166,7 +172,9 @@ internal static class AccessLog
               and ({filters.Page}::text = '' or l.page like '%' || {filters.Page}::text || '%')
             order by l.id desc
             limit {MaxDownloadRows}
-            """).ToListAsync(ct);
+            """,
+            row => new AccessRow(row.Text("AccessedAt"), row.Int("Token"), row.Text("Name"), row.Text("Email"), row.IntOrNull("RoleId"), row.Text("Method"), row.Text("Page"), row.Text("Ip"), row.Text("UserAgent"), row.Text("Referer")),
+            ct);
     }
 
     private static string Trimmed(string? value) => (value ?? string.Empty).Trim(' ', '\t', '\n', '\r', '\0', '\v');

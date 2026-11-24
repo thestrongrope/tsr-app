@@ -45,7 +45,17 @@ public static class HostServices
         }
 
         services.AddAccess();
+        if (mode is RunMode.Migrate)
+        {
+            services.AddPlatformMigrations();
+        }
+
         services.AddPlatform();
+        if (mode is RunMode.Migrate)
+        {
+            services.AddMembershipMigrations();
+        }
+
         services.AddMembership();
         if (mode is RunMode.Migrate)
         {
@@ -54,8 +64,23 @@ public static class HostServices
 
         services.AddContent();
         // Registered after platform, whose migration creates the collation classes uses.
+        if (mode is RunMode.Migrate)
+        {
+            services.AddClassesMigrations();
+        }
+
         services.AddClasses();
+        if (mode is RunMode.Migrate)
+        {
+            services.AddAssessmentMigrations();
+        }
+
         services.AddAssessment();
+        if (mode is RunMode.Migrate)
+        {
+            services.AddNotificationsMigrations();
+        }
+
         services.AddNotifications();
         services.AddSearch();
     }

@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
 using Tsr.Shared.Api;
@@ -21,7 +22,7 @@ internal static class ClassManageSlice
     }
 
     private static async Task<IResult> HandleAsync(
-        string class_id, HttpContext context, ClassesContext db, Permissions permissions, IConfiguration configuration, CancellationToken ct)
+        string class_id, HttpContext context, NpgsqlDataSource source, Permissions permissions, IConfiguration configuration, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -29,7 +30,7 @@ internal static class ClassManageSlice
             return Problem.Unauthenticated();
         }
 
-        var head = await ClassGuards.FindActiveClassAsync(db, ClassGuards.IdOf(class_id), ct);
+        var head = await ClassGuards.FindActiveClassAsync(source, ClassGuards.IdOf(class_id), ct);
         if (head is null)
         {
             return Refusals.ClassNotFound();
@@ -40,7 +41,7 @@ internal static class ClassManageSlice
             return Problem.Detail(StatusCodes.Status403Forbidden, "You do not have permission to manage this class");
         }
 
-        await ClassGuards.LogAdminAccessAsync(db, context, permissions, caller, ct);
-        return Results.Json(await ManagePayload.BuildAsync(db, permissions, configuration, caller, head.Id, ct));
+        await ClassGuards.LogAdminAccessAsync(context, permissions, caller, ct);
+        return Results.Json(await ManagePayload.BuildAsync(source, permissions, configuration, caller, head.Id, ct), ClassesJson.Answers.Answer);
     }
 }

@@ -36,7 +36,7 @@ internal static class WhatsappLinkSlice
 
         var answer = await notifier.StatusAsync(ct);
         var data = answer.Status == StatusCodes.Status200OK ? NotifierAsk.Decode(answer.Body) : default;
-        return data.ValueKind == System.Text.Json.JsonValueKind.Undefined ? NotifierAsk.LinkUnreachable() : Results.Json(new Link(StateOf(data), LastSeenOf(data)));
+        return data.ValueKind == System.Text.Json.JsonValueKind.Undefined ? NotifierAsk.LinkUnreachable() : Results.Json(new Link(StateOf(data), LastSeenOf(data)), NotificationsJson.Answers.Link);
     }
 
     internal static string StateOf(System.Text.Json.JsonElement data)

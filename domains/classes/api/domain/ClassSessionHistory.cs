@@ -1,5 +1,5 @@
 using System.Globalization;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Shared.Api;
 
@@ -19,14 +19,12 @@ internal static class ClassSessionHistory
 
     private sealed record Row(DateOnly ConductedOn, short Conducted, string? Reason, int? Surah, int? Verse, string? Arabic, string? Aqaed, string? Ahkam, string? Akhlaq, string? Other);
 
-    public static async Task<IReadOnlyList<Item>> LoadAsync(ClassesContext db, Permissions permissions, Caller caller, long classId, CancellationToken ct)
+    public static async Task<IReadOnlyList<Item>> LoadAsync(NpgsqlDataSource db, Permissions permissions, Caller caller, long classId, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(permissions);
         ArgumentNullException.ThrowIfNull(caller);
-        var genders = await db.Database
-            .SqlQuery<int>($"""select coalesce(gender, 0) as "Value" from classes.classes where id = {classId} limit 1""")
-            .ToListAsync(ct);
+        var genders = await db.ListAsync($"""select coalesce(gender, 0) as "Gender" from classes.classes where id = {classId} limit 1""", r => r.Int("Gender"), ct);
         if (genders.Count == 0)
         {
             return [];
@@ -39,16 +37,19 @@ internal static class ClassSessionHistory
             return [];
         }
 
-        var rows = await db.Database
-            .SqlQuery<Row>($"""
-                select conducted_on as "ConductedOn", conducted as "Conducted", non_conduction_reason::text as "Reason", quran_recitation_surah as "Surah", quran_recitation_verse as "Verse",
-                       arabic_topic::text as "Arabic", aqaed_topic::text as "Aqaed", ahkam_topic::text as "Ahkam", akhlaq_topic::text as "Akhlaq", other_topic::text as "Other"
-                from classes.class_sessions
-                where class_id = {classId}
-                order by conducted_on desc, id desc
-                limit {MaxSessions}
-                """)
-            .ToListAsync(ct);
+        var rows = await db.ListAsync(
+            $"""
+            select conducted_on as "ConductedOn", conducted as "Conducted", non_conduction_reason::text as "Reason", quran_recitation_surah as "Surah", quran_recitation_verse as "Verse",
+                   arabic_topic::text as "Arabic", aqaed_topic::text as "Aqaed", ahkam_topic::text as "Ahkam", akhlaq_topic::text as "Akhlaq", other_topic::text as "Other"
+            from classes.class_sessions
+            where class_id = {classId}
+            order by conducted_on desc, id desc
+            limit {MaxSessions}
+            """,
+            r => new Row(
+                r.Date("ConductedOn"), r.Short("Conducted"), r.TextOrNull("Reason"), r.IntOrNull("Surah"), r.IntOrNull("Verse"),
+                r.TextOrNull("Arabic"), r.TextOrNull("Aqaed"), r.TextOrNull("Ahkam"), r.TextOrNull("Akhlaq"), r.TextOrNull("Other")),
+            ct);
         return [.. rows.Select(ToItem)];
     }
 

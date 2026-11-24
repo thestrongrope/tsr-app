@@ -2,7 +2,7 @@ using System.Globalization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
 using Tsr.Shared.Api;
@@ -41,7 +41,7 @@ internal static class AdminTransferHistorySlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(HttpContext context, ClassesContext db, Permissions permissions, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(HttpContext context, NpgsqlDataSource source, Permissions permissions, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -61,15 +61,15 @@ internal static class AdminTransferHistorySlice
         var q = PhpText.Trim(qValues.Count == 0 ? string.Empty : qValues[^1] ?? string.Empty);
         if (q.Contains('\0', StringComparison.Ordinal))
         {
-            return Results.Json(new Body(0, page, pageSize, [])); // PostgreSQL text cannot hold a NUL byte, so nothing matches.
+            return Results.Json(new Body(0, page, pageSize, []), ClassesJson.Answers.TransferHistoryBody); // PostgreSQL text cannot hold a NUL byte, so nothing matches.
         }
 
         // As PHP: the permission is the only gate; a caller limited to assigned classes still sees every move (owner's decision, 14 Nov 2026).
         var like = "%" + q + "%";
         var offset = (Math.Min(page, MaxPage) - 1) * pageSize;
 
-        var total = (await db.Database
-            .SqlQuery<int>($"""
+        var total = (await source.ListAsync(
+            $"""
                 select count(*)::int as "Value"
                 from classes.student_transfers st
                 join membership.v_members u on u.token = st.token_no
@@ -78,10 +78,11 @@ internal static class AdminTransferHistorySlice
                 join membership.v_members ab on ab.token = st.transferred_by
                 where ({q} = '' or u.name like {like}::citext or st.token_no::text = {q} or fc.code like {like}::citext or tc.code like {like}::citext
                    or st.reason like {like}::citext or ab.name like {like}::citext)
-                """)
-            .ToListAsync(ct))[0];
-        var rows = await db.Database
-            .SqlQuery<Row>($"""
+                """,
+            row => row.Int("Value"),
+            ct))[0];
+        var rows = await source.ListAsync(
+            $"""
                 select st.id as "Id", st.token_no as "StudentToken", u.name as "StudentName", st.type as "Type", fc.code as "FromCode", tc.code as "ToCode",
                        st.reason::text as "Reason", ab.name as "TransferredBy", st.transferred_at as "TransferredAt"
                 from classes.student_transfers st
@@ -93,8 +94,18 @@ internal static class AdminTransferHistorySlice
                    or st.reason like {like}::citext or ab.name like {like}::citext)
                 order by st.transferred_at desc, st.id desc
                 limit {pageSize} offset {offset}
-                """)
-            .ToListAsync(ct);
+                """,
+            row => new Row(
+                row.Long("Id"),
+                row.Int("StudentToken"),
+                row.TextOrNull("StudentName"),
+                row.Text("Type"),
+                row.TextOrNull("FromCode"),
+                row.TextOrNull("ToCode"),
+                row.TextOrNull("Reason"),
+                row.TextOrNull("TransferredBy"),
+                row.Instant("TransferredAt")),
+            ct);
         var items = rows.Select(r => new Item(
             r.Id,
             r.StudentToken,
@@ -105,6 +116,6 @@ internal static class AdminTransferHistorySlice
             PhpCast.TextOrNull(r.Reason),
             PhpCast.Text(r.TransferredBy),
             r.TransferredAt.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss", CultureInfo.InvariantCulture))).ToList();
-        return Results.Json(new Body(total, page, pageSize, items));
+        return Results.Json(new Body(total, page, pageSize, items), ClassesJson.Answers.TransferHistoryBody);
     }
 }

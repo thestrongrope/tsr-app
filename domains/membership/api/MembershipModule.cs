@@ -1,6 +1,8 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Npgsql;
 using Tsr.Membership.Api.Domain;
 using Tsr.Membership.Api.Features.LinkAccount;
 using Tsr.Membership.Api.Features.MeChildren;
@@ -41,16 +43,28 @@ public static class MembershipModule
     public static readonly IReadOnlyList<string> Dependencies = ["access", "identity", "platform"];
 
     /// <summary>
+    /// Registers membership's tables for the one-off migrate job. The API does not call it: membership reads and writes through the data source, and its context is for the migrate job only.
+    /// The host calls it in migrate mode just before <see cref="AddMembership"/>, so the migration order is unchanged.
+    /// </summary>
+    [RequiresUnreferencedCode("Entity Framework is JIT only: it reflects over the context.")]
+    [RequiresDynamicCode("Entity Framework is JIT only: it reflects over the context.")]
+    public static IServiceCollection AddMembershipMigrations(this IServiceCollection services)
+    {
+        services.AddDomainContext<MembershipContext>(MembershipContext.SchemaName);
+        return services;
+    }
+
+    /// <summary>
     /// Registers membership. Its sink replaces identity's no-op one, so it must be registered after identity (the last
     /// registration wins); the default <see cref="IClassEnrolments"/> answers "not enrolled" and steps aside for the real one.
     /// </summary>
     public static IServiceCollection AddMembership(this IServiceCollection services)
     {
-        services.AddDomainContext<MembershipContext>(MembershipContext.SchemaName);
+        services.AddTsrDataSource();
         services.AddScoped<Tsr.Identity.Api.IProfileSink, ProfileSink>();
         services.AddScoped<Tsr.Identity.Api.IMemberErasure, MemberErasure>();
         services.TryAddScoped<IClassEnrolments, NoEnrolments>();
-        services.AddScoped(provider => new MemberNames(provider.GetRequiredService<MembershipContext>()));
+        services.AddScoped(provider => new MemberNames(provider.GetRequiredService<NpgsqlDataSource>()));
         services.TryAddSingleton<MemberRateLimit>();
         services.AddScoped<RegistrationGetHandler>();
         services.AddScoped<RegistrationSaveHandler>();

@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Assessment.Api.Domain;
 using Tsr.Shared.Api;
@@ -22,7 +23,7 @@ internal static class ClassMyScoresSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string class_id, HttpContext context, AssessmentContext db, Permissions permissions, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(string class_id, HttpContext context, NpgsqlDataSource source, Permissions permissions, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -35,21 +36,21 @@ internal static class ClassMyScoresSlice
             return Refusals.NotPermitted();
         }
 
-        if (!await QuizAccess.HasNumericGenderAsync(db, caller, ct))
+        if (!await QuizAccess.HasNumericGenderAsync(source, caller, ct))
         {
             return Refusals.GenderNotSet();
         }
 
         var classId = PhpValue.IntOfText(class_id);
-        if (!await QuizAccess.IsEnrolledStudentAsync(db, classId, caller.Token, ct))
+        if (!await QuizAccess.IsEnrolledStudentAsync(source, classId, caller.Token, ct))
         {
             return Refusals.ClassNotEnrolled();
         }
 
         var from = context.Request.Query["start_date"].LastOrDefault();
         var to = context.Request.Query["end_date"].LastOrDefault();
-        var rows = await ScoreRows.ForAsync(db, classId, caller.Token, from, to, ct);
-        return Results.Json(rows.Select(ToItem).ToList());
+        var rows = await ScoreRows.ForAsync(source, classId, caller.Token, from, to, ct);
+        return Results.Json(rows.Select(ToItem).ToList(), AssessmentJson.Answers.ClassMyScores);
     }
 
     private static Item ToItem(ScoreRows.Row row)

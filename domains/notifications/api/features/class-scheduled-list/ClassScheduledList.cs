@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Notifications.Api.Domain;
 
@@ -21,7 +21,7 @@ internal static class ClassScheduledListSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string class_id, HttpContext context, NotificationsContext db, Permissions permissions, TimeProvider clock, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(string class_id, HttpContext context, NpgsqlDataSource source, Permissions permissions, TimeProvider clock, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -30,22 +30,23 @@ internal static class ClassScheduledListSlice
         }
 
         var classId = NotifyGuards.IdOf(class_id);
-        var refusal = await NotifyGuards.ClassAccessAsync(db, permissions, caller, classId, ct);
+        var refusal = await NotifyGuards.ClassAccessAsync(source, permissions, caller, classId, ct);
         if (refusal is not null)
         {
             return refusal;
         }
 
         var now = clock.GetUtcNow();
-        var rows = await ScheduledRows.QueryAsync(db, classId, 0, ct);
-        var lastRuns = await ScheduledRows.LastRunsAsync(db, rows.Select(r => r.Id), ct);
+        var rows = await ScheduledRows.QueryAsync(source, classId, 0, ct);
+        var lastRuns = await ScheduledRows.LastRunsAsync(source, rows.Select(r => r.Id), ct);
         var items = rows.Select(r => ScheduledRows.Item(r, lastRuns.GetValueOrDefault(r.Id), now)).ToList();
-        var slots = await db.Database
-            .SqlQuery<Slot>($"""
-                select id as "Id", coalesce(day, 0) as "Day", coalesce(hour, 0) as "Hour", coalesce(minute, 0) as "Minute", coalesce(timezone, '') as "Timezone"
-                from classes.v_class_schedules where class_id = {classId} and deleted_at is null order by day, hour, minute
-                """)
-            .ToListAsync(ct);
-        return Results.Json(new Dictionary<string, object> { ["items"] = items, ["schedules"] = slots.Select(s => new Dictionary<string, object> { ["id"] = s.Id, ["day"] = s.Day, ["hour"] = s.Hour, ["minute"] = s.Minute, ["timezone"] = s.Timezone }).ToList() });
+        var slots = await source.ListAsync(
+            $"""
+            select id as "Id", coalesce(day, 0) as "Day", coalesce(hour, 0) as "Hour", coalesce(minute, 0) as "Minute", coalesce(timezone, '') as "Timezone"
+            from classes.v_class_schedules where class_id = {classId} and deleted_at is null order by day, hour, minute
+            """,
+            row => new Slot(row.Int("Id"), row.Int("Day"), row.Int("Hour"), row.Int("Minute"), row.Text("Timezone")),
+            ct);
+        return Results.Json(new Dictionary<string, object?> { ["items"] = items, ["schedules"] = slots.Select(s => new Dictionary<string, object?> { ["id"] = s.Id, ["day"] = s.Day, ["hour"] = s.Hour, ["minute"] = s.Minute, ["timezone"] = s.Timezone }).ToList() }, NotificationsJson.Answers.Answer);
     }
 }

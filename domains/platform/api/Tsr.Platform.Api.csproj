@@ -1,5 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!-- platform: app version, release notes, health, feedback, geo. Lists access as a dependency. -->
+  <PropertyGroup>
+    <IsAotCompatible>true</IsAotCompatible>
+    <EnableRequestDelegateGenerator>true</EnableRequestDelegateGenerator>
+  </PropertyGroup>
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <ProjectReference Include="../../../shared/api/Tsr.Shared.Api.csproj" />

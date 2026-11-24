@@ -1,5 +1,5 @@
 using System.Globalization;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Shared.Api;
 
@@ -54,113 +54,131 @@ internal static class ClassRoster
             await permissions.CanAsync(caller, "students:transfer", AccessTarget.None, ct));
     }
 
-    /// <summary>The current students (PHP getStudents): one row per member, with the first enrolment's day, the note and the MCQ-admin flag.</summary>
-    public static async Task<List<Student>> ActiveAsync(ClassesContext db, int classId, CancellationToken ct) =>
-        await db.Database
-            .SqlQuery<Student>($"""
-                select m.token as "Token", m.name as "Name", u.email as "Email", m.mobile as "Mobile",
-                       (min(cs.created_at) at time zone 'UTC')::date as "JoinedOn", max(cs.notes::text) as "Notes",
-                       max(coalesce(cs.mcq_admin, 0)) > 0 as "McqAdmin"
-                from classes.class_students cs
-                join membership.v_members m on m.token = cs.token_no
-                join identity.v_users u on u.id = m.user_id
-                where cs.removed_at is null and cs.status = 'A' and cs.class_id = {classId}
-                group by m.user_id, m.name, m.token, u.email, m.mobile
-                order by m.name, m.token
-                limit {MaxRows}
-                """)
-            .ToListAsync(ct);
-
-    /// <summary>PHP api_manage_find_student: the member is on the active roster (getStudents).</summary>
-    public static async Task<bool> IsActiveAsync(ClassesContext db, int classId, int token, CancellationToken ct) =>
-        (await db.Database
-            .SqlQuery<int>($"""
-                select 1 as "Value" from classes.class_students cs join membership.v_members m on m.token = cs.token_no
-                where cs.removed_at is null and cs.status = 'A' and cs.class_id = {classId} and cs.token_no = {token}
-                limit 1
-                """)
-            .ToListAsync(ct)).Count > 0;
-
     // PHP getRemovedStudents: the member's latest enrolment row of the class, when it is removed and not a move to another class.
-    private static async Task<List<Removed>> RemovedAsync(ClassesContext db, int classId, CancellationToken ct) =>
-        await db.Database
-            .SqlQuery<Removed>($"""
-                select m.token as "Token", m.name as "Name", u.email as "Email", m.mobile as "Mobile", cs.removed_at as "RemovedAt",
-                       cs.removed_reason::text as "RemovedReason", r.name as "RemovedByName"
-                from classes.class_students cs
-                join membership.v_members m on m.token = cs.token_no
-                join identity.v_users u on u.id = m.user_id
-                left join membership.v_members r on r.token = cs.removed_by
-                where cs.removed_at is not null and cs.class_id = {classId}
-                  and cs.id = (select max(l.id) from classes.class_students l where l.class_id = cs.class_id and l.token_no = cs.token_no)
-                  and coalesce(cs.removed_reason, '') not like 'Transfer to class #%'
-                  and coalesce(cs.removed_reason, '') not like 'Promotion to class #%'
-                  and coalesce(cs.removed_reason, '') not like 'Demotion to class #%'
-                order by m.name, m.token
-                limit {MaxRows}
-                """)
-            .ToListAsync(ct);
-
-    /// <summary>PHP api_manage_find_student(removed): the member is on the removed list (getRemovedStudents): the latest enrolment row of the class is removed and not a move to another class.</summary>
-    public static async Task<bool> IsRemovedAsync(ClassesContext db, int classId, int token, CancellationToken ct) =>
-        (await db.Database
-            .SqlQuery<int>($"""
-                select 1 as "Value"
-                from classes.class_students cs
-                join membership.v_members m on m.token = cs.token_no
-                where cs.removed_at is not null and cs.class_id = {classId} and cs.token_no = {token}
-                  and cs.id = (select max(l.id) from classes.class_students l where l.class_id = cs.class_id and l.token_no = cs.token_no)
-                  and coalesce(cs.removed_reason, '') not like 'Transfer to class #%'
-                  and coalesce(cs.removed_reason, '') not like 'Promotion to class #%'
-                  and coalesce(cs.removed_reason, '') not like 'Demotion to class #%'
-                limit 1
-                """)
-            .ToListAsync(ct)).Count > 0;
-
     // PHP getStudentsFromMCQs: members who answered a quiz of the class.
-    private static async Task<List<Candidate>> QuizTakersAsync(ClassesContext db, int classId, CancellationToken ct) =>
-        await db.Database
-            .SqlQuery<Candidate>($"""
-                select m.token as "Token", m.name as "Name", u.email as "Email", m.mobile as "Mobile"
-                from membership.v_members m
-                join identity.v_users u on u.id = m.user_id
-                where m.token in (select r.token from assessment.v_quiz_results r where r.class_id = {classId})
-                order by m.name, m.token
-                limit {MaxRows}
-                """)
-            .ToListAsync(ct);
-
     // PHP getTransferHistory(0, classId): the transfers into or out of the class, newest first.
-    private static async Task<List<Transfer>> TransfersAsync(ClassesContext db, int classId, CancellationToken ct) =>
-        await db.Database
-            .SqlQuery<Transfer>($"""
-                select st.token_no as "StudentToken", s.name as "StudentName", st.from_class_id as "FromClassId", fc.code as "FromClassCode",
-                       st.to_class_id as "ToClassId", tc.code as "ToClassCode", st.type as "Type", st.reason::text as "Reason",
-                       ab.name as "TransferredBy", st.transferred_at as "TransferredAt"
-                from classes.student_transfers st
-                join membership.v_members s on s.token = st.token_no
-                join classes.classes fc on fc.id = st.from_class_id
-                join classes.classes tc on tc.id = st.to_class_id
-                join membership.v_members ab on ab.token = st.transferred_by
-                where st.from_class_id = {classId} or st.to_class_id = {classId}
-                order by st.transferred_at desc, st.id desc
-                limit {MaxRows}
-                """)
-            .ToListAsync(ct);
+    public static Task<List<Student>> ActiveAsync(NpgsqlDataSource source, int classId, CancellationToken ct) =>
+        source.ListAsync(
+            $"""
+            select m.token as "Token", m.name as "Name", u.email as "Email", m.mobile as "Mobile",
+                   (min(cs.created_at) at time zone 'UTC')::date as "JoinedOn", max(cs.notes::text) as "Notes",
+                   max(coalesce(cs.mcq_admin, 0)) > 0 as "McqAdmin"
+            from classes.class_students cs
+            join membership.v_members m on m.token = cs.token_no
+            join identity.v_users u on u.id = m.user_id
+            where cs.removed_at is null and cs.status = 'A' and cs.class_id = {classId}
+            group by m.user_id, m.name, m.token, u.email, m.mobile
+            order by m.name, m.token
+            limit {MaxRows}
+            """,
+            row => new Student(row.Int("Token"), row.TextOrNull("Name"), row.TextOrNull("Email"), row.TextOrNull("Mobile"), row.Date("JoinedOn"), row.TextOrNull("Notes"), row.Bool("McqAdmin")),
+            ct);
 
-    public static async Task<Dictionary<string, object?>> BuildAsync(ClassesContext db, Permissions permissions, Caller caller, int classId, CancellationToken ct)
+    public static Task<bool> IsActiveAsync(NpgsqlDataSource source, int classId, int token, CancellationToken ct) =>
+        source.AnyAsync(
+            $"""
+            select 1 as "Value" from classes.class_students cs join membership.v_members m on m.token = cs.token_no
+            where cs.removed_at is null and cs.status = 'A' and cs.class_id = {classId} and cs.token_no = {token}
+            limit 1
+            """,
+            ct);
+
+    public static Task<bool> IsRemovedAsync(NpgsqlDataSource source, int classId, int token, CancellationToken ct) =>
+        source.AnyAsync(
+            $"""
+            select 1 as "Value"
+            from classes.class_students cs
+            join membership.v_members m on m.token = cs.token_no
+            where cs.removed_at is not null and cs.class_id = {classId} and cs.token_no = {token}
+              and cs.id = (select max(l.id) from classes.class_students l where l.class_id = cs.class_id and l.token_no = cs.token_no)
+              and coalesce(cs.removed_reason, '') not like 'Transfer to class #%'
+              and coalesce(cs.removed_reason, '') not like 'Promotion to class #%'
+              and coalesce(cs.removed_reason, '') not like 'Demotion to class #%'
+            limit 1
+            """,
+            ct);
+
+    private static Task<List<Removed>> RemovedAsync(NpgsqlDataSource source, int classId, CancellationToken ct) =>
+        source.ListAsync(
+            $"""
+            select m.token as "Token", m.name as "Name", u.email as "Email", m.mobile as "Mobile", cs.removed_at as "RemovedAt",
+                   cs.removed_reason::text as "RemovedReason", r.name as "RemovedByName"
+            from classes.class_students cs
+            join membership.v_members m on m.token = cs.token_no
+            join identity.v_users u on u.id = m.user_id
+            left join membership.v_members r on r.token = cs.removed_by
+            where cs.removed_at is not null and cs.class_id = {classId}
+              and cs.id = (select max(l.id) from classes.class_students l where l.class_id = cs.class_id and l.token_no = cs.token_no)
+              and coalesce(cs.removed_reason, '') not like 'Transfer to class #%'
+              and coalesce(cs.removed_reason, '') not like 'Promotion to class #%'
+              and coalesce(cs.removed_reason, '') not like 'Demotion to class #%'
+            order by m.name, m.token
+            limit {MaxRows}
+            """,
+            row => new Removed(
+                row.Int("Token"),
+                row.TextOrNull("Name"),
+                row.TextOrNull("Email"),
+                row.TextOrNull("Mobile"),
+                row.InstantOrNull("RemovedAt"),
+                row.TextOrNull("RemovedReason"),
+                row.TextOrNull("RemovedByName")),
+            ct);
+
+    private static Task<List<Candidate>> QuizTakersAsync(NpgsqlDataSource source, int classId, CancellationToken ct) =>
+        source.ListAsync(
+            $"""
+            select m.token as "Token", m.name as "Name", u.email as "Email", m.mobile as "Mobile"
+            from membership.v_members m
+            join identity.v_users u on u.id = m.user_id
+            where m.token in (select r.token from assessment.v_quiz_results r where r.class_id = {classId})
+            order by m.name, m.token
+            limit {MaxRows}
+            """,
+            row => new Candidate(row.Int("Token"), row.TextOrNull("Name"), row.TextOrNull("Email"), row.TextOrNull("Mobile")),
+            ct);
+
+    private static Task<List<Transfer>> TransfersAsync(NpgsqlDataSource source, int classId, CancellationToken ct) =>
+        source.ListAsync(
+            $"""
+            select st.token_no as "StudentToken", s.name as "StudentName", st.from_class_id as "FromClassId", fc.code as "FromClassCode",
+                   st.to_class_id as "ToClassId", tc.code as "ToClassCode", st.type as "Type", st.reason::text as "Reason",
+                   ab.name as "TransferredBy", st.transferred_at as "TransferredAt"
+            from classes.student_transfers st
+            join membership.v_members s on s.token = st.token_no
+            join classes.classes fc on fc.id = st.from_class_id
+            join classes.classes tc on tc.id = st.to_class_id
+            join membership.v_members ab on ab.token = st.transferred_by
+            where st.from_class_id = {classId} or st.to_class_id = {classId}
+            order by st.transferred_at desc, st.id desc
+            limit {MaxRows}
+            """,
+            row => new Transfer(
+                row.Int("StudentToken"),
+                row.TextOrNull("StudentName"),
+                row.Int("FromClassId"),
+                row.TextOrNull("FromClassCode"),
+                row.Int("ToClassId"),
+                row.TextOrNull("ToClassCode"),
+                row.TextOrNull("Type"),
+                row.TextOrNull("Reason"),
+                row.TextOrNull("TransferredBy"),
+                row.Instant("TransferredAt")),
+            ct);
+
+    public static async Task<Dictionary<string, object?>> BuildAsync(NpgsqlDataSource source, Permissions permissions, Caller caller, int classId, CancellationToken ct)
     {
         var can = await CanAsync(permissions, caller, classId, ct);
-        return await BuildAsync(db, classId, can, ct);
+        return await BuildAsync(source, classId, can, ct);
     }
 
-    public static async Task<Dictionary<string, object?>> BuildAsync(ClassesContext db, int classId, Can can, CancellationToken ct)
+    public static async Task<Dictionary<string, object?>> BuildAsync(NpgsqlDataSource source, int classId, Can can, CancellationToken ct)
     {
-        var students = await ActiveAsync(db, classId, ct);
-        var removed = await RemovedAsync(db, classId, ct);
+        var students = await ActiveAsync(source, classId, ct);
+        var removed = await RemovedAsync(source, classId, ct);
         var listed = students.Select(s => s.Token).Concat(removed.Select(r => r.Token)).ToHashSet();
-        var candidates = (await QuizTakersAsync(db, classId, ct)).Where(c => !listed.Contains(c.Token)).ToList();
-        var history = can.Transfer ? (await TransfersAsync(db, classId, ct)).Select(TransferWire).ToList() : null;
+        var candidates = (await QuizTakersAsync(source, classId, ct)).Where(c => !listed.Contains(c.Token)).ToList();
+        var history = can.Transfer ? (await TransfersAsync(source, classId, ct)).Select(TransferWire).ToList() : null;
 
         return new Dictionary<string, object?>
         {

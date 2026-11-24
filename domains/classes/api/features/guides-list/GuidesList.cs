@@ -2,7 +2,7 @@ using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
 using Tsr.Shared.Api;
@@ -24,7 +24,7 @@ internal static class GuidesListSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(HttpContext context, ClassesContext db, Permissions permissions, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(HttpContext context, NpgsqlDataSource source, Permissions permissions, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -37,9 +37,10 @@ internal static class GuidesListSlice
             return Refusals.NotPermitted();
         }
 
-        var levels = await db.Database
-            .SqlQuery<Level>($"""select id as "Id", name as "Name" from classes.class_levels where id in (2, 3, 4, 5) order by sort_order, id""")
-            .ToListAsync(ct);
-        return Results.Json(new Body(levels));
+        var levels = await source.ListAsync(
+            $"""select id as "Id", name as "Name" from classes.class_levels where id in (2, 3, 4, 5) order by sort_order, id""",
+            row => new Level(row.Int("Id"), row.Text("Name")),
+            ct);
+        return Results.Json(new Body(levels), ClassesJson.Answers.GuidesListBody);
     }
 }

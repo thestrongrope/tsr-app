@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
 using Tsr.Shared.Api;
@@ -23,7 +23,7 @@ internal static class RegistrationPlaceSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string registration_id, HttpContext context, ClassesContext db, Permissions permissions, TimeProvider clock, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(string registration_id, HttpContext context, NpgsqlDataSource source, Permissions permissions, TimeProvider clock, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -31,7 +31,7 @@ internal static class RegistrationPlaceSlice
             return Problem.Unauthenticated();
         }
 
-        var (registrant, refusal) = await WaitingRegistrant.RequireAsync(db, permissions, caller, registration_id, ct);
+        var (registrant, refusal) = await WaitingRegistrant.RequireAsync(source, permissions, caller, registration_id, ct);
         if (refusal is not null)
         {
             return refusal;
@@ -48,7 +48,7 @@ internal static class RegistrationPlaceSlice
             return Problem.Detail(StatusCodes.Status422UnprocessableEntity, "classId must be a class id");
         }
 
-        var head = await ClassGuards.FindActiveClassAsync(db, classId, ct);
+        var head = await ClassGuards.FindActiveClassAsync(source, classId, ct);
         if (head is null)
         {
             return Refusals.ClassNotFound();
@@ -59,7 +59,7 @@ internal static class RegistrationPlaceSlice
             return Problem.Detail(StatusCodes.Status403Forbidden, "You do not have permission to place members in this class");
         }
 
-        if (!await SaveAsync(db, clock, head.Id, registrant!.Token, ct))
+        if (!await SaveAsync(source, clock, head.Id, registrant!.Token, ct))
         {
             return Problem.Detail(StatusCodes.Status422UnprocessableEntity, "Could not place them: their gender does not match this class.");
         }
@@ -69,19 +69,19 @@ internal static class RegistrationPlaceSlice
             ["placed"] = true,
             ["registrationId"] = PhpValue.IntOfText(registration_id),
             ["classId"] = head.Id,
-        });
+        }, ClassesJson.Answers.Answer);
     }
 
-    private static async Task<bool> SaveAsync(ClassesContext db, TimeProvider clock, int classId, int token, CancellationToken ct)
+    private static async Task<bool> SaveAsync(NpgsqlDataSource source, TimeProvider clock, int classId, int token, CancellationToken ct)
     {
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        if (!await Enrolment.AddAsync(db, classId, token, null, ct))
+        await using var tx = await source.BeginAsync(ct);
+        if (!await Enrolment.AddAsync(tx, classId, token, null, ct))
         {
             return false;
         }
 
-        await Outbox.WriteAsync(db, "classes.student_enrolled", new StudentEnrolled(classId, token, null, "placed"), clock, ct);
-        await transaction.CommitAsync(ct);
+        await Outbox.WriteAsync(tx, "classes.student_enrolled", new StudentEnrolled(classId, token, null, "placed"), ClassesJson.Default.StudentEnrolled, clock, ct);
+        await tx.CommitAsync(ct);
         return true;
     }
 }

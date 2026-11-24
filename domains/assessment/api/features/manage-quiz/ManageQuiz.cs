@@ -1,8 +1,8 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Assessment.Api.Domain;
 using Tsr.Shared.Api;
@@ -33,7 +33,7 @@ internal static class ManageQuizSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string quiz_id, HttpContext context, AssessmentContext db, Permissions permissions, IConfiguration configuration, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(string quiz_id, HttpContext context, NpgsqlDataSource source, Permissions permissions, IConfiguration configuration, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -41,7 +41,7 @@ internal static class ManageQuizSlice
             return Problem.Unauthenticated();
         }
 
-        var (quiz, refusal) = await ManageAccess.ResolveQuizAsync(db, PhpValue.IntOfText(quiz_id), ct);
+        var (quiz, refusal) = await ManageAccess.ResolveQuizAsync(source, PhpValue.IntOfText(quiz_id), ct);
         if (refusal is not null)
         {
             return refusal;
@@ -52,15 +52,16 @@ internal static class ManageQuizSlice
             return ManageAccess.NotPermitted();
         }
 
-        var questions = await db.Database
-            .SqlQuery<Row>($"""
+        var questions = await source.ListAsync(
+            $"""
                 select id as "Id", question::text as "Question", option1::text as "Option1", option2::text as "Option2", option3::text as "Option3", option4::text as "Option4", option5::text as "Option5"
                 from assessment.spot_quiz_questions where spot_quiz_id = {quiz.Id} order by id limit {MaxQuestions}
-                """)
-            .ToListAsync(ct);
+                """,
+            row => new Row(row.Int("Id"), row.TextOrNull("Question"), row.TextOrNull("Option1"), row.TextOrNull("Option2"), row.TextOrNull("Option3"), row.TextOrNull("Option4"), row.TextOrNull("Option5")),
+            ct);
         return Results.Json(new Body(
             quiz.Id, quiz.Code ?? string.Empty, quiz.Name ?? string.Empty, quiz.Topic, quiz.ClassId, quiz.ClassCode ?? string.Empty, quiz.ClassName ?? string.Empty, quiz.RestrictToClass,
             QuizAccess.Stamp(quiz.PublishedAt), QuizAccess.Stamp(quiz.DeactivatedAt), ManageAccess.Link(configuration, quiz.Code, quiz.PublishedAt),
-            questions.Select(q => new QuestionWire(q.Id, q.Question ?? string.Empty, QuizResult.TextOrNull(q.Option1), QuizResult.TextOrNull(q.Option2), QuizResult.TextOrNull(q.Option3), QuizResult.TextOrNull(q.Option4), QuizResult.TextOrNull(q.Option5))).ToList()));
+            questions.Select(q => new QuestionWire(q.Id, q.Question ?? string.Empty, QuizResult.TextOrNull(q.Option1), QuizResult.TextOrNull(q.Option2), QuizResult.TextOrNull(q.Option3), QuizResult.TextOrNull(q.Option4), QuizResult.TextOrNull(q.Option5))).ToList()), AssessmentJson.Answers.ManageQuiz);
     }
 }

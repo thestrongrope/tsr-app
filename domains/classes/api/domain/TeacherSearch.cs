@@ -1,6 +1,6 @@
 using System.Globalization;
 using Microsoft.AspNetCore.Http;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Shared.Api;
 
 namespace Tsr.Classes.Api.Domain;
@@ -16,46 +16,45 @@ internal static class TeacherSearch
 
     internal sealed record Row(int Token, string? Name);
 
-    public static async Task<IResult> RunAsync(ClassesContext db, string? rawQuery, bool gentsClass, CancellationToken ct)
-    {
-        var q = PhpText.Trim(rawQuery ?? string.Empty);
-        // PostgreSQL text cannot hold a NUL byte, so such a search matches nobody (PHP also answers an empty list).
-        var matchesNobody = q.Length == 0 || q.Contains('\0');
-        var teachers = matchesNobody ? [] : await FindAsync(db, q, gentsClass, ct);
-        var wire = teachers.Select(t => new Dictionary<string, object?> { ["token"] = t.Token, ["name"] = PhpText.HtmlDecode(t.Name ?? string.Empty) }).ToList();
-        return Results.Json(new Dictionary<string, object?> { ["teachers"] = wire });
-    }
-
-    /// <summary>PHP isTeacherCandidate: the member is token 1001 or an active student of any class, and a gents class takes gents only (token 1001 excepted).</summary>
-    public static async Task<bool> IsCandidateAsync(ClassesContext db, int token, bool gentsClass, CancellationToken ct) =>
-        (await db.Database
-            .SqlQuery<int>($"""
-                select 1 as "Value" from membership.v_members m
-                where m.token = {token}
-                  and (m.token = {AlwaysCandidate} or m.token in (select cs.token_no from classes.class_students cs where cs.removed_at is null and cs.status = 'A'))
-                  and (not {gentsClass} or m.token = {AlwaysCandidate} or lower(m.gender) in ('1', 'male'))
-                limit 1
-                """)
-            .ToListAsync(ct)).Count > 0;
-
     /// <summary>PHP's <c>addcslashes($q, '%_\\')</c> into a contains pattern.</summary>
     private static string Pattern(string q) => "%" + q.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_") + "%";
 
-    private static async Task<List<Row>> FindAsync(ClassesContext db, string q, bool gentsClass, CancellationToken ct)
+    public static async Task<IResult> RunAsync(NpgsqlDataSource source, string? rawQuery, bool gentsClass, CancellationToken ct)
+    {
+        var q = PhpText.Trim(rawQuery ?? string.Empty);
+        var matchesNobody = q.Length == 0 || q.Contains('\0');
+        var teachers = matchesNobody ? [] : await FindAsync(source, q, gentsClass, ct);
+        var wire = teachers.Select(t => new Dictionary<string, object?> { ["token"] = t.Token, ["name"] = PhpText.HtmlDecode(t.Name ?? string.Empty) }).ToList();
+        return Results.Json(new Dictionary<string, object?> { ["teachers"] = wire }, ClassesJson.Answers.Answer);
+    }
+
+    public static Task<bool> IsCandidateAsync(NpgsqlDataSource source, int token, bool gentsClass, CancellationToken ct) =>
+        source.AnyAsync(
+            $"""
+            select 1 as "Value" from membership.v_members m
+            where m.token = {token}
+              and (m.token = {AlwaysCandidate} or m.token in (select cs.token_no from classes.class_students cs where cs.removed_at is null and cs.status = 'A'))
+              and (not {gentsClass} or m.token = {AlwaysCandidate} or lower(m.gender) in ('1', 'male'))
+            limit 1
+            """,
+            ct);
+
+    private static Task<List<Row>> FindAsync(NpgsqlDataSource source, string q, bool gentsClass, CancellationToken ct)
     {
         var pattern = Pattern(q);
         var digits = q.All(char.IsAsciiDigit) && long.TryParse(q, NumberStyles.None, CultureInfo.InvariantCulture, out var number) ? number : 0;
-        return await db.Database
-            .SqlQuery<Row>($"""
-                select m.token as "Token", m.name as "Name"
-                from membership.v_members m
-                where (m.name ilike {pattern} or m.token = {digits})
-                  and (m.token = {AlwaysCandidate}
-                       or m.token in (select cs.token_no from classes.class_students cs where cs.removed_at is null and cs.status = 'A'))
-                  and (not {gentsClass} or m.token = {AlwaysCandidate} or lower(m.gender) in ('1', 'male'))
-                order by m.name, m.token
-                limit {Limit}
-                """)
-            .ToListAsync(ct);
+        return source.ListAsync(
+            $"""
+            select m.token as "Token", m.name as "Name"
+            from membership.v_members m
+            where (m.name ilike {pattern} or m.token = {digits})
+              and (m.token = {AlwaysCandidate}
+                   or m.token in (select cs.token_no from classes.class_students cs where cs.removed_at is null and cs.status = 'A'))
+              and (not {gentsClass} or m.token = {AlwaysCandidate} or lower(m.gender) in ('1', 'male'))
+            order by m.name, m.token
+            limit {Limit}
+            """,
+            row => new Row(row.Int("Token"), row.TextOrNull("Name")),
+            ct);
     }
 }

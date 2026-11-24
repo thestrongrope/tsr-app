@@ -73,6 +73,6 @@ internal static partial class WhatsappReminderUpdateSlice
 
         var changed = string.Join(',', fields.Keys);
         LogUpdated(log, id, changed);
-        return Results.Json(new Updated(NotifierRows.Reminder(data)));
+        return Results.Json(new Updated(NotifierRows.Reminder(data)), NotificationsJson.Answers.Updated);
     }
 }

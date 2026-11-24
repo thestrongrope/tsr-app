@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
 using Tsr.Shared.Api;
@@ -23,7 +23,7 @@ internal static class AdminSyllabusUpdateSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string syllabus_id, HttpContext context, ClassesContext db, Permissions permissions, TimeProvider clock, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(string syllabus_id, HttpContext context, NpgsqlDataSource source, Permissions permissions, TimeProvider clock, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -31,7 +31,7 @@ internal static class AdminSyllabusUpdateSlice
             return Problem.Unauthenticated();
         }
 
-        var refusal = await AdminGuards.SyllabusAdminAsync(context, db, permissions, caller, ct);
+        var refusal = await AdminGuards.SyllabusAdminAsync(context, permissions, caller, ct);
         if (refusal is not null)
         {
             return refusal;
@@ -44,7 +44,7 @@ internal static class AdminSyllabusUpdateSlice
         }
 
         var id = ClassGuards.IdOf(syllabus_id);
-        if (await SyllabusItems.LiveByIdAsync(db, id, ct) is null)
+        if (await SyllabusItems.LiveByIdAsync(source, id, ct) is null)
         {
             return Problem.Detail(StatusCodes.Status404NotFound, "Syllabus item not found");
         }
@@ -61,22 +61,25 @@ internal static class AdminSyllabusUpdateSlice
             return Problem.Detail(StatusCodes.Status400BadRequest, "No fields to update");
         }
 
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        await db.Database.ExecuteSqlAsync(
-            $"""
-            update classes.syllabus set
-                subject_name = coalesce({edit.SubjectName}::citext, subject_name),
-                description = coalesce({edit.Description}::citext, description),
-                link_type = coalesce({edit.LinkType}::citext, link_type),
-                url = coalesce({edit.Url}::citext, url),
-                sort_order = coalesce({edit.SortOrder}::integer, sort_order),
-                is_active = coalesce({edit.IsActive}::smallint, is_active),
-                modified_at = now(), modified_by = {caller.Token}
-            where id = {id}
-            """,
-            ct);
-        await Outbox.WriteAsync(db, "classes.syllabus_item_updated", new SyllabusItemUpdated((int)id, caller.Token), clock, ct);
-        await transaction.CommitAsync(ct);
-        return Results.Json(await SyllabusItems.LiveByIdAsync(db, id, ct));
+        await using (var tx = await source.BeginAsync(ct))
+        {
+            await tx.ExecuteAsync(
+                $"""
+                update classes.syllabus set
+                    subject_name = coalesce({edit.SubjectName}::citext, subject_name),
+                    description = coalesce({edit.Description}::citext, description),
+                    link_type = coalesce({edit.LinkType}::citext, link_type),
+                    url = coalesce({edit.Url}::citext, url),
+                    sort_order = coalesce({edit.SortOrder}::integer, sort_order),
+                    is_active = coalesce({edit.IsActive}::smallint, is_active),
+                    modified_at = now(), modified_by = {caller.Token}
+                where id = {id}
+                """,
+                ct);
+            await Outbox.WriteAsync(tx, "classes.syllabus_item_updated", new SyllabusItemUpdated((int)id, caller.Token), ClassesJson.Default.SyllabusItemUpdated, clock, ct);
+            await tx.CommitAsync(ct);
+        }
+
+        return Results.Json(await SyllabusItems.LiveByIdAsync(source, id, ct), ClassesJson.Answers.SyllabusItem);
     }
 }

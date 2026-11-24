@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Http;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Shared.Api;
 
@@ -36,8 +36,11 @@ internal static class QuizAdmin
     public static IResult Busy() => Problem.Detail(StatusCodes.Status409Conflict, "Another quiz admin action is running. Try again in a moment.");
 
     /// <summary>The quiz settings document; empty settings when none was ever read. Never fetches (PHP settings()).</summary>
-    public static async Task<QuizSettings> SettingsAsync(AssessmentContext db, CancellationToken ct) =>
-        new(await QuizStateStore.LoadObjectAsync(db, QuizStateStore.Settings, ct));
+    public static async Task<QuizSettings> SettingsAsync(NpgsqlDataSource source, CancellationToken ct)
+    {
+        await using var tx = await source.BeginAsync(ct);
+        return new QuizSettings(await QuizStateStore.LoadObjectAsync(tx, QuizStateStore.Settings, ct));
+    }
 
     /// <summary>PHP requireSettings: 409 until the settings sheet was read once (and it asks for a number of episodes the sheets can serve).</summary>
     public static IResult? RequireSettings(QuizSettings settings)
@@ -53,11 +56,11 @@ internal static class QuizAdmin
     }
 
     /// <summary>The acting member as stamped: "Name (token)" (PHP actorLabel; the name is the member's profile name).</summary>
-    public static async Task<string> ActorLabelAsync(AssessmentContext db, Caller caller, CancellationToken ct)
+    public static async Task<string> ActorLabelAsync(DbTx tx, Caller caller, CancellationToken ct)
     {
         var token = caller.Token;
-        var name = await db.Database.SqlQuery<string>($"""select coalesce(name, '') as "Value" from membership.v_members where token = {token}""").FirstOrDefaultAsync(ct);
-        return (name ?? string.Empty) + " (" + token.ToString(CultureInfo.InvariantCulture) + ")";
+        var names = await tx.ListAsync($"""select coalesce(name, '') as "Value" from membership.v_members where token = {token}""", row => row.Text("Value"), ct);
+        return (names.Count == 0 ? string.Empty : names[0]) + " (" + token.ToString(CultureInfo.InvariantCulture) + ")";
     }
 
     /// <summary>PHP get_current_time(): the wall clock (IST).</summary>
@@ -76,33 +79,24 @@ internal static class QuizAdmin
     public static string Stamp(DateTimeOffset time) => time.ToString("yyyy-MM-dd'T'HH:mm:sszzz", CultureInfo.InvariantCulture);
 
     /// <summary>One outbox event per change: the action name only.</summary>
-    public static Task EventAsync(AssessmentContext db, string action, TimeProvider clock, CancellationToken ct) =>
-        Outbox.WriteAsync(db, "assessment.quiz_state_changed", new { action }, clock, ct);
+    public static Task EventAsync(DbTx tx, string action, TimeProvider clock, CancellationToken ct) =>
+        Outbox.WriteAsync(tx, "assessment.quiz_state_changed", new QuizStateChanged(action), AssessmentJson.Default.QuizStateChanged, clock, ct);
 
     /// <summary>PHP feasibility() I/O wrapper: the downloaded participants, their member data (in chunks) and the enrolled students, through the rules of <see cref="QuizEligibility"/>.</summary>
-    public static async Task<Feasibility> FeasibilityAsync(AssessmentContext db, QuizSettings settings, CancellationToken ct)
+    public static async Task<Feasibility> FeasibilityAsync(DbTx tx, QuizSettings settings, CancellationToken ct)
     {
-        var days = ParticipantsOf(await QuizStateStore.LoadObjectAsync(db, QuizStateStore.Participants, ct), settings.TotalQuizzes);
-        var users = await UsersAsync(db, days, settings, ct);
+        var days = ParticipantsOf(await QuizStateStore.LoadObjectAsync(tx, QuizStateStore.Participants, ct), settings.TotalQuizzes);
+        var users = await UsersAsync(tx, days, settings, ct);
         var feasibility = QuizEligibility.Compute(days, users, settings);
-        var transaction = db.Database.CurrentTransaction;
-        if (transaction is not null)
-        {
-            await transaction.CreateSavepointAsync("quiz_students", ct);
-        }
-
+        await tx.ExecuteAsync($"savepoint quiz_students", ct);
         try
         {
-            var students = await StudentsAsync(db, ct);
+            var students = await StudentsAsync(tx, ct);
             return QuizEligibility.WithStudents(feasibility, students);
         }
         catch (System.Data.Common.DbException)
         {
-            if (transaction is not null)
-            {
-                await transaction.RollbackToSavepointAsync("quiz_students", ct);
-            }
-
+            await tx.ExecuteAsync($"rollback to savepoint quiz_students", ct);
             return QuizEligibility.WithoutStudents(feasibility);
         }
     }
@@ -120,10 +114,10 @@ internal static class QuizAdmin
     }
 
     /// <summary>The scoreboard's name and city per token (PHP participantInfo / readScoreboard).</summary>
-    public static async Task<IReadOnlyDictionary<int, ParticipantInfo>> ParticipantInfoAsync(AssessmentContext db, CancellationToken ct)
+    public static async Task<IReadOnlyDictionary<int, ParticipantInfo>> ParticipantInfoAsync(DbTx tx, CancellationToken ct)
     {
         var info = new Dictionary<int, ParticipantInfo>();
-        foreach (var row in (await QuizStateStore.LoadArrayAsync(db, QuizStateStore.Scoreboard, ct)).OfType<JsonArray>().Where(r => r.Count > 3))
+        foreach (var row in (await QuizStateStore.LoadArrayAsync(tx, QuizStateStore.Scoreboard, ct)).OfType<JsonArray>().Where(r => r.Count > 3))
         {
             var token = (int)Math.Clamp(PhpValue.IntOfText(QuizOverview.Text(row[1]) ?? string.Empty), int.MinValue, int.MaxValue);
             info[token] = new ParticipantInfo(QuizOverview.Text(row[2]), QuizOverview.Text(row[3]));
@@ -135,19 +129,20 @@ internal static class QuizAdmin
     private sealed record UserRow(int Token, string? Name, string? City, string? Country);
 
     private static async Task<IReadOnlyDictionary<int, Member>> UsersAsync(
-        AssessmentContext db, IReadOnlyDictionary<int, List<Submission>> days, QuizSettings settings, CancellationToken ct)
+        DbTx tx, IReadOnlyDictionary<int, List<Submission>> days, QuizSettings settings, CancellationToken ct)
     {
         var tokens = days.Values.SelectMany(d => d).Select(s => (int)Math.Clamp(PhpValue.IntOfText(s.Token), int.MinValue, int.MaxValue)).Distinct().ToArray();
         var users = new Dictionary<int, Member>();
         var chunk = settings.Str("validation_chunks") is null ? UserChunk : (int)Math.Clamp(settings.Int("validation_chunks"), 1, 1000);
         foreach (var part in tokens.Chunk(chunk))
         {
-            var rows = await db.Database
-                .SqlQuery<UserRow>($"""
-                    select token as "Token", name as "Name", city as "City", country as "Country"
-                    from membership.v_members where token = any({part}) and token <> 0
-                    """)
-                .ToListAsync(ct);
+            var rows = await tx.ListAsync(
+                $"""
+                select token as "Token", name as "Name", city as "City", country as "Country"
+                from membership.v_members where token = any({part}) and token <> 0
+                """,
+                row => new UserRow(row.Int("Token"), row.TextOrNull("Name"), row.TextOrNull("City"), row.TextOrNull("Country")),
+                ct);
             foreach (var row in rows)
             {
                 users[row.Token] = new Member(row.Name ?? string.Empty, row.City ?? string.Empty, row.Country ?? string.Empty);
@@ -158,12 +153,13 @@ internal static class QuizAdmin
     }
 
     /// <summary>PHP enrolledStudents: members enrolled in an active class and not removed.</summary>
-    private static async Task<IReadOnlySet<int>> StudentsAsync(AssessmentContext db, CancellationToken ct) =>
-        (await db.Database
-            .SqlQuery<int>($"""
-                select distinct e.token_no as "Value" from classes.v_enrolments e
-                join classes.v_classes c on c.id = e.class_id
-                where c.status = 'A' and e.removed_at is null limit {MaxStudents}
-                """)
-            .ToListAsync(ct)).ToHashSet();
+    private static async Task<IReadOnlySet<int>> StudentsAsync(DbTx tx, CancellationToken ct) =>
+        (await tx.ListAsync(
+            $"""
+            select distinct e.token_no as "Value" from classes.v_enrolments e
+            join classes.v_classes c on c.id = e.class_id
+            where c.status = 'A' and e.removed_at is null limit {MaxStudents}
+            """,
+            row => row.Int("Value"),
+            ct)).ToHashSet();
 }

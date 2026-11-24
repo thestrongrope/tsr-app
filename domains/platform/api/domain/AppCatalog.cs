@@ -77,7 +77,7 @@ internal static partial class AppCatalog
 
         foreach (var release in ReadReleases(catalog.RootElement, logger))
         {
-            array.Add(release.ToJson());
+            array.Add((JsonNode?)release.ToJson());
         }
 
         return array;
@@ -264,7 +264,7 @@ internal static partial class AppCatalog
         var array = new JsonArray();
         foreach (var note in notes)
         {
-            array.Add(note);
+            array.Add((JsonNode?)JsonValue.Create(note));
         }
 
         return array;

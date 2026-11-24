@@ -1,8 +1,8 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Assessment.Api.Domain;
 using Tsr.Shared.Api;
@@ -31,7 +31,7 @@ internal static class ManageListSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string class_id, HttpContext context, AssessmentContext db, Permissions permissions, IConfiguration configuration, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(string class_id, HttpContext context, NpgsqlDataSource source, Permissions permissions, IConfiguration configuration, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -40,7 +40,7 @@ internal static class ManageListSlice
         }
 
         var classId = PhpValue.IntOfText(class_id);
-        if (await ManageAccess.ActiveClassAsync(db, classId, ct) is null)
+        if (await ManageAccess.ActiveClassAsync(source, classId, ct) is null)
         {
             return ManageAccess.ClassNotFound();
         }
@@ -51,11 +51,12 @@ internal static class ManageListSlice
         }
 
         var paging = Paging.From(context, maxSize: 50);
-        var total = await db.Database
-            .SqlQuery<int>($"""select count(*)::int as "Value" from assessment.spot_quizzes where class_id = {classId}""")
-            .SingleAsync(ct);
-        var rows = await db.Database
-            .SqlQuery<Row>($"""
+        var total = (await source.ListAsync(
+            $"""select count(*)::int as "Value" from assessment.spot_quizzes where class_id = {classId}""",
+            row => row.Int("Value"),
+            ct)).Single();
+        var rows = await source.ListAsync(
+            $"""
                 select q.id as "Id", q.code::text as "Code", q.name::text as "Name", q.topic::text as "Topic", q.class_id as "ClassId", q.created_at as "CreatedAt",
                        q.published_at as "PublishedAt", q.deactivated_at as "DeactivatedAt", q.restrict_to_class::int as "RestrictToClass",
                        (select count(*) from assessment.spot_quiz_questions qq where qq.spot_quiz_id = q.id)::int as "QuestionCount",
@@ -64,11 +65,14 @@ internal static class ManageListSlice
                 where q.class_id = {classId}
                 order by q.id desc
                 limit {paging.PageSize} offset {paging.Offset}
-                """)
-            .ToListAsync(ct);
+                """,
+            row => new Row(
+                row.Int("Id"), row.TextOrNull("Code"), row.TextOrNull("Name"), row.TextOrNull("Topic"), row.Int("ClassId"), row.Instant("CreatedAt"), row.InstantOrNull("PublishedAt"),
+                row.InstantOrNull("DeactivatedAt"), row.Int("RestrictToClass"), row.Int("QuestionCount"), row.Int("SubmittedCount")),
+            ct);
         var hasNext = (decimal)(paging.Page - 1) * paging.PageSize + rows.Count < total;
         var items = rows.Select(r => ToItem(r, configuration)).ToList();
-        return Results.Json(new Body(total, paging.Page, paging.PageSize, hasNext, items));
+        return Results.Json(new Body(total, paging.Page, paging.PageSize, hasNext, items), AssessmentJson.Answers.ManageList);
     }
 
     private static Item ToItem(Row r, IConfiguration configuration) =>

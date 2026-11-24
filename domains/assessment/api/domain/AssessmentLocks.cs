@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+using Tsr.Shared.Api;
 
 namespace Tsr.Assessment.Api.Domain;
 
@@ -15,6 +15,6 @@ internal static class AssessmentLocks
     public const long QuizAdmin = 5002;
 
     /// <summary>True when the lock is ours; false when another transaction holds it.</summary>
-    public static async Task<bool> TryTakeAsync(AssessmentContext db, long key, CancellationToken ct) =>
-        await db.Database.SqlQuery<bool>($"""select pg_try_advisory_xact_lock({key}) as "Value" """).SingleAsync(ct);
+    public static async Task<bool> TryTakeAsync(DbTx tx, long key, CancellationToken ct) =>
+        (await tx.ListAsync($"""select pg_try_advisory_xact_lock({key}) as "Value" """, row => row.Bool("Value"), ct)).Single();
 }

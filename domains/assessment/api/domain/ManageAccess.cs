@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Http;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Shared.Api;
 
@@ -32,19 +32,20 @@ internal static class ManageAccess
     public static IResult ClassNotFound() => Problem.Detail(StatusCodes.Status404NotFound, "Class not found");
 
     /// <summary>PHP ClassesModel::get requires status A: an inactive or missing class is the same 404 (null here). The class code and language are what the standard list needs.</summary>
-    public static async Task<ActiveClass?> ActiveClassAsync(AssessmentContext db, long classId, CancellationToken ct)
+    public static async Task<ActiveClass?> ActiveClassAsync(NpgsqlDataSource source, long classId, CancellationToken ct)
     {
-        var rows = await db.Database
-            .SqlQuery<ActiveClass>($"""select id as "Id", code::text as "Code", language_id as "LanguageId" from classes.v_classes where id = {classId} and status = 'A' limit 1""")
-            .ToListAsync(ct);
+        var rows = await source.ListAsync(
+            $"""select id as "Id", code::text as "Code", language_id as "LanguageId" from classes.v_classes where id = {classId} and status = 'A' limit 1""",
+            row => new ActiveClass(row.Int("Id"), row.Text("Code"), row.IntOrNull("LanguageId")),
+            ct);
         return rows.Count == 0 ? null : rows[0];
     }
 
     /// <summary>PHP api_find_mcq_quiz: the quiz (404 "Quiz not found"), then its class active (404 "Class not found").</summary>
-    public static async Task<(QuizRow? Quiz, IResult? Refusal)> ResolveQuizAsync(AssessmentContext db, long quizId, CancellationToken ct)
+    public static async Task<(QuizRow? Quiz, IResult? Refusal)> ResolveQuizAsync(NpgsqlDataSource source, long quizId, CancellationToken ct)
     {
-        var rows = await db.Database
-            .SqlQuery<QuizRow>($"""
+        var rows = await source.ListAsync(
+            $"""
                 select q.id as "Id", q.code::text as "Code", q.name::text as "Name", q.topic::text as "Topic", q.class_id as "ClassId",
                        c.code::text as "ClassCode", c.name::text as "ClassName", q.restrict_to_class::int as "RestrictToClass",
                        q.published_at as "PublishedAt", q.deactivated_at as "DeactivatedAt", c.status::text as "ClassStatus"
@@ -52,8 +53,11 @@ internal static class ManageAccess
                 join classes.v_classes c on c.id = q.class_id
                 where q.id = {quizId}
                 limit 1
-                """)
-            .ToListAsync(ct);
+                """,
+            row => new QuizRow(
+                row.Int("Id"), row.TextOrNull("Code"), row.TextOrNull("Name"), row.TextOrNull("Topic"), row.Int("ClassId"), row.TextOrNull("ClassCode"), row.TextOrNull("ClassName"),
+                row.Int("RestrictToClass"), row.InstantOrNull("PublishedAt"), row.InstantOrNull("DeactivatedAt"), row.Text("ClassStatus")),
+            ct);
         if (rows.Count == 0)
         {
             return (null, Refusals.QuizNotFound());
@@ -67,10 +71,10 @@ internal static class ManageAccess
         permissions.CanAsync(caller, action, AccessTarget.ForClass((int)Math.Clamp(classId, int.MinValue, int.MaxValue)), ct);
 
     /// <summary>PHP getTopics plus the trim of its two callers: the class's distinct topics in order, each trimmed (PHP trim set), blank ones dropped. At most 5000.</summary>
-    public static async Task<IReadOnlyList<string>> TopicsAsync(AssessmentContext db, long classId, CancellationToken ct)
+    public static async Task<IReadOnlyList<string>> TopicsAsync(NpgsqlDataSource source, long classId, CancellationToken ct)
     {
-        var topics = await db.Database
-            .SqlQuery<string>($"""
+        var topics = await source.ListAsync(
+            $"""
                 select t::text as "Value"
                 from (
                     select distinct rtrim(topic::text, ' ')::citext as t
@@ -79,8 +83,9 @@ internal static class ManageAccess
                 ) topics
                 order by t
                 limit 5000
-                """)
-            .ToListAsync(ct);
+                """,
+            row => row.Text("Value"),
+            ct);
         return topics.Select(PhpText.Trim).Where(t => t.Length > 0).ToList();
     }
 

@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
 using Tsr.Shared.Api;
@@ -30,7 +30,7 @@ internal static class ClassStudentRemoveSlice
         string class_id,
         string token,
         HttpContext context,
-        ClassesContext db,
+        NpgsqlDataSource source,
         Permissions permissions,
         TimeProvider clock,
         CancellationToken ct)
@@ -41,7 +41,7 @@ internal static class ClassStudentRemoveSlice
             return Problem.Unauthenticated();
         }
 
-        var head = await ClassGuards.FindActiveClassAsync(db, ClassGuards.IdOf(class_id), ct);
+        var head = await ClassGuards.FindActiveClassAsync(source, ClassGuards.IdOf(class_id), ct);
         if (head is null)
         {
             return Refusals.ClassNotFound();
@@ -53,7 +53,7 @@ internal static class ClassStudentRemoveSlice
         }
 
         var student = ClassGuards.TokenOf(token);
-        if (!await ClassRoster.IsActiveAsync(db, head.Id, student, ct))
+        if (!await ClassRoster.IsActiveAsync(source, head.Id, student, ct))
         {
             return Problem.Detail(StatusCodes.Status404NotFound, "Student not found in this class");
         }
@@ -70,17 +70,17 @@ internal static class ClassStudentRemoveSlice
             return Problem.Detail(StatusCodes.Status422UnprocessableEntity, "reason is required and must be at most 500 characters");
         }
 
-        await SaveAsync(db, clock, head.Id, student, reason, caller.Token, ct);
-        return Results.Json(await ClassRoster.BuildAsync(db, permissions, caller, head.Id, ct));
+        await SaveAsync(source, clock, head.Id, student, reason, caller.Token, ct);
+        return Results.Json(await ClassRoster.BuildAsync(source, permissions, caller, head.Id, ct), ClassesJson.Answers.Answer);
     }
 
-    private static async Task SaveAsync(ClassesContext db, TimeProvider clock, int classId, int student, string reason, int by, CancellationToken ct)
+    private static async Task SaveAsync(NpgsqlDataSource source, TimeProvider clock, int classId, int student, string reason, int by, CancellationToken ct)
     {
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        await db.Database.ExecuteSqlAsync(
+        await using var tx = await source.BeginAsync(ct);
+        await tx.ExecuteAsync(
             $"update classes.class_students set removed_at = now(), removed_by = {by}, status = 'I', removed_reason = {reason}, mcq_admin = 0 where class_id = {classId} and token_no = {student}",
             ct);
-        await Outbox.WriteAsync(db, "classes.student_removed", new StudentRemoved(classId, student, by), clock, ct);
-        await transaction.CommitAsync(ct);
+        await Outbox.WriteAsync(tx, "classes.student_removed", new StudentRemoved(classId, student, by), ClassesJson.Default.StudentRemoved, clock, ct);
+        await tx.CommitAsync(ct);
     }
 }

@@ -1,5 +1,5 @@
 using Microsoft.AspNetCore.Http;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Shared.Api;
 
@@ -63,7 +63,7 @@ internal sealed record ReportScope(int Gender, bool All, bool HasGenderLimit, in
     /// The active classes of <see cref="Gender"/> the scope reaches, the demo class (code AYD1, PHP <c>DEMO_CLASS_CODE</c>) never among them; with <paramref name="onlyClass"/> above 0, that class or none. A gender of 0 (a class with no gender, PHP's <c>(int) null</c>) narrows by no gender.
     /// PHP: reachFilter, status 'A' and <c>demo_class_exclusion_sql</c>. Bound: the classes of one gender. <paramref name="anyStatus"/> lifts the status (the few PHP queries that never ask for it, e.g. the recitation list of TSR at a glance).
     /// </summary>
-    public async Task<int[]> ClassIdsAsync(ClassesContext db, long onlyClass, CancellationToken ct, bool anyStatus = false)
+    public async Task<int[]> ClassIdsAsync(NpgsqlDataSource db, long onlyClass, CancellationToken ct, bool anyStatus = false)
     {
         ArgumentNullException.ThrowIfNull(db);
         var all = All;
@@ -71,17 +71,18 @@ internal sealed record ReportScope(int Gender, bool All, bool HasGenderLimit, in
         var genderLimit = GenderLimit;
         var assigned = ClassIds;
         var gender = Gender;
-        var rows = await db.Database
-            .SqlQuery<int>($"""
-                select c.id as "Value" from classes.classes c
-                where (c.status = 'A' or {anyStatus}) and c.code <> 'AYD1'
-                  and ({all} or ({hasGender} and c.gender = {genderLimit}) or c.id = any({assigned}))
-                  and ({gender} = 0 or c.gender = {gender})
-                  and ({onlyClass} = 0 or c.id = {onlyClass})
-                order by c.id
-                limit 20000
-                """)
-            .ToListAsync(ct);
+        var rows = await db.ListAsync(
+            $"""
+            select c.id as "Id" from classes.classes c
+            where (c.status = 'A' or {anyStatus}) and c.code <> 'AYD1'
+              and ({all} or ({hasGender} and c.gender = {genderLimit}) or c.id = any({assigned}))
+              and ({gender} = 0 or c.gender = {gender})
+              and ({onlyClass} = 0 or c.id = {onlyClass})
+            order by c.id
+            limit 20000
+            """,
+            r => r.Int("Id"),
+            ct);
         return [.. rows];
     }
 }

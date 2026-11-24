@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
 using Tsr.Shared.Api;
@@ -21,7 +22,7 @@ internal static class ConductionCheckSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string class_id, HttpContext context, ClassesContext db, Permissions permissions, TimeProvider clock, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(string class_id, HttpContext context, NpgsqlDataSource source, Permissions permissions, TimeProvider clock, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -29,7 +30,7 @@ internal static class ConductionCheckSlice
             return Problem.Unauthenticated();
         }
 
-        var (head, refusal) = await ConductionData.OpenAsync(db, permissions, caller, class_id, "sessions:create", ct);
+        var (head, refusal) = await ConductionData.OpenAsync(source, permissions, caller, class_id, "sessions:create", ct);
         if (refusal is not null)
         {
             return refusal;
@@ -43,7 +44,8 @@ internal static class ConductionCheckSlice
             return Problem.Detail(StatusCodes.Status422UnprocessableEntity, "date is required and must be a valid date");
         }
 
-        var check = await ConductionData.CheckDayAsync(db, head!.Id, day.Value, 0, ct);
-        return Results.Json(new Answer(check.AlreadyConducted, check.SameWeek));
+        await using var tx = await source.BeginAsync(ct);
+        var check = await ConductionData.CheckDayAsync(tx, head!.Id, day.Value, 0, ct);
+        return Results.Json(new Answer(check.AlreadyConducted, check.SameWeek), ClassesJson.Answers.ConductionCheckAnswer);
     }
 }

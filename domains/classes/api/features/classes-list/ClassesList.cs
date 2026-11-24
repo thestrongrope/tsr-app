@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Microsoft.Extensions.Configuration;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
@@ -28,7 +28,7 @@ internal static class ClassesListSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(HttpContext context, ClassesContext db, Permissions permissions, IConfiguration configuration, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(HttpContext context, NpgsqlDataSource source, Permissions permissions, IConfiguration configuration, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -44,11 +44,11 @@ internal static class ClassesListSlice
         var reach = context.Request.Query["include"].LastOrDefault() == "managed"
             ? await permissions.ReachAsync(caller, "classes:read", ct)
             : null;
-        var rows = await QueryAsync(context, db, caller.Token, reach, ct);
+        var rows = await QueryAsync(context, source, caller.Token, reach, ct);
         var ids = rows.Select(r => r.Id).Distinct().ToArray();
-        var slots = await ClassCards.SlotsAsync(db, ids, ct);
-        var details = await DetailsAsync(db, ids, ct);
-        var tags = await TagsAsync(db, ids, ct);
+        var slots = await ClassCards.SlotsAsync(source, ids, ct);
+        var details = await DetailsAsync(source, ids, ct);
+        var tags = await TagsAsync(source, ids, ct);
 
         var body = rows.Select(r =>
         {
@@ -61,10 +61,10 @@ internal static class ClassesListSlice
             card["schedules"] = slots[r.Id].Select(ClassCards.ToSchedule).ToList();
             return card;
         }).ToList();
-        return Results.Json(body);
+        return Results.Json(body, ClassesJson.Answers.AnswerList);
     }
 
-    private static async Task<List<ClassCards.Row>> QueryAsync(HttpContext context, ClassesContext db, int token, Reach? reach, CancellationToken ct)
+    private static async Task<List<ClassCards.Row>> QueryAsync(HttpContext context, NpgsqlDataSource source, int token, Reach? reach, CancellationToken ct)
     {
         var level = IntFilter(context, "level");
         var language = IntFilter(context, "language");
@@ -80,10 +80,10 @@ internal static class ClassesListSlice
         var reachedIds = reach?.ClassIds.ToArray() ?? [];
         var hasReach = all || gender is not null || reachedIds.Length > 0;
 
-        return await db.Database
-            .SqlQuery<ClassCards.Row>($"""
+        return await source.ListAsync(
+            $"""
                 select * from (select distinct c.id as "Id", c.code as "Code", c.name as "Name", c.class_level_id as "Level", cl.name as "LevelName", c.language_id as "Language",
-                       c.gender as "Gender", c.status as "Status", c.location as "Location", c.format as "Format", c.started_on as "StartedOn",
+                       c.gender as "Gender", c.status as "Status", c.location as "Location", c.format as "Format", c.started_on::text as "StartedOn",
                        t.name as "TeacherName", t.mobile as "TeacherMobile",
                        case when c.teacher = {token} then 'conducting' when {hasReach} and cs.token_no is null then 'managing' else 'attending' end as "Role",
                        case when (c.teacher = {token} or {all} or ({gender}::int is not null and c.gender = {gender}::int) or c.id = any({reachedIds}))
@@ -100,8 +100,24 @@ internal static class ClassesListSlice
                        or ({gender}::int is not null and c.gender = {gender}::int) or c.id = any({reachedIds}))) x
                 order by (x."Role" = 'conducting') desc, x."Id" desc
                 limit {MaxClasses}
-                """)
-            .ToListAsync(ct);
+                """,
+            row => new ClassCards.Row(
+                row.Int("Id"),
+                row.Text("Code"),
+                row.Text("Name"),
+                row.IntOrNull("Level"),
+                row.TextOrNull("LevelName"),
+                row.IntOrNull("Language"),
+                row.IntOrNull("Gender"),
+                row.Text("Status"),
+                row.TextOrNull("Location"),
+                row.TextOrNull("Format"),
+                ClassesRows.DateOrNull(row.TextOrNull("StartedOn")),
+                row.TextOrNull("TeacherName"),
+                row.TextOrNull("TeacherMobile"),
+                row.TextOrNull("Role"),
+                row.TextOrNull("JoinCode")),
+            ct);
     }
 
     // PHP: isset and not '' gives (int); anything else no filter.
@@ -111,29 +127,31 @@ internal static class ClassesListSlice
         return string.IsNullOrEmpty(raw) ? null : (int)Math.Clamp(PhpValue.IntOfText(raw), int.MinValue, int.MaxValue);
     }
 
-    private static async Task<Dictionary<int, Listing>> DetailsAsync(ClassesContext db, int[] ids, CancellationToken ct)
+    private static async Task<Dictionary<int, Listing>> DetailsAsync(NpgsqlDataSource source, int[] ids, CancellationToken ct)
     {
-        var rows = await db.Database
-            .SqlQuery<Listing>($"""
+        var rows = await source.ListAsync(
+            $"""
                 select c.id as "Id", c.city as "City", c.country as "Country",
                        (select count(1) from classes.class_students s where s.class_id = c.id and s.removed_at is null)::int as "Students",
                        c.extra_students as "ExtraStudents"
                 from classes.classes c where c.id = any({ids})
-                """)
-            .ToListAsync(ct);
+                """,
+            row => new Listing(row.Int("Id"), row.TextOrNull("City"), row.TextOrNull("Country"), row.Int("Students"), row.TextOrNull("ExtraStudents")),
+            ct);
         return rows.ToDictionary(r => r.Id);
     }
 
-    private static async Task<ILookup<int, string>> TagsAsync(ClassesContext db, int[] ids, CancellationToken ct)
+    private static async Task<ILookup<int, string>> TagsAsync(NpgsqlDataSource source, int[] ids, CancellationToken ct)
     {
-        var rows = await db.Database
-            .SqlQuery<TagRow>($"""
+        var rows = await source.ListAsync(
+            $"""
                 select ct.class_id as "ClassId", t.name as "Name" from classes.class_tags ct
                 join classes.tags t on t.id = ct.tag_id
                 where ct.deleted_at is null and t.deleted_at is null and ct.class_id = any({ids})
                 order by t.name
-                """)
-            .ToListAsync(ct);
+                """,
+            row => new TagRow(row.Int("ClassId"), row.Text("Name")),
+            ct);
         return rows.ToLookup(r => r.ClassId, r => r.Name);
     }
 

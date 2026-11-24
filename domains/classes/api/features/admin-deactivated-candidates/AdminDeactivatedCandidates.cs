@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
 using Tsr.Shared.Api;
@@ -23,7 +24,7 @@ internal static class AdminDeactivatedCandidatesSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(HttpContext context, ClassesContext db, Permissions permissions, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(HttpContext context, NpgsqlDataSource source, Permissions permissions, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -37,9 +38,9 @@ internal static class AdminDeactivatedCandidatesSlice
             return refusal;
         }
 
-        var classes = await ClassListing.AllAsync(db, await ClassListing.AssignedAsync(permissions, caller, ct), includeInactive: false, ct);
+        var classes = await ClassListing.AllAsync(source, await ClassListing.AssignedAsync(permissions, caller, ct), includeInactive: false, ct);
         return Results.Json(new Body(classes
             .Select(c => new Candidate(c.Id, PhpCast.Str(c.Code), PhpCast.Str(c.Level), c.Gender ?? 0, PhpCast.Str(c.TeacherName), PhpCast.Str(c.City), c.Students))
-            .ToList()));
+            .ToList()), ClassesJson.Answers.DeactivatedCandidatesBody);
     }
 }

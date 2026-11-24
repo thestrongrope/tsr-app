@@ -1,5 +1,6 @@
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
+using Tsr.Shared.Api;
 
 namespace Tsr.Classes.Api;
 
@@ -7,7 +8,7 @@ namespace Tsr.Classes.Api;
 /// Supplies access's port from this domain's own tables (PHP PermissionsModel: taught, MCQ-flagged and enrolled classes, all active).
 /// Replaces access's default "no classes" (registered in <see cref="ClassesModule.AddClasses"/>).
 /// </summary>
-internal sealed class ClassScopes(ClassesContext db) : IClassScopes
+internal sealed class ClassScopes(NpgsqlDataSource source) : IClassScopes
 {
     private const int MaxClasses = 10000;
 
@@ -20,8 +21,8 @@ internal sealed class ClassScopes(ClassesContext db) : IClassScopes
     // One command: access asks this for every signed-in request.
     public async Task<ClassMemberships> MembershipsAsync(int token, CancellationToken ct)
     {
-        var rows = await db.Database
-            .SqlQuery<MembershipRow>($"""
+        var rows = await source.ListAsync(
+            $"""
                 select
                   array(select id from classes.classes where teacher = {token} and status = 'A' order by id) as "Taught",
                   array(select distinct cs.class_id from classes.class_students cs
@@ -32,8 +33,9 @@ internal sealed class ClassScopes(ClassesContext db) : IClassScopes
                         join classes.classes c on c.id = cs.class_id
                         where cs.token_no = {token} and cs.status = 'A' and cs.removed_at is null and c.status = 'A'
                         order by 1) as "Enrolled"
-                """)
-            .ToListAsync(ct);
+                """,
+            row => new MembershipRow(row.IntArray("Taught"), row.IntArray("Flagged"), row.IntArray("Enrolled")),
+            ct);
         return new ClassMemberships(rows[0].Taught, rows[0].Flagged, rows[0].Enrolled);
     }
 
@@ -47,20 +49,22 @@ internal sealed class ClassScopes(ClassesContext db) : IClassScopes
 
     private async Task<IReadOnlyList<ClassFacts>> FactsAsync(int? classId, CancellationToken ct)
     {
-        var rows = await db.Database
-            .SqlQuery<Fact>($"""
+        var rows = await source.ListAsync(
+            $"""
                 select id as "Id", coalesce(gender, 0) as "Gender", city as "City", country as "Country", class_level_id as "LevelId", code as "Code", name as "Name"
                 from classes.classes where status = 'A' and ({classId}::int is null or id = {classId}) order by id limit {MaxClasses}
-                """)
-            .ToListAsync(ct);
-        var tags = await db.Database
-            .SqlQuery<TagRow>($"""
+                """,
+            row => new Fact(row.Int("Id"), row.Int("Gender"), row.TextOrNull("City"), row.TextOrNull("Country"), row.IntOrNull("LevelId"), row.TextOrNull("Code"), row.TextOrNull("Name")),
+            ct);
+        var tags = await source.ListAsync(
+            $"""
                 select ct.class_id as "ClassId", t.name as "Name" from classes.class_tags ct
                 join classes.tags t on t.id = ct.tag_id
                 where ct.deleted_at is null and t.deleted_at is null and ({classId}::int is null or ct.class_id = {classId})
                 order by t.name
-                """)
-            .ToListAsync(ct);
+                """,
+            row => new TagRow(row.Int("ClassId"), row.Text("Name")),
+            ct);
         var byClass = tags.ToLookup(t => t.ClassId, t => t.Name);
         return rows.Select(r => new ClassFacts(r.Id, r.Gender, r.City, r.Country, r.LevelId, byClass[r.Id].ToList(), r.Code ?? string.Empty, r.Name ?? string.Empty)).ToList();
     }

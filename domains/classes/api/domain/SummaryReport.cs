@@ -1,5 +1,6 @@
 using System.Globalization;
 using Microsoft.AspNetCore.Http;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Shared.Api;
 
@@ -23,7 +24,7 @@ internal static class SummaryReport
 
     internal sealed record Loaded(int Gender, string From, string To, IReadOnlyList<string> Levels, IReadOnlyList<ClassItem> Classes);
 
-    public static async Task<(Loaded? Report, IResult? Refusal)> OpenAsync(HttpContext context, ClassesContext db, Permissions permissions, Caller caller, DateOnly today, CancellationToken ct)
+    public static async Task<(Loaded? Report, IResult? Refusal)> OpenAsync(HttpContext context, NpgsqlDataSource db, Permissions permissions, Caller caller, DateOnly today, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(context);
         var (scope, refusal) = await ReportScope.OpenAsync(context, permissions, caller, ct);

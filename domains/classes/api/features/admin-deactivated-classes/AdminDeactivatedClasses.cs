@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
 using Tsr.Shared.Api;
@@ -31,7 +31,7 @@ internal static class AdminDeactivatedClassesSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(HttpContext context, ClassesContext db, Permissions permissions, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(HttpContext context, NpgsqlDataSource source, Permissions permissions, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -46,11 +46,11 @@ internal static class AdminDeactivatedClassesSlice
         }
 
         // As PHP: the permission is the only gate; a caller limited to assigned classes still sees every closed class and the whole log (owner's decision, 14 Nov 2026).
-        var closed = await db.Database
-            .SqlQuery<DeactivationView.ClosedClass>($"""
+        var closed = await source.ListAsync(
+            $"""
                 select c.id as "Id", c.code as "Code", cl.name as "Level", c.gender as "Gender", t.name as "Teacher", a.details::text as "Details",
-                       c.completed_on as "CompletedOn", c.shutdown_on as "ShutdownOn", c.comments::text as "Comments", c.deleted_by as "DeletedBy",
-                       c.deleted_at at time zone 'UTC' as "DeletedAt", pu.name as "PerformedByName", du.name as "DeletedByName", a.performed_at at time zone 'UTC' as "PerformedAt"
+                       c.completed_on::text as "CompletedOn", c.shutdown_on::text as "ShutdownOn", c.comments::text as "Comments", c.deleted_by as "DeletedBy",
+                       c.deleted_at as "DeletedAt", pu.name as "PerformedByName", du.name as "DeletedByName", a.performed_at as "PerformedAt"
                 from classes.classes c
                 join classes.class_levels cl on cl.id = c.class_level_id
                 left join membership.v_members t on t.token = c.teacher
@@ -65,12 +65,27 @@ internal static class AdminDeactivatedClassesSlice
                 where c.status = 'I'
                 order by coalesce(a.performed_at, c.deleted_at) desc nulls last, c.id desc
                 limit {MaxClasses}
-                """)
-            .ToListAsync(ct);
-        var log = await db.Database
-            .SqlQuery<DeactivationView.LogRow>($"""
+                """,
+            row => new DeactivationView.ClosedClass(
+                row.Int("Id"),
+                row.TextOrNull("Code"),
+                row.TextOrNull("Level"),
+                row.IntOrNull("Gender"),
+                row.TextOrNull("Teacher"),
+                row.TextOrNull("Details"),
+                ClassesRows.DateOrNull(row.TextOrNull("CompletedOn")),
+                ClassesRows.DateOrNull(row.TextOrNull("ShutdownOn")),
+                row.TextOrNull("Comments"),
+                row.IntOrNull("DeletedBy"),
+                row.InstantOrNull("DeletedAt")?.UtcDateTime,
+                row.TextOrNull("PerformedByName"),
+                row.TextOrNull("DeletedByName"),
+                row.InstantOrNull("PerformedAt")?.UtcDateTime),
+            ct);
+        var log = await source.ListAsync(
+            $"""
                 select a.id as "Id", a.class_id as "ClassId", c.code as "Code", c.gender as "Gender", cl.name as "Level", a.details::text as "Details",
-                       a.performed_by as "PerformedBy", u.name as "PerformedByName", a.performed_at at time zone 'UTC' as "PerformedAt"
+                       a.performed_by as "PerformedBy", u.name as "PerformedByName", a.performed_at as "PerformedAt"
                 from classes.class_audit_log a
                 left join classes.classes c on c.id = a.class_id
                 left join classes.class_levels cl on cl.id = c.class_level_id
@@ -78,13 +93,23 @@ internal static class AdminDeactivatedClassesSlice
                 where a.action = 'deactivated'
                 order by a.performed_at desc, a.id desc
                 limit {LogLimit}
-                """)
-            .ToListAsync(ct);
+                """,
+            row => new DeactivationView.LogRow(
+                row.Long("Id"),
+                row.Int("ClassId"),
+                row.TextOrNull("Code"),
+                row.IntOrNull("Gender"),
+                row.TextOrNull("Level"),
+                row.TextOrNull("Details"),
+                row.Int("PerformedBy"),
+                row.TextOrNull("PerformedByName"),
+                row.Instant("PerformedAt").UtcDateTime),
+            ct);
 
         var summaries = closed.Select(DeactivationView.Summarise).Select(s => new Closed(
             s.Id, s.Code, s.Level, s.Gender, s.Teacher, s.Type, s.EffectiveDate, PhpCast.TextOrNull(s.Reason), s.PerformedBy, s.PerformedAt)).ToList();
         var entries = log.Select(DeactivationView.LogOf).Select(e => new Logged(
             e.Id, e.Code, e.Level, e.Gender, e.Type, e.EffectiveDate, PhpCast.TextOrNull(e.Reason), e.PerformedBy, e.PerformedAt)).ToList();
-        return Results.Json(new Body(summaries, entries));
+        return Results.Json(new Body(summaries, entries), ClassesJson.Answers.DeactivatedClassesBody);
     }
 }

@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Assessment.Api.Domain;
 using Tsr.Shared.Api;
@@ -27,7 +27,7 @@ internal static class ClassQuizzesSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string class_id, HttpContext context, AssessmentContext db, Permissions permissions, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(string class_id, HttpContext context, NpgsqlDataSource source, Permissions permissions, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -42,23 +42,24 @@ internal static class ClassQuizzesSlice
             return Refusals.NotPermitted();
         }
 
-        if (!await QuizAccess.HasNumericGenderAsync(db, caller, ct))
+        if (!await QuizAccess.HasNumericGenderAsync(source, caller, ct))
         {
             return Refusals.GenderNotSet();
         }
 
-        if (!await QuizAccess.IsEnrolledStudentAsync(db, classId, caller.Token, ct))
+        if (!await QuizAccess.IsEnrolledStudentAsync(source, classId, caller.Token, ct))
         {
             return Refusals.ClassNotEnrolled();
         }
 
         var paging = Paging.From(context);
-        var total = await db.Database
-            .SqlQuery<int>($"""select count(*)::int as "Value" from assessment.spot_quizzes where class_id = {classId} and published_at is not null""")
-            .SingleAsync(ct);
+        var total = (await source.ListAsync(
+            $"""select count(*)::int as "Value" from assessment.spot_quizzes where class_id = {classId} and published_at is not null""",
+            row => row.Int("Value"),
+            ct)).Single();
         var token = caller.Token;
-        var rows = await db.Database
-            .SqlQuery<Row>($"""
+        var rows = await source.ListAsync(
+            $"""
                 select q.id as "Id", q.code::text as "Code", q.name::text as "Name", q.topic::text as "Topic", q.class_id as "ClassId", q.published_at as "PublishedAt",
                        (select count(*) from assessment.spot_quiz_questions qq where qq.spot_quiz_id = q.id)::int as "QuestionCount",
                        (select count(*) from assessment.spot_quiz_responses r where r.spot_quiz_id = q.id and r.token = {token})::int as "Answered",
@@ -67,10 +68,13 @@ internal static class ClassQuizzesSlice
                 where q.class_id = {classId} and q.published_at is not null
                 order by q.published_at desc, q.id desc
                 limit {paging.PageSize} offset {paging.Offset}
-                """)
-            .ToListAsync(ct);
+                """,
+            row => new Row(
+                row.Int("Id"), row.TextOrNull("Code"), row.TextOrNull("Name"), row.TextOrNull("Topic"), row.Int("ClassId"), row.InstantOrNull("PublishedAt"),
+                row.Int("QuestionCount"), row.Int("Answered"), row.IntOrNull("Score")),
+            ct);
         var hasNext = (decimal)(paging.Page - 1) * paging.PageSize + rows.Count < total;
-        return Results.Json(new Body(total, paging.Page, paging.PageSize, hasNext, rows.Select(ToItem).ToList()));
+        return Results.Json(new Body(total, paging.Page, paging.PageSize, hasNext, rows.Select(ToItem).ToList()), AssessmentJson.Answers.ClassQuizzes);
     }
 
     private static Item ToItem(Row row)

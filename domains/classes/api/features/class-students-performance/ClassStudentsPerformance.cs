@@ -3,7 +3,7 @@ using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
 using Tsr.Shared.Api;
@@ -41,7 +41,7 @@ internal static partial class ClassStudentsPerformanceSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string class_id, HttpContext context, ClassesContext db, Permissions permissions, TimeProvider clock, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(string class_id, HttpContext context, NpgsqlDataSource source, Permissions permissions, TimeProvider clock, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -49,7 +49,7 @@ internal static partial class ClassStudentsPerformanceSlice
             return Problem.Unauthenticated();
         }
 
-        var head = await ClassGuards.FindActiveClassAsync(db, ClassGuards.IdOf(class_id), ct);
+        var head = await ClassGuards.FindActiveClassAsync(source, ClassGuards.IdOf(class_id), ct);
         if (head is null)
         {
             return Refusals.ClassNotFound();
@@ -68,7 +68,7 @@ internal static partial class ClassStudentsPerformanceSlice
             return Problem.Detail(StatusCodes.Status422UnprocessableEntity, error);
         }
 
-        return Results.Json(await ReportAsync(db, head.Id, from, to, ct));
+        return Results.Json(await ReportAsync(source, head.Id, from, to, ct), ClassesJson.Answers.Answer);
     }
 
     private static string? Query(HttpContext context, string name)
@@ -114,19 +114,19 @@ internal static partial class ClassStudentsPerformanceSlice
         return end.DayNumber - start.DayNumber > MaxDays ? "The range can cover at most a year" : null;
     }
 
-    private static async Task<Dictionary<string, object?>> ReportAsync(ClassesContext db, int classId, string from, string to, CancellationToken ct)
+    private static async Task<Dictionary<string, object?>> ReportAsync(NpgsqlDataSource source, int classId, string from, string to, CancellationToken ct)
     {
-        var students = await ClassRoster.ActiveAsync(db, classId, ct);
-        var attendance = (await AttendanceAsync(db, classId, from, to, ct)).ToDictionary(a => a.Token);
-        var recitation = (await RecitationAsync(db, classId, from, to, ct)).ToDictionary(r => r.Token);
-        var totalQuizzes = await db.Database
-            .SqlQuery<int>($"""
-                select count(*)::int as "Value" from assessment.v_quizzes
-                where class_id = {classId} and (published_at at time zone 'UTC') >= {from}::timestamp and (published_at at time zone 'UTC') <= {to}::timestamp
-                """)
-            .SingleAsync(ct);
-        var maxMarks = OrderTopics(await MaxMarksAsync(db, classId, from, to, ct));
-        var figures = (await QuizFiguresAsync(db, classId, from, to, ct)).ToLookup(f => f.Token);
+        var students = await ClassRoster.ActiveAsync(source, classId, ct);
+        var attendance = (await AttendanceAsync(source, classId, from, to, ct)).ToDictionary(a => a.Token);
+        var recitation = (await RecitationAsync(source, classId, from, to, ct)).ToDictionary(r => r.Token);
+        var totalQuizzes = await source.ScalarAsync<int>(
+            $"""
+            select count(*)::int as "Value" from assessment.v_quizzes
+            where class_id = {classId} and (published_at at time zone 'UTC') >= {from}::timestamp and (published_at at time zone 'UTC') <= {to}::timestamp
+            """,
+            ct) ?? throw new InvalidOperationException("A count returned no row.");
+        var maxMarks = OrderTopics(await MaxMarksAsync(source, classId, from, to, ct));
+        var figures = (await QuizFiguresAsync(source, classId, from, to, ct)).ToLookup(f => f.Token);
 
         var rows = students.Select(s => StudentWire(s, attendance, recitation, figures[s.Token].ToList(), maxMarks)).ToList();
         return new Dictionary<string, object?>
@@ -178,53 +178,57 @@ internal static partial class ClassStudentsPerformanceSlice
     }
 
     // PHP getStudentAttendance: the conducted sessions of the range that took a register, per member.
-    private static async Task<List<Attendance>> AttendanceAsync(ClassesContext db, int classId, string from, string to, CancellationToken ct) =>
-        await db.Database
-            .SqlQuery<Attendance>($"""
-                select ca.token as "Token", count(cs.id)::int as "Expected", coalesce(sum(ca.present), 0)::int as "Present"
-                from classes.class_sessions cs join classes.class_attendance ca on ca.session_id = cs.id
-                where cs.class_id = {classId} and cs.conducted = 1 and cs.conducted_on >= {from}::date and cs.conducted_on <= {to}::date
-                group by ca.token
-                limit {MaxRows}
-                """)
-            .ToListAsync(ct);
+    private static async Task<List<Attendance>> AttendanceAsync(NpgsqlDataSource source, int classId, string from, string to, CancellationToken ct) =>
+        await source.ListAsync(
+            $"""
+            select ca.token as "Token", count(cs.id)::int as "Expected", coalesce(sum(ca.present), 0)::int as "Present"
+            from classes.class_sessions cs join classes.class_attendance ca on ca.session_id = cs.id
+            where cs.class_id = {classId} and cs.conducted = 1 and cs.conducted_on >= {from}::date and cs.conducted_on <= {to}::date
+            group by ca.token
+            limit {MaxRows}
+            """,
+            row => new Attendance(row.Int("Token"), row.Int("Expected"), row.Int("Present")),
+            ct);
 
-    private static async Task<List<Recitation>> RecitationAsync(ClassesContext db, int classId, string from, string to, CancellationToken ct) =>
-        await db.Database
-            .SqlQuery<Recitation>($"""
-                select ca.token as "Token", coalesce(sum(ca.recitation), 0)::bigint as "Total"
-                from classes.class_sessions cs join classes.class_attendance ca on ca.session_id = cs.id
-                where cs.class_id = {classId} and cs.conducted = 1 and cs.conducted_on >= {from}::date and cs.conducted_on <= {to}::date
-                group by ca.token
-                limit {MaxRows}
-                """)
-            .ToListAsync(ct);
+    private static async Task<List<Recitation>> RecitationAsync(NpgsqlDataSource source, int classId, string from, string to, CancellationToken ct) =>
+        await source.ListAsync(
+            $"""
+            select ca.token as "Token", coalesce(sum(ca.recitation), 0)::bigint as "Total"
+            from classes.class_sessions cs join classes.class_attendance ca on ca.session_id = cs.id
+            where cs.class_id = {classId} and cs.conducted = 1 and cs.conducted_on >= {from}::date and cs.conducted_on <= {to}::date
+            group by ca.token
+            limit {MaxRows}
+            """,
+            row => new Recitation(row.Int("Token"), row.Long("Total")),
+            ct);
 
     // The questions of the quizzes of the range by topic, answered or not (a topic nobody attempted still counts against everyone).
-    private static async Task<List<MaxMarks>> MaxMarksAsync(ClassesContext db, int classId, string from, string to, CancellationToken ct) =>
-        await db.Database
-            .SqlQuery<MaxMarks>($"""
-                select topic as "Topic", sum(max_marks)::int as "Marks" from assessment.v_quizzes
-                where class_id = {classId} and (published_at at time zone 'UTC') >= {from}::timestamp and (published_at at time zone 'UTC') <= {to}::timestamp
-                  and topic is not null and topic <> ''
-                group by topic
-                order by topic
-                limit {MaxRows}
-                """)
-            .ToListAsync(ct);
+    private static async Task<List<MaxMarks>> MaxMarksAsync(NpgsqlDataSource source, int classId, string from, string to, CancellationToken ct) =>
+        await source.ListAsync(
+            $"""
+            select topic as "Topic", sum(max_marks)::int as "Marks" from assessment.v_quizzes
+            where class_id = {classId} and (published_at at time zone 'UTC') >= {from}::timestamp and (published_at at time zone 'UTC') <= {to}::timestamp
+              and topic is not null and topic <> ''
+            group by topic
+            order by topic
+            limit {MaxRows}
+            """,
+            row => new MaxMarks(row.Text("Topic"), row.Int("Marks")),
+            ct);
 
     // What each enrolled member answered in the range, per topic.
-    private static async Task<List<QuizFigure>> QuizFiguresAsync(ClassesContext db, int classId, string from, string to, CancellationToken ct) =>
-        await db.Database
-            .SqlQuery<QuizFigure>($"""
-                select r.token as "Token", nullif(r.topic, '') as "Topic", coalesce(sum(r.correct), 0)::bigint as "Correct",
-                       coalesce(sum(r.answered), 0)::bigint as "Total", count(*)::bigint as "Attempted"
-                from assessment.v_quiz_results r
-                where r.class_id = {classId} and (r.published_at at time zone 'UTC') >= {from}::timestamp and (r.published_at at time zone 'UTC') <= {to}::timestamp
-                group by r.token, nullif(r.topic, '')
-                limit {MaxRows}
-                """)
-            .ToListAsync(ct);
+    private static async Task<List<QuizFigure>> QuizFiguresAsync(NpgsqlDataSource source, int classId, string from, string to, CancellationToken ct) =>
+        await source.ListAsync(
+            $"""
+            select r.token as "Token", nullif(r.topic, '') as "Topic", coalesce(sum(r.correct), 0)::bigint as "Correct",
+                   coalesce(sum(r.answered), 0)::bigint as "Total", count(*)::bigint as "Attempted"
+            from assessment.v_quiz_results r
+            where r.class_id = {classId} and (r.published_at at time zone 'UTC') >= {from}::timestamp and (r.published_at at time zone 'UTC') <= {to}::timestamp
+            group by r.token, nullif(r.topic, '')
+            limit {MaxRows}
+            """,
+            row => new QuizFigure(row.Int("Token"), row.TextOrNull("Topic"), row.Long("Correct"), row.Long("Total"), row.Long("Attempted")),
+            ct);
 
     private static List<MaxMarks> OrderTopics(List<MaxMarks> topics) =>
         topics

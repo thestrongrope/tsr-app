@@ -528,11 +528,10 @@ public sealed class SharedDataAccessTests
         Assert.That(await ScratchCountAsync(), Is.EqualTo(2));
     }
 
-    private async Task RunEfAndJoinedAsync(bool commit)
+    private static async Task RunEfAndJoinedAsync(bool commit)
     {
         await TestDatabase.ExecuteAsync("truncate public.scratch_96");
-        await using var scope = factory.Services.CreateAsyncScope();
-        var context = scope.ServiceProvider.GetRequiredService<PlatformContext>();
+        await using var context = EfContexts.Create<PlatformContext>();
         await using var efTransaction = await context.Database.BeginTransactionAsync();
 
         var joined = EfTransaction.Join(context);

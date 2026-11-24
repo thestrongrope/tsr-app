@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Assessment.Api.Domain;
 using Tsr.Shared.Api;
@@ -32,7 +32,7 @@ internal static class ManageUpdateSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string quiz_id, HttpContext context, AssessmentContext db, Permissions permissions, TimeProvider clock, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(string quiz_id, HttpContext context, NpgsqlDataSource source, Permissions permissions, TimeProvider clock, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -40,7 +40,7 @@ internal static class ManageUpdateSlice
             return Problem.Unauthenticated();
         }
 
-        var (quiz, refusal) = await ManageAccess.ResolveQuizAsync(db, PhpValue.IntOfText(quiz_id), ct);
+        var (quiz, refusal) = await ManageAccess.ResolveQuizAsync(source, PhpValue.IntOfText(quiz_id), ct);
         if (refusal is not null)
         {
             return refusal;
@@ -64,9 +64,9 @@ internal static class ManageUpdateSlice
         }
 
         var edit = parsed.Value!;
-        return await SaveAsync(db, clock, quiz, caller.Token, edit, ct) switch
+        return await SaveAsync(source, clock, quiz, caller.Token, edit, ct) switch
         {
-            SaveOutcome.Saved => Results.Json(new Body(quiz.Id, edit.QuestionCount)),
+            SaveOutcome.Saved => Results.Json(new Body(quiz.Id, edit.QuestionCount), AssessmentJson.Answers.ManageUpdate),
             SaveOutcome.Answered => Problem.Detail(StatusCodes.Status409Conflict, AnsweredText),
             _ => Refusals.QuizNotFound(),
         };
@@ -79,11 +79,11 @@ internal static class ManageUpdateSlice
         Gone,
     }
 
-    private static async Task<SaveOutcome> SaveAsync(AssessmentContext db, TimeProvider clock, ManageAccess.QuizRow quiz, int token, QuizEdit.Edit edit, CancellationToken ct)
+    private static async Task<SaveOutcome> SaveAsync(NpgsqlDataSource source, TimeProvider clock, ManageAccess.QuizRow quiz, int token, QuizEdit.Edit edit, CancellationToken ct)
     {
         var at = ManageAccess.NowToSecond(clock);
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        var answered = await QuizLock.LockAndCheckAnsweredAsync(db, quiz.Id, ct);
+        await using var tx = await source.BeginAsync(ct);
+        var answered = await QuizLock.LockAndCheckAnsweredAsync(tx, quiz.Id, ct);
         if (answered is null)
         {
             return SaveOutcome.Gone;
@@ -94,7 +94,7 @@ internal static class ManageUpdateSlice
             return SaveOutcome.Answered;
         }
 
-        var updated = await db.Database.ExecuteSqlAsync(
+        var updated = await tx.ExecuteAsync(
             $"""
             update assessment.spot_quizzes
             set name = {edit.Name}, topic = {edit.Topic}, restrict_to_class = coalesce({edit.RestrictToClass}::smallint, restrict_to_class), modified_by = {token}, modified_at = {at}
@@ -106,10 +106,10 @@ internal static class ManageUpdateSlice
             return SaveOutcome.Gone;
         }
 
-        await db.Database.ExecuteSqlAsync($"delete from assessment.spot_quiz_questions where spot_quiz_id = {quiz.Id}", ct);
+        await tx.ExecuteAsync($"delete from assessment.spot_quiz_questions where spot_quiz_id = {quiz.Id}", ct);
         foreach (var q in edit.Insert)
         {
-            await db.Database.ExecuteSqlAsync(
+            await tx.ExecuteAsync(
                 $"""
                 insert into assessment.spot_quiz_questions (spot_quiz_id, question, option1, option2, option3, option4, option5, answer, created_at)
                 values ({quiz.Id}, {q.Text}, {q.Option1}, {q.Option2}, {q.Option3}, {q.Option4}, {q.Option5}, 1, {at})
@@ -117,8 +117,8 @@ internal static class ManageUpdateSlice
                 ct);
         }
 
-        await Outbox.WriteAsync(db, "assessment.quiz_updated", new QuizUpdated(quiz.Id, quiz.ClassId, token), clock, ct);
-        await transaction.CommitAsync(ct);
+        await Outbox.WriteAsync(tx, "assessment.quiz_updated", new QuizUpdated(quiz.Id, quiz.ClassId, token), AssessmentJson.Default.QuizUpdated, clock, ct);
+        await tx.CommitAsync(ct);
         return SaveOutcome.Saved;
     }
 }

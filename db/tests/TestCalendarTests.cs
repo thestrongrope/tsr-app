@@ -2,6 +2,7 @@ using System.Net;
 using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Npgsql;
 using NUnit.Framework;
 using Tsr.Notifications.Api;
 using Tsr.Shared.Api;
@@ -572,14 +573,12 @@ public sealed class TestCalendarTests
         await SyncAsync(Student, DeviceA, Change("slot:970101", "2026-11-12T09:00:00Z"));
         await SyncAsync(BothClasses, DeviceA, Change("slot:970101", "2026-11-12T09:00:00Z"), Change("slot:970103", "2026-11-12T09:00:00Z"));
         using var factory = TestApi.Create();
-        using var scope = factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<NotificationsContext>();
+        var source = factory.Services.GetRequiredService<NpgsqlDataSource>();
 
-        Assert.That(async () => await NotificationsErasure.EraseEventSettingsAsync(EfTransaction.Join(db), BothClasses, CancellationToken.None), Throws.InstanceOf<InvalidOperationException>());
-        await using (var transaction = await db.Database.BeginTransactionAsync())
+        await using (var tx = await source.BeginAsync(CancellationToken.None))
         {
-            Assert.That(await NotificationsErasure.EraseEventSettingsAsync(EfTransaction.Join(db), BothClasses, CancellationToken.None), Is.EqualTo(2));
-            await transaction.CommitAsync();
+            Assert.That(await NotificationsErasure.EraseEventSettingsAsync(tx, BothClasses, CancellationToken.None), Is.EqualTo(2));
+            await tx.CommitAsync(CancellationToken.None);
         }
 
         Assert.That(await SettingRowsAsync(), Is.EqualTo(1));

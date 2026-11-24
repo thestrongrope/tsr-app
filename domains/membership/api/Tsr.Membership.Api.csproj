@@ -1,5 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!-- membership: members' profiles, registrations, interests, guardians. Lists access, identity and platform as dependencies. -->
+  <PropertyGroup>
+    <IsAotCompatible>true</IsAotCompatible>
+    <EnableRequestDelegateGenerator>true</EnableRequestDelegateGenerator>
+  </PropertyGroup>
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <ProjectReference Include="../../../shared/api/Tsr.Shared.Api.csproj" />

@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
 using Tsr.Shared.Api;
@@ -19,7 +20,7 @@ internal static class ClassSyllabusTopicsSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string class_id, HttpContext context, ClassesContext db, Permissions permissions, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(string class_id, HttpContext context, NpgsqlDataSource source, Permissions permissions, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -27,12 +28,12 @@ internal static class ClassSyllabusTopicsSlice
             return Problem.Unauthenticated();
         }
 
-        if (!await ClassGuards.HasNumericGenderAsync(db, caller, ct))
+        if (!await ClassGuards.HasNumericGenderAsync(source, caller, ct))
         {
             return Refusals.GenderNotSet();
         }
 
-        var head = await ClassGuards.FindActiveClassAsync(db, ClassGuards.IdOf(class_id), ct);
+        var head = await ClassGuards.FindActiveClassAsync(source, ClassGuards.IdOf(class_id), ct);
         if (head is null)
         {
             return Refusals.ClassNotFound();
@@ -45,6 +46,6 @@ internal static class ClassSyllabusTopicsSlice
         }
 
         var topics = SyllabusCatalogue.For(head.LevelName);
-        return topics is null ? Results.Json(new Dictionary<string, string>()) : Results.Json(topics.Value);
+        return topics is null ? Results.Json(new Dictionary<string, string>(), ClassesJson.Answers.StringMap) : Results.Json(topics.Value, ClassesJson.Answers.JsonElement);
     }
 }

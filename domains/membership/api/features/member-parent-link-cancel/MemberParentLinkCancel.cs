@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Membership.Api.Domain;
 using Tsr.Shared.Api;
@@ -15,9 +15,9 @@ namespace Tsr.Membership.Api.Features.MemberParentLinkCancel;
 
 internal static class MemberParentLinkCancelSlice
 {
-    internal sealed record InviteCancelled(int InviteId, int ChildToken, int CancelledBy);
-
     private sealed record InviteRow(int CreatedBy, string? ChildGender);
+
+    internal sealed record InviteCancelled(int InviteId, int ChildToken, int CancelledBy);
 
     public static IEndpointRouteBuilder MapMemberParentLinkCancel(this IEndpointRouteBuilder routes)
     {
@@ -29,7 +29,7 @@ internal static class MemberParentLinkCancelSlice
         string child_token,
         string id,
         HttpContext context,
-        MembershipContext db,
+        NpgsqlDataSource source,
         Permissions permissions,
         TimeProvider clock,
         CancellationToken ct)
@@ -41,46 +41,47 @@ internal static class MemberParentLinkCancelSlice
         }
 
         var childToken = PhpValue.IntOfText(child_token);
-        var refusal = await GuardianChecks.RequireParentLinkAsync(db, permissions, caller, childToken, ct);
+        var refusal = await GuardianChecks.RequireParentLinkAsync(source, permissions, caller, childToken, ct);
         if (refusal is not null)
         {
             return refusal;
         }
 
         var linkId = PhpValue.IntOfText(id);
-        if (childToken > int.MaxValue || linkId is < 1 or > int.MaxValue || !await MayCancelAsync(db, permissions, caller, (int)linkId, (int)childToken, ct))
+        if (childToken > int.MaxValue || linkId is < 1 or > int.MaxValue || !await MayCancelAsync(source, permissions, caller, (int)linkId, (int)childToken, ct))
         {
             return NotFound();
         }
 
         var now = clock.GetUtcNow();
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        var changed = await db.UserGuardians
-            .Where(g => g.Id == (int)linkId && g.Status == "invited")
-            .ExecuteUpdateAsync(set => set.SetProperty(g => g.Status, "revoked").SetProperty(g => g.RevokedAt, now).SetProperty(g => g.RevokedBy, caller.UserId), ct);
+        await using var tx = await source.BeginAsync(ct);
+        var changed = await tx.ExecuteAsync(
+            $"update membership.user_guardians set status = 'revoked', revoked_at = {now}, revoked_by = {caller.UserId} where id = {(int)linkId} and status = 'invited'",
+            ct);
         if (changed == 0)
         {
             return NotFound();
         }
 
-        await Outbox.WriteAsync(db, "membership.parent_invite_cancelled", new InviteCancelled((int)linkId, (int)childToken, caller.UserId), clock, ct);
-        await transaction.CommitAsync(ct);
+        await Outbox.WriteAsync(tx, "membership.parent_invite_cancelled", new InviteCancelled((int)linkId, (int)childToken, caller.UserId), MembershipJson.Default.InviteCancelled, clock, ct);
+        await tx.CommitAsync(ct);
         return Results.NoContent();
     }
 
     // The invite must be unused and name this child whose member exists (PHP joins users on the child token; the first holder gives the gender).
-    private static async Task<bool> MayCancelAsync(MembershipContext db, Permissions permissions, Caller caller, int linkId, int childToken, CancellationToken ct)
+    private static async Task<bool> MayCancelAsync(NpgsqlDataSource source, Permissions permissions, Caller caller, int linkId, int childToken, CancellationToken ct)
     {
-        var rows = await db.Database
-            .SqlQuery<InviteRow>($"""
-                select ug.created_by as "CreatedBy", p.gender as "ChildGender"
-                from membership.user_guardians ug
-                join identity.v_users cu on cu.token = ug.child_token
-                left join membership.member_profiles p on p.user_id = cu.id
-                where ug.id = {linkId} and ug.child_token = {childToken} and ug.status = 'invited'
-                order by cu.id limit 1
-                """)
-            .ToListAsync(ct);
+        var rows = await source.ListAsync(
+            $"""
+            select ug.created_by as "CreatedBy", p.gender as "ChildGender"
+            from membership.user_guardians ug
+            join identity.v_users cu on cu.token = ug.child_token
+            left join membership.member_profiles p on p.user_id = cu.id
+            where ug.id = {linkId} and ug.child_token = {childToken} and ug.status = 'invited'
+            order by cu.id limit 1
+            """,
+            row => new InviteRow(row.Int("CreatedBy"), row.TextOrNull("ChildGender")),
+            ct);
         if (rows.Count == 0)
         {
             return false;

@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Http;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Shared.Api;
 
@@ -16,7 +17,7 @@ internal static class QuizDrawFlow
     private const int MaxWinnersPerEpisode = 10_000;
 
     public static async Task<IResult> RunAsync(
-        HttpContext context, AssessmentContext db, Permissions permissions, TimeProvider clock, IQuizRandom random, bool reset, CancellationToken ct)
+        HttpContext context, NpgsqlDataSource source, Permissions permissions, TimeProvider clock, IQuizRandom random, bool reset, CancellationToken ct)
     {
         var (caller, refusal) = await QuizAdmin.GuardAsync(context, permissions, ct);
         if (refusal is not null)
@@ -37,7 +38,7 @@ internal static class QuizDrawFlow
             return Problem.Detail(StatusCodes.Status422UnprocessableEntity, "Unknown kind.");
         }
 
-        var settings = await QuizAdmin.SettingsAsync(db, ct);
+        var settings = await QuizAdmin.SettingsAsync(source, ct);
         if (QuizAdmin.RequireSettings(settings) is { } blocked)
         {
             return blocked;
@@ -54,18 +55,18 @@ internal static class QuizDrawFlow
             return Problem.Detail(StatusCodes.Status409Conflict, "The winner counts in the quiz settings are not usable.");
         }
 
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        if (!await AssessmentLocks.TryTakeAsync(db, AssessmentLocks.QuizAdmin, ct))
+        await using var tx = await source.BeginAsync(ct);
+        if (!await AssessmentLocks.TryTakeAsync(tx, AssessmentLocks.QuizAdmin, ct))
         {
             return QuizAdmin.Busy();
         }
 
-        var winners = await QuizStateStore.LoadObjectAsync(db, QuizStateStore.Winners, ct);
-        var feasibility = await QuizAdmin.FeasibilityAsync(db, settings, ct);
-        var info = await QuizAdmin.ParticipantInfoAsync(db, ct);
+        var winners = await QuizStateStore.LoadObjectAsync(tx, QuizStateStore.Winners, ct);
+        var feasibility = await QuizAdmin.FeasibilityAsync(tx, settings, ct);
+        var info = await QuizAdmin.ParticipantInfoAsync(tx, ct);
         var result = kind switch
         {
-            "grand" or "daily" => QuizDraw.Episodes(counts, feasibility, winners, await QuizStateStore.LoadQuizDayAsync(db, ct), info, reset, kind == "grand", random),
+            "grand" or "daily" => QuizDraw.Episodes(counts, feasibility, winners, await QuizStateStore.LoadQuizDayAsync(tx, ct), info, reset, kind == "grand", random),
             "mega" => OverallMega(settings, feasibility, winners, info, reset, random),
             _ => QuizDraw.Mega("mega_student", reset, feasibility.MegaStudent, winners, info, random),
         };
@@ -76,12 +77,12 @@ internal static class QuizDrawFlow
 
         if (result.Report.Changed)
         {
-            await SaveAsync(db, caller!, clock, kind, reset, feasibility, result, ct);
-            await QuizAdmin.EventAsync(db, reset ? "regenerate" : "generate", clock, ct);
+            await SaveAsync(tx, caller!, clock, kind, reset, feasibility, result, ct);
+            await QuizAdmin.EventAsync(tx, reset ? "regenerate" : "generate", clock, ct);
         }
 
-        await transaction.CommitAsync(ct);
-        return Results.Json(Answer(result.Report));
+        await tx.CommitAsync(ct);
+        return Results.Json(Answer(result.Report), AssessmentJson.Answers.JsonObject);
     }
 
     /// <summary>PHP drawOverallMega: offered only once every episode has winners.</summary>
@@ -90,22 +91,22 @@ internal static class QuizDrawFlow
             ? new DrawResult(QuizDraw.Report([new DrawCell(null, 0, 0, 1)], "the overall Mega winner needs winners for every episode first"), winners, [])
             : QuizDraw.Mega("mega", reset, feasibility.Mega, winners, info, random);
 
-    private static async Task SaveAsync(AssessmentContext db, Caller caller, TimeProvider clock, string kind, bool reset, Feasibility feasibility, DrawResult result, CancellationToken ct)
+    private static async Task SaveAsync(DbTx tx, Caller caller, TimeProvider clock, string kind, bool reset, Feasibility feasibility, DrawResult result, CancellationToken ct)
     {
-        var actor = await QuizAdmin.ActorLabelAsync(db, caller, ct);
+        var actor = await QuizAdmin.ActorLabelAsync(tx, caller, ct);
         var at = QuizAdmin.Stamp(QuizAdmin.Wall(clock));
         if (result.Replaced.Count > 0)
         {
-            var record = await QuizStateStore.LoadArrayAsync(db, QuizStateStore.WinnersReplaced, ct);
+            var record = await QuizStateStore.LoadArrayAsync(tx, QuizStateStore.WinnersReplaced, ct);
             foreach (var replaced in result.Replaced)
             {
-                record.Add(new JsonObject { ["at"] = at, ["by"] = actor, ["kind"] = replaced.Kind, ["episode"] = replaced.Episode.DeepClone(), ["winners"] = replaced.Winners.DeepClone() });
+                record.Add((JsonNode)new JsonObject { ["at"] = at, ["by"] = actor, ["kind"] = replaced.Kind, ["episode"] = replaced.Episode.DeepClone(), ["winners"] = replaced.Winners.DeepClone() });
             }
 
-            await QuizStateStore.SaveAsync(db, QuizStateStore.WinnersReplaced, record, clock, ct);
+            await QuizStateStore.SaveAsync(tx, QuizStateStore.WinnersReplaced, record, clock, ct);
         }
 
-        var timestamps = await QuizStateStore.LoadObjectAsync(db, QuizStateStore.Timestamps, ct);
+        var timestamps = await QuizStateStore.LoadObjectAsync(tx, QuizStateStore.Timestamps, ct);
         var prefix = kind switch { "mega" => "mega_winner", "mega_student" => "mega_student_winner", _ => "winners" };
         timestamps[prefix + "_generated_at"] = at;
         timestamps[prefix + "_generated_by"] = actor;
@@ -120,8 +121,8 @@ internal static class QuizDrawFlow
             timestamps[prefix + "_reset_by"] = actor;
         }
 
-        await QuizStateStore.SaveAsync(db, QuizStateStore.Winners, result.Winners, clock, ct);
-        await QuizStateStore.SaveAsync(db, QuizStateStore.Timestamps, timestamps, clock, ct);
+        await QuizStateStore.SaveAsync(tx, QuizStateStore.Winners, result.Winners, clock, ct);
+        await QuizStateStore.SaveAsync(tx, QuizStateStore.Timestamps, timestamps, clock, ct);
     }
 
     /// <summary>The wire shape of a draw report (api_quiz_draw): one row per episode and prize; Mega rows have a null episode and prize 0.</summary>

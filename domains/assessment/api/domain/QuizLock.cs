@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+using Tsr.Shared.Api;
 
 namespace Tsr.Assessment.Api.Domain;
 
@@ -9,44 +9,44 @@ namespace Tsr.Assessment.Api.Domain;
 internal static class QuizLock
 {
     /// <summary>Locks the quiz row for share, inside the caller's transaction. False when the quiz is gone or its questions are no longer exactly <paramref name="questionIds"/> (an edit committed after the caller read them): write nothing.</summary>
-    public static async Task<bool> ShareUnchangedAsync(AssessmentContext db, long quizId, IReadOnlyCollection<long> questionIds, CancellationToken ct)
+    public static async Task<bool> ShareUnchangedAsync(DbTx tx, long quizId, IReadOnlyCollection<long> questionIds, CancellationToken ct)
     {
-        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(tx);
         ArgumentNullException.ThrowIfNull(questionIds);
-        var ids = questionIds.ToArray();
-        var locked = await db.Database
-            .SqlQuery<int>($"""select id as "Value" from assessment.spot_quizzes where id = {quizId} for share""")
-            .ToListAsync(ct);
+        var ids = questionIds.Select(id => (int)id).ToArray();
+        var locked = await tx.ListAsync($"""select id as "Value" from assessment.spot_quizzes where id = {quizId} for share""", row => row.Int("Value"), ct);
         if (locked.Count == 0)
         {
             return false;
         }
 
-        return await db.Database
-            .SqlQuery<bool>($"""
-                select ((select count(*) from assessment.spot_quiz_questions where spot_quiz_id = {quizId}) = {ids.Length}
-                    and (select count(*) from assessment.spot_quiz_questions where spot_quiz_id = {quizId} and id = any({ids})) = {ids.Length}) as "Value"
-                """)
-            .SingleAsync(ct);
+        var unchanged = await tx.ListAsync(
+            $"""
+            select ((select count(*) from assessment.spot_quiz_questions where spot_quiz_id = {quizId}) = {ids.Length}
+                and (select count(*) from assessment.spot_quiz_questions where spot_quiz_id = {quizId} and id = any({ids})) = {ids.Length}) as "Value"
+            """,
+            row => row.Bool("Value"),
+            ct);
+        return unchanged.Single();
     }
 
     /// <summary>Locks the quiz row for update, inside the caller's transaction, and says whether any online answer or offline submission exists. Null when the quiz row is gone.</summary>
-    public static async Task<bool?> LockAndCheckAnsweredAsync(AssessmentContext db, long quizId, CancellationToken ct)
+    public static async Task<bool?> LockAndCheckAnsweredAsync(DbTx tx, long quizId, CancellationToken ct)
     {
-        ArgumentNullException.ThrowIfNull(db);
-        var locked = await db.Database
-            .SqlQuery<int>($"""select id as "Value" from assessment.spot_quizzes where id = {quizId} for update""")
-            .ToListAsync(ct);
+        ArgumentNullException.ThrowIfNull(tx);
+        var locked = await tx.ListAsync($"""select id as "Value" from assessment.spot_quizzes where id = {quizId} for update""", row => row.Int("Value"), ct);
         if (locked.Count == 0)
         {
             return null;
         }
 
-        return await db.Database
-            .SqlQuery<bool>($"""
-                select (exists (select 1 from assessment.spot_quiz_responses where spot_quiz_id = {quizId})
-                    or exists (select 1 from assessment.spot_quiz_submissions where spot_quiz_id = {quizId})) as "Value"
-                """)
-            .SingleAsync(ct);
+        var answered = await tx.ListAsync(
+            $"""
+            select (exists (select 1 from assessment.spot_quiz_responses where spot_quiz_id = {quizId})
+                or exists (select 1 from assessment.spot_quiz_submissions where spot_quiz_id = {quizId})) as "Value"
+            """,
+            row => row.Bool("Value"),
+            ct);
+        return answered.Single();
     }
 }

@@ -183,7 +183,7 @@ public sealed class AccessFailureTests
     private static string SubjectRules => $"/admin/class-access/members/{GoldenSeed.Subject}/rules";
 
     private static void UseBudget(IServiceCollection services, PortBudget budget) =>
-        services.AddScoped<IClassScopes>(provider => new BudgetedClasses(new ClassScopes(provider.GetRequiredService<ClassesContext>()), budget));
+        services.AddScoped<IClassScopes>(provider => new BudgetedClasses(new ClassScopes(provider.GetRequiredService<NpgsqlDataSource>()), budget));
 
     /// <summary>How many times the classes port was asked for the active classes, and from which call on it fails as a database does.</summary>
     private sealed class PortBudget
@@ -215,10 +215,10 @@ public sealed class AccessFailureTests
         var plainId = int.Parse((await run.QueryAsync($"select id from identity.users where token = {GoldenSeed.Plain}"))[0], CultureInfo.InvariantCulture);
         var superId = int.Parse((await run.QueryAsync($"select id from identity.users where token = {GoldenSeed.Super}"))[0], CultureInfo.InvariantCulture);
         await using var scope = run.Services.CreateAsyncScope();
-        var classes = scope.ServiceProvider.GetRequiredService<ClassesContext>();
-        await using (var tx = await classes.Database.BeginTransactionAsync())
+        var source = scope.ServiceProvider.GetRequiredService<NpgsqlDataSource>();
+        await using (var tx = await source.BeginAsync(CancellationToken.None))
         {
-            await classes.Database.ExecuteSqlAsync($"insert into access.user_permissions (user_id, permission, granted_by, granted_at, reason) values ({plainId}, 'donors:read:all', {superId}, now(), 'probe')");
+            await tx.ExecuteAsync($"insert into access.user_permissions (user_id, permission, granted_by, granted_at, reason) values ({plainId}, 'donors:read:all', {superId}, now(), 'probe')", CancellationToken.None);
 
             var allowed = await scope.ServiceProvider.GetRequiredService<Permissions>()
                 .CanAsync(new Caller(plainId, GoldenSeed.Plain), "donors:read", AccessTarget.None, CancellationToken.None);
@@ -238,10 +238,10 @@ public sealed class AccessFailureTests
         var caller = new Caller(plainId, GoldenSeed.Plain);
         await using (var writing = run.Services.CreateAsyncScope())
         {
-            var classes = writing.ServiceProvider.GetRequiredService<ClassesContext>();
-            await using var tx = await classes.Database.BeginTransactionAsync();
-            await classes.Database.ExecuteSqlAsync($"insert into access.user_permissions (user_id, permission, granted_by, granted_at, reason) values ({plainId}, 'donors:read:all', {superId}, now(), 'probe')");
-            await tx.CommitAsync();
+            var source = writing.ServiceProvider.GetRequiredService<NpgsqlDataSource>();
+            await using var tx = await source.BeginAsync(CancellationToken.None);
+            await tx.ExecuteAsync($"insert into access.user_permissions (user_id, permission, granted_by, granted_at, reason) values ({plainId}, 'donors:read:all', {superId}, now(), 'probe')", CancellationToken.None);
+            await tx.CommitAsync(CancellationToken.None);
         }
 
         // A new scope: the first scope's Permissions keeps the answer it resolved, so a second question there would not read again.

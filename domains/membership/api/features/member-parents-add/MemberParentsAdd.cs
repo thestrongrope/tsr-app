@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Identity.Api;
 using Tsr.Membership.Api.Domain;
@@ -31,7 +31,7 @@ internal static class MemberParentsAddSlice
     private static async Task<IResult> HandleAsync(
         string child_token,
         HttpContext context,
-        MembershipContext db,
+        NpgsqlDataSource source,
         Permissions permissions,
         UserDirectory users,
         TimeProvider clock,
@@ -44,7 +44,7 @@ internal static class MemberParentsAddSlice
         }
 
         var childToken = PhpValue.IntOfText(child_token);
-        if (!await GuardianChecks.StaffMayAddForAsync(db, permissions, caller, childToken, direct: true, ct))
+        if (!await GuardianChecks.StaffMayAddForAsync(source, permissions, caller, childToken, direct: true, ct))
         {
             return await permissions.CanAsync(caller, "parents:add-direct", AccessTarget.None, ct)
                 ? Problem.Detail(StatusCodes.Status404NotFound, GuardianChecks.StudentNotFound)
@@ -65,19 +65,19 @@ internal static class MemberParentsAddSlice
 
         var parentToken = PhpValue.ToInteger(parsed.Value!.Get("parent_token"));
         var relationship = PhpValue.Text(parsed.Value.Get("relationship"));
-        return await AddAsync(db, permissions, users, clock, caller, parentToken, childToken, relationship, ct);
+        return await AddAsync(source, permissions, users, clock, caller, parentToken, childToken, relationship, ct);
     }
 
     private static async Task<IResult> AddAsync(
-        MembershipContext db, Permissions permissions, UserDirectory users, TimeProvider clock, Caller caller, long parentToken, long childToken, string typed, CancellationToken ct)
+        NpgsqlDataSource source, Permissions permissions, UserDirectory users, TimeProvider clock, Caller caller, long parentToken, long childToken, string typed, CancellationToken ct)
     {
-        var parent = await GuardianChecks.ValidateMemberAsync(db, users, parentToken, ct);
+        var parent = await GuardianChecks.ValidateMemberAsync(source, users, parentToken, ct);
         if (parent.Status != MemberCheck.Ok)
         {
             return Unknown(parent.Status);
         }
 
-        var child = await GuardianChecks.ValidateMemberAsync(db, users, childToken, ct);
+        var child = await GuardianChecks.ValidateMemberAsync(source, users, childToken, ct);
         if (child.Status != MemberCheck.Ok)
         {
             return Unknown(child.Status);
@@ -92,33 +92,39 @@ internal static class MemberParentsAddSlice
         }
 
         var relationship = ParentLinkRules.DirectRelationship(typed)!;
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        await GuardianLock.TakeAsync(db, child.UserId, ct);
-        if (await db.UserGuardians.AnyAsync(g => g.ParentToken == parentValue && g.ChildToken == childValue && g.Status == "active", ct))
+        await using var tx = await source.BeginAsync(ct);
+        await GuardianLock.TakeAsync(tx, child.UserId, ct);
+        var active = await tx.ListAsync(
+            $"select 1 as \"Value\" from membership.user_guardians where parent_token = {parentValue} and child_token = {childValue} and status = 'active' limit 1",
+            row => row.Int("Value"),
+            ct);
+        if (active.Count > 0)
         {
             return Problem.Detail(StatusCodes.Status409Conflict, GuardianRules.AlreadyLinked);
         }
 
-        if (await GuardianChecks.RemovedByChildBlocksAsync(db, users, permissions, parentValue, childValue, child.UserId, caller, ct))
+        if (await GuardianChecks.RemovedByChildBlocksAsync(tx, users, permissions, parentValue, childValue, child.UserId, caller, ct))
         {
             return Problem.Detail(StatusCodes.Status403Forbidden, "Child previously revoked this parent; admin approval required");
         }
 
         var now = clock.GetUtcNow();
-        var link = new UserGuardian
-        {
-            ParentToken = parentValue, ChildToken = childValue, Relationship = relationship, Status = "active", Source = "token_entry",
-            CreatedBy = caller.UserId, CreatedAt = now, ActivatedAt = now,
-        };
-        db.UserGuardians.Add(link);
-        await db.SaveChangesAsync(ct);
-        await Outbox.WriteAsync(db, "membership.parent_link_added", new ParentLinkAdded(link.Id, parentValue, childValue, relationship, caller.UserId), clock, ct);
-        await transaction.CommitAsync(ct);
+        var linkId = await tx.ScalarAsync<int>(
+            $"""
+            insert into membership.user_guardians (parent_token, child_token, relationship, status, source, created_by, created_at, activated_at)
+            values ({parentValue}, {childValue}, {relationship}, 'active', 'token_entry', {caller.UserId}, {now}, {now})
+            returning id as "Value"
+            """,
+            ct);
+        var id = linkId!.Value;
+        await Outbox.WriteAsync(tx, "membership.parent_link_added", new ParentLinkAdded(id, parentValue, childValue, relationship, caller.UserId), MembershipJson.Default.ParentLinkAdded, clock, ct);
+        await tx.CommitAsync(ct);
         return Results.Json(
             new Dictionary<string, object?>
             {
-                ["id"] = link.Id, ["parent_token"] = parentValue, ["child_token"] = childValue, ["relationship"] = relationship, ["status"] = "active",
+                ["id"] = id, ["parent_token"] = parentValue, ["child_token"] = childValue, ["relationship"] = relationship, ["status"] = "active",
             },
+            MembershipJson.Answers.Answer,
             statusCode: StatusCodes.Status201Created);
     }
 

@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Npgsql;
 using Microsoft.Extensions.Options;
 using Tsr.Access.Api;
 using Tsr.Assessment.Api.Domain;
@@ -22,7 +23,6 @@ namespace Tsr.Assessment.Api.Features.AdminQuizSettingsRefresh;
 
 internal static partial class AdminQuizSettingsRefreshSlice
 {
-    private const string SavePoint = "quiz_announce";
     private const string Unreadable = "The settings sheet could not be read. The settings are unchanged.";
 
     public static IEndpointRouteBuilder MapAdminQuizSettingsRefresh(this IEndpointRouteBuilder routes)
@@ -32,7 +32,7 @@ internal static partial class AdminQuizSettingsRefreshSlice
     }
 
     private static async Task<IResult> HandleAsync(
-        HttpContext context, AssessmentContext db, Permissions permissions, ISheets sheets, IOptions<GoogleSheetsSettings> options, TimeProvider clock, ILoggerFactory loggers, CancellationToken ct)
+        HttpContext context, NpgsqlDataSource source, Permissions permissions, ISheets sheets, IOptions<GoogleSheetsSettings> options, TimeProvider clock, ILoggerFactory loggers, CancellationToken ct)
     {
         var (_, refusal) = await QuizAdmin.GuardAsync(context, permissions, ct);
         if (refusal is not null)
@@ -41,36 +41,38 @@ internal static partial class AdminQuizSettingsRefreshSlice
         }
 
         var log = loggers.CreateLogger("Tsr.Assessment.Api.AdminQuizSettingsRefresh");
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        if (!await AssessmentLocks.TryTakeAsync(db, AssessmentLocks.QuizAdmin, ct))
+        await using var tx = await source.BeginAsync(ct);
+        if (!await AssessmentLocks.TryTakeAsync(tx, AssessmentLocks.QuizAdmin, ct))
         {
             return QuizAdmin.Busy();
         }
 
-        var old = await QuizStateStore.LoadAsync(db, QuizStateStore.Settings, ct) as JsonObject;
+        var old = await QuizStateStore.LoadAsync(tx, QuizStateStore.Settings, ct) as JsonObject;
         var fetched = await FetchAsync(sheets, options.Value.QuizSettingsSheetId, log, ct);
         if (fetched is null)
         {
             if (old is null)
             {
-                await QuizStateStore.SaveAsync(db, QuizStateStore.Settings, new JsonObject(), clock, ct);
+                await QuizStateStore.SaveAsync(tx, QuizStateStore.Settings, new JsonObject(), clock, ct);
             }
 
-            await transaction.CommitAsync(ct);
+            await tx.CommitAsync(ct);
             return Problem.Detail(StatusCodes.Status502BadGateway, Unreadable);
         }
 
-        await QuizStateStore.SaveAsync(db, QuizStateStore.Settings, fetched.Values, clock, ct);
-        await AnnounceAsync(db, transaction, old, fetched, log, ct);
-        await QuizAdmin.EventAsync(db, "settings_refresh", clock, ct);
-        await transaction.CommitAsync(ct);
-        return Results.Json(new JsonObject
-        {
-            ["outcome"] = "complete",
-            ["message"] = "The settings were refreshed.",
-            ["changed"] = true,
-            ["settings"] = QuizOverview.Settings(fetched),
-        });
+        await QuizStateStore.SaveAsync(tx, QuizStateStore.Settings, fetched.Values, clock, ct);
+        await AnnounceAsync(tx, old, fetched, log, ct);
+        await QuizAdmin.EventAsync(tx, "settings_refresh", clock, ct);
+        await tx.CommitAsync(ct);
+        return Results.Json(
+            new JsonObject
+            {
+                ["outcome"] = "complete",
+                ["message"] = "The settings were refreshed.",
+                ["changed"] = true,
+                ["settings"] = QuizOverview.Settings(fetched),
+            },
+            AssessmentJson.Answers.JsonObject);
     }
 
     private static async Task<QuizSettings?> FetchAsync(ISheets sheets, string? sheetId, ILogger log, CancellationToken ct)
@@ -96,7 +98,7 @@ internal static partial class AdminQuizSettingsRefreshSlice
 
     /// <summary>PHP announceSwitchOn, never failing the refresh: the push and inbox rows are written in a savepoint that a database error rolls back.</summary>
     private static async Task AnnounceAsync(
-        AssessmentContext db, Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction transaction, JsonObject? old, QuizSettings fresh, ILogger log, CancellationToken ct)
+        DbTx tx, JsonObject? old, QuizSettings fresh, ILogger log, CancellationToken ct)
     {
         var announcement = AnnouncementFor(old, fresh);
         if (announcement is null)
@@ -104,16 +106,16 @@ internal static partial class AdminQuizSettingsRefreshSlice
             return;
         }
 
-        await transaction.CreateSavepointAsync(SavePoint, ct);
+        await tx.ExecuteAsync($"savepoint quiz_announce", ct);
         try
         {
-            await NotificationsCommands.AnnounceAsync(EfTransaction.Join(db), announcement, ct);
-            await transaction.ReleaseSavepointAsync(SavePoint, ct);
+            await NotificationsCommands.AnnounceAsync(tx, announcement, ct);
+            await tx.ExecuteAsync($"release savepoint quiz_announce", ct);
         }
-        catch (Exception e) when (e is DbException or Microsoft.EntityFrameworkCore.DbUpdateException)
+        catch (DbException e)
         {
             LogAnnounceFailed(log, e.GetType().Name);
-            await transaction.RollbackToSavepointAsync(SavePoint, ct);
+            await tx.ExecuteAsync($"rollback to savepoint quiz_announce", ct);
         }
     }
 

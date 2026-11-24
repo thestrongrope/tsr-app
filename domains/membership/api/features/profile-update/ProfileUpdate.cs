@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Microsoft.Extensions.Logging;
 using Tsr.Access.Api;
 using Tsr.Identity.Api;
@@ -31,7 +31,7 @@ internal static class ProfileUpdateEndpoint
 }
 
 internal sealed partial class ProfileUpdateHandler(
-    MembershipContext db,
+    NpgsqlDataSource source,
     Permissions permissions,
     UserDirectory users,
     PlaceCheck place,
@@ -66,7 +66,7 @@ internal sealed partial class ProfileUpdateHandler(
 
     private async Task<IResult> UpdateAsync(Caller caller, ProfileChanges changes, CancellationToken ct)
     {
-        var stored = await db.MemberProfiles.AsNoTracking().Where(p => p.UserId == caller.UserId).FirstOrDefaultAsync(ct);
+        var stored = (await source.ListAsync(ProfileRows.ByUserId(caller.UserId), ProfileRows.Read, ct)).FirstOrDefault();
 
         // PHP answers a body with no updatable key before it validates anything.
         if (changes.IsEmpty)
@@ -114,10 +114,19 @@ internal sealed partial class ProfileUpdateHandler(
     // The member's row is created on the first write; two first writes at once cannot collide.
     private async Task<MemberProfile> SaveAsync(Caller caller, ProfileChanges changes, string? state, string? city, CancellationToken ct)
     {
-        await db.Database.ExecuteSqlAsync(
+        await source.ExecuteAsync(
             $"insert into membership.member_profiles (user_id) values ({caller.UserId}) on conflict (user_id) do nothing",
             ct);
-        var profile = await db.MemberProfiles.SingleAsync(p => p.UserId == caller.UserId, ct);
+
+        // The row is locked while it is read and written, so two changes of one member apply one after the other.
+        await using var tx = await source.BeginAsync(ct);
+        var profile = (await tx.ListAsync(
+            $"""
+            select user_id, name, first_name, last_name, picture, gender, age_range, mobile, country, state, city, zip, language, sendupdates, unsubscribe
+            from membership.member_profiles where user_id = {caller.UserId} for update
+            """,
+            ProfileRows.Read,
+            ct)).Single();
         foreach (var field in ProfileFields.Updatable.Where(changes.Has))
         {
             Apply(profile, field, changes.Value(field));
@@ -126,7 +135,15 @@ internal sealed partial class ProfileUpdateHandler(
         // The postal code's own state and city win over what was sent.
         profile.State = state ?? profile.State;
         profile.City = city ?? profile.City;
-        await db.SaveChangesAsync(ct);
+        await tx.ExecuteAsync(
+            $"""
+            update membership.member_profiles
+            set name = {profile.Name}, gender = {profile.Gender}, age_range = {profile.AgeRange}, mobile = {profile.Mobile}, country = {profile.Country},
+                state = {profile.State}, city = {profile.City}, language = {profile.Language}, zip = {profile.Zip}
+            where user_id = {caller.UserId}
+            """,
+            ct);
+        await tx.CommitAsync(ct);
         return profile;
     }
 
@@ -149,7 +166,7 @@ internal sealed partial class ProfileUpdateHandler(
     private static void Apply(MemberProfile profile, string field, System.Text.Json.JsonElement value) => Setters[field](profile, value);
 
     private async Task<IResult> AnswerAsync(Caller caller, MemberProfile? profile, CancellationToken ct) =>
-        Results.Json(await ProfileAnswer.BuildAsync(caller, profile, users, permissions, ct));
+        Results.Json(await ProfileAnswer.BuildAsync(caller, profile, users, permissions, ct), MembershipJson.Answers.JsonObject);
 
     private static IResult Unprocessable(string detail) => Problem.Detail(StatusCodes.Status422UnprocessableEntity, detail);
 

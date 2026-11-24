@@ -3,7 +3,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
 using Tsr.Notifications.Api;
@@ -31,7 +31,9 @@ internal static class ReportPendingNudgeSlice
 
     internal sealed record Answer(int TeacherToken, string Teacher, string Title, string Body, bool AlreadyReminded, string? LastReminded, bool Sent, int DeviceCount);
 
-    private sealed record TeacherNudged(int TeacherToken, int SenderToken, IReadOnlyList<int> ClassIds);
+    internal sealed record TeacherNudged(int TeacherToken, int SenderToken, IReadOnlyList<int> ClassIds);
+
+    internal sealed record NudgeCriteria(string Type, int Teacher, IReadOnlyList<int> Classes);
 
     public static IEndpointRouteBuilder MapReportPendingNudge(this IEndpointRouteBuilder routes)
     {
@@ -39,7 +41,7 @@ internal static class ReportPendingNudgeSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(HttpContext context, ClassesContext db, Permissions permissions, MemberRateLimit limit, TimeProvider clock, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(HttpContext context, NpgsqlDataSource db, Permissions permissions, MemberRateLimit limit, TimeProvider clock, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -86,7 +88,7 @@ internal static class ReportPendingNudgeSlice
         var answer = new Answer(teacher.TeacherToken, teacher.Teacher, title, text, last is not null, Stamp(last), false, 0);
         if (!send)
         {
-            return Results.Json(answer);
+            return Results.Json(answer, ClassesJson.Answers.ReportPendingNudge);
         }
 
         if (last is not null)
@@ -107,7 +109,7 @@ internal static class ReportPendingNudgeSlice
             return Problem.Detail(StatusCodes.Status429TooManyRequests, AlreadyReminded);
         }
 
-        return Results.Json(answer with { Sent = true, DeviceCount = devices.Value, LastReminded = Stamp(now) });
+        return Results.Json(answer with { Sent = true, DeviceCount = devices.Value, LastReminded = Stamp(now) }, ClassesJson.Answers.ReportPendingNudge);
     }
 
     private const string AlreadyReminded = "This teacher was already reminded in the last 24 hours";
@@ -122,25 +124,24 @@ internal static class ReportPendingNudgeSlice
         when?.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
 
     // The preview read runs in a short transaction of its own, closed before the send path opens its own.
-    private static async Task<DateTimeOffset?> LastNudgeInOwnTransactionAsync(ClassesContext db, int teacher, CancellationToken ct)
+    private static async Task<DateTimeOffset?> LastNudgeInOwnTransactionAsync(NpgsqlDataSource db, int teacher, CancellationToken ct)
     {
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        return await NotificationsCommands.LastNudgeAsync(EfTransaction.Join(db), teacher, WindowHours, ct);
+        await using var tx = await db.BeginAsync(ct);
+        return await NotificationsCommands.LastNudgeAsync(tx, teacher, WindowHours, ct);
     }
 
     // Null when the teacher was reminded meanwhile; else the devices queued for.
-    private static async Task<int?> RecordAsync(ClassesContext db, TimeProvider clock, int sender, int teacher, Answer message, List<int> classIds, DateTimeOffset now, CancellationToken ct)
+    private static async Task<int?> RecordAsync(NpgsqlDataSource db, TimeProvider clock, int sender, int teacher, Answer message, List<int> classIds, DateTimeOffset now, CancellationToken ct)
     {
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        await db.Database.ExecuteSqlAsync($"set local lock_timeout = '5s'", ct);
-        await db.Database.ExecuteSqlAsync($"select pg_advisory_xact_lock({LockClass}, {teacher})", ct);
-        var tx = EfTransaction.Join(db);
+        await using var tx = await db.BeginAsync(ct);
+        await tx.ExecuteAsync($"set local lock_timeout = '5s'", ct);
+        await tx.ExecuteAsync($"select pg_advisory_xact_lock({LockClass}, {teacher})", ct);
         if (await NotificationsCommands.LastNudgeAsync(tx, teacher, WindowHours, ct) is not null)
         {
             return null;
         }
 
-        var criteria = JsonSerializer.Serialize(new { type = "CC_NUDGE", teacher, classes = classIds });
+        var criteria = JsonSerializer.Serialize(new NudgeCriteria("CC_NUDGE", teacher, classIds), ClassesJson.Default.NudgeCriteria);
         var data = new Dictionary<string, string>
         {
             ["type"] = "cc_reminder",
@@ -154,8 +155,8 @@ internal static class ReportPendingNudgeSlice
             message.Title, message.Body, null, "cc_reminder", key, [teacher],
             Sender: sender, Criteria: criteria, Data: data, ReuseExisting: false, SkipDemoDevices: true);
         var devices = await NotificationsCommands.AnnounceAsync(tx, announcement, ct);
-        await Outbox.WriteAsync(db, "classes.teacher_nudged", new TeacherNudged(teacher, sender, classIds), clock, ct);
-        await transaction.CommitAsync(ct);
+        await Outbox.WriteAsync(tx, "classes.teacher_nudged", new TeacherNudged(teacher, sender, classIds), ClassesJson.Default.TeacherNudged, clock, ct);
+        await tx.CommitAsync(ct);
         return devices;
     }
 

@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
+using Tsr.Shared.Api;
 
 namespace Tsr.Assessment.Api.Domain;
 
@@ -17,17 +18,18 @@ internal static partial class ClassStudents
 
     public static bool IsOffline(string email) => OfflineEmail().IsMatch(email);
 
-    public static async Task<IReadOnlyList<Student>> ListAsync(AssessmentContext db, long classId, CancellationToken ct) =>
-        await db.Database
-            .SqlQuery<Student>($"""
-                select e.token_no as "Token", coalesce(max(m.name::text), '') as "Name", coalesce(max(u.email::text), '') as "Email"
-                from classes.v_enrolments e
-                join identity.v_users u on u.token = e.token_no
-                left join membership.v_members m on m.token = e.token_no
-                where e.class_id = {classId} and e.status = 'A' and e.removed_at is null
-                group by e.token_no
-                order by coalesce(max(m.name::text), ''), e.token_no
-                limit 5000
-                """)
-            .ToListAsync(ct);
+    public static async Task<IReadOnlyList<Student>> ListAsync(NpgsqlDataSource source, long classId, CancellationToken ct) =>
+        await source.ListAsync(
+            $"""
+            select e.token_no as "Token", coalesce(max(m.name::text), '') as "Name", coalesce(max(u.email::text), '') as "Email"
+            from classes.v_enrolments e
+            join identity.v_users u on u.token = e.token_no
+            left join membership.v_members m on m.token = e.token_no
+            where e.class_id = {classId} and e.status = 'A' and e.removed_at is null
+            group by e.token_no
+            order by coalesce(max(m.name::text), ''), e.token_no
+            limit 5000
+            """,
+            row => new Student(row.Int("Token"), row.Text("Name"), row.Text("Email")),
+            ct);
 }

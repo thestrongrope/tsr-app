@@ -2,7 +2,7 @@ using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Microsoft.Extensions.Configuration;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
@@ -31,7 +31,7 @@ internal static class MeGuideSlice
     private static async Task<IResult> HandleAsync(
         string slug,
         HttpContext context,
-        ClassesContext db,
+        NpgsqlDataSource source,
         Permissions permissions,
         IConfiguration configuration,
         CancellationToken ct)
@@ -51,19 +51,18 @@ internal static class MeGuideSlice
         var levelId = GuideSlugs.LevelFor(slug);
         var guides = levelId is null
             ? []
-            : await db.Database
-                .SqlQuery<string>($"""select coalesce(guide, '') as "Value" from classes.guides where level_id = {levelId} and language_id = 1 order by id limit 1""")
-                .ToListAsync(ct);
+            : await source.ListAsync(
+                $"""select coalesce(guide, '') as "Value" from classes.guides where level_id = {levelId} and language_id = 1 order by id limit 1""",
+                row => row.Text("Value"),
+                ct);
         if (guides.Count == 0 || PhpText.Trim(guides[0]).Length == 0)
         {
             return Problem.Detail(StatusCodes.Status404NotFound, "Guide not found");
         }
 
-        var names = await db.Database
-            .SqlQuery<string>($"""select name as "Value" from classes.class_levels where id = {levelId} limit 1""")
-            .ToListAsync(ct);
+        var names = await source.ListAsync($"""select name as "Value" from classes.class_levels where id = {levelId} limit 1""", row => row.Text("Value"), ct);
         var publicWebBase = (configuration["TSR_PUBLIC_WEB_BASE"] ?? string.Empty).TrimEnd('/');
         var shareUrl = publicWebBase.Length == 0 ? null : publicWebBase + "/guide.php?guide=" + slug;
-        return Results.Json(new Body(guides[0], shareUrl, names.Count == 0 ? string.Empty : names[0]));
+        return Results.Json(new Body(guides[0], shareUrl, names.Count == 0 ? string.Empty : names[0]), ClassesJson.Answers.MeGuideBody);
     }
 }

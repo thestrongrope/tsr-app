@@ -2,7 +2,7 @@ using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Identity.Api;
 using Tsr.Membership.Api.Domain;
@@ -21,7 +21,7 @@ internal static class LinkAccountEndpoint
     {
         routes.MapPost(
             "/auth/link",
-            async (HttpContext context, MembershipContext db, UserDirectory users, Permissions permissions) =>
+            async (HttpContext context, NpgsqlDataSource source, UserDirectory users, Permissions permissions) =>
             {
                 var caller = context.GetCaller();
                 if (caller is null)
@@ -30,9 +30,9 @@ internal static class LinkAccountEndpoint
                 }
 
                 var ct = context.RequestAborted;
-                var profile = await db.MemberProfiles.AsNoTracking().Where(p => p.UserId == caller.UserId).FirstOrDefaultAsync(ct);
+                var profile = (await source.ListAsync(ProfileRows.ByUserId(caller.UserId), ProfileRows.Read, ct)).FirstOrDefault();
                 var me = await ProfileAnswer.BuildAsync(caller, profile, users, permissions, ct);
-                return Results.Json(new JsonObject { ["me"] = me });
+                return Results.Json(new JsonObject { ["me"] = me }, MembershipJson.Answers.JsonObject);
             })
             .RequireMember(createsMember: true);
         return routes;

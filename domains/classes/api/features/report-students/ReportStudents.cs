@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
 using Tsr.Shared.Api;
@@ -22,7 +23,7 @@ internal static class ReportStudentsSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(HttpContext context, ClassesContext db, Permissions permissions, TimeProvider clock, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(HttpContext context, NpgsqlDataSource db, Permissions permissions, TimeProvider clock, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -38,6 +39,6 @@ internal static class ReportStudentsSlice
         }
 
         var (levels, classes) = StudentRules.Pickers(report!.Students.Select(s => new StudentRules.Pick(s.Class, s.Level)), await StudentsReport.LevelNamesAsync(db, ct));
-        return Results.Json(new Answer(report.Gender, report.From, report.To, levels, classes, report.Students));
+        return Results.Json(new Answer(report.Gender, report.From, report.To, levels, classes, report.Students), ClassesJson.Answers.ReportStudents);
     }
 }

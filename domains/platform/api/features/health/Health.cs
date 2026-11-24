@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Tsr.Platform.Api.Domain;
 
 namespace Tsr.Platform.Api.Features.Health;
 
@@ -12,7 +13,7 @@ internal static class HealthEndpoint
 {
     public static IEndpointRouteBuilder MapHealth(this IEndpointRouteBuilder routes)
     {
-        routes.MapGet("/health", () => Results.Ok(new HealthResponse("ok")));
+        routes.MapGet("/health", () => Results.Json(new HealthResponse("ok"), PlatformJson.Answers.HealthResponse));
         return routes;
     }
 }

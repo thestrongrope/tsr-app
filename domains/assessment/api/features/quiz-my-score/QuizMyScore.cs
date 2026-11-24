@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Assessment.Api.Domain;
 using Tsr.Shared.Api;
@@ -25,7 +25,7 @@ internal static class QuizMyScoreSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string quiz_id, HttpContext context, AssessmentContext db, Permissions permissions, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(string quiz_id, HttpContext context, NpgsqlDataSource source, Permissions permissions, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -38,20 +38,20 @@ internal static class QuizMyScoreSlice
             return Refusals.NotPermitted();
         }
 
-        if (!await QuizAccess.HasNumericGenderAsync(db, caller, ct))
+        if (!await QuizAccess.HasNumericGenderAsync(source, caller, ct))
         {
             return Refusals.GenderNotSet();
         }
 
         var quizId = PhpValue.IntOfText(quiz_id);
-        if (await QuizAccess.VisibleAsync(db, quizId, caller.Token, ct) is null)
+        if (await QuizAccess.VisibleAsync(source, quizId, caller.Token, ct) is null)
         {
             return Refusals.QuizNotFound();
         }
 
-        var total = await QuizAccess.CountQuestionsAsync(db, quizId, ct);
-        var rows = await db.Database
-            .SqlQuery<Row>($"""
+        var total = await QuizAccess.CountQuestionsAsync(source, quizId, ct);
+        var rows = await source.ListAsync(
+            $"""
                 select r.spot_quiz_question_id as "QuestionId", q.question::text as "QuestionText", r.response::text as "SelectedText",
                        r.correct_response::text as "CorrectText", r.is_correct::int as "IsCorrect"
                 from assessment.spot_quiz_responses r
@@ -59,8 +59,9 @@ internal static class QuizMyScoreSlice
                 where r.spot_quiz_id = {quizId} and r.token = {caller.Token}
                 order by r.spot_quiz_question_id
                 limit {MaxAnswers}
-                """)
-            .ToListAsync(ct);
+                """,
+            row => new Row(row.Int("QuestionId"), row.TextOrNull("QuestionText"), row.TextOrNull("SelectedText"), row.TextOrNull("CorrectText"), row.IntOrNull("IsCorrect")),
+            ct);
         if (rows.Count == 0)
         {
             return Problem.Detail(StatusCodes.Status404NotFound, "No attempt found");
@@ -70,6 +71,6 @@ internal static class QuizMyScoreSlice
             .Select(r => new QuizResult.Detail(
                 r.QuestionId, QuizResult.TextOrNull(r.QuestionText), 0, QuizResult.TextOrNull(r.SelectedText), QuizResult.TextOrNull(r.CorrectText), r.IsCorrect ?? 0))
             .ToList();
-        return Results.Json(QuizResult.Of(total, details));
+        return Results.Json(QuizResult.Of(total, details), AssessmentJson.Answers.QuizResult);
     }
 }

@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace Tsr.Notifications.Api.Domain;
 
@@ -37,8 +37,8 @@ internal static class ScheduledRows
     public const int MaxListed = 500;
 
     /// <summary>The rows of a class, newest first: one by id when <paramref name="id"/> is above zero, else up to <see cref="MaxListed"/>.</summary>
-    public static async Task<List<ScheduledRow>> QueryAsync(NotificationsContext db, int classId, int id, CancellationToken ct) =>
-        await db.Database.SqlQuery<ScheduledRow>($"""
+    public static async Task<List<ScheduledRow>> QueryAsync(NpgsqlDataSource source, int classId, int id, CancellationToken ct) =>
+        await source.ListAsync($"""
             select s.id as "Id", s.title as "Title", s.body as "Body", s.action_link as "ActionLink", s.kind as "Kind", s.send_at as "SendAt", s.weekdays as "Weekdays",
                    s.send_time as "SendTime", s.tz as "Tz", s.class_schedule_id as "ClassScheduleId", s.offset_minutes as "OffsetMinutes", s.repeat_weekly as "RepeatWeekly",
                    s.status as "Status", s.created_by as "CreatedBy", s.created_at as "CreatedAt",
@@ -49,9 +49,33 @@ internal static class ScheduledRows
             where s.class_id = {classId} and ({id} = 0 or s.id = {id})
             order by s.id desc
             limit {MaxListed}
-            """).ToListAsync(ct);
+            """, ReadRow, ct);
 
-    public static async Task<Dictionary<int, ScheduledLastRun>> LastRunsAsync(NotificationsContext db, IEnumerable<int> ids, CancellationToken ct)
+    private static ScheduledRow ReadRow(DbRow row) => new(
+        row.Int("Id"),
+        row.Text("Title"),
+        row.Text("Body"),
+        row.TextOrNull("ActionLink"),
+        row.Text("Kind"),
+        row.LocalTimestampOrNull("SendAt"),
+        row.TextOrNull("Weekdays"),
+        row.TimeOrNull("SendTime"),
+        row.TextOrNull("Tz"),
+        row.IntOrNull("ClassScheduleId"),
+        row.IntOrNull("OffsetMinutes"),
+        row.Short("RepeatWeekly"),
+        row.Text("Status"),
+        row.Int("CreatedBy"),
+        row.Instant("CreatedAt"),
+        row.TextOrNull("CreatorName"),
+        row.IntOrNull("SlotId"),
+        row.IntOrNull("SlotDay"),
+        row.IntOrNull("SlotHour"),
+        row.IntOrNull("SlotMinute"),
+        row.TextOrNull("SlotTimezone"),
+        row.InstantOrNull("SlotDeletedAt"));
+
+    public static async Task<Dictionary<int, ScheduledLastRun>> LastRunsAsync(NpgsqlDataSource source, IEnumerable<int> ids, CancellationToken ct)
     {
         var wanted = ids.ToArray();
         if (wanted.Length == 0)
@@ -59,13 +83,21 @@ internal static class ScheduledRows
             return [];
         }
 
-        var rows = await db.Database.SqlQuery<ScheduledLastRun>($"""
+        var rows = await source.ListAsync($"""
             select distinct on (scheduled_id) scheduled_id as "ScheduledId", run_at as "RunAt", notification_id as "NotificationId", student_count as "StudentCount",
                    device_count as "DeviceCount", success_count as "SuccessCount", failure_count as "FailureCount", skipped_reason as "SkippedReason"
             from notifications.class_scheduled_notification_runs
             where scheduled_id = any({wanted})
             order by scheduled_id, id desc
-            """).ToListAsync(ct);
+            """, row => new ScheduledLastRun(
+                row.Int("ScheduledId"),
+                row.Instant("RunAt"),
+                row.IntOrNull("NotificationId"),
+                row.Int("StudentCount"),
+                row.Int("DeviceCount"),
+                row.Int("SuccessCount"),
+                row.Int("FailureCount"),
+                row.TextOrNull("SkippedReason")), ct);
         return rows.ToDictionary(r => r.ScheduledId);
     }
 
@@ -94,7 +126,7 @@ internal static class ScheduledRows
             ["class_schedule_id"] = row.ClassScheduleId is > 0 ? row.ClassScheduleId : null,
             ["offset_minutes"] = row.OffsetMinutes,
             ["repeat_weekly"] = row.RepeatWeekly != 0,
-            ["schedule"] = slot is null ? null : new Dictionary<string, object> { ["id"] = row.SlotId!.Value, ["day"] = slot.Day, ["hour"] = slot.Hour, ["minute"] = slot.Minute, ["timezone"] = slot.Timezone },
+            ["schedule"] = slot is null ? null : new Dictionary<string, object?> { ["id"] = row.SlotId!.Value, ["day"] = slot.Day, ["hour"] = slot.Hour, ["minute"] = slot.Minute, ["timezone"] = slot.Timezone },
             ["last_run"] = lastRun is null ? null : LastRun(lastRun),
         };
     }

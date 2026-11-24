@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Identity.Api;
+using Tsr.Shared.Api;
 
 namespace Tsr.Membership.Api.Domain;
 
@@ -10,7 +11,7 @@ namespace Tsr.Membership.Api.Domain;
 /// straight from the profile, so an empty name stays empty (MemberNames leaves those out). Reads other domains through
 /// identity's <see cref="UserDirectory"/> only.
 /// </summary>
-internal sealed class LinkLister(MembershipContext db, UserDirectory users)
+internal sealed class LinkLister(NpgsqlDataSource source, UserDirectory users)
 {
     /// <summary>A bound on one list; a member has a handful of links.</summary>
     public const int MaxRows = 200;
@@ -20,11 +21,12 @@ internal sealed class LinkLister(MembershipContext db, UserDirectory users)
         var tokens = rows.Select(otherToken).OfType<int>().Distinct().ToList();
         var holders = (await users.ByTokensAsync(tokens, ct)).ToLookup(u => u.Token, u => u.Id);
         var creators = (await users.ByIdsAsync(rows.Select(r => r.CreatedBy).Distinct().ToList(), ct)).Select(u => u.Id);
-        var userIds = holders.SelectMany(h => h).Concat(creators).Distinct().ToList();
-        var names = await db.MemberProfiles.AsNoTracking()
-            .Where(p => userIds.Contains(p.UserId))
-            .Select(p => new { p.UserId, p.Name })
-            .ToDictionaryAsync(p => p.UserId, p => p.Name, ct);
+        var userIds = holders.SelectMany(h => h).Concat(creators).Distinct().ToArray();
+        var named = await source.ListAsync(
+            $"select user_id, name from membership.member_profiles where user_id = any({userIds})",
+            row => (UserId: row.Int("user_id"), Name: row.TextOrNull("name")),
+            ct);
+        var names = named.ToDictionary(p => p.UserId, p => p.Name);
 
         var list = new JsonArray();
         foreach (var row in rows)
@@ -35,7 +37,7 @@ internal sealed class LinkLister(MembershipContext db, UserDirectory users)
             var memberNames = members.Count == 0 ? [null] : members.Select(id => names.GetValueOrDefault(id)).ToList();
             foreach (var memberName in memberNames)
             {
-                list.Add(LinkRowView.Build(ToRow(row), nameKey, memberName, creator));
+                list.Add((JsonNode)LinkRowView.Build(ToRow(row), nameKey, memberName, creator));
             }
         }
 
