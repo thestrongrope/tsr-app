@@ -24,10 +24,7 @@ public sealed partial class RunTimeEfUseTests
         new("identity", "domains/identity/api/IdentityModule.cs", "services.AddDomainContext<IdentityContext>(IdentityContext.SchemaName);",
             "domains/identity/api/IdentityContext.cs", "domains/identity/api/Tsr.Identity.Api.csproj",
             [
-                "domains/identity/api/IdentityModule.cs",
-                "domains/identity/api/UserDirectory.cs",
                 "domains/identity/api/domain/DeletionRequests.cs",
-                "domains/identity/api/domain/MemberDirectory.cs",
                 "domains/identity/api/features/admin-deletion-complete/AdminDeletionComplete.cs",
                 "domains/identity/api/features/admin-deletion-confirmation-sent/AdminDeletionConfirmationSent.cs",
                 "domains/identity/api/features/admin-deletion-hold/AdminDeletionHold.cs",

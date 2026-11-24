@@ -1,4 +1,5 @@
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
+using Tsr.Shared.Api;
 
 namespace Tsr.Identity.Api;
 
@@ -21,18 +22,16 @@ public sealed class UserDirectory
     /// <summary>The most users a batch of tokens returns (a bound on the answer; token 0 should not be asked for).</summary>
     public const int MaxTokenMatches = 2000;
 
-    private readonly IdentityContext _db;
+    private readonly NpgsqlDataSource _source;
 
-    internal UserDirectory(IdentityContext db) => _db = db;
+    internal UserDirectory(NpgsqlDataSource source) => _source = source;
 
     /// <summary>Every user holding <paramref name="token"/>, oldest first, at most <see cref="MaxMatches"/>.</summary>
     public async Task<IReadOnlyList<UserRef>> ByTokenAsync(int token, CancellationToken ct) =>
-        await _db.Users.AsNoTracking()
-            .Where(u => u.Token == token)
-            .OrderBy(u => u.Id)
-            .Take(MaxMatches)
-            .Select(u => new UserRef(u.Id, u.Token, u.Email))
-            .ToListAsync(ct);
+        await _source.ListAsync(
+            $"select u.id as \"Id\", u.token as \"Token\", u.email as \"Email\" from identity.users u where u.token = {token} order by u.id limit {MaxMatches}",
+            Read,
+            ct);
 
     /// <summary>Every user holding any of these tokens, in id order (a shared token returns each holder). At most <see cref="MaxBatch"/> tokens.</summary>
     public async Task<IReadOnlyList<UserRef>> ByTokensAsync(IReadOnlyCollection<int> tokens, CancellationToken ct)
@@ -44,13 +43,11 @@ public sealed class UserDirectory
             return [];
         }
 
-        var wanted = tokens.Distinct().ToList();
-        return await _db.Users.AsNoTracking()
-            .Where(u => wanted.Contains(u.Token))
-            .OrderBy(u => u.Id)
-            .Take(MaxTokenMatches)
-            .Select(u => new UserRef(u.Id, u.Token, u.Email))
-            .ToListAsync(ct);
+        var wanted = tokens.Distinct().ToArray();
+        return await _source.ListAsync(
+            $"select u.id as \"Id\", u.token as \"Token\", u.email as \"Email\" from identity.users u where u.token = any({wanted}) order by u.id limit {MaxTokenMatches}",
+            Read,
+            ct);
     }
 
     /// <summary>The users with these ids (an id that does not exist is left out), in id order. At most <see cref="MaxBatch"/> ids.</summary>
@@ -63,11 +60,12 @@ public sealed class UserDirectory
             return [];
         }
 
-        var wanted = ids.Distinct().ToList();
-        return await _db.Users.AsNoTracking()
-            .Where(u => wanted.Contains(u.Id))
-            .OrderBy(u => u.Id)
-            .Select(u => new UserRef(u.Id, u.Token, u.Email))
-            .ToListAsync(ct);
+        var wanted = ids.Distinct().ToArray();
+        return await _source.ListAsync(
+            $"select u.id as \"Id\", u.token as \"Token\", u.email as \"Email\" from identity.users u where u.id = any({wanted}) order by u.id",
+            Read,
+            ct);
     }
+
+    private static UserRef Read(DbRow row) => new(row.Int("Id"), row.Int("Token"), row.TextOrNull("Email"));
 }

@@ -4,6 +4,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
+using Npgsql;
 using Tsr.Identity.Api.Features.AdminDeletionComplete;
 using Tsr.Identity.Api.Features.AdminDeletionConfirmationSent;
 using Tsr.Identity.Api.Features.AdminDeletionHold;
@@ -44,6 +45,7 @@ public static class IdentityModule
     public static IServiceCollection AddIdentity(this IServiceCollection services, IHostEnvironment env, IConfiguration configuration)
     {
         var settings = FirebaseSettings.Create(configuration, env);
+        services.AddTsrDataSource();
         services.AddIdentityTables();
         services.AddFirebaseVerification(settings);
         services.AddScoped<MemberDirectory>();
@@ -51,7 +53,7 @@ public static class IdentityModule
         services.TryAddScoped<IMemberErasure, NoMemberErasure>();
         services.TryAddSingleton<MemberRateLimit>();
         AddFirebaseAccounts(services, settings, configuration);
-        services.AddScoped(provider => new UserDirectory(provider.GetRequiredService<IdentityContext>()));
+        services.AddScoped(provider => new UserDirectory(provider.GetRequiredService<NpgsqlDataSource>()));
         return services;
     }
 
