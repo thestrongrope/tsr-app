@@ -114,29 +114,37 @@ internal static class GuardianChecks
     }
 
     /// <summary>
-    /// A parent the child ended returns only through someone who manages parents for the child's gender: true when the child ended
-    /// this pair and <paramref name="actor"/> lacks that permission (PHP revokedByChildBlocks).
+    /// A parent the child ended returns only through someone who manages parents for the child's gender (PHP revokedByChildBlocks). Read
+    /// this before the guardian transaction opens: the permission read takes its own connection, so it cannot run inside it.
     /// </summary>
-    public static async Task<bool> RemovedByChildBlocksAsync(
-        DbTx tx, UserDirectory users, Permissions permissions, int parentToken, int childToken, int childUserId, Caller actor, CancellationToken ct)
+    public static Task<bool> MayManageParentsAsync(Permissions permissions, Caller actor, string? childGender, CancellationToken ct) =>
+        permissions.CanAsync(actor, ManageParents, AccessTarget.ForGender((int)PhpValue.IntOfText(childGender ?? string.Empty)), ct);
+
+    /// <summary>The gender text of a member's profile as stored, null when there is none.</summary>
+    public static async Task<string?> GenderOfAsync(NpgsqlDataSource source, int userId, CancellationToken ct) =>
+        (await source.ListAsync($"select gender from membership.member_profiles where user_id = {userId}", row => row.TextOrNull("gender"), ct)).FirstOrDefault();
+
+    /// <summary>
+    /// True when the child ended this pair (a revoked row whose revoked_by is the child's user) and <paramref name="actorMayManage"/> is false.
+    /// One read on the caller's transaction (identity's published view), under the guardian lock; no second connection.
+    /// </summary>
+    public static async Task<bool> RemovedByChildBlocksAsync(DbTx tx, int parentToken, int childToken, bool actorMayManage, CancellationToken ct)
     {
-        var revokers = await tx.ListAsync(
-            $"""
-            select distinct revoked_by as "Value" from membership.user_guardians
-            where parent_token = {parentToken} and child_token = {childToken} and status = 'revoked' and revoked_by is not null
-            limit {UserDirectory.MaxBatch}
-            """,
-            row => row.Int("Value"),
-            ct);
-        var endedByChild = (await users.ByIdsAsync(revokers, ct)).Any(u => u.Token == childToken);
-        if (!endedByChild)
+        if (actorMayManage)
         {
             return false;
         }
 
-        var gender = (await tx.ListAsync($"select gender from membership.member_profiles where user_id = {childUserId}", row => row.TextOrNull("gender"), ct)).FirstOrDefault();
-        var target = AccessTarget.ForGender((int)PhpValue.IntOfText(gender ?? string.Empty));
-        return !await permissions.CanAsync(actor, ManageParents, target, ct);
+        var ended = await tx.ListAsync(
+            $"""
+            select 1 as "Value" from membership.user_guardians g
+            join identity.v_users u on u.id = g.revoked_by
+            where g.parent_token = {parentToken} and g.child_token = {childToken} and g.status = 'revoked' and u.token = {childToken}
+            limit 1
+            """,
+            row => row.Int("Value"),
+            ct);
+        return ended.Count > 0;
     }
 
     /// <summary>PHP tokenOfUser(): the user's token, 0 when there is no such user.</summary>

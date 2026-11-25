@@ -96,13 +96,18 @@ internal sealed class ChildrenLinkAcceptHandler(NpgsqlDataSource source, Permiss
             return Invalid();
         }
 
-        return await ActivateAsync(caller, link.Code!, relationship, child[0].Id, ct);
+        // The reads that take their own connection come before the transaction: the invite's creator (a row never changes) and whether
+        // that creator may bring back a parent the child removed.
+        var creator = new Caller(link.CreatedBy, creatorToken);
+        var gender = await GuardianChecks.GenderOfAsync(source, child[0].Id, ct);
+        var creatorMayManage = await GuardianChecks.MayManageParentsAsync(permissions, creator, gender, ct);
+        return await ActivateAsync(caller, link.Code!, relationship, child[0].Id, creatorMayManage, ct);
     }
 
     // PHP's validateMemberToken for the caller: a token shared by several members is refused (the caller's own row is one of them).
     private async Task<bool> IsAmbiguousAsync(int token, CancellationToken ct) => (await users.ByTokenAsync(token, ct)).Count > 1;
 
-    private async Task<IResult> ActivateAsync(Caller caller, string code, string relationship, int childUserId, CancellationToken ct)
+    private async Task<IResult> ActivateAsync(Caller caller, string code, string relationship, int childUserId, bool creatorMayManage, CancellationToken ct)
     {
         await using var tx = await source.BeginAsync(ct);
         await GuardianLock.TakeAsync(tx, childUserId, ct);
@@ -114,8 +119,7 @@ internal sealed class ChildrenLinkAcceptHandler(NpgsqlDataSource source, Permiss
             return Problem.Detail(StatusCodes.Status410Gone, GuardianRules.InviteUsed);
         }
 
-        var creator = new Caller(link.CreatedBy, await GuardianChecks.TokenOfUserAsync(users, link.CreatedBy, ct));
-        if (await GuardianChecks.RemovedByChildBlocksAsync(tx, users, permissions, caller.Token, link.ChildToken, childUserId, creator, ct))
+        if (await GuardianChecks.RemovedByChildBlocksAsync(tx, caller.Token, link.ChildToken, creatorMayManage, ct))
         {
             return Problem.Detail(StatusCodes.Status403Forbidden, GuardianRules.RemovedByChild);
         }

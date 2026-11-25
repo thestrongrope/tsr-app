@@ -92,6 +92,7 @@ internal static class MemberParentsAddSlice
         }
 
         var relationship = ParentLinkRules.DirectRelationship(typed)!;
+        var mayManage = await GuardianChecks.MayManageParentsAsync(permissions, caller, child.Gender, ct);
         await using var tx = await source.BeginAsync(ct);
         await GuardianLock.TakeAsync(tx, child.UserId, ct);
         var active = await tx.ListAsync(
@@ -103,7 +104,7 @@ internal static class MemberParentsAddSlice
             return Problem.Detail(StatusCodes.Status409Conflict, GuardianRules.AlreadyLinked);
         }
 
-        if (await GuardianChecks.RemovedByChildBlocksAsync(tx, users, permissions, parentValue, childValue, child.UserId, caller, ct))
+        if (await GuardianChecks.RemovedByChildBlocksAsync(tx, parentValue, childValue, mayManage, ct))
         {
             return Problem.Detail(StatusCodes.Status403Forbidden, "Child previously revoked this parent; admin approval required");
         }
