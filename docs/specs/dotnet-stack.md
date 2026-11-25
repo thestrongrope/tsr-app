@@ -38,7 +38,7 @@ otherwise; our own small code where a library adds risk. Avoid libraries that we
 | E2E | Patrol (Flutter app), Playwright (static site) | LeanCode / Microsoft | |
 | Load | k6 | Grafana Labs | |
 | Quality gates | Nullable, `TreatWarningsAsErrors`, analyzers at `latest-recommended`, central package versions, module-boundary tests | Microsoft / ours | |
-| Images | `runtime-deps` (Debian) for the native image, the ASP.NET runtime image for the JIT migrate job | Microsoft | |
+| Images | `runtime-deps` chiseled (`11.0-resolute-chiseled-extra`: no shell, with time zone data) for the native image, the ASP.NET runtime image for the JIT migrate job | Microsoft | |
 
 ## AOT per host, persistence per domain (Asif, 2026-11-09)
 - NativeAOT is decided **per host process**, not per module: every module in one host shares one binary.

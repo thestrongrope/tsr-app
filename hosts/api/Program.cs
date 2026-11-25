@@ -108,6 +108,7 @@ app.MapAssessment();
 app.MapNotifications();
 app.MapSearch();
 
+await DatabaseWarmUp.RunAsync(app.Services, CancellationToken.None);
 app.Run();
 
 /// <summary>Entry point, public so tests can host the API in-process.</summary>

@@ -8,6 +8,8 @@
     <IsAotCompatible>true</IsAotCompatible>
     <!-- As the native spikes of issues 99 to 102 ran. -->
     <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- Workstation GC: measured on the native image 15 s after a start, 64 MiB against 81 MiB with the web default (server GC). Epic 95 asks for 80 MiB or less. -->
+    <ServerGarbageCollection>false</ServerGarbageCollection>
     <!-- On in both builds: the JIT build (PublishAot=false) would otherwise switch it off and fail its analyzer on Map(string, Delegate). -->
     <EnableRequestDelegateGenerator>true</EnableRequestDelegateGenerator>
   </PropertyGroup>
