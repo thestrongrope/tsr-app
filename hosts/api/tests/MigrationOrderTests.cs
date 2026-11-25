@@ -171,6 +171,37 @@ public sealed class MigrationOrderTests
         Assert.That(optionTypes, Is.Not.Empty, $"the migrate job applies {name}'s migrations through its context");
     }
 
+    /// <summary>
+    /// Issue 108: the native build leaves Entity Framework out (the switch is off there), so <c>--migrate</c> refuses at once and names the image that migrates,
+    /// before any other setting is read. Here the switch is turned off for the one call and restored after.
+    /// </summary>
+    [Test]
+    public async Task Without_entity_framework_the_migrate_mode_refuses_and_names_the_migrate_image()
+    {
+        var entry = typeof(Program).Assembly.EntryPoint ?? throw new InvalidOperationException("The API assembly has no entry point.");
+        string[] args = ["--migrate"];
+        AppContext.SetSwitch(HostServices.MigrationsSwitch, false);
+        try
+        {
+            var error = await Assert.ThrowsAsync<System.Reflection.TargetInvocationException>(async () =>
+            {
+                var result = await Task.Run(() => entry.Invoke(null, [args]));
+                if (result is Task task)
+                {
+                    await task;
+                }
+            });
+
+            Assert.That(error!.InnerException, Is.InstanceOf<InvalidOperationException>());
+            Assert.That(error.InnerException!.Message, Does.Contain("--migrate").And.Contain("target migrate"));
+            Assert.That(() => Register(RunMode.Migrate), Throws.InvalidOperationException.With.Message.Contain("target migrate"));
+        }
+        finally
+        {
+            AppContext.SetSwitch(HostServices.MigrationsSwitch, true);
+        }
+    }
+
     /// <summary>The registrations are read from the container description by name, because the record is internal to shared/api.</summary>
     private static List<string> MigrationSchemas(RunMode mode) =>
         Register(mode)

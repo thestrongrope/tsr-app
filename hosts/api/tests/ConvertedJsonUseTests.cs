@@ -79,6 +79,20 @@ public sealed partial class ConvertedJsonUseTests
         Assert.That(stale, Is.Empty, "a file that no longer writes by reflection (or is gone) comes off the ratchet list, so the list can only shrink");
     }
 
+    /// <summary>
+    /// Issue 108: the host publishes native too, and has no JSON context of its own, so any serialising statement in it is a reflection write.
+    /// Found by the identity spike's control: <c>Results.Ok(new { status = "ok" })</c>, the worker mode's health answer, is a 500 natively.
+    /// </summary>
+    [Test]
+    public void The_host_writes_no_json_by_reflection()
+    {
+        var root = RouteCatalog.RepoRoot();
+        var found = SqlBoundaryTests.Sources(Path.Combine(root, "hosts", "api"))
+            .SelectMany(path => Hits(File.ReadAllText(path), "no context in the host").Select(statement => $"{Path.GetRelativePath(root, path)}: {statement}"));
+
+        Assert.That(found, Is.Empty, "the host writes fixed JSON text, or calls a domain that passes its own type info");
+    }
+
     [Test]
     public void The_scan_reads_each_converted_domain()
     {
