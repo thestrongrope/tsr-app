@@ -24,7 +24,8 @@ FROM src AS build-native
 RUN apt-get update && apt-get install -y --no-install-recommends clang zlib1g-dev && rm -rf /var/lib/apt/lists/*
 RUN dotnet publish hosts/api/Tsr.Host.Api.csproj -c Release -o /out -p:TrimmerSingleWarn=false
 
-FROM mcr.microsoft.com/dotnet/runtime-deps:11.0 AS native
+# Chiseled: no shell and no package manager. The -extra variant carries the time zone data the class schedules need.
+FROM mcr.microsoft.com/dotnet/runtime-deps:11.0-resolute-chiseled-extra AS native
 WORKDIR /app
 COPY --from=build-native /out/Tsr.Host.Api .
 # The published content the Library reads (TSR_CONTENT_DIR in docker-compose.yml). The publication files (content/downloads/) are not copied: the API does not read them, the site image carries them. Copied files keep the repository's modes (644 and 755), so the user "app" can read them.

@@ -11,7 +11,7 @@ and runs the file. It holds no secret and publishes no port; `hosts/api/tests/Pr
 | `db-role` | creates the API's limited role `tsr_app` and sets its password | once per start |
 | `migrate` | the API's JIT build (`hosts/api/Dockerfile` target `migrate`; Entity Framework cannot be native) with `--migrate`: applies the migrations not applied yet | once per start |
 | `content-load` | the native API image with `--load-content`: copies the published content baked into the image (`/var/tsr/content`) into the database, then stops; exit 1 when it could not (the last set is kept) | once per start, after `migrate`; retried up to five times |
-| `api` | the API, the native image (`hosts/api/Dockerfile` target `native`: one binary, no .NET runtime); port 8080 | always |
+| `api` | the API, the native image (`hosts/api/Dockerfile` target `native`: one binary on a chiseled base: no .NET runtime, no shell and no package manager, so `docker exec ... sh` does not work; it opens one database connection before it listens); port 8080 | always |
 | `workers` | the native API image with `--workers`: runs the workers named in `TSR_WORKERS` | always |
 | `gotenberg` | PDF rendering for report downloads | always |
 | `elasticsearch` | the search index; data in the volume `es-data` | always |
