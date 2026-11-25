@@ -10,7 +10,7 @@ info:
 
     Validation note: a malformed body is 422 `Invalid JSON body`, never 400. A body over 1 MiB is 413 (PHP reads any size).
 servers:
-  - url: http://localhost:8088
+  - url: https://gateway.tsr-app-dev.orb.local
     description: Local dev stack (gateway)
 paths:
   /me:

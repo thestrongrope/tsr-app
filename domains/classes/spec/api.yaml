@@ -7,7 +7,7 @@ info:
     Forward compatible: a store-live app keeps calling these, so add fields and routes freely but
     never remove or change one without the release process. Every error body is {"detail": "..."}.
 servers:
-  - url: http://localhost:8088
+  - url: https://gateway.tsr-app-dev.orb.local
     description: Local dev stack (gateway)
 paths:
   /class-levels:

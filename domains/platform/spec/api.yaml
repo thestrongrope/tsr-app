@@ -10,7 +10,7 @@ info:
     Validation note: a missing or malformed field is 422, never 400, so the app sees one error
     shape. A gateway or generated server must not turn "required" into a 400.
 servers:
-  - url: http://localhost:8088
+  - url: https://gateway.tsr-app-dev.orb.local
     description: Local dev stack (gateway)
 paths:
   /health:

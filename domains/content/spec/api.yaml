@@ -8,7 +8,7 @@ info:
     release process. Every error body is {"detail": "..."}, except on the routes under /api/v1/: those keep
     the answer shape of the website they were moved from (V1Error), because supported app builds read it.
 servers:
-  - url: http://localhost:8088
+  - url: https://gateway.tsr-app-dev.orb.local
     description: Local dev stack (gateway)
 paths:
   /articles:
