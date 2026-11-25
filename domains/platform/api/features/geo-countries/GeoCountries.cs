@@ -2,8 +2,8 @@ using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Npgsql;
 using Tsr.Platform.Api.Domain;
 using Tsr.Shared.Api;
 
@@ -24,7 +24,7 @@ internal static class GeoCountriesEndpoint
     }
 }
 
-internal sealed class GeoCountriesHandler(PlatformContext db, GeoGate gate, ILogger<GeoCountriesHandler> logger)
+internal sealed class GeoCountriesHandler(NpgsqlDataSource source, GeoGate gate, ILogger<GeoCountriesHandler> logger)
 {
     /// <summary>The list has about 250 rows; this is a safety bound, not a page size.</summary>
     private const int MaxRows = 1000;
@@ -40,12 +40,22 @@ internal sealed class GeoCountriesHandler(PlatformContext db, GeoGate gate, ILog
         var countries = new JsonArray();
         foreach (var row in rows)
         {
-            countries.Add(new JsonObject { ["code"] = row.Code, ["name"] = row.Name, ["hasPostalCodes"] = row.HasPostalCodes });
+            countries.Add((JsonNode?)new JsonObject { ["code"] = row.Code, ["name"] = row.Name, ["hasPostalCodes"] = row.HasPostalCodes });
         }
 
-        return Results.Json(new JsonObject { ["countries"] = countries });
+        return PlatformJson.Text(new JsonObject { ["countries"] = countries });
     }
 
-    private Task<List<GeoCountry>> ReadAsync(CancellationToken ct) =>
-        db.GeoCountries.AsNoTracking().OrderBy(c => c.Name).ThenBy(c => c.Code).Take(MaxRows).ToListAsync(ct);
+    private Task<List<Country>> ReadAsync(CancellationToken ct) =>
+        source.ListAsync(
+            $"""
+            select c.code::text as "Code", c.name as "Name", c.has_postal_codes as "HasPostalCodes"
+            from platform.geo_countries c
+            order by c.name, c.code
+            limit {MaxRows}
+            """,
+            row => new Country(row.Text("Code"), row.Text("Name"), row.Bool("HasPostalCodes")),
+            ct);
+
+    private sealed record Country(string Code, string Name, bool HasPostalCodes);
 }

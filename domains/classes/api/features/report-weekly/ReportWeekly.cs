@@ -2,6 +2,7 @@ using System.Globalization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
 using Tsr.Shared.Api;
@@ -24,7 +25,7 @@ internal static class ReportWeeklySlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(HttpContext context, ClassesContext db, Permissions permissions, TimeProvider clock, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(HttpContext context, NpgsqlDataSource db, Permissions permissions, TimeProvider clock, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -39,7 +40,7 @@ internal static class ReportWeeklySlice
             return refusal;
         }
 
-        return Results.Json(new Answer(report!.Gender, report.From, report.To, report.Levels, WeekItems(report.Months), report.Classes));
+        return Results.Json(new Answer(report!.Gender, report.From, report.To, report.Levels, WeekItems(report.Months), report.Classes), ClassesJson.Answers.ReportWeekly);
     }
 
     private static List<WeekItem> WeekItems(IReadOnlyList<WeeklyGrid.Month> months) =>

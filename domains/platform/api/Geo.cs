@@ -1,6 +1,6 @@
 using Tsr.Shared.Api;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Npgsql;
 using Tsr.Platform.Api.Domain;
 
 namespace Tsr.Platform.Api;
@@ -18,18 +18,18 @@ public sealed record GeoPlace(string? City, string? State);
 /// </summary>
 public sealed class Geo
 {
-    private readonly PlatformContext _db;
+    private readonly NpgsqlDataSource _source;
     private readonly ILogger<Geo> _logger;
 
-    internal Geo(PlatformContext db, ILogger<Geo> logger)
+    internal Geo(NpgsqlDataSource source, ILogger<Geo> logger)
     {
-        _db = db;
+        _source = source;
         _logger = logger;
     }
 
     /// <summary>Is the country list loaded? Without it nothing about a country can be checked.</summary>
     public Task<bool> HasCountriesAsync(CancellationToken ct) =>
-        GeoTables.OrEmptyAsync(() => _db.GeoCountries.AnyAsync(ct), false, _logger);
+        GeoTables.OrEmptyAsync(async () => await _source.ScalarAsync<bool>($"select exists (select 1 from platform.geo_countries)", ct) ?? false, false, _logger);
 
     /// <summary>The country for a name (trimmed; case and accents do not matter), or null.</summary>
     public async Task<GeoCountryInfo?> CountryByNameAsync(string name, CancellationToken ct)
@@ -41,11 +41,7 @@ public sealed class Geo
             return null;
         }
 
-        var row = await GeoTables.OrEmptyAsync(
-            () => _db.GeoCountries.AsNoTracking().Where(c => c.Name == wanted).OrderBy(c => c.Code).FirstOrDefaultAsync(ct),
-            null,
-            _logger);
-        return row is null ? null : new GeoCountryInfo(row.Code, row.Name, row.HasPostalCodes, row.PostalCodeRegex);
+        return await GeoTables.OrEmptyAsync(() => FindCountryAsync(wanted, ct), null, _logger);
     }
 
     /// <summary>
@@ -73,16 +69,38 @@ public sealed class Geo
         return country is { HasPostalCodes: true } ? await ByPostalCodeAsync(country.Code, postalCode, ct) : null;
     }
 
+    private async Task<GeoCountryInfo?> FindCountryAsync(string wanted, CancellationToken ct)
+    {
+        // The name column has the geo collation (case and accents ignored), so a plain comparison finds "Zürich" for "zurich".
+        var rows = await _source.ListAsync(
+            $"""
+            select c.code::text as "Code", c.name as "Name", c.has_postal_codes as "HasPostalCodes", c.postal_code_regex::text as "PostalCodeRegex"
+            from platform.geo_countries c
+            where c.name = {wanted}
+            order by c.code
+            limit 1
+            """,
+            row => new GeoCountryInfo(row.Text("Code"), row.Text("Name"), row.Bool("HasPostalCodes"), row.TextOrNull("PostalCodeRegex")),
+            ct);
+        return rows.FirstOrDefault();
+    }
+
     private async Task<GeoPlace?> FindAsync(string country, IReadOnlyList<string> tries, CancellationToken ct)
     {
         foreach (var attempt in tries)
         {
-            var row = await _db.GeoPostalCodes.AsNoTracking()
-                .Where(p => p.CountryCode == country && p.PostalCode == attempt)
-                .FirstOrDefaultAsync(ct);
-            if (row is not null)
+            var rows = await _source.ListAsync(
+                $"""
+                select p.city::text as "City", p.state::text as "State"
+                from platform.geo_postal_codes p
+                where p.country_code = {country}::citext and p.postal_code = {attempt}
+                limit 1
+                """,
+                row => new GeoPlace(row.TextOrNull("City"), row.TextOrNull("State")),
+                ct);
+            if (rows.Count > 0)
             {
-                return new GeoPlace(row.City, row.State);
+                return rows[0];
             }
         }
 

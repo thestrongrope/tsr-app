@@ -3,7 +3,7 @@ using System.Text;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
 using Tsr.Shared.Api;
@@ -34,7 +34,7 @@ internal static class ReportClassSessionsAllSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(HttpContext context, ClassesContext db, Permissions permissions, TimeProvider clock, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(HttpContext context, NpgsqlDataSource db, Permissions permissions, TimeProvider clock, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -49,8 +49,8 @@ internal static class ReportClassSessionsAllSlice
         }
 
         var ids = await scope!.ClassIdsAsync(db, 0, ct);
-        var rows = await db.Database
-            .SqlQuery<Row>($"""
+        var rows = await db.ListAsync(
+            $"""
                 select c.code::text as "Code", c.name::text as "Name", cl.name::text as "Level", u.name::text as "Teacher", s.conducted_on as "ConductedOn", s.conducted as "Conducted",
                        s.non_conduction_reason::text as "Reason", s.quran_recitation_surah as "Surah", s.quran_recitation_verse as "Verse",
                        s.arabic_topic::text as "Arabic", s.aqaed_topic::text as "Aqaed", s.ahkam_topic::text as "Ahkam", s.akhlaq_topic::text as "Akhlaq", s.other_topic::text as "Other",
@@ -62,8 +62,11 @@ internal static class ReportClassSessionsAllSlice
                 where c.id = any({ids})
                 order by cl.sort_order nulls first, c.code, s.conducted_on, s.id
                 limit {MaxSessions}
-                """)
-            .ToListAsync(ct);
+                """,
+            r => new Row(
+                r.Text("Code"), r.TextOrNull("Name"), r.TextOrNull("Level"), r.TextOrNull("Teacher"), r.Date("ConductedOn"), r.Short("Conducted"), r.TextOrNull("Reason"), r.IntOrNull("Surah"), r.IntOrNull("Verse"),
+                r.TextOrNull("Arabic"), r.TextOrNull("Aqaed"), r.TextOrNull("Ahkam"), r.TextOrNull("Akhlaq"), r.TextOrNull("Other"), r.IntOrNull("Attendance"), r.IntOrNull("Duration")),
+            ct);
 
         var csv = ReportCsv.Build(Headers, [.. rows.Select(ToCells)]);
         if (csv is null)

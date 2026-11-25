@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Identity.Api;
 using Tsr.Membership.Api.Domain;
@@ -27,7 +27,7 @@ internal static class MemberParentCandidateSlice
         string child_token,
         string parent_token,
         HttpContext context,
-        MembershipContext db,
+        NpgsqlDataSource source,
         Permissions permissions,
         UserDirectory users,
         MemberRateLimit limit,
@@ -49,12 +49,12 @@ internal static class MemberParentCandidateSlice
             return Problem.Detail(StatusCodes.Status429TooManyRequests, GuardianRules.TooManyLookups);
         }
 
-        if (!await GuardianChecks.StaffMayAddForAsync(db, permissions, caller, PhpValue.IntOfText(child_token), direct: true, ct))
+        if (!await GuardianChecks.StaffMayAddForAsync(source, permissions, caller, PhpValue.IntOfText(child_token), direct: true, ct))
         {
             return NotFound();
         }
 
-        var parent = await GuardianChecks.ValidateMemberAsync(db, users, PhpValue.IntOfText(parent_token), ct);
+        var parent = await GuardianChecks.ValidateMemberAsync(source, users, PhpValue.IntOfText(parent_token), ct);
         if (parent.Status == MemberCheck.Ambiguous)
         {
             return Refusals.AmbiguousToken();
@@ -65,8 +65,8 @@ internal static class MemberParentCandidateSlice
             return NotFound();
         }
 
-        var name = await db.MemberProfiles.AsNoTracking().Where(p => p.UserId == parent.UserId).Select(p => p.Name).FirstOrDefaultAsync(ct);
-        return Results.Json(new Dictionary<string, object?> { ["name"] = name ?? string.Empty });
+        var name = (await source.ListAsync($"select name from membership.member_profiles where user_id = {parent.UserId}", row => row.TextOrNull("name"), ct)).FirstOrDefault();
+        return Results.Json(new Dictionary<string, object?> { ["name"] = name ?? string.Empty }, MembershipJson.Answers.Answer);
     }
 
     private static IResult NotFound() => Problem.Detail(StatusCodes.Status404NotFound, "Member not found");

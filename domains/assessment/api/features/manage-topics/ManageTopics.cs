@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Assessment.Api.Domain;
 using Tsr.Shared.Api;
@@ -21,7 +21,7 @@ internal static class ManageTopicsSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string class_id, HttpContext context, AssessmentContext db, Permissions permissions, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(string class_id, HttpContext context, NpgsqlDataSource source, Permissions permissions, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -30,7 +30,7 @@ internal static class ManageTopicsSlice
         }
 
         var classId = PhpValue.IntOfText(class_id);
-        if (await ManageAccess.ActiveClassAsync(db, classId, ct) is null)
+        if (await ManageAccess.ActiveClassAsync(source, classId, ct) is null)
         {
             return ManageAccess.ClassNotFound();
         }
@@ -40,6 +40,6 @@ internal static class ManageTopicsSlice
             return ManageAccess.NotPermitted();
         }
 
-        return Results.Json(await ManageAccess.TopicsAsync(db, classId, ct));
+        return Results.Json(await ManageAccess.TopicsAsync(source, classId, ct), AssessmentJson.Answers.TextList);
     }
 }

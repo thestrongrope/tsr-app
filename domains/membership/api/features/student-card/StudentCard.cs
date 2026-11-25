@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Membership.Api.Domain;
 using Tsr.Shared.Api;
@@ -27,7 +27,7 @@ internal static class StudentCardSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string token, HttpContext context, MembershipContext db, Permissions permissions, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(string token, HttpContext context, NpgsqlDataSource source, Permissions permissions, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -46,29 +46,31 @@ internal static class StudentCardSlice
             return NotFound();
         }
 
-        var member = (await db.Database
-            .SqlQuery<MemberRow>($"""
-                select p.name::text as "Name", p.gender::text as "Gender" from identity.v_users u
-                left join membership.member_profiles p on p.user_id = u.id
-                where u.token = {(int)value} order by u.id limit 1
-                """)
-            .ToListAsync(ct)).FirstOrDefault();
+        var member = (await source.ListAsync(
+            $"""
+            select p.name::text as "Name", p.gender::text as "Gender" from identity.v_users u
+            left join membership.member_profiles p on p.user_id = u.id
+            where u.token = {(int)value} order by u.id limit 1
+            """,
+            row => new MemberRow(row.TextOrNull("Name"), row.TextOrNull("Gender")),
+            ct)).FirstOrDefault();
         if (member is null)
         {
             return NotFound();
         }
 
         var reach = await permissions.ReachAsync(caller, "classes:read", ct);
-        var current = await db.Database
-            .SqlQuery<ClassRow>($"""
-                select c.id as "Id", c.code::text as "Code", c.gender as "Gender", c.level_name::text as "Level"
-                from classes.v_enrolments cs
-                join classes.v_classes c on c.id = cs.class_id and c.status = 'A'
-                where cs.token_no = {(int)value} and cs.removed_at is null
-                order by c.code::text collate "C"
-                limit 200
-                """)
-            .ToListAsync(ct);
+        var current = await source.ListAsync(
+            $"""
+            select c.id as "Id", c.code::text as "Code", c.gender as "Gender", c.level_name::text as "Level"
+            from classes.v_enrolments cs
+            join classes.v_classes c on c.id = cs.class_id and c.status = 'A'
+            where cs.token_no = {(int)value} and cs.removed_at is null
+            order by c.code::text collate "C"
+            limit 200
+            """,
+            row => new ClassRow(row.Int("Id"), row.Text("Code"), row.IntOrNull("Gender"), row.TextOrNull("Level")),
+            ct);
         var classes = current
             .Where(c => CardRules.Reaches(reach.All, reach.Gender, reach.ClassIds, c.Id, c.Gender))
             .Select(c => new ClassItem(c.Id, c.Code, c.Level ?? string.Empty))
@@ -84,7 +86,7 @@ internal static class StudentCardSlice
             ["name"] = member.Name ?? string.Empty,
             ["gender"] = CardRules.GenderOf(member.Gender),
             ["classes"] = classes,
-        });
+        }, MembershipJson.Answers.Answer);
     }
 
     private static IResult NotFound() => Problem.Detail(StatusCodes.Status404NotFound, "Person not found");

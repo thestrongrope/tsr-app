@@ -1,5 +1,5 @@
 using System.Text.Json;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace Tsr.Notifications.Api.Domain;
 
@@ -49,7 +49,7 @@ internal static class Criteria
     internal sealed record Named(int Id, string Name);
 
     /// <summary>Class id to "code name", for the ids that exist.</summary>
-    public static async Task<Dictionary<int, string>> ClassNamesAsync(NotificationsContext db, IEnumerable<int> ids, CancellationToken ct)
+    public static async Task<Dictionary<int, string>> ClassNamesAsync(NpgsqlDataSource source, IEnumerable<int> ids, CancellationToken ct)
     {
         var wanted = ids.Distinct().Take(Audience.MaxRecipients).ToArray();
         if (wanted.Length == 0)
@@ -57,9 +57,10 @@ internal static class Criteria
             return [];
         }
 
-        var rows = await db.Database
-            .SqlQuery<Named>($"""select id as "Id", trim(coalesce(code, '') || ' ' || coalesce(name, '')) as "Name" from classes.v_classes where id = any({wanted})""")
-            .ToListAsync(ct);
+        var rows = await source.ListAsync(
+            $"""select id as "Id", trim(coalesce(code, '') || ' ' || coalesce(name, '')) as "Name" from classes.v_classes where id = any({wanted})""",
+            row => new Named(row.Int("Id"), row.Text("Name")),
+            ct);
         return rows.ToDictionary(r => r.Id, r => r.Name);
     }
 }

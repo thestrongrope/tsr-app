@@ -8,14 +8,14 @@ namespace Tsr.Classes.Api.Domain;
 internal static class AdminGuards
 {
     /// <summary>PHP api_require_super_admin (syllabus.php): syllabus:update, then platform's audit row for a privileged caller.</summary>
-    public static async Task<IResult?> SyllabusAdminAsync(HttpContext context, ClassesContext db, Permissions permissions, Caller caller, CancellationToken ct)
+    public static async Task<IResult?> SyllabusAdminAsync(HttpContext context, Permissions permissions, Caller caller, CancellationToken ct)
     {
         if (!await permissions.CanAsync(caller, "syllabus:update", AccessTarget.None, ct))
         {
             return Problem.Detail(StatusCodes.Status403Forbidden, "Only super admins can access this resource");
         }
 
-        await ClassGuards.LogAdminAccessAsync(db, context, permissions, caller, ct);
+        await ClassGuards.LogAdminAccessAsync(context, permissions, caller, ct);
         return null;
     }
 

@@ -201,7 +201,7 @@ internal static class QuizDraw
                 var person = info.GetValueOrDefault(token.Value) ?? new ParticipantInfo("(unknown)", string.Empty);
                 var list = winners[key] as JsonArray ?? [];
                 winners[key] = list;
-                list.Add(new JsonObject { ["episode"] = episode, ["prize"] = prize + 1, ["token"] = token.Value, ["name"] = person.Name, ["city"] = person.City });
+                list.Add((JsonNode)new JsonObject { ["episode"] = episode, ["prize"] = prize + 1, ["token"] = token.Value, ["name"] = person.Name, ["city"] = person.City });
                 winning.Add(token.Value);
                 drawn++;
             }

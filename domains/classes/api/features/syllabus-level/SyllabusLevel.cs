@@ -2,7 +2,7 @@ using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
 using Tsr.Shared.Api;
@@ -28,7 +28,7 @@ internal static class SyllabusLevelSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string level_id, HttpContext context, ClassesContext db, Permissions permissions, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(string level_id, HttpContext context, NpgsqlDataSource source, Permissions permissions, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -42,15 +42,16 @@ internal static class SyllabusLevelSlice
         }
 
         var levelId = ClassGuards.IdOf(level_id);
-        var levels = await db.Database
-            .SqlQuery<Level>($"""select id as "Id", name as "Name", code as "Code" from classes.class_levels where id = {levelId} limit 1""")
-            .ToListAsync(ct);
+        var levels = await source.ListAsync(
+            $"""select id as "Id", name as "Name", code as "Code" from classes.class_levels where id = {levelId} limit 1""",
+            row => new Level(row.Int("Id"), row.Text("Name"), row.Text("Code")),
+            ct);
         if (levels.Count == 0)
         {
             return Problem.Detail(StatusCodes.Status404NotFound, "Level not found");
         }
 
-        var items = await SyllabusItems.ActiveOfLevelAsync(db, levelId, ct);
-        return Results.Json(new Body(levels[0].Id, levels[0].Name, levels[0].Code, items));
+        var items = await SyllabusItems.ActiveOfLevelAsync(source, levelId, ct);
+        return Results.Json(new Body(levels[0].Id, levels[0].Name, levels[0].Code, items), ClassesJson.Answers.SyllabusLevelBody);
     }
 }

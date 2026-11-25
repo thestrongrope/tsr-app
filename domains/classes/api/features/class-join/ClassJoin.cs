@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
 using Tsr.Shared.Api;
@@ -31,7 +31,7 @@ internal static class ClassJoinSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(HttpContext context, ClassesContext db, Permissions permissions, TimeProvider clock, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(HttpContext context, NpgsqlDataSource source, Permissions permissions, TimeProvider clock, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -44,7 +44,7 @@ internal static class ClassJoinSlice
             return Refusals.NotPermitted();
         }
 
-        var gender = await ClassGuards.NumericGenderAsync(db, caller, ct);
+        var gender = await ClassGuards.NumericGenderAsync(source, caller, ct);
         if (gender is null)
         {
             return Refusals.GenderNotSet();
@@ -62,7 +62,7 @@ internal static class ClassJoinSlice
             return Problem.Detail(StatusCodes.Status422UnprocessableEntity, "link is required");
         }
 
-        var target = await FindAsync(db, link, ct);
+        var target = await FindAsync(source, link, ct);
         if (target is null)
         {
             return Problem.Detail(StatusCodes.Status404NotFound, "Invalid class link or class not active");
@@ -73,42 +73,44 @@ internal static class ClassJoinSlice
             return Problem.Detail(StatusCodes.Status403Forbidden, "This class is not available for your gender");
         }
 
-        return await JoinAsync(db, clock, target, caller.Token, ct);
+        return await JoinAsync(source, clock, target, caller.Token, ct);
     }
 
-    private static async Task<Target?> FindAsync(ClassesContext db, string link, CancellationToken ct)
+    private static async Task<Target?> FindAsync(NpgsqlDataSource source, string link, CancellationToken ct)
     {
         if (link.Contains('\0', StringComparison.Ordinal))
         {
             return null;
         }
 
-        var rows = await db.Database
-            .SqlQuery<Target>($"""
-                select c.id as "Id", c.name as "Name", c.gender as "Gender"
-                from classes.classes c
-                join membership.v_members t on t.token = c.teacher
-                where c.link = {link}::citext and c.status = 'A'
-                order by c.id
-                limit 1
-                """)
-            .ToListAsync(ct);
+        var rows = await source.ListAsync(
+            $"""
+            select c.id as "Id", c.name as "Name", c.gender as "Gender"
+            from classes.classes c
+            join membership.v_members t on t.token = c.teacher
+            where c.link = {link}::citext and c.status = 'A'
+            order by c.id
+            limit 1
+            """,
+            row => new Target(row.Int("Id"), row.Text("Name"), row.IntOrNull("Gender")),
+            ct);
         return rows.Count == 0 ? null : rows[0];
     }
 
-    private static async Task<IResult> JoinAsync(ClassesContext db, TimeProvider clock, Target target, int token, CancellationToken ct)
+    private static async Task<IResult> JoinAsync(NpgsqlDataSource source, TimeProvider clock, Target target, int token, CancellationToken ct)
     {
-        var rows = await db.Database
-            .SqlQuery<Existing>($"""
-                select coalesce(bool_or(removed_at is null), false) as "AnyLive",
-                       coalesce(bool_or(removed_at is not null and removed_by is not null and removed_by <> {token}), false) as "AnyRemovedByOther"
-                from classes.class_students where class_id = {target.Id} and token_no = {token}
-                having count(*) > 0
-                """)
-            .ToListAsync(ct);
+        var rows = await source.ListAsync(
+            $"""
+            select coalesce(bool_or(removed_at is null), false) as "AnyLive",
+                   coalesce(bool_or(removed_at is not null and removed_by is not null and removed_by <> {token}), false) as "AnyRemovedByOther"
+            from classes.class_students where class_id = {target.Id} and token_no = {token}
+            having count(*) > 0
+            """,
+            row => new Existing(row.Bool("AnyLive"), row.Bool("AnyRemovedByOther")),
+            ct);
         if (rows.Count == 0)
         {
-            await EnrolAsync(db, clock, target.Id, token, ct);
+            await EnrolAsync(source, clock, target.Id, token, ct);
             return Answer(true, "Successfully joined the class!", target);
         }
 
@@ -122,36 +124,38 @@ internal static class ClassJoinSlice
             return Problem.Detail(StatusCodes.Status403Forbidden, "You were removed from this class. Please contact the class coordinator.");
         }
 
-        await RejoinAsync(db, clock, target.Id, token, ct);
+        await RejoinAsync(source, clock, target.Id, token, ct);
         return Answer(true, "Welcome back! You have re-joined the class", target);
     }
 
-    private static async Task EnrolAsync(ClassesContext db, TimeProvider clock, int classId, int token, CancellationToken ct)
+    private static async Task EnrolAsync(NpgsqlDataSource source, TimeProvider clock, int classId, int token, CancellationToken ct)
     {
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        if (await Enrolment.AddAsync(db, classId, token, null, ct))
+        await using var tx = await source.BeginAsync(ct);
+        if (await Enrolment.AddAsync(tx, classId, token, null, ct))
         {
-            await Outbox.WriteAsync(db, "classes.student_enrolled", new StudentEnrolled(classId, token, null, "joined"), clock, ct);
+            await Outbox.WriteAsync(tx, "classes.student_enrolled", new StudentEnrolled(classId, token, null, "joined"), ClassesJson.Default.StudentEnrolled, clock, ct);
         }
 
-        await transaction.CommitAsync(ct);
+        await tx.CommitAsync(ct);
     }
 
-    private static async Task RejoinAsync(ClassesContext db, TimeProvider clock, int classId, int token, CancellationToken ct)
+    private static async Task RejoinAsync(NpgsqlDataSource source, TimeProvider clock, int classId, int token, CancellationToken ct)
     {
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        await db.Database.ExecuteSqlAsync(
+        await using var tx = await source.BeginAsync(ct);
+        await tx.ExecuteAsync(
             $"update classes.class_students set status = 'A', removed_at = null, removed_reason = null, joined_on = (now() at time zone 'UTC')::date, mcq_admin = 0 where class_id = {classId} and token_no = {token}",
             ct);
-        await Outbox.WriteAsync(db, "classes.student_rejoined", new StudentRejoined(classId, token), clock, ct);
-        await transaction.CommitAsync(ct);
+        await Outbox.WriteAsync(tx, "classes.student_rejoined", new StudentRejoined(classId, token), ClassesJson.Default.StudentRejoined, clock, ct);
+        await tx.CommitAsync(ct);
     }
 
-    private static IResult Answer(bool success, string message, Target target) => Results.Json(new Dictionary<string, object?>
-    {
-        ["success"] = success,
-        ["message"] = message,
-        ["classId"] = target.Id,
-        ["className"] = target.Name,
-    });
+    private static IResult Answer(bool success, string message, Target target) => Results.Json(
+        new Dictionary<string, object?>
+        {
+            ["success"] = success,
+            ["message"] = message,
+            ["classId"] = target.Id,
+            ["className"] = target.Name,
+        },
+        ClassesJson.Answers.Answer);
 }

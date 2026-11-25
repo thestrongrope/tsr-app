@@ -1,9 +1,0 @@
-### GET /holy-quran as 900001
-status: 200
-Content-Type: application/json; charset=utf-8
-X-Permissions-Revision: f01a7b9eac11cfa6
-body: [{"id":1,"surah":"Al-Fatiha","arabic":"ٱلْفَاتِحَة","verses":7},{"id":2,"surah":"Al-Baqara","arabic":"","verses":286},{"id":3,"surah":"Ünï Sûra \"Q\" <b> + &amp;","arabic":"آلِ عِمْرَان","verses":200}]
-### GET /holy-quran as nobody
-status: 401
-Content-Type: application/json; charset=utf-8
-body: {"detail":"Not authenticated"}

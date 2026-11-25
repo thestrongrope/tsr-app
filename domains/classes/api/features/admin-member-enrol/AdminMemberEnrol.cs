@@ -2,7 +2,7 @@ using System.Data.Common;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Microsoft.Extensions.Logging;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
@@ -25,7 +25,7 @@ internal static partial class AdminMemberEnrolSlice
 {
     private const int LockClass = 7_200_001;
 
-    internal sealed record StudentRestored(int ClassId, int Token, int RestoredBy);
+    internal sealed record MemberEnrolRestored(int ClassId, int Token, int RestoredBy);
 
     internal sealed record Outcome(bool Saved, object? Roster);
 
@@ -57,11 +57,11 @@ internal static partial class AdminMemberEnrolSlice
     private static async Task<IResult> HandleAsync(
         string token,
         HttpContext context,
-        ClassesContext db,
+        NpgsqlDataSource source,
         Permissions permissions,
         MemberRateLimit limit,
         TimeProvider clock,
-        ILogger<ClassesContext> log,
+        ILogger<ClassesLog> log,
         CancellationToken ct)
     {
         var caller = context.GetCaller();
@@ -86,7 +86,7 @@ internal static partial class AdminMemberEnrolSlice
             return Problem.Detail(StatusCodes.Status422UnprocessableEntity, "classId must be a class id");
         }
 
-        var head = await ClassGuards.FindActiveClassAsync(db, classId, ct);
+        var head = await ClassGuards.FindActiveClassAsync(source, classId, ct);
         if (head is null)
         {
             return Refusals.ClassNotFound();
@@ -97,7 +97,7 @@ internal static partial class AdminMemberEnrolSlice
             return Refusals.NotPermittedToChangeStudents();
         }
 
-        await ClassGuards.LogAdminAccessAsync(db, context, permissions, caller, ct);
+        await ClassGuards.LogAdminAccessAsync(context, permissions, caller, ct);
         if (!limit.Allow("member_enrol", caller.Token, 30, 3600))
         {
             return Problem.Detail(StatusCodes.Status429TooManyRequests, MemberLookup.Throttled);
@@ -106,7 +106,7 @@ internal static partial class AdminMemberEnrolSlice
         Answer answer;
         try
         {
-            answer = await EnrolAsync(db, clock, head.Id, MemberLookup.TokenOf(token), caller.Token, ct);
+            answer = await EnrolAsync(source, clock, head.Id, MemberLookup.TokenOf(token), caller.Token, ct);
         }
         catch (Exception e) when (e is DbException or InvalidOperationException)
         {
@@ -121,61 +121,64 @@ internal static partial class AdminMemberEnrolSlice
             Answer.AlreadyEnrolled => MemberLookup.Refusal(StatusCodes.Status409Conflict, "This member is already in this class", "already_enrolled"),
             Answer.OtherGender => MemberLookup.Refusal(StatusCodes.Status422UnprocessableEntity, "This class is for the other gender", "other_gender"),
             Answer.ClassInactive => MemberLookup.Refusal(StatusCodes.Status409Conflict, "This class is not active", "class_inactive"),
-            _ => await SavedAsync(db, permissions, caller, head.Id, log, ct),
+            _ => await SavedAsync(source, permissions, caller, head.Id, log, ct),
         };
     }
 
     // The enrolment is committed, so the answer is a success even when the roster cannot be built.
-    private static async Task<IResult> SavedAsync(ClassesContext db, Permissions permissions, Caller caller, int classId, ILogger<ClassesContext> log, CancellationToken ct)
+    private static async Task<IResult> SavedAsync(NpgsqlDataSource source, Permissions permissions, Caller caller, int classId, ILogger<ClassesLog> log, CancellationToken ct)
     {
         try
         {
-            var roster = await ClassRoster.BuildAsync(db, permissions, caller, classId, ct);
+            var roster = await ClassRoster.BuildAsync(source, permissions, caller, classId, ct);
             var answer = new Dictionary<string, object?> { ["saved"] = true };
             foreach (var entry in roster)
             {
                 answer[entry.Key] = entry.Value;
             }
 
-            return Results.Json(answer);
+            return Results.Json(answer, ClassesJson.Answers.Answer);
         }
         catch (DbException e)
         {
             LogRosterFailed(log, e, classId);
-            return Results.Json(new Outcome(true, null));
+            return Results.Json(new Outcome(true, null), ClassesJson.Answers.MemberEnrolOutcome);
         }
     }
 
-    private static async Task<Answer> EnrolAsync(ClassesContext db, TimeProvider clock, int classId, int token, int by, CancellationToken ct)
+    private static async Task<Answer> EnrolAsync(NpgsqlDataSource source, TimeProvider clock, int classId, int token, int by, CancellationToken ct)
     {
-        var first = await ReadClassAsync(db, classId, ct);
-        if (first.Status != "A")
+        await using (var read = await source.BeginAsync(ct))
         {
-            return Answer.ClassInactive;
+            var first = await ReadClassAsync(read, classId, ct);
+            if (first.Status != "A")
+            {
+                return Answer.ClassInactive;
+            }
+
+            var holders = await MemberLookup.HoldersAsync(read, token, ct);
+            if (holders != 1)
+            {
+                return holders == 0 ? Answer.NotFound : Answer.Ambiguous;
+            }
         }
 
-        var holders = await MemberLookup.HoldersAsync(db, token, ct);
-        if (holders != 1)
-        {
-            return holders == 0 ? Answer.NotFound : Answer.Ambiguous;
-        }
-
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        await db.Database.ExecuteSqlAsync($"set local lock_timeout = '5s'", ct);
-        await db.Database.ExecuteSqlAsync($"select pg_advisory_xact_lock({LockClass}, {token})", ct);
-        var current = await ReadClassAsync(db, classId, ct);
+        await using var tx = await source.BeginAsync(ct);
+        await tx.ExecuteAsync($"set local lock_timeout = '5s'", ct);
+        await tx.ExecuteAsync($"select pg_advisory_xact_lock({LockClass}, {token})", ct);
+        var current = await ReadClassAsync(tx, classId, ct);
         if (current.Status != "A")
         {
             return Answer.ClassInactive;
         }
 
-        var member = await MemberLookup.RowAsync(db, token, ct);
+        var member = await MemberLookup.RowAsync(tx, token, ct);
         if (member is null)
         {
             return Answer.NotFound;
         }
 
-        if (await IsEnrolledAsync(db, classId, token, ct))
+        if (await IsEnrolledAsync(tx, classId, token, ct))
         {
             return Answer.AlreadyEnrolled;
         }
@@ -186,49 +189,51 @@ internal static partial class AdminMemberEnrolSlice
             return Answer.OtherGender;
         }
 
-        var restored = await RestoreLatestAsync(db, classId, token, by, ct);
+        var restored = await RestoreLatestAsync(tx, classId, token, by, ct);
         if (restored)
         {
-            await Outbox.WriteAsync(db, "classes.student_restored", new StudentRestored(classId, token, by), clock, ct);
+            await Outbox.WriteAsync(tx, "classes.student_restored", new MemberEnrolRestored(classId, token, by), ClassesJson.Default.MemberEnrolRestored, clock, ct);
         }
         else
         {
-            await MembershipCommands.RecordAcceptedRegistrationAsync(EfTransaction.Join(db), token, classId, ct);
-            await db.Database.ExecuteSqlAsync(
+            await MembershipCommands.RecordAcceptedRegistrationAsync(tx, token, classId, ct);
+            await tx.ExecuteAsync(
                 $"insert into classes.class_students (class_id, token_no, joined_on, added_by) values ({classId}, {token}, (now() at time zone 'UTC')::date, {by})", ct);
-            await Outbox.WriteAsync(db, "classes.student_enrolled", new StudentEnrolled(classId, token, by, "by_token"), clock, ct);
+            await Outbox.WriteAsync(tx, "classes.student_enrolled", new StudentEnrolled(classId, token, by, "by_token"), ClassesJson.Default.StudentEnrolled, clock, ct);
         }
 
-        await transaction.CommitAsync(ct);
+        await tx.CommitAsync(ct);
         return restored ? Answer.Restored : Answer.Enrolled;
     }
 
-    private static async Task<ClassRow> ReadClassAsync(ClassesContext db, int classId, CancellationToken ct) =>
-        (await db.Database.SqlQuery<ClassRow>($"""select gender as "Gender", status as "Status" from classes.classes where id = {classId}""").ToListAsync(ct))
+    private static async Task<ClassRow> ReadClassAsync(DbTx tx, int classId, CancellationToken ct) =>
+        (await tx.ListAsync(
+            $"""select gender as "Gender", status as "Status" from classes.classes where id = {classId}""",
+            row => new ClassRow(row.IntOrNull("Gender"), row.Text("Status")),
+            ct))
             .FirstOrDefault() ?? throw new InvalidOperationException("The class was removed while it was being enrolled in");
 
     // PHP isEnrolledStudent: an active row (status A, not removed) of the member in the class.
-    private static async Task<bool> IsEnrolledAsync(ClassesContext db, int classId, int token, CancellationToken ct) =>
-        (await db.Database
-            .SqlQuery<int>($"""select 1 as "Value" from classes.class_students where class_id = {classId} and token_no = {token} and status = 'A' and removed_at is null limit 1""")
-            .ToListAsync(ct)).Count > 0;
+    private static async Task<bool> IsEnrolledAsync(DbTx tx, int classId, int token, CancellationToken ct) =>
+        await tx.AnyAsync($"""select 1 as "Value" from classes.class_students where class_id = {classId} and token_no = {token} and status = 'A' and removed_at is null limit 1""", ct);
 
     // PHP restoreLatestRemoved: the latest removed (or not active) row of the member in the class comes back, as restoreStudent and a rejoin do for the join date and mcq_admin.
-    private static async Task<bool> RestoreLatestAsync(ClassesContext db, int classId, int token, int by, CancellationToken ct)
+    private static async Task<bool> RestoreLatestAsync(DbTx tx, int classId, int token, int by, CancellationToken ct)
     {
-        var ids = await db.Database
-            .SqlQuery<int>($"""
+        var ids = await tx.ListAsync(
+            $"""
                 select id as "Value" from classes.class_students
                 where class_id = {classId} and token_no = {token} and (removed_at is not null or status <> 'A')
                 order by id desc limit 1
-                """)
-            .ToListAsync(ct);
+                """,
+            row => row.Int("Value"),
+            ct);
         if (ids.Count == 0)
         {
             return false;
         }
 
-        await db.Database.ExecuteSqlAsync(
+        await tx.ExecuteAsync(
             $"""
             update classes.class_students
             set status = 'A', removed_at = null, removed_by = null, removed_reason = null, joined_on = (now() at time zone 'UTC')::date, mcq_admin = 0, added_by = {by}

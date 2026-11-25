@@ -1,4 +1,3 @@
-using Microsoft.EntityFrameworkCore;
 using Tsr.Shared.Api;
 
 namespace Tsr.Classes.Api.Domain;
@@ -13,21 +12,21 @@ internal sealed record StudentTransferred(int FromClassId, int ToClassId, int To
 /// </summary>
 internal static class StudentMove
 {
-    public static async Task WriteAsync(ClassesContext db, TimeProvider clock, int from, int to, int student, string type, string reason, int by, bool removeFromSource, CancellationToken ct)
+    public static async Task WriteAsync(DbTx tx, TimeProvider clock, int from, int to, int student, string type, string reason, int by, bool removeFromSource, CancellationToken ct)
     {
         if (removeFromSource)
         {
             var removal = EnrolmentRules.TransferReason(type, reason, to);
-            await db.Database.ExecuteSqlAsync(
+            await tx.ExecuteAsync(
                 $"update classes.class_students set removed_at = now(), removed_by = {by}, status = 'I', removed_reason = {removal} where class_id = {from} and token_no = {student} and removed_at is null",
                 ct);
         }
 
-        await db.Database.ExecuteSqlAsync(
+        await tx.ExecuteAsync(
             $"insert into classes.class_students (class_id, token_no, joined_on) values ({to}, {student}, (now() at time zone 'UTC')::date)", ct);
-        await db.Database.ExecuteSqlAsync(
+        await tx.ExecuteAsync(
             $"insert into classes.student_transfers (token_no, from_class_id, to_class_id, type, reason, transferred_by) values ({student}, {from}, {to}, {type}, {reason}, {by})",
             ct);
-        await Outbox.WriteAsync(db, "classes.student_transferred", new StudentTransferred(from, to, student, type, by), clock, ct);
+        await Outbox.WriteAsync(tx, "classes.student_transferred", new StudentTransferred(from, to, student, type, by), ClassesJson.Default.StudentTransferred, clock, ct);
     }
 }

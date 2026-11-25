@@ -1,8 +1,8 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
 using Tsr.Shared.Api;
@@ -24,7 +24,7 @@ internal static class ClassDetailSlice
     }
 
     private static async Task<IResult> HandleAsync(
-        string class_id, HttpContext context, ClassesContext db, Permissions permissions, IConfiguration configuration, CancellationToken ct)
+        string class_id, HttpContext context, NpgsqlDataSource source, Permissions permissions, IConfiguration configuration, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -33,9 +33,10 @@ internal static class ClassDetailSlice
         }
 
         var classId = ClassGuards.IdOf(class_id);
-        var teachers = await db.Database
-            .SqlQuery<int>($"""select coalesce(teacher, 0) as "Value" from classes.classes where id = {classId} and status = 'A' limit 1""")
-            .ToListAsync(ct);
+        var teachers = await source.ListAsync(
+            $"""select coalesce(teacher, 0) as "Value" from classes.classes where id = {classId} and status = 'A' limit 1""",
+            row => row.Int("Value"),
+            ct);
         if (teachers.Count == 0)
         {
             return Refusals.ClassNotFound();
@@ -48,18 +49,18 @@ internal static class ClassDetailSlice
         }
 
         var isTeacher = teachers[0] == caller.Token;
-        var manager = !isTeacher && await ReachesAsync(db, permissions, caller, id, ct);
+        var manager = !isTeacher && await ReachesAsync(source, permissions, caller, id, ct);
         var gated = !isTeacher && !manager;
-        var gender = gated ? await ClassGuards.NumericGenderAsync(db, caller, ct) : 0;
+        var gender = gated ? await ClassGuards.NumericGenderAsync(source, caller, ct) : 0;
         if (gender is null)
         {
             return Refusals.GenderNotSet();
         }
 
-        var rows = await db.Database
-            .SqlQuery<ClassCards.Row>($"""
+        var rows = await source.ListAsync(
+            $"""
                 select c.id as "Id", c.code as "Code", c.name as "Name", c.class_level_id as "Level", cl.name as "LevelName", c.language_id as "Language",
-                       c.gender as "Gender", c.status as "Status", c.location as "Location", c.format as "Format", c.started_on as "StartedOn",
+                       c.gender as "Gender", c.status as "Status", c.location as "Location", c.format as "Format", to_char(c.started_on, 'YYYY-MM-DD') as "StartedOn",
                        t.name as "TeacherName", t.mobile as "TeacherMobile",
                        case when c.teacher = {caller.Token} then 'conducting'
                             when {manager} and not exists (select 1 from classes.class_students cs where cs.class_id = c.id and cs.token_no = {caller.Token}
@@ -75,21 +76,39 @@ internal static class ClassDetailSlice
                            and exists (select 1 from classes.class_students cs where cs.class_id = c.id and cs.token_no = {caller.Token}
                                        and cs.status = 'A' and cs.removed_at is null)))
                 limit 1
-                """)
-            .ToListAsync(ct);
+                """,
+            ReadCard,
+            ct);
         if (rows.Count == 0)
         {
             return Refusals.ClassNotFound();
         }
 
-        var slots = await ClassCards.SlotsAsync(db, [id], ct);
+        var slots = await ClassCards.SlotsAsync(source, [id], ct);
         var body = ClassCards.ToCard(rows[0], configuration);
         body["schedules"] = slots[id].Select(ClassCards.ToSchedule).ToList();
-        return Results.Json(body);
+        return Results.Json(body, ClassesJson.Answers.Answer);
     }
 
+    private static ClassCards.Row ReadCard(DbRow row) => new(
+        row.Int("Id"),
+        row.Text("Code"),
+        row.Text("Name"),
+        row.IntOrNull("Level"),
+        row.TextOrNull("LevelName"),
+        row.IntOrNull("Language"),
+        row.IntOrNull("Gender"),
+        row.Text("Status"),
+        row.TextOrNull("Location"),
+        row.TextOrNull("Format"),
+        row.DateOrNull("StartedOn"),
+        row.TextOrNull("TeacherName"),
+        row.TextOrNull("TeacherMobile"),
+        row.TextOrNull("Role"),
+        row.TextOrNull("JoinCode"));
+
     // PHP permissions->reaches(managedReach(classes:read), class): all, the reach's gender, or one of its class ids.
-    private static async Task<bool> ReachesAsync(ClassesContext db, Permissions permissions, Caller caller, int classId, CancellationToken ct)
+    private static async Task<bool> ReachesAsync(NpgsqlDataSource source, Permissions permissions, Caller caller, int classId, CancellationToken ct)
     {
         var reach = await permissions.ReachAsync(caller, "classes:read", ct);
         if (reach.All || reach.ClassIds.Contains(classId))
@@ -102,9 +121,10 @@ internal static class ClassDetailSlice
             return false;
         }
 
-        var genders = await db.Database
-            .SqlQuery<int>($"""select coalesce(gender, 0) as "Value" from classes.classes where id = {classId} limit 1""")
-            .ToListAsync(ct);
+        var genders = await source.ListAsync(
+            $"""select coalesce(gender, 0) as "Value" from classes.classes where id = {classId} limit 1""",
+            row => row.Int("Value"),
+            ct);
         return genders.Count > 0 && genders[0] == reach.Gender;
     }
 }

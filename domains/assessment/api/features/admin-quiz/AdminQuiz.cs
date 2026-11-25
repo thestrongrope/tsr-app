@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Logging;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Assessment.Api.Domain;
 using Tsr.Shared.Api;
@@ -24,7 +25,7 @@ internal static partial class AdminQuizSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(HttpContext context, AssessmentContext db, Permissions permissions, ILoggerFactory loggers, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(HttpContext context, NpgsqlDataSource source, Permissions permissions, ILoggerFactory loggers, CancellationToken ct)
     {
         var (caller, refusal) = await QuizAdmin.GuardAsync(context, permissions, ct);
         if (refusal is not null)
@@ -32,25 +33,26 @@ internal static partial class AdminQuizSlice
             return refusal;
         }
 
-        var settings = await QuizAdmin.SettingsAsync(db, ct);
-        var timestamps = await QuizStateStore.LoadObjectAsync(db, QuizStateStore.Timestamps, ct);
-        var winners = await QuizStateStore.LoadObjectAsync(db, QuizStateStore.Winners, ct);
-        var quizDay = await QuizStateStore.LoadQuizDayAsync(db, ct);
-        var feasibility = await FeasibilityOrNullAsync(db, settings, loggers.CreateLogger("Tsr.Assessment.Api.AdminQuiz"), ct);
         var canReset = await permissions.CanAsync(caller!, "quiz:reset", AccessTarget.None, ct);
-        return Results.Json(QuizOverview.Build(settings, winners, timestamps, quizDay, feasibility, canReset));
+        await using var tx = await source.BeginAsync(ct);
+        var settings = new QuizSettings(await QuizStateStore.LoadObjectAsync(tx, QuizStateStore.Settings, ct));
+        var timestamps = await QuizStateStore.LoadObjectAsync(tx, QuizStateStore.Timestamps, ct);
+        var winners = await QuizStateStore.LoadObjectAsync(tx, QuizStateStore.Winners, ct);
+        var quizDay = await QuizStateStore.LoadQuizDayAsync(tx, ct);
+        var feasibility = await FeasibilityOrNullAsync(tx, settings, loggers.CreateLogger("Tsr.Assessment.Api.AdminQuiz"), ct);
+        return Results.Json(QuizOverview.Build(settings, winners, timestamps, quizDay, feasibility, canReset), AssessmentJson.Answers.JsonObject);
     }
 
-    private static async Task<Feasibility?> FeasibilityOrNullAsync(AssessmentContext db, QuizSettings settings, ILogger log, CancellationToken ct)
+    private static async Task<Feasibility?> FeasibilityOrNullAsync(DbTx tx, QuizSettings settings, ILogger log, CancellationToken ct)
     {
-        if (!settings.Loaded || settings.TotalQuizzes > QuizSettings.MaxEpisodes || !await QuizStateStore.ExistsAsync(db, QuizStateStore.Participants, ct))
+        if (!settings.Loaded || settings.TotalQuizzes > QuizSettings.MaxEpisodes || !await QuizStateStore.ExistsAsync(tx, QuizStateStore.Participants, ct))
         {
             return null;
         }
 
         try
         {
-            return await QuizAdmin.FeasibilityAsync(db, settings, ct);
+            return await QuizAdmin.FeasibilityAsync(tx, settings, ct);
         }
         catch (DbException e)
         {

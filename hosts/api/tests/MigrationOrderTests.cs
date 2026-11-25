@@ -111,6 +111,97 @@ public sealed class MigrationOrderTests
         Assert.That(optionTypes, Is.Not.Empty, "the migrate job applies identity's migrations through its context");
     }
 
+    // Issue 103: notifications is converted too. The migrate job still registers its context, last; no other mode does.
+    [TestCase(RunMode.Api)]
+    [TestCase(RunMode.Workers)]
+    [TestCase(RunMode.LoadContent)]
+    public void The_api_mode_registers_no_notifications_context(RunMode mode)
+    {
+        var services = Register(mode);
+
+        var notificationsTypes = services
+            .Select(descriptor => descriptor.ServiceType)
+            .Where(type => type.ToString().Contains("NotificationsContext", StringComparison.Ordinal))
+            .ToList();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(notificationsTypes, Is.Empty, "notifications reads and writes through the data source: its context is for the migrate job only");
+            Assert.That(MigrationSchemas(mode), Does.Not.Contain("notifications"));
+        });
+    }
+
+    [Test]
+    public void The_migrate_mode_registers_the_notifications_context()
+    {
+        var optionTypes = Register(RunMode.Migrate)
+            .Select(descriptor => descriptor.ServiceType.ToString())
+            .Where(name => name.Contains("DbContextOptions", StringComparison.Ordinal) && name.Contains("NotificationsContext", StringComparison.Ordinal));
+
+        Assert.That(optionTypes, Is.Not.Empty, "the migrate job applies notifications' migrations through its context");
+    }
+
+    // Issue 103: platform, membership, assessment and classes are converted too. The migrate job still registers their contexts; no other mode does.
+    [Test]
+    public void The_api_modes_register_no_context_of_platform_membership_assessment_or_classes([Values(RunMode.Api, RunMode.Workers, RunMode.LoadContent)] RunMode mode, [Values("platform", "membership", "assessment", "classes")] string domain)
+    {
+        var contextName = char.ToUpperInvariant(domain[0]) + domain[1..] + "Context";
+        var types = Register(mode)
+            .Select(descriptor => descriptor.ServiceType)
+            .Where(type => type.ToString().Contains(contextName, StringComparison.Ordinal))
+            .ToList();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(types, Is.Empty, $"{domain} reads and writes through the data source: its context is for the migrate job only");
+            Assert.That(MigrationSchemas(mode), Does.Not.Contain(domain));
+        });
+    }
+
+    [TestCase("Platform")]
+    [TestCase("Membership")]
+    [TestCase("Assessment")]
+    [TestCase("Classes")]
+    public void The_migrate_mode_registers_the_context_of_each_remaining_domain(string name)
+    {
+        var optionTypes = Register(RunMode.Migrate)
+            .Select(descriptor => descriptor.ServiceType.ToString())
+            .Where(type => type.Contains("DbContextOptions", StringComparison.Ordinal) && type.Contains(name + "Context", StringComparison.Ordinal));
+
+        Assert.That(optionTypes, Is.Not.Empty, $"the migrate job applies {name}'s migrations through its context");
+    }
+
+    /// <summary>
+    /// Issue 108: the native build leaves Entity Framework out (the switch is off there), so <c>--migrate</c> refuses at once and names the image that migrates,
+    /// before any other setting is read. Here the switch is turned off for the one call and restored after.
+    /// </summary>
+    [Test]
+    public async Task Without_entity_framework_the_migrate_mode_refuses_and_names_the_migrate_image()
+    {
+        var entry = typeof(Program).Assembly.EntryPoint ?? throw new InvalidOperationException("The API assembly has no entry point.");
+        string[] args = ["--migrate"];
+        AppContext.SetSwitch(HostServices.MigrationsSwitch, false);
+        try
+        {
+            var error = await Assert.ThrowsAsync<System.Reflection.TargetInvocationException>(async () =>
+            {
+                var result = await Task.Run(() => entry.Invoke(null, [args]));
+                if (result is Task task)
+                {
+                    await task;
+                }
+            });
+
+            Assert.That(error!.InnerException, Is.InstanceOf<InvalidOperationException>());
+            Assert.That(error.InnerException!.Message, Does.Contain("--migrate").And.Contain("target migrate"));
+            Assert.That(() => Register(RunMode.Migrate), Throws.InvalidOperationException.With.Message.Contain("target migrate"));
+        }
+        finally
+        {
+            AppContext.SetSwitch(HostServices.MigrationsSwitch, true);
+        }
+    }
+
     /// <summary>The registrations are read from the container description by name, because the record is internal to shared/api.</summary>
     private static List<string> MigrationSchemas(RunMode mode) =>
         Register(mode)

@@ -84,7 +84,7 @@ An endpoint opts in with `.RequireMember()` (`.RequireMember(createsMember: true
 
 ```
 dotnet test domains/identity/api/tests     # token verification, settings, deletion allow list
-dotnet test db/tests                       # every refusal and success over HTTP, the sign-in write as the limited role (Docker); TestDeletion*Tests.cs, TestDebugTokenTests.cs; the golden files in db/tests/golden/identity (IdentityGoldenTests), IdentityFailureTests, IdentityPoolTests
+dotnet test db/tests                       # every refusal and success over HTTP, the sign-in write as the limited role (Docker); TestDeletion*Tests.cs, TestDebugTokenTests.cs; IdentityFailureTests, IdentityPoolTests
 tools/identity-contract.sh test            # Hurl contract on the test stack (emulator sign-in; never dev: it may hold real data)
 tools/identity-contract.sh parity          # the same file on PHP (parity stack up, tools/parity-php/README.md)
 tools/contract-deletion.sh test|parity     # the deletion and debug-token Hurl files

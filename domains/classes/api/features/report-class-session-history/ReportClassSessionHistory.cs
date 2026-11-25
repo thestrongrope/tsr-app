@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
 using Tsr.Shared.Api;
@@ -20,7 +21,7 @@ internal static class ReportClassSessionHistorySlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string class_id, HttpContext context, ClassesContext db, Permissions permissions, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(string class_id, HttpContext context, NpgsqlDataSource db, Permissions permissions, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -33,6 +34,6 @@ internal static class ReportClassSessionHistorySlice
             return Refusals.NotPermitted();
         }
 
-        return Results.Json(new Answer(await ClassSessionHistory.LoadAsync(db, permissions, caller, ClassGuards.IdOf(class_id), ct)));
+        return Results.Json(new Answer(await ClassSessionHistory.LoadAsync(db, permissions, caller, ClassGuards.IdOf(class_id), ct)), ClassesJson.Answers.ReportClassSessionHistory);
     }
 }

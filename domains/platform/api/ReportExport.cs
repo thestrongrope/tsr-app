@@ -18,7 +18,7 @@ public sealed record ReportSection(string Heading, IReadOnlyList<string> Headers
 /// <summary>
 /// PHP's <c>ReportExportModel</c> plus <c>api_send_report_download</c>: turns a title and sections into an Excel workbook or a PDF
 /// and answers the download. It knows nothing about any report, so a file holds exactly the figures its caller passes.
-/// The workbook is written here (ClosedXML); the PDF is HTML rendered by a Gotenberg container (setting <c>TSR_GOTENBERG_URL</c>).
+/// The workbook is written here (<c>ReportXlsx</c>, no library); the PDF is HTML rendered by a Gotenberg container (setting <c>TSR_GOTENBERG_URL</c>).
 /// A renderer that is down or slow is a 503 <c>{"detail": ...}</c> (PHP has no such answer: Dompdf ran inside the request).
 /// </summary>
 public sealed partial class ReportExport

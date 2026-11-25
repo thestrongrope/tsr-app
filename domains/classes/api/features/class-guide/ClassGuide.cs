@@ -2,8 +2,8 @@ using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
 using Tsr.Shared.Api;
@@ -31,7 +31,7 @@ internal static class ClassGuideSlice
     private static async Task<IResult> HandleAsync(
         string class_id,
         HttpContext context,
-        ClassesContext db,
+        NpgsqlDataSource source,
         Permissions permissions,
         IConfiguration configuration,
         CancellationToken ct)
@@ -42,12 +42,12 @@ internal static class ClassGuideSlice
             return Problem.Unauthenticated();
         }
 
-        if (!await ClassGuards.HasNumericGenderAsync(db, caller, ct))
+        if (!await ClassGuards.HasNumericGenderAsync(source, caller, ct))
         {
             return Refusals.GenderNotSet();
         }
 
-        var head = await ClassGuards.FindActiveClassAsync(db, ClassGuards.IdOf(class_id), ct);
+        var head = await ClassGuards.FindActiveClassAsync(source, ClassGuards.IdOf(class_id), ct);
         if (head is null)
         {
             return Refusals.ClassNotFound();
@@ -61,17 +61,18 @@ internal static class ClassGuideSlice
         var slug = GuideSlugs.ForLevel(head.LevelId);
         var guides = slug is null
             ? []
-            : await db.Database
-                .SqlQuery<string>($"""select coalesce(guide, '') as "Value" from classes.guides where level_id = {head.LevelId} and language_id = 1 order by id limit 1""")
-                .ToListAsync(ct);
+            : await source.ListAsync(
+                $"""select coalesce(guide, '') as "Value" from classes.guides where level_id = {head.LevelId} and language_id = 1 order by id limit 1""",
+                row => row.Text("Value"),
+                ct);
         var html = guides.Count == 0 ? string.Empty : PhpText.Trim(guides[0]);
         if (html.Length == 0)
         {
-            return Results.Json(new Body(null, null, head.LevelName));
+            return Results.Json(new Body(null, null, head.LevelName), ClassesJson.Answers.ClassGuideBody);
         }
 
         var publicWebBase = (configuration["TSR_PUBLIC_WEB_BASE"] ?? string.Empty).TrimEnd('/');
         var shareUrl = publicWebBase.Length == 0 ? null : publicWebBase + "/guide.php?guide=" + slug;
-        return Results.Json(new Body(guides[0], shareUrl, head.LevelName));
+        return Results.Json(new Body(guides[0], shareUrl, head.LevelName), ClassesJson.Answers.ClassGuideBody);
     }
 }

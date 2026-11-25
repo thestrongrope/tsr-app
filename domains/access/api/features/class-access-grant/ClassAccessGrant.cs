@@ -132,6 +132,8 @@ internal static class ClassAccessGrantSlice
 
     private static async Task<Refusal?> WriteAsync(NpgsqlDataSource source, IClassScopes classes, ClassAccessOperator op, TimeProvider clock, int token, Draft draft, CancellationToken ct)
     {
+        // Read through the port before the transaction opens: the port takes its own connection, and no path may hold two.
+        var active = await classes.ActiveClassesAsync(ct);
         await using var tx = await source.BeginAsync(ct);
         await MemberLock.TakeAsync(tx, token, ct);
         var locked = await ClassAccessStore.MemberAsync(tx, token, ct);
@@ -143,7 +145,7 @@ internal static class ClassAccessGrantSlice
         var (member, roleId) = locked.Value;
         var guard = await op.GuardAsync(tx, member, roleId, draft.Gender, ct);
         var rules = await ClassAccessStore.LiveRulesAsync(tx, token, ct);
-        var refused = guard ?? await RefuseAsync(classes, roleId, rules, draft, ct);
+        var refused = guard ?? Refuse(active, roleId, rules, draft);
         if (refused is not null)
         {
             return refused;
@@ -156,7 +158,7 @@ internal static class ClassAccessGrantSlice
     }
 
     // guardVersion then guardGrantable: the version (409), Finance (422), the same access held (409), no class reached (422), the classes changed since the preview (409).
-    private static async Task<Refusal?> RefuseAsync(IClassScopes classes, int roleId, IReadOnlyList<StoredRule> rules, Draft draft, CancellationToken ct)
+    private static Refusal? Refuse(IReadOnlyList<ClassFacts> active, int roleId, IReadOnlyList<StoredRule> rules, Draft draft)
     {
         if (ClassAccessRules.VersionOf(roleId, rules.Select(r => r.Id)) != draft.Version)
         {
@@ -174,7 +176,7 @@ internal static class ClassAccessGrantSlice
             return Refusal.Coded(409, "This member already has this access", "already_has_access");
         }
 
-        var reached = ClassAccessRules.Reach(draft.Gender, draft.Conditions, await classes.ActiveClassesAsync(ct));
+        var reached = ClassAccessRules.Reach(draft.Gender, draft.Conditions, active);
         if (reached.Count == 0)
         {
             return new Refusal(422, "This access reaches no class");

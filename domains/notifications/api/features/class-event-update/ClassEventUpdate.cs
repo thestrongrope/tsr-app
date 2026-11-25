@@ -2,7 +2,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Notifications.Api.Domain;
 
@@ -27,7 +27,7 @@ internal static class ClassEventUpdateSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string class_id, string event_id, HttpContext context, NotificationsContext db, Permissions permissions, TimeProvider clock, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(string class_id, string event_id, HttpContext context, NpgsqlDataSource source, Permissions permissions, TimeProvider clock, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -49,7 +49,7 @@ internal static class ClassEventUpdateSlice
         }
 
         var id = NotifyGuards.IdOf(event_id);
-        var row = await ClassEvents.FindAsync(db, classId, id, ct);
+        var row = await ClassEvents.FindAsync(source, classId, id, ct);
         if (row is null)
         {
             return ClassEvents.NotFound();
@@ -71,32 +71,32 @@ internal static class ClassEventUpdateSlice
             return Problem.Detail(StatusCodes.Status422UnprocessableEntity, CalendarEventInput.ZoneError);
         }
 
-        if (!await UpdateAsync(db, clock, row, values.Value!, caller.Token, ct))
+        if (!await UpdateAsync(source, clock, row, values.Value!, caller.Token, ct))
         {
             return ClassEvents.NotFound();
         }
-        var changed = await ClassEvents.FindAsync(db, classId, id, ct);
+        var changed = await ClassEvents.FindAsync(source, classId, id, ct);
         if (changed is null)
         {
             return ClassEvents.NotFound();
         }
 
-        return Results.Json(new Dictionary<string, object?> { ["item"] = await ClassEvents.ManagedPayloadAsync(permissions, caller, changed, ct) });
+        return Results.Json(new Dictionary<string, object?> { ["item"] = await ClassEvents.ManagedPayloadAsync(permissions, caller, changed, ct) }, NotificationsJson.Answers.Answer);
     }
 
     // PHP's `$input + $payload`: the body's field when the body names it (null included), else the event as it is on the wire, checked again by the same rules.
     private static Result<CalendarEventValues> Merge(JsonBody body, ClassEventRow row)
     {
-        var stored = JsonSerializer.SerializeToElement(ClassEvents.Payload(row, row.CreatedByUserId, editable: false));
+        var stored = JsonSerializer.SerializeToElement(ClassEvents.Payload(row, row.CreatedByUserId, editable: false), NotificationsJson.Default.Answer);
         return CalendarEventInput.Parse(name => body.Has(name) ? body.Get(name) : stored.GetProperty(name));
     }
 
     // False when the event was deleted since it was read: nothing is written, and no event says it was updated.
-    private static async Task<bool> UpdateAsync(NotificationsContext db, TimeProvider clock, ClassEventRow row, CalendarEventValues values, int token, CancellationToken ct)
+    private static async Task<bool> UpdateAsync(NpgsqlDataSource source, TimeProvider clock, ClassEventRow row, CalendarEventValues values, int token, CancellationToken ct)
     {
         var now = clock.GetUtcNow();
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        var changed = await db.Database.ExecuteSqlAsync(
+        await using var tx = await source.BeginAsync(ct);
+        var changed = await tx.ExecuteAsync(
             $"""
             update notifications.class_scheduled_events
             set message = {values.Message}, description = {values.Description}, action_link = {values.ActionLink}, weekdays = {values.Weekdays}, send_time = {values.SendTime}, updated_at = {now}
@@ -108,8 +108,8 @@ internal static class ClassEventUpdateSlice
             return false;
         }
 
-        await Outbox.WriteAsync(db, "notifications.class_event_updated", new ClassEventUpdated(row.Id, row.ClassId, token), clock, ct);
-        await transaction.CommitAsync(ct);
+        await Outbox.WriteAsync(tx, "notifications.class_event_updated", new ClassEventUpdated(row.Id, row.ClassId, token), NotificationsJson.Default.ClassEventUpdated, clock, ct);
+        await tx.CommitAsync(ct);
         return true;
     }
 }

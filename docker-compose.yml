@@ -49,11 +49,13 @@ services:
       db:
         condition: service_healthy
 
-  # One-off: the API image run with --migrate applies every domain's migrations that are not applied yet, as the owner role.
+  # One-off: the API's JIT build (target migrate: Entity Framework cannot be native) run with --migrate applies every domain's migrations that are
+  # not applied yet, as the owner role.
   migrate:
     build:
       context: .
       dockerfile: hosts/api/Dockerfile
+      target: migrate
     restart: "no"
     command: ["--migrate"]
     environment:
@@ -98,12 +100,14 @@ services:
       retries: 12
       start_period: 60s
 
-  # Reached from outside: the deployment tool attaches the API's host name to it, port 8080. It answers unknown paths itself
-  # and reads the caller's address from the proxy's X-Forwarded-For (shared/api/ClientAddress.cs).
+  # The native image (target native: one binary, no .NET runtime), as are content-load and workers. Reached from outside: the deployment tool
+  # attaches the API's host name to it, port 8080. It answers unknown paths itself and reads the caller's address from the proxy's
+  # X-Forwarded-For (shared/api/ClientAddress.cs).
   api:
     build:
       context: .
       dockerfile: hosts/api/Dockerfile
+      target: native
     restart: unless-stopped
     environment: &api-environment
       ASPNETCORE_ENVIRONMENT: Production
@@ -133,6 +137,7 @@ services:
     build:
       context: .
       dockerfile: hosts/api/Dockerfile
+      target: native
     restart: on-failure:5
     command: ["--load-content"]
     environment:
@@ -147,6 +152,7 @@ services:
     build:
       context: .
       dockerfile: hosts/api/Dockerfile
+      target: native
     restart: unless-stopped
     command: ["--workers"]
     environment:

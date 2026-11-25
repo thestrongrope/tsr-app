@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
 using Tsr.Shared.Api;
@@ -33,7 +34,7 @@ internal static class ChildPerformanceSlice
     }
 
     private static async Task<IResult> HandleAsync(
-        string child_token, string class_id, HttpContext context, ClassesContext db, Permissions permissions, CancellationToken ct)
+        string child_token, string class_id, HttpContext context, NpgsqlDataSource source, Permissions permissions, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -48,19 +49,19 @@ internal static class ChildPerformanceSlice
 
         var childToken = ClassGuards.IdOf(child_token);
         var classId = ClassGuards.IdOf(class_id);
-        if (!await ChildGuards.IsActiveGuardianAsync(db, caller.Token, childToken, ct)
-            || !await ChildGuards.IsChildEnrolledAsync(db, childToken, classId, ct))
+        if (!await ChildGuards.IsActiveGuardianAsync(source, caller.Token, childToken, ct)
+            || !await ChildGuards.IsChildEnrolledAsync(source, childToken, classId, ct))
         {
             return Problem.Detail(StatusCodes.Status404NotFound, "Child or class not found");
         }
 
         var from = context.Request.Query["start_date"].LastOrDefault();
         var to = context.Request.Query["end_date"].LastOrDefault();
-        var history = await StudentAttendance.HistoryAsync(db, (int)classId, (int)childToken, from, to, ct);
+        var history = await StudentAttendance.HistoryAsync(source, (int)classId, (int)childToken, from, to, ct);
         var summary = StudentAttendance.Summarise(history);
-        var quiz = await StudentAttendance.QuizAsync(db, (int)classId, (int)childToken, from, to, ct);
+        var quiz = await StudentAttendance.QuizAsync(source, (int)classId, (int)childToken, from, to, ct);
         return Results.Json(new Body(
             new Attendance(summary.TotalSessions, summary.AttendedSessions, StudentAttendance.Percent(summary, 1), summary.TotalRecitation),
-            new Quizzes(quiz.QuizzesAttempted, PhpFloat.Round((decimal)quiz.AverageScore, 1))));
+            new Quizzes(quiz.QuizzesAttempted, PhpFloat.Round((decimal)quiz.AverageScore, 1))), ClassesJson.Answers.ChildPerformanceBody);
     }
 }

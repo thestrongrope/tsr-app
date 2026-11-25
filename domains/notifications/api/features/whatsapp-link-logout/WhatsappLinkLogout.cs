@@ -19,6 +19,6 @@ internal static class WhatsappLinkLogoutSlice
         return routes;
     }
 
-    private static Task<IResult> HandleAsync(HttpContext context, Permissions permissions, MemberRateLimit limit, NotificationsContext db, INotifier notifier, ILogger<Notifier> log, CancellationToken ct) =>
-        NotifierLinkChange.RunAsync(context, permissions, limit, db, log, notifier.LogoutAsync, "whatsapp.logged_out", "Logout failed. The link is unchanged; please try again.", ct);
+    private static Task<IResult> HandleAsync(HttpContext context, Permissions permissions, MemberRateLimit limit, INotifier notifier, ILogger<Notifier> log, CancellationToken ct) =>
+        NotifierLinkChange.RunAsync(context, permissions, limit, log, notifier.LogoutAsync, "whatsapp.logged_out", "Logout failed. The link is unchanged; please try again.", ct);
 }

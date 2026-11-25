@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
 using Tsr.Shared.Api;
@@ -25,7 +26,7 @@ internal static class ConductionGetSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string class_id, string session_id, HttpContext context, ClassesContext db, Permissions permissions, TimeProvider clock, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(string class_id, string session_id, HttpContext context, NpgsqlDataSource source, Permissions permissions, TimeProvider clock, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -33,22 +34,22 @@ internal static class ConductionGetSlice
             return Problem.Unauthenticated();
         }
 
-        var (head, refusal) = await ConductionData.OpenAsync(db, permissions, caller, class_id, "sessions:update", ct);
+        var (head, refusal) = await ConductionData.OpenAsync(source, permissions, caller, class_id, "sessions:update", ct);
         if (refusal is not null)
         {
             return refusal;
         }
 
-        var session = await ConductionData.GetSessionAsync(db, ClassGuards.IdOf(session_id), ct);
+        var session = await ConductionData.GetSessionAsync(source, ClassGuards.IdOf(session_id), ct);
         if (session is null || session.ClassId != head!.Id)
         {
             return Problem.Detail(StatusCodes.Status404NotFound, "Session not found");
         }
 
         return Results.Json(new Detail(
-            await ConductionData.HeaderAsync(db, head.Id, ct),
+            await ConductionData.HeaderAsync(source, head.Id, ct),
             ConductionData.ToItem(session, clock.GetUtcNow()),
-            await ConductionData.AttendanceAsync(db, session.Id, ct),
-            await ConductionData.HolyQuranAsync(db, ct)));
+            await ConductionData.AttendanceAsync(source, session.Id, ct),
+            await ConductionData.HolyQuranAsync(source, ct)), ClassesJson.Answers.ConductionDetail);
     }
 }

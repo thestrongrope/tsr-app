@@ -22,13 +22,23 @@ public sealed partial class RunTimeEfUseTests
         new("search", null, null, null, "domains/search/api/Tsr.Search.Api.csproj", []),
         new("identity", "domains/identity/api/IdentityModule.cs", "services.AddDomainContext<IdentityContext>(IdentityContext.SchemaName);",
             "domains/identity/api/IdentityContext.cs", "domains/identity/api/Tsr.Identity.Api.csproj", []),
+        new("notifications", "domains/notifications/api/NotificationsModule.cs", "services.AddDomainContext<NotificationsContext>(NotificationsContext.SchemaName);",
+            "domains/notifications/api/NotificationsContext.cs", "domains/notifications/api/Tsr.Notifications.Api.csproj", []),
+        new("platform", "domains/platform/api/PlatformModule.cs", "services.AddDomainContext<PlatformContext>(PlatformContext.SchemaName);",
+            "domains/platform/api/PlatformContext.cs", "domains/platform/api/Tsr.Platform.Api.csproj", []),
+        new("membership", "domains/membership/api/MembershipModule.cs", "services.AddDomainContext<MembershipContext>(MembershipContext.SchemaName);",
+            "domains/membership/api/MembershipContext.cs", "domains/membership/api/Tsr.Membership.Api.csproj", []),
+        new("assessment", "domains/assessment/api/AssessmentModule.cs", "services.AddDomainContext<AssessmentContext>(AssessmentContext.SchemaName);",
+            "domains/assessment/api/AssessmentContext.cs", "domains/assessment/api/Tsr.Assessment.Api.csproj", []),
+        new("classes", "domains/classes/api/ClassesModule.cs", "services.AddDomainContext<ClassesContext>(ClassesContext.SchemaName);",
+            "domains/classes/api/ClassesContext.cs", "domains/classes/api/Tsr.Classes.Api.csproj", []),
     ];
 
     [GeneratedRegex("""<Using\s[^>]*Include\s*=\s*"[^"]*EntityFramework""")]
     private static partial Regex EfUsing();
 
     // The context names are listed, never \w+Context, which would hit HttpContext and JsonSerializerContext.
-    [GeneratedRegex(@"Microsoft\.EntityFrameworkCore|DbContext|\b(?:AccessContext|ContentContext|IdentityContext)\b|\bEfTransaction\b")]
+    [GeneratedRegex(@"Microsoft\.EntityFrameworkCore|DbContext|\b(?:AccessContext|ContentContext|IdentityContext|NotificationsContext|PlatformContext|MembershipContext|AssessmentContext|ClassesContext)\b|\bEfTransaction\b")]
     private static partial Regex Banned();
 
     /// <summary>The banned names in a file's text, after each domain's one allowed line is taken out of its own module.</summary>
@@ -88,6 +98,11 @@ public sealed partial class RunTimeEfUseTests
     [TestCase("AccessContext db", "AccessContext")]
     [TestCase("ContentContext db", "ContentContext")]
     [TestCase("IdentityContext db", "IdentityContext")]
+    [TestCase("NotificationsContext db", "NotificationsContext")]
+    [TestCase("PlatformContext db", "PlatformContext")]
+    [TestCase("MembershipContext db", "MembershipContext")]
+    [TestCase("AssessmentContext db", "AssessmentContext")]
+    [TestCase("ClassesContext db", "ClassesContext")]
     [TestCase("var tx = EfTransaction.Join(db);", "EfTransaction")]
     public void The_scan_reports_each_banned_name(string source, string name) =>
         Assert.That(Hits("domains/access/api/X.cs", source), Does.Contain(name));

@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
 using Tsr.Shared.Api;
@@ -21,7 +22,7 @@ internal static class ReportActiveTeachersSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(HttpContext context, ClassesContext db, Permissions permissions, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(HttpContext context, NpgsqlDataSource db, Permissions permissions, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -35,6 +36,6 @@ internal static class ReportActiveTeachersSlice
             return refusal;
         }
 
-        return Results.Json(new Answer(scope!.Gender, await ActiveTeachers.LoadAsync(db, scope, ct)));
+        return Results.Json(new Answer(scope!.Gender, await ActiveTeachers.LoadAsync(db, scope, ct)), ClassesJson.Answers.ReportActiveTeachers);
     }
 }

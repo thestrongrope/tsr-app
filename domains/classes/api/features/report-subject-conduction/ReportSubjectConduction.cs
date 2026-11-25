@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
 using Tsr.Shared.Api;
@@ -21,7 +22,7 @@ internal static class ReportSubjectConductionSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(HttpContext context, ClassesContext db, Permissions permissions, TimeProvider clock, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(HttpContext context, NpgsqlDataSource db, Permissions permissions, TimeProvider clock, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -36,6 +37,6 @@ internal static class ReportSubjectConductionSlice
             return refusal;
         }
 
-        return Results.Json(new Answer(report!.Gender, report.From, report.To, report.Levels, report.Classes, report.Rows));
+        return Results.Json(new Answer(report!.Gender, report.From, report.To, report.Levels, report.Classes, report.Rows), ClassesJson.Answers.ReportSubjectConduction);
     }
 }

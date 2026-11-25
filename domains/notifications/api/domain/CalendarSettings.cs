@@ -7,6 +7,9 @@ namespace Tsr.Notifications.Api.Domain;
 /// <summary>What a member's alert setting is about: a class's scheduled event (<c>event:12</c>) or a timetable slot (<c>slot:7</c>).</summary>
 internal readonly record struct EventKey(string Text, bool IsEvent, long Id);
 
+/// <summary>A stored alert setting of a member, as the two calendar routes read it.</summary>
+internal sealed record EventSettingRow(int Id, int UserId, int ClassId, string EventKey, int? OffsetMinutes, short Muted, short DeletedForMe, DateTimeOffset ClientUpdatedAt, DateTimeOffset ServerUpdatedAt, string DeviceKey);
+
 /// <summary>One change a phone sends: the alert offset in minutes (null: the app's default), muted, deleted for this member, and when the phone made it.</summary>
 internal sealed record SettingChange(int? OffsetMinutes, bool Muted, bool Deleted, DateTimeOffset ClientTime);
 
@@ -95,7 +98,7 @@ internal static partial class CalendarSettings
     public static string Iso(DateTimeOffset value) => value.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture);
 
     /// <summary>PHP <c>settingPayload</c>, key order included: a stored setting as both calendar routes answer it.</summary>
-    public static Dictionary<string, object?> Payload(MemberEventSetting setting)
+    public static Dictionary<string, object?> Payload(EventSettingRow setting)
     {
         ArgumentNullException.ThrowIfNull(setting);
         return new()
@@ -108,6 +111,19 @@ internal static partial class CalendarSettings
             ["device_key"] = setting.DeviceKey,
         };
     }
+
+    /// <summary>A stored setting, read from the columns <c>Id</c> to <c>DeviceKey</c> as every query of this table selects them.</summary>
+    public static EventSettingRow ReadRow(DbRow row) => new(
+        row.Int("Id"),
+        row.Int("UserId"),
+        row.Int("ClassId"),
+        row.Text("EventKey"),
+        row.IntOrNull("OffsetMinutes"),
+        row.Short("Muted"),
+        row.Short("DeletedForMe"),
+        row.Instant("ClientUpdatedAt"),
+        row.Instant("ServerUpdatedAt"),
+        row.Text("DeviceKey"));
 
     public static DateTimeOffset Milliseconds(DateTimeOffset value)
     {

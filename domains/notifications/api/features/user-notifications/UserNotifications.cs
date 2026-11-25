@@ -2,7 +2,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Notifications.Api.Domain;
 
@@ -24,7 +24,7 @@ internal static class UserNotificationsSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(HttpContext context, NotificationsContext db, Permissions permissions, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(HttpContext context, NpgsqlDataSource source, Permissions permissions, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -50,8 +50,8 @@ internal static class UserNotificationsSlice
         }
 
         var (take, skip) = NotifyGuards.Page(limit.Value, offset.Value);
-        var rows = await db.Database
-            .SqlQuery<InboxRow>($"""
+        var rows = await source.ListAsync(
+            $"""
                 select un.id as "Id", un.notification_id as "NotificationId", n.title as "Title", n.body as "Body", n.action_link as "ActionLink",
                        n.target_audience_criteria as "Criteria", n.sent_at as "SentAt", un.is_read as "IsRead", un.read_at as "ReadAt"
                 from notifications.user_notifications un
@@ -59,11 +59,21 @@ internal static class UserNotificationsSlice
                 where un.user_token = {caller.Token}
                 order by n.sent_at desc, un.id desc
                 limit {take} offset {skip}
-                """)
-            .ToListAsync(ct);
-        var covered = await ReminderClassesAsync(db, rows, ct);
-        var total = (await db.Database.SqlQuery<long>($"""select count(*) as "Value" from notifications.user_notifications where user_token = {caller.Token}""").ToListAsync(ct))[0];
-        var unread = (await db.Database.SqlQuery<long>($"""select count(*) as "Value" from notifications.user_notifications where user_token = {caller.Token} and is_read = 0""").ToListAsync(ct))[0];
+                """,
+            row => new InboxRow(
+                row.Int("Id"),
+                row.Int("NotificationId"),
+                row.Text("Title"),
+                row.Text("Body"),
+                row.TextOrNull("ActionLink"),
+                row.TextOrNull("Criteria"),
+                row.Instant("SentAt"),
+                row.Short("IsRead"),
+                row.InstantOrNull("ReadAt")),
+            ct);
+        var covered = await ReminderClassesAsync(source, rows, ct);
+        var total = (await source.ListAsync($"""select count(*) as "Value" from notifications.user_notifications where user_token = {caller.Token}""", row => row.Long("Value"), ct))[0];
+        var unread = (await source.ListAsync($"""select count(*) as "Value" from notifications.user_notifications where user_token = {caller.Token} and is_read = 0""", row => row.Long("Value"), ct))[0];
 
         var items = rows.Select(r => Item(r, covered)).ToList();
         return Results.Json(new Dictionary<string, object?>
@@ -73,10 +83,10 @@ internal static class UserNotificationsSlice
             ["unread_count"] = unread,
             ["limit"] = limit.Value,
             ["offset"] = offset.Value,
-        });
+        }, NotificationsJson.Answers.Answer);
     }
 
-    private static Dictionary<string, object?> Item(InboxRow row, Dictionary<int, List<Dictionary<string, object>>> covered) => new()
+    private static Dictionary<string, object?> Item(InboxRow row, Dictionary<int, List<Dictionary<string, object?>>> covered) => new()
     {
         ["id"] = row.Id,
         ["notification_id"] = row.NotificationId,
@@ -90,7 +100,7 @@ internal static class UserNotificationsSlice
     };
 
     // Only CC_NUDGE rows have any: the class ids of their criteria, named once for the whole page; a class that no longer exists is left out.
-    private static async Task<Dictionary<int, List<Dictionary<string, object>>>> ReminderClassesAsync(NotificationsContext db, List<InboxRow> rows, CancellationToken ct)
+    private static async Task<Dictionary<int, List<Dictionary<string, object?>>>> ReminderClassesAsync(NpgsqlDataSource source, List<InboxRow> rows, CancellationToken ct)
     {
         var idsByNotification = new Dictionary<int, List<int>>();
         foreach (var row in rows)
@@ -102,11 +112,11 @@ internal static class UserNotificationsSlice
             }
         }
 
-        var names = await Criteria.ClassNamesAsync(db, idsByNotification.Values.SelectMany(ids => ids), ct);
-        var covered = new Dictionary<int, List<Dictionary<string, object>>>();
+        var names = await Criteria.ClassNamesAsync(source, idsByNotification.Values.SelectMany(ids => ids), ct);
+        var covered = new Dictionary<int, List<Dictionary<string, object?>>>();
         foreach (var (notificationId, ids) in idsByNotification)
         {
-            var list = ids.Where(names.ContainsKey).Select(id => new Dictionary<string, object> { ["id"] = id, ["name"] = names[id] }).ToList();
+            var list = ids.Where(names.ContainsKey).Select(id => new Dictionary<string, object?> { ["id"] = id, ["name"] = names[id] }).ToList();
             if (list.Count > 0)
             {
                 covered[notificationId] = list;

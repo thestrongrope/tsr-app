@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Logging;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Assessment.Api.Domain;
 using Tsr.Shared.Api;
@@ -33,7 +34,7 @@ internal static partial class AdminQuizPublishSlice
     }
 
     private static async Task<IResult> HandleAsync(
-        HttpContext context, AssessmentContext db, Permissions permissions, ISheets sheets, TimeProvider clock, ILoggerFactory loggers, CancellationToken ct)
+        HttpContext context, NpgsqlDataSource source, Permissions permissions, ISheets sheets, TimeProvider clock, ILoggerFactory loggers, CancellationToken ct)
     {
         var (caller, refusal) = await QuizAdmin.GuardAsync(context, permissions, ct);
         if (refusal is not null)
@@ -54,7 +55,7 @@ internal static partial class AdminQuizPublishSlice
             return Problem.Detail(StatusCodes.Status422UnprocessableEntity, "Unknown target.");
         }
 
-        var settings = await QuizAdmin.SettingsAsync(db, ct);
+        var settings = await QuizAdmin.SettingsAsync(source, ct);
         if (QuizAdmin.RequireSettings(settings) is { } blocked)
         {
             return blocked;
@@ -65,19 +66,19 @@ internal static partial class AdminQuizPublishSlice
             return Problem.Detail(StatusCodes.Status404NotFound, "This quiz has nothing to publish from here.");
         }
 
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        if (!await AssessmentLocks.TryTakeAsync(db, AssessmentLocks.QuizAdmin, ct))
+        await using var tx = await source.BeginAsync(ct);
+        if (!await AssessmentLocks.TryTakeAsync(tx, AssessmentLocks.QuizAdmin, ct))
         {
             return QuizAdmin.Busy();
         }
 
         var log = loggers.CreateLogger("Tsr.Assessment.Api.AdminQuizPublish");
-        var timestamps = await QuizStateStore.LoadObjectAsync(db, QuizStateStore.Timestamps, ct);
-        var actor = await QuizAdmin.ActorLabelAsync(db, caller!, ct);
+        var timestamps = await QuizStateStore.LoadObjectAsync(tx, QuizStateStore.Timestamps, ct);
+        var actor = await QuizAdmin.ActorLabelAsync(tx, caller!, ct);
         Written written;
         try
         {
-            var result = await PublishAsync(db, sheets, settings, what, timestamps, actor, clock, ct);
+            var result = await PublishAsync(tx, sheets, settings, what, timestamps, actor, clock, ct);
             if (result is { Refusal: { } publishRefusal })
             {
                 return publishRefusal;
@@ -95,25 +96,25 @@ internal static partial class AdminQuizPublishSlice
         // PHP: published is false only for the student winner with no range set; an empty scoreboard or winners list was written (one empty row) and is "Published 0 rows.".
         if (written.Rows == 0 && what == "mega_student")
         {
-            return Results.Json(Answer("Nothing was published: the sheet range for this winner is not set in the quiz settings.", changed: false, rows: 0));
+            return Results.Json(Answer("Nothing was published: the sheet range for this winner is not set in the quiz settings.", changed: false, rows: 0), AssessmentJson.Answers.JsonObject);
         }
 
-        await QuizStateStore.SaveAsync(db, QuizStateStore.Timestamps, timestamps, clock, ct);
-        await QuizAdmin.EventAsync(db, "publish", clock, ct);
-        await transaction.CommitAsync(ct);
-        return Results.Json(Answer("Published " + written.Rows + (written.Rows == 1 ? " row." : " rows."), changed: true, rows: written.Rows));
+        await QuizStateStore.SaveAsync(tx, QuizStateStore.Timestamps, timestamps, clock, ct);
+        await QuizAdmin.EventAsync(tx, "publish", clock, ct);
+        await tx.CommitAsync(ct);
+        return Results.Json(Answer("Published " + written.Rows + (written.Rows == 1 ? " row." : " rows."), changed: true, rows: written.Rows), AssessmentJson.Answers.JsonObject);
     }
 
     private sealed record Published(Written? Written, IResult? Refusal);
 
     private static async Task<Published> PublishAsync(
-        AssessmentContext db, ISheets sheets, QuizSettings settings, string what, JsonObject timestamps, string actor, TimeProvider clock, CancellationToken ct)
+        DbTx tx, ISheets sheets, QuizSettings settings, string what, JsonObject timestamps, string actor, TimeProvider clock, CancellationToken ct)
     {
         var sheetId = settings.Str(settings.ModePrefix() + "scores_sheet_id");
-        var winners = await QuizStateStore.LoadObjectAsync(db, QuizStateStore.Winners, ct);
+        var winners = await QuizStateStore.LoadObjectAsync(tx, QuizStateStore.Winners, ct);
         if (what == "scoreboard")
         {
-            var rows = await PushScoreboardAsync(db, sheets, settings, sheetId, timestamps, actor, clock, ct);
+            var rows = await PushScoreboardAsync(tx, sheets, settings, sheetId, timestamps, actor, clock, ct);
             return new Published(new Written(rows, "scoreboard_updated"), null);
         }
 
@@ -153,11 +154,11 @@ internal static partial class AdminQuizPublishSlice
     }
 
     private static async Task<int> PushScoreboardAsync(
-        AssessmentContext db, ISheets sheets, QuizSettings settings, string? sheetId, JsonObject timestamps, string actor, TimeProvider clock, CancellationToken ct)
+        DbTx tx, ISheets sheets, QuizSettings settings, string? sheetId, JsonObject timestamps, string actor, TimeProvider clock, CancellationToken ct)
     {
         var curTime = QuizAdmin.NowOrOverride(settings, clock);
         timestamps["scoreboard_updated_by"] = actor;
-        var scoreboard = await QuizStateStore.LoadArrayAsync(db, QuizStateStore.Scoreboard, ct);
+        var scoreboard = await QuizStateStore.LoadArrayAsync(tx, QuizStateStore.Scoreboard, ct);
         timestamps["scoreboard_generated_at"] = QuizAdmin.Stamp(curTime);
         var rows = scoreboard.OfType<JsonArray>().Select(r => (IReadOnlyList<object?>)r.Select(Cell).ToList()).ToList();
         await WriteAsync(sheets, sheetId, settings.Str("scores_range"), rows, partly: false, ct);

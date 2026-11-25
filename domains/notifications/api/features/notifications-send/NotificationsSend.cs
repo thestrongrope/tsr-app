@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Logging;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Notifications.Api.Domain;
 
@@ -28,7 +29,7 @@ internal static class NotificationsSendSlice
 
     private static async Task<IResult> HandleAsync(
         HttpContext context,
-        NotificationsContext db,
+        NpgsqlDataSource source,
         Permissions permissions,
         IPushSender sender,
         ILoggerFactory loggers,
@@ -41,7 +42,7 @@ internal static class NotificationsSendSlice
             return Problem.Unauthenticated();
         }
 
-        var refusal = await NotifyGuards.AdminAsync(context, db, permissions, caller, "send notifications", ct);
+        var refusal = await NotifyGuards.AdminAsync(context, permissions, caller, "send notifications", ct);
         if (refusal is not null)
         {
             return refusal;
@@ -60,13 +61,13 @@ internal static class NotificationsSendSlice
         }
 
         var announcement = parsed.Value!;
-        var devices = await Audience.DevicesAsync(db, announcement.Target, ct);
+        var devices = await Audience.DevicesAsync(source, announcement.Target, ct);
         if (devices.Count == 0)
         {
-            return Results.Json(Outcome("No devices found matching the target criteria", 0, 0, 0, null));
+            return Results.Json(Outcome("No devices found matching the target criteria", 0, 0, 0, null), NotificationsJson.Answers.Answer);
         }
 
-        var members = await Audience.MemberTokensAsync(db, announcement.Target, ct);
+        var members = await Audience.MemberTokensAsync(source, announcement.Target, ct);
         var logger = loggers.CreateLogger(NotifyLog.Category);
         if (Audience.TooLarge(devices.Count) || Audience.TooLarge(members.Count))
         {
@@ -88,8 +89,8 @@ internal static class NotificationsSendSlice
         };
         // Not the request's token from here on: a push cannot be unsent, so a caller or gateway that goes away must not cut it short or lose its record (PHP runs on too). PushBatch keeps its own deadline.
         var report = await PushBatch.SendAsync(sender, announcement.Title, PushBatch.CutBody(announcement.Body), data, devices, CancellationToken.None);
-        var id = await RecordAsync(db, clock, logger, announcement, devices.Count, report, members, caller.Token, CancellationToken.None);
-        return Results.Json(Outcome($"Notification sent to {report.Success} devices successfully", devices.Count, report.Success, report.Failure, id));
+        var id = await RecordAsync(source, clock, logger, announcement, devices.Count, report, members, caller.Token, CancellationToken.None);
+        return Results.Json(Outcome($"Notification sent to {report.Success} devices successfully", devices.Count, report.Success, report.Failure, id), NotificationsJson.Answers.Answer);
     }
 
     private static Dictionary<string, object?> Outcome(string message, int devices, int success, int failure, int? id) => new()
@@ -104,7 +105,7 @@ internal static class NotificationsSendSlice
 
     // Best effort: the push has gone out and cannot be unsent, so a failure here is logged (no values) and not shown as an error.
     private static async Task<int?> RecordAsync(
-        NotificationsContext db,
+        NpgsqlDataSource source,
         TimeProvider clock,
         ILogger logger,
         AnnouncementInput announcement,
@@ -117,7 +118,9 @@ internal static class NotificationsSendSlice
         try
         {
             var notification = new NewNotification(announcement.Title, announcement.Body, announcement.CriteriaJson, deviceCount, report.Success, report.Failure, announcement.ActionLink ?? string.Empty, sender);
-            var written = await NotificationWriter.WriteAsync(db, clock, notification, members, "announcement", reuseSameCriteria: false, ct);
+            await using var tx = await source.BeginAsync(ct);
+            var written = await NotificationWriter.WriteAsync(tx, clock, notification, members, "announcement", reuseSameCriteria: false, ct);
+            await tx.CommitAsync(ct);
             return written.NotificationId;
         }
         catch (Exception e) when (e is not OperationCanceledException)

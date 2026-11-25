@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Assessment.Api.Domain;
 using Tsr.Shared.Api;
@@ -27,7 +27,7 @@ internal static class ManageDeactivateSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string quiz_id, HttpContext context, AssessmentContext db, Permissions permissions, TimeProvider clock, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(string quiz_id, HttpContext context, NpgsqlDataSource source, Permissions permissions, TimeProvider clock, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -35,7 +35,7 @@ internal static class ManageDeactivateSlice
             return Problem.Unauthenticated();
         }
 
-        var (quiz, refusal) = await ManageAccess.ResolveQuizAsync(db, PhpValue.IntOfText(quiz_id), ct);
+        var (quiz, refusal) = await ManageAccess.ResolveQuizAsync(source, PhpValue.IntOfText(quiz_id), ct);
         if (refusal is not null)
         {
             return refusal;
@@ -54,16 +54,17 @@ internal static class ManageDeactivateSlice
 
         var deactivate = PhpValue.Truthy(body!.Get("deactivate"), whenMissing: true);
         var at = ManageAccess.NowToSecond(clock);
-        await SaveAsync(db, clock, quiz, caller.Token, deactivate, at, ct);
-        return Results.Json(new Body(true, deactivate, deactivate ? QuizAccess.Stamp(at) : null));
+        await SaveAsync(source, clock, quiz, caller.Token, deactivate, at, ct);
+        return Results.Json(new Body(true, deactivate, deactivate ? QuizAccess.Stamp(at) : null), AssessmentJson.Answers.ManageDeactivate);
     }
 
-    private static async Task SaveAsync(AssessmentContext db, TimeProvider clock, ManageAccess.QuizRow quiz, int token, bool deactivate, DateTimeOffset at, CancellationToken ct)
+    private static async Task SaveAsync(NpgsqlDataSource source, TimeProvider clock, ManageAccess.QuizRow quiz, int token, bool deactivate, DateTimeOffset at, CancellationToken ct)
     {
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        var was = await db.Database
-            .SqlQuery<bool>($"""select deactivated_at is not null as "Value" from assessment.spot_quizzes where id = {quiz.Id} for update""")
-            .ToListAsync(ct);
+        await using var tx = await source.BeginAsync(ct);
+        var was = await tx.ListAsync(
+            $"""select deactivated_at is not null as "Value" from assessment.spot_quizzes where id = {quiz.Id} for update""",
+            row => row.Bool("Value"),
+            ct);
         if (was.Count == 0)
         {
             return;
@@ -71,19 +72,19 @@ internal static class ManageDeactivateSlice
 
         if (deactivate)
         {
-            await db.Database.ExecuteSqlAsync($"update assessment.spot_quizzes set deactivated_at = {at}, deactivated_by = {token} where id = {quiz.Id}", ct);
+            await tx.ExecuteAsync($"update assessment.spot_quizzes set deactivated_at = {at}, deactivated_by = {token} where id = {quiz.Id}", ct);
         }
         else
         {
-            await db.Database.ExecuteSqlAsync(
+            await tx.ExecuteAsync(
                 $"update assessment.spot_quizzes set deactivated_at = null, deactivated_by = null, modified_at = {at}, modified_by = {token} where id = {quiz.Id}", ct);
         }
 
         if (was[0] != deactivate)
         {
-            await Outbox.WriteAsync(db, "assessment.quiz_deactivated", new QuizDeactivated(quiz.Id, quiz.ClassId, token, deactivate), clock, ct);
+            await Outbox.WriteAsync(tx, "assessment.quiz_deactivated", new QuizDeactivated(quiz.Id, quiz.ClassId, token, deactivate), AssessmentJson.Default.QuizDeactivated, clock, ct);
         }
 
-        await transaction.CommitAsync(ct);
+        await tx.CommitAsync(ct);
     }
 }

@@ -4,7 +4,7 @@ using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Classes.Api.Domain;
 using Tsr.Shared.Api;
 
@@ -30,7 +30,7 @@ internal static partial class JoinPreviewSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string code, HttpContext context, ClassesContext db, MemberRateLimit limit, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(string code, HttpContext context, NpgsqlDataSource source, MemberRateLimit limit, CancellationToken ct)
     {
         var address = ClientAddress.Of(context);
         if (!limit.Allow("join_preview", KeyOf(address), 30, 60))
@@ -43,16 +43,17 @@ internal static partial class JoinPreviewSlice
             return Problem.Detail(StatusCodes.Status404NotFound, "Not Found");
         }
 
-        var rows = await db.Database
-            .SqlQuery<Row>($"""
+        var rows = await source.ListAsync(
+            $"""
                 select c.name as "Name", c.status as "Status", c.language_id as "LanguageId", cl.name as "Level", g.name as "GenderName"
                 from classes.classes c
                 left join classes.class_levels cl on cl.id = c.class_level_id
                 left join platform.v_genders g on g.id = c.gender
                 where c.link = {code}::citext and c.deleted_at is null
                 limit 1
-                """)
-            .ToListAsync(ct);
+                """,
+            row => new Row(row.TextOrNull("Name"), row.TextOrNull("Status"), row.IntOrNull("LanguageId"), row.TextOrNull("Level"), row.TextOrNull("GenderName")),
+            ct);
         if (rows.Count == 0)
         {
             return Problem.Detail(StatusCodes.Status404NotFound, "Not Found");
@@ -67,7 +68,7 @@ internal static partial class JoinPreviewSlice
             ["language"] = language,
             ["gender"] = row.GenderName ?? string.Empty,
             ["open"] = row.Status == "A",
-        });
+        }, ClassesJson.Answers.Answer);
     }
 
     private static int KeyOf(string address) => BitConverter.ToInt32(SHA256.HashData(Encoding.UTF8.GetBytes(address)), 0);

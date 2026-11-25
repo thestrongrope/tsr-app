@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
 using Tsr.Shared.Api;
@@ -32,7 +32,7 @@ internal static class AdminTeachersSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(HttpContext context, ClassesContext db, Permissions permissions, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(HttpContext context, NpgsqlDataSource source, Permissions permissions, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -48,8 +48,8 @@ internal static class AdminTeachersSlice
         }
 
         var genderText = gender.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        var rows = await db.Database
-            .SqlQuery<Row>($"""
+        var rows = await source.ListAsync(
+            $"""
                 select t.token as "Token", m.name as "Name", c2.class_level as "Level",
                        max(t.salman) as "Salman", max(t.abuzar) as "Abuzar", max(t.miqdad) as "Miqdad", max(t.ammar) as "Ammar", max(t.bilal) as "Bilal",
                        count(c.id)::int as "Classes", string_agg(c.code::text, ', ' order by c.sort_order, c.id) as "Conducting"
@@ -71,8 +71,19 @@ internal static class AdminTeachersSlice
                 group by t.token, m.name, c2.class_level
                 order by m.name, t.token
                 limit {MaxRows}
-                """)
-            .ToListAsync(ct);
+                """,
+            row => new Row(
+                row.Int("Token"),
+                row.TextOrNull("Name"),
+                row.TextOrNull("Level"),
+                row.Int("Salman"),
+                row.Int("Abuzar"),
+                row.Int("Miqdad"),
+                row.Int("Ammar"),
+                row.Int("Bilal"),
+                row.Int("Classes"),
+                row.TextOrNull("Conducting")),
+            ct);
 
         var levels = TeacherTraining.Levels.Select(l => new Level(l.Key, l.Code, PhpText.UcFirst(l.Key))).ToList();
         var teachers = rows.Select(r => new Teacher(
@@ -82,7 +93,7 @@ internal static class AdminTeachersSlice
             r.Classes,
             Flags(r),
             string.IsNullOrEmpty(r.Conducting) ? [] : r.Conducting.Split(", "))).ToList();
-        return Results.Json(new Body(gender, levels, teachers));
+        return Results.Json(new Body(gender, levels, teachers), ClassesJson.Answers.TeachersBody);
     }
 
     private static Dictionary<string, bool> Flags(Row r) => new()

@@ -3,7 +3,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
 using Tsr.Identity.Api;
@@ -39,7 +39,7 @@ internal static class ClassStudentsBulkSlice
     private static async Task<IResult> HandleAsync(
         string class_id,
         HttpContext context,
-        ClassesContext db,
+        NpgsqlDataSource source,
         Permissions permissions,
         MemberRateLimit limit,
         TimeProvider clock,
@@ -51,7 +51,7 @@ internal static class ClassStudentsBulkSlice
             return Problem.Unauthenticated();
         }
 
-        var head = await ClassGuards.FindActiveClassAsync(db, ClassGuards.IdOf(class_id), ct);
+        var head = await ClassGuards.FindActiveClassAsync(source, ClassGuards.IdOf(class_id), ct);
         if (head is null)
         {
             return Refusals.ClassNotFound();
@@ -62,7 +62,7 @@ internal static class ClassStudentsBulkSlice
             return Refusals.NotPermittedToChangeStudents();
         }
 
-        await ClassGuards.LogAdminAccessAsync(db, context, permissions, caller, ct);
+        await ClassGuards.LogAdminAccessAsync(context, permissions, caller, ct);
         if (!limit.Allow(Bucket, caller.Token, 10, 60))
         {
             return Problem.Detail(StatusCodes.Status429TooManyRequests, "Too many bulk adds. Please wait a minute and try again.");
@@ -86,21 +86,21 @@ internal static class ClassStudentsBulkSlice
             return Problem.Detail(StatusCodes.Status422UnprocessableEntity, resolutionError);
         }
 
-        var result = BulkLines.Classify(lines!, resolutions!, await MatchesAsync(db, lines!, head.Gender, ct), await EnrolledTokensAsync(db, head.Id, ct), await EnrolledNamesAsync(db, head.Id, ct));
+        var result = BulkLines.Classify(lines!, resolutions!, await MatchesAsync(source, lines!, head.Gender, ct), await EnrolledTokensAsync(source, head.Id, ct), await EnrolledNamesAsync(source, head.Id, ct));
         if (result.Plan.Count == 0)
         {
-            return Results.Json(Answer(result, new Dictionary<int, string>()));
+            return Results.Json(Answer(result, new Dictionary<int, string>()), ClassesJson.Answers.Answer);
         }
 
-        var written = await WriteAsync(db, clock, head.Id, head.Gender, result.Plan, caller.Token, ct);
+        var written = await WriteAsync(source, clock, head.Id, head.Gender, result.Plan, caller.Token, ct);
         if (written is null)
         {
             return Problem.Detail(StatusCodes.Status500InternalServerError, "Nothing was added. Please try again.");
         }
 
         var answer = Answer(result, written);
-        answer["roster"] = await ClassRoster.BuildAsync(db, permissions, caller, head.Id, ct);
-        return Results.Json(answer);
+        answer["roster"] = await ClassRoster.BuildAsync(source, permissions, caller, head.Id, ct);
+        return Results.Json(answer, ClassesJson.Answers.Answer);
     }
 
     private static List<string>? ReadLines(JsonBody body, out string? error)
@@ -171,7 +171,7 @@ internal static class ClassStudentsBulkSlice
     }
 
     // PHP memberByMobile: the stored number without spaces, dashes and plus signs, its last ten characters (MariaDB substr(x, -10) is empty for a shorter one), the first member by id whose gender fits.
-    private static async Task<Dictionary<string, BulkLines.Member>> MatchesAsync(ClassesContext db, List<string> lines, int classGender, CancellationToken ct)
+    private static async Task<Dictionary<string, BulkLines.Member>> MatchesAsync(NpgsqlDataSource source, List<string> lines, int classGender, CancellationToken ct)
     {
         var keys = lines
             .Where(l => PhpText.Trim(l).Length > 0)
@@ -186,19 +186,20 @@ internal static class ClassStudentsBulkSlice
             return matches;
         }
 
-        var rows = await db.Database
-            .SqlQuery<Candidate>($"""
-                select m.token as "Token", coalesce(m.name, '') as "Name", m.gender as "Gender", x.k as "Key"
-                from membership.v_members m
-                cross join lateral (
-                    select case when length(s.v) >= 10 then right(s.v, 10) else '' end as k
-                    from (select replace(replace(replace(coalesce(m.mobile, ''), ' ', ''), '-', ''), '+', '') as v) s
-                ) x
-                where m.token > 0 and x.k = any({keys})
-                order by m.user_id
-                limit {MobileMatchRows}
-                """)
-            .ToListAsync(ct);
+        var rows = await source.ListAsync(
+            $"""
+            select m.token as "Token", coalesce(m.name, '') as "Name", m.gender as "Gender", x.k as "Key"
+            from membership.v_members m
+            cross join lateral (
+                select case when length(s.v) >= 10 then right(s.v, 10) else '' end as k
+                from (select replace(replace(replace(coalesce(m.mobile, ''), ' ', ''), '-', ''), '+', '') as v) s
+            ) x
+            where m.token > 0 and x.k = any({keys})
+            order by m.user_id
+            limit {MobileMatchRows}
+            """,
+            row => new Candidate(row.Int("Token"), row.Text("Name"), row.TextOrNull("Gender"), row.Text("Key")),
+            ct);
         foreach (var row in rows.Where(r => EnrolmentRules.GenderAllows(r.Gender, classGender)))
         {
             matches.TryAdd(row.Key, new BulkLines.Member(row.Token, row.Name));
@@ -207,41 +208,43 @@ internal static class ClassStudentsBulkSlice
         return matches;
     }
 
-    private static async Task<HashSet<int>> EnrolledTokensAsync(ClassesContext db, int classId, CancellationToken ct) =>
-        (await db.Database
-            .SqlQuery<int>($"""select token_no as "Value" from classes.class_students where class_id = {classId} and status = 'A' and removed_at is null""")
-            .ToListAsync(ct)).ToHashSet();
+    private static async Task<HashSet<int>> EnrolledTokensAsync(NpgsqlDataSource source, int classId, CancellationToken ct) =>
+        (await source.ListAsync(
+            $"""select token_no as "Value" from classes.class_students where class_id = {classId} and status = 'A' and removed_at is null""",
+            row => row.Int("Value"),
+            ct)).ToHashSet();
 
-    private static async Task<HashSet<string>> EnrolledNamesAsync(ClassesContext db, int classId, CancellationToken ct) =>
-        (await db.Database
-            .SqlQuery<string>($"""
-                select coalesce(m.name, '') as "Value"
-                from classes.class_students cs
-                join membership.v_members m on m.token = cs.token_no
-                where cs.class_id = {classId} and cs.status = 'A' and cs.removed_at is null
-                """)
-            .ToListAsync(ct)).Select(BulkLines.NameKey).ToHashSet();
+    private static async Task<HashSet<string>> EnrolledNamesAsync(NpgsqlDataSource source, int classId, CancellationToken ct) =>
+        (await source.ListAsync(
+            $"""
+            select coalesce(m.name, '') as "Value"
+            from classes.class_students cs
+            join membership.v_members m on m.token = cs.token_no
+            where cs.class_id = {classId} and cs.status = 'A' and cs.removed_at is null
+            """,
+            row => row.Text("Value"),
+            ct)).Select(BulkLines.NameKey).ToHashSet();
 
     // The statuses the written lines end with, by line number; null when the batch failed and nothing was kept.
-    private static async Task<Dictionary<int, string>?> WriteAsync(ClassesContext db, TimeProvider clock, int classId, int classGender, IReadOnlyList<BulkLines.Step> plan, int by, CancellationToken ct)
+    private static async Task<Dictionary<int, string>?> WriteAsync(NpgsqlDataSource source, TimeProvider clock, int classId, int classGender, IReadOnlyList<BulkLines.Step> plan, int by, CancellationToken ct)
     {
         var statuses = new Dictionary<int, string>();
         try
         {
-            await using var transaction = await db.Database.BeginTransactionAsync(ct);
+            await using var tx = await source.BeginAsync(ct);
             foreach (var step in plan)
             {
-                var token = step.EnrolToken ?? await CreateMemberAsync(db, clock, classGender, step, ct);
-                if (!await Enrolment.AddAsync(db, classId, token, by, ct))
+                var token = step.EnrolToken ?? await CreateMemberAsync(tx, clock, classGender, step, ct);
+                if (!await Enrolment.AddAsync(tx, classId, token, by, ct))
                 {
                     return null;
                 }
 
-                await Outbox.WriteAsync(db, "classes.student_enrolled", new StudentEnrolled(classId, token, by, "bulk"), clock, ct);
+                await Outbox.WriteAsync(tx, "classes.student_enrolled", new StudentEnrolled(classId, token, by, "bulk"), ClassesJson.Default.StudentEnrolled, clock, ct);
                 statuses[step.Line] = step.EnrolToken is null ? "added" : "enrolled";
             }
 
-            await transaction.CommitAsync(ct);
+            await tx.CommitAsync(ct);
             return statuses;
         }
         catch (Exception e) when (e is DbException or InvalidOperationException or ArgumentException)
@@ -250,9 +253,8 @@ internal static class ClassStudentsBulkSlice
         }
     }
 
-    private static async Task<int> CreateMemberAsync(ClassesContext db, TimeProvider clock, int classGender, BulkLines.Step step, CancellationToken ct)
+    private static async Task<int> CreateMemberAsync(DbTx tx, TimeProvider clock, int classGender, BulkLines.Step step, CancellationToken ct)
     {
-        var tx = EfTransaction.Join(db);
         var token = await IdentityCommands.CreateMemberAsync(tx, clock, ct);
         await MembershipCommands.CreateProfileAsync(tx, token, step.Name, classGender.ToString(System.Globalization.CultureInfo.InvariantCulture), step.Mobile, clock, ct);
         return token;

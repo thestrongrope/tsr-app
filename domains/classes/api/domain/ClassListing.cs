@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Shared.Api;
 
@@ -15,16 +15,29 @@ internal static class ClassListing
 
     internal sealed record Row(int Id, string Code, string Name, string Level, int? Gender, string? TeacherName, string? City, string? Country, int Students, string Status);
 
+    private static Row ReadRow(DbRow row) =>
+        new(
+            row.Int("Id"),
+            row.Text("Code"),
+            row.Text("Name"),
+            row.Text("Level"),
+            row.IntOrNull("Gender"),
+            row.TextOrNull("TeacherName"),
+            row.TextOrNull("City"),
+            row.TextOrNull("Country"),
+            row.Int("Students"),
+            row.Text("Status"));
+
     /// <summary>PHP assignedOnlyIds(caller, 'classes:read'): the classes a listing is limited to, or null when it is not limited.</summary>
     public static async Task<IReadOnlyList<int>?> AssignedAsync(Permissions permissions, Caller caller, CancellationToken ct) =>
         (await permissions.ReachAsync(caller, "classes:read", ct)).AssignedOnlyIds;
 
-    public static async Task<List<Row>> AllAsync(ClassesContext db, IReadOnlyList<int>? assigned, bool includeInactive, CancellationToken ct)
+    public static async Task<List<Row>> AllAsync(NpgsqlDataSource source, IReadOnlyList<int>? assigned, bool includeInactive, CancellationToken ct)
     {
         var limited = assigned is not null;
         var ids = assigned?.ToArray() ?? [];
-        return await db.Database
-            .SqlQuery<Row>($"""
+        return await source.ListAsync(
+            $"""
                 select c.id as "Id", c.code as "Code", c.name as "Name", cl.name as "Level", c.gender as "Gender", t.name as "TeacherName",
                        c.city::text as "City", c.country::text as "Country",
                        (select count(1) from classes.class_students s where s.class_id = c.id and s.removed_at is null)::int as "Students",
@@ -36,17 +49,18 @@ internal static class ClassListing
                   and (not {limited} or c.id = any({ids}))
                 order by c.gender, cl.sort_order, c.id
                 limit {MaxRows}
-                """)
-            .ToListAsync(ct);
+                """,
+            ReadRow,
+            ct);
     }
 
     /// <summary>The class with this id in any status, as <see cref="AllAsync"/> would list it, or null.</summary>
-    public static async Task<Row?> FindAsync(ClassesContext db, IReadOnlyList<int>? assigned, long classId, CancellationToken ct)
+    public static async Task<Row?> FindAsync(NpgsqlDataSource source, IReadOnlyList<int>? assigned, long classId, CancellationToken ct)
     {
         var limited = assigned is not null;
         var ids = assigned?.ToArray() ?? [];
-        var rows = await db.Database
-            .SqlQuery<Row>($"""
+        var rows = await source.ListAsync(
+            $"""
                 select c.id as "Id", c.code as "Code", c.name as "Name", cl.name as "Level", c.gender as "Gender", t.name as "TeacherName",
                        c.city::text as "City", c.country::text as "Country",
                        (select count(1) from classes.class_students s where s.class_id = c.id and s.removed_at is null)::int as "Students",
@@ -57,8 +71,9 @@ internal static class ClassListing
                 where c.id = {classId}
                   and (not {limited} or c.id = any({ids}))
                 limit 1
-                """)
-            .ToListAsync(ct);
+                """,
+            ReadRow,
+            ct);
         return rows.Count == 0 ? null : rows[0];
     }
 }

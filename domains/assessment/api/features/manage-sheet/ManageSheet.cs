@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Assessment.Api.Domain;
 using Tsr.Platform.Api;
@@ -28,7 +28,7 @@ internal static class ManageSheetSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string quiz_id, HttpContext context, AssessmentContext db, Permissions permissions, ReportExport export, IQuizRandom random, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(string quiz_id, HttpContext context, NpgsqlDataSource source, Permissions permissions, ReportExport export, IQuizRandom random, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -36,7 +36,7 @@ internal static class ManageSheetSlice
             return Problem.Unauthenticated();
         }
 
-        var (quiz, refusal) = await ManageAccess.ResolveQuizAsync(db, PhpValue.IntOfText(quiz_id), ct);
+        var (quiz, refusal) = await ManageAccess.ResolveQuizAsync(source, PhpValue.IntOfText(quiz_id), ct);
         if (refusal is not null)
         {
             return refusal;
@@ -47,14 +47,17 @@ internal static class ManageSheetSlice
             return ManageAccess.NotPermitted();
         }
 
-        await OptionOrder.FillMissingAsync(db, quiz.Id, random, ct);
-        var rows = await db.Database
-            .SqlQuery<Row>($"""
+        await OptionOrder.FillMissingAsync(source, quiz.Id, random, ct);
+        var rows = await source.ListAsync(
+            $"""
                 select question::text as "Question", option1::text as "Option1", option2::text as "Option2", option3::text as "Option3",
                        option4::text as "Option4", option5::text as "Option5", option_display_order::text as "Order"
                 from assessment.spot_quiz_questions where spot_quiz_id = {quiz.Id} order by id limit {MaxQuestions}
-                """)
-            .ToListAsync(ct);
+                """,
+            row => new Row(
+                row.TextOrNull("Question"), row.TextOrNull("Option1"), row.TextOrNull("Option2"), row.TextOrNull("Option3"), row.TextOrNull("Option4"), row.TextOrNull("Option5"),
+                row.TextOrNull("Order")),
+            ct);
         if (rows.Count == 0)
         {
             return Problem.Detail(StatusCodes.Status404NotFound, "This MCQ has no questions");

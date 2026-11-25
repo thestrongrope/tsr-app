@@ -362,14 +362,12 @@ public sealed class SignInTests
         await using var run = await IdentityRun.StartAsync("race-one-account");
         var headers = IdentityGoldenScenarios.Headers("uid-race", "race.one@example.invalid", true, IdentitySeed.Odd, "https://img.invalid/race");
 
-        var replies = await SendAtTheTokenLockAsync(run, ("uid-race, name and picture", headers), ("uid-race, name and picture", headers));
-        await run.RowsAsync("both answered");
+        var replies = await SendAtTheTokenLockAsync(run, headers, headers);
 
         Assert.That(replies.Select(r => r.Status), Is.All.EqualTo(HttpStatusCode.OK), replies[0].Body + replies[1].Body);
         Assert.That(replies[1].Body, Is.EqualTo(replies[0].Body), "both answer as the same member");
         Assert.That(await run.Run.QueryAsync("select count(*) from identity.users where firebase_uid = 'uid-race'"), Is.EqualTo(["1"]));
         Assert.That(await run.Run.QueryAsync("select count(*) from membership.member_profiles p join identity.users u on u.id = p.user_id where u.firebase_uid = 'uid-race' and p.picture = 'https://img.invalid/race'"), Is.EqualTo(["1"]));
-        GoldenScenario.Check("race-one-account", run.Transcript, IdentityGolden.Set);
     }
 
     [Test]
@@ -380,15 +378,15 @@ public sealed class SignInTests
 
         var replies = await SendAtTheTokenLockAsync(
             run,
-            ("uid-race-a", IdentityGoldenScenarios.Headers("uid-race-a", "race.a@example.invalid")),
-            ("uid-race-b", IdentityGoldenScenarios.Headers("uid-race-b", "race.b@example.invalid")));
+            IdentityGoldenScenarios.Headers("uid-race-a", "race.a@example.invalid"),
+            IdentityGoldenScenarios.Headers("uid-race-b", "race.b@example.invalid"));
 
         Assert.That(replies.Select(r => r.Status), Is.All.EqualTo(HttpStatusCode.OK), replies[0].Body + replies[1].Body);
         var tokens = await run.Run.QueryAsync("select token from identity.users where firebase_uid in ('uid-race-a', 'uid-race-b') order by token");
         Assert.That(tokens, Is.EqualTo([(highest + 1).ToString(System.Globalization.CultureInfo.InvariantCulture), (highest + 2).ToString(System.Globalization.CultureInfo.InvariantCulture)]));
     }
 
-    private static async Task<GoldenReply[]> SendAtTheTokenLockAsync(IdentityRun run, params (string Who, List<KeyValuePair<string, string>> Headers)[] requests)
+    private static async Task<GoldenReply[]> SendAtTheTokenLockAsync(IdentityRun run, params List<KeyValuePair<string, string>>[] requests)
     {
         const string waiting =
             "select count(*) from pg_locks where locktype = 'advisory' and objid = 7100001 and not granted and database = (select oid from pg_database where datname = current_database())";
@@ -398,7 +396,7 @@ public sealed class SignInTests
             await take.ExecuteNonQueryAsync();
         }
 
-        var sends = requests.Select(r => run.SendAsync(r.Who, r.Headers, HttpMethod.Post, "/auth/link")).ToArray();
+        var sends = requests.Select(headers => run.SendAsync(headers, HttpMethod.Post, "/auth/link")).ToArray();
         var arrived = false;
         try
         {

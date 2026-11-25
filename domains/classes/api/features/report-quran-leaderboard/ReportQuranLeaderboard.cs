@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
 using Tsr.Shared.Api;
@@ -24,7 +25,7 @@ internal static class ReportQuranLeaderboardSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(HttpContext context, ClassesContext db, Permissions permissions, TimeProvider clock, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(HttpContext context, NpgsqlDataSource db, Permissions permissions, TimeProvider clock, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -40,6 +41,6 @@ internal static class ReportQuranLeaderboardSlice
         }
 
         var students = report!.Rows.Select(r => new Student(r.Rank, r.Name ?? string.Empty, r.Token, r.Class, r.Total)).ToList();
-        return Results.Json(new Answer(report.Gender, report.From, report.To, report.Levels, report.Total, students));
+        return Results.Json(new Answer(report.Gender, report.From, report.To, report.Levels, report.Total, students), ClassesJson.Answers.ReportQuranLeaderboard);
     }
 }

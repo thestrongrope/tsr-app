@@ -56,6 +56,13 @@ public sealed class DbRow
 
     public DateOnly Date(string column) => Required<DateOnly>(column);
 
+    public TimeOnly Time(string column) => Required<TimeOnly>(column);
+
+    public TimeOnly? TimeOrNull(string column) => OrNullValue<TimeOnly>(column);
+
+    /// <summary>A <c>timestamp without time zone</c> as a wall-clock value (kind Unspecified).</summary>
+    public DateTime? LocalTimestampOrNull(string column) => OrNullValue<DateTime>(column);
+
     public string[] TextArray(string column) => Required<string[]>(column);
 
     public string[]? TextArrayOrNull(string column) => OrNull<string[]>(column);
@@ -69,7 +76,9 @@ public sealed class DbRow
     /// quietly read as a long, with two exceptions Npgsql forces: it reports timestamptz as DateTime and arrays as Array.
     /// </summary>
     internal static bool Accepts(Type fieldType, string dataTypeName, Type wanted) =>
-        fieldType == wanted
+        (fieldType == wanted && !(wanted == typeof(DateTime) && dataTypeName == "timestamp with time zone"))
+        || (wanted == typeof(TimeOnly) && fieldType == typeof(TimeSpan) && dataTypeName == "time without time zone")
+        || (wanted == typeof(DateTime) && fieldType == typeof(DateTime) && dataTypeName == "timestamp without time zone")
         || (wanted == typeof(DateTimeOffset) && fieldType == typeof(DateTime) && dataTypeName == "timestamp with time zone")
         || (wanted == typeof(string[]) && fieldType == typeof(Array) && dataTypeName is "text[]" or "character varying[]" or "public.citext[]")
         || (wanted == typeof(int[]) && fieldType == typeof(Array) && dataTypeName == "integer[]");

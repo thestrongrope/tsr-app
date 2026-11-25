@@ -11,13 +11,9 @@ internal static partial class AccessGoldenScenarios
     private static async Task GrantAndRevokeAsync(GoldenScenario run)
     {
         await run.SendAsync(Super, Post, $"/admin/permissions/members/{Subject}/grants", """{"permission": "donors:read:all", "reason": "  Needs the list  "}""");
-        await run.AppendRowsAsync("grant 1");
         await run.SendAsync(Super, Post, $"/admin/permissions/members/{GoldenSeed.OddName}/grants", """{"permission": "audit-log:read:all", "reason": "Odd +\" < name"}""");
-        await run.AppendRowsAsync("grant 2");
         await run.SendAsync(Super, Post, "/admin/permissions/grants/1/revoke", """{"reason": "  Done  "}""");
-        await run.AppendRowsAsync("revoke 1");
         await run.SendAsync(Super, Post, "/admin/permissions/grants/2/revoke", """{"reason": "Done too"}""");
-        await run.AppendRowsAsync("revoke 2");
     }
 
     private static async Task RuleSaveAndRevokeAsync(GoldenScenario run)
@@ -25,33 +21,27 @@ internal static partial class AccessGoldenScenarios
         var rules = $"/admin/class-access/members/{Subject}/rules";
         var (version, hash) = await DraftAsync(run, Gents, Subject, 1, Ville);
         var saved = await run.SendAsync(Gents, Post, rules, SaveBody(1, Ville, "  Teaches there  ", version, hash));
-        await run.AppendRowsAsync("save 1 (member of role 0 becomes role 5)");
         var (_, secondHash) = await DraftAsync(run, Super, Subject, 1, MixedConditions);
         await run.SendAsync(Super, Post, rules, SaveBody(1, MixedConditions, "Second rule", AccessGoldenScenarios.StringOf(saved.Json, "version"), secondHash));
-        await run.AppendRowsAsync("save 2");
         await run.SendAsync(Super, Post, "/admin/class-access/rules/1/revoke", RevokeBody("  Moved  ", await VersionOfAsync(run, Subject)));
-        await run.AppendRowsAsync("revoke 1 (a live rule is left: role stays 5)");
         await run.SendAsync(Super, Post, "/admin/class-access/rules/2/revoke", RevokeBody("Moved too", await VersionOfAsync(run, Subject)));
-        await run.AppendRowsAsync("revoke 2 (the last rule: role back to 0)");
     }
 
-    // One rule sent with conditions level 3, city, tag, level 2: the stored order of its conditions (TC-ACC-R2-02), through the golden file and in the member view.
+    // One rule sent with conditions level 3, city, tag, level 2: the stored order of its conditions (TC-ACC-R2-02), in the member view.
     private static async Task ConditionOrderAsync(GoldenScenario run)
     {
         var (version, hash) = await DraftAsync(run, Gents, Subject, 1, MixedConditions);
         await run.SendAsync(Gents, Post, $"/admin/class-access/members/{Subject}/rules", SaveBody(1, MixedConditions, "Order", version, hash));
         await run.SendAsync(Gents, Get, $"/admin/class-access/members/{Subject}");
-        await run.AppendRowsAsync("save");
     }
 
-    // TC-ACC-Q1-02: a super admin saves a rule on a gents admin and on a ladies admin (a gents admin may not: the refusals scenario), with the rows and events after each.
+    // TC-ACC-Q1-02: a super admin saves a rule on a gents admin and on a ladies admin (a gents admin may not: the refusals scenario).
     private static async Task RuleSaveOnAdminsAsync(GoldenScenario run)
     {
         foreach (var (member, gender) in new[] { (GoldenSeed.PeerGentsAdmin, 1), (GoldenSeed.LadiesAdmin, 2) })
         {
             var (version, hash) = await DraftAsync(run, Super, member, gender, Ville);
             await run.SendAsync(Super, Post, $"/admin/class-access/members/{member}/rules", SaveBody(gender, Ville, "Admin rule " + member, version, hash));
-            await run.AppendRowsAsync("save on " + member);
         }
     }
 

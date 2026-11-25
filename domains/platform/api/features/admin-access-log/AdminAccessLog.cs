@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Platform.Api.Domain;
 using Tsr.Shared.Api;
@@ -18,7 +19,7 @@ internal static class AdminAccessLogSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(HttpContext context, PlatformContext db, Permissions permissions, TimeProvider clock, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(HttpContext context, NpgsqlDataSource source, Permissions permissions, TimeProvider clock, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -38,9 +39,9 @@ internal static class AdminAccessLogSlice
         }
 
         var since = AccessLog.WindowStart(clock);
-        var members = await AccessLog.SummaryByMemberAsync(db, since, filters, ct);
-        var pages = await AccessLog.SummaryByPageAsync(db, since, filters, ct);
-        var recent = await AccessLog.RecentAsync(db, filters, ct);
+        var members = await AccessLog.SummaryByMemberAsync(source, since, filters, ct);
+        var pages = await AccessLog.SummaryByPageAsync(source, since, filters, ct);
+        var recent = await AccessLog.RecentAsync(source, filters, ct);
 
         return Results.Json(new Dictionary<string, object?>
         {
@@ -71,6 +72,6 @@ internal static class AdminAccessLogSlice
                 ["page"] = r.Page,
                 ["ip"] = r.Ip,
             }).ToList(),
-        });
+        }, PlatformJson.Answers.Answer);
     }
 }

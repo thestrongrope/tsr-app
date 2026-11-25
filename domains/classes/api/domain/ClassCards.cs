@@ -1,6 +1,6 @@
 using System.Globalization;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Npgsql;
 using Tsr.Shared.Api;
 
 namespace Tsr.Classes.Api.Domain;
@@ -76,18 +76,18 @@ internal static class ClassCards
         ["timezone"] = Text(s.Timezone),
     };
 
-    /// <summary>The live slots of the given classes: PHP getSchedules / getSchedulesForClasses (not deleted, by class, day, hour, minute).</summary>
-    public static async Task<ILookup<int, Slot>> SlotsAsync(ClassesContext db, int[] classIds, CancellationToken ct)
+    public static async Task<ILookup<int, Slot>> SlotsAsync(NpgsqlDataSource source, int[] classIds, CancellationToken ct)
     {
-        var rows = await db.Database
-            .SqlQuery<Slot>($"""
-                select class_id as "ClassId", coalesce(day, 0) as "Day", coalesce(hour, 0) as "Hour", coalesce(minute, 0) as "Minute", timezone as "Timezone"
-                from classes.class_schedules
-                where class_id = any({classIds}) and deleted_at is null
-                order by class_id, day, hour, minute
-                limit {MaxSlots}
-                """)
-            .ToListAsync(ct);
+        var rows = await source.ListAsync(
+            $"""
+            select class_id as "ClassId", coalesce(day, 0) as "Day", coalesce(hour, 0) as "Hour", coalesce(minute, 0) as "Minute", timezone as "Timezone"
+            from classes.class_schedules
+            where class_id = any({classIds}) and deleted_at is null
+            order by class_id, day, hour, minute
+            limit {MaxSlots}
+            """,
+            row => new Slot(row.Int("ClassId"), row.Int("Day"), row.Int("Hour"), row.Int("Minute"), row.TextOrNull("Timezone")),
+            ct);
         return rows.ToLookup(s => s.ClassId);
     }
 

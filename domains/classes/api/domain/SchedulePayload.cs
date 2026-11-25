@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Shared.Api;
 
 namespace Tsr.Classes.Api.Domain;
@@ -12,17 +12,18 @@ internal static class SchedulePayload
 
     internal sealed record Slot(int Id, int Day, int Hour, int Minute, string? Timezone);
 
-    public static async Task<Dictionary<string, object?>> BuildAsync(ClassesContext db, int classId, CancellationToken ct)
+    public static async Task<Dictionary<string, object?>> BuildAsync(NpgsqlDataSource source, int classId, CancellationToken ct)
     {
-        var slots = await db.Database
-            .SqlQuery<Slot>($"""
-                select id as "Id", coalesce(day, 0) as "Day", coalesce(hour, 0) as "Hour", coalesce(minute, 0) as "Minute", timezone as "Timezone"
-                from classes.class_schedules
-                where class_id = {classId} and deleted_at is null
-                order by id
-                limit {MaxSlots}
-                """)
-            .ToListAsync(ct);
+        var slots = await source.ListAsync(
+            $"""
+            select id as "Id", coalesce(day, 0) as "Day", coalesce(hour, 0) as "Hour", coalesce(minute, 0) as "Minute", timezone as "Timezone"
+            from classes.class_schedules
+            where class_id = {classId} and deleted_at is null
+            order by id
+            limit {MaxSlots}
+            """,
+            row => new Slot(row.Int("Id"), row.Int("Day"), row.Int("Hour"), row.Int("Minute"), row.TextOrNull("Timezone")),
+            ct);
 
         var schedules = slots.Select(s => new Dictionary<string, object?>
         {

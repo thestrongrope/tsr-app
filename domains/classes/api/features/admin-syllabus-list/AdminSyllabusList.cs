@@ -2,7 +2,7 @@ using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
 using Tsr.Shared.Api;
@@ -29,7 +29,7 @@ internal static class AdminSyllabusListSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(HttpContext context, ClassesContext db, Permissions permissions, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(HttpContext context, NpgsqlDataSource source, Permissions permissions, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -37,7 +37,7 @@ internal static class AdminSyllabusListSlice
             return Problem.Unauthenticated();
         }
 
-        var refusal = await AdminGuards.SyllabusAdminAsync(context, db, permissions, caller, ct);
+        var refusal = await AdminGuards.SyllabusAdminAsync(context, permissions, caller, ct);
         if (refusal is not null)
         {
             return refusal;
@@ -50,10 +50,11 @@ internal static class AdminSyllabusListSlice
             return Problem.Detail(StatusCodes.Status422UnprocessableEntity, include.Error!);
         }
 
-        var levels = await db.Database
-            .SqlQuery<Level>($"""select id as "Id", code as "Code", name as "Name" from classes.class_levels order by sort_order, id""")
-            .ToListAsync(ct);
-        var byLevel = (await SyllabusItems.LiveAsync(db, include.Value, ct)).ToLookup(i => i.LevelId);
-        return Results.Json(levels.Select(l => new Section(l.Id, l.Name, l.Code, byLevel[l.Id].ToList())).ToList());
+        var levels = await source.ListAsync(
+            $"""select id as "Id", code as "Code", name as "Name" from classes.class_levels order by sort_order, id""",
+            row => new Level(row.Int("Id"), row.Text("Code"), row.Text("Name")),
+            ct);
+        var byLevel = (await SyllabusItems.LiveAsync(source, include.Value, ct)).ToLookup(i => i.LevelId);
+        return Results.Json(levels.Select(l => new Section(l.Id, l.Name, l.Code, byLevel[l.Id].ToList())).ToList(), ClassesJson.Answers.AdminSyllabusSections);
     }
 }

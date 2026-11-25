@@ -1,5 +1,6 @@
 using System.Globalization;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
+using Tsr.Shared.Api;
 
 namespace Tsr.Classes.Api.Domain;
 
@@ -14,11 +15,11 @@ internal static class TransferRoster
 
     internal sealed record Student(int Token, string? Name, string? Email, string? Mobile, string? JoinedOn, string? RemovedOn, bool FromDeactivation);
 
-    private sealed record Cohort(int Token, string? Name, string? Email, string? Mobile, DateOnly? RemovedOn);
+    private sealed record Cohort(int Token, string? Name, string? Email, string? Mobile, string? RemovedOn);
 
-    public static async Task<List<Student>> ForAsync(ClassesContext db, int classId, bool classActive, CancellationToken ct)
+    public static async Task<List<Student>> ForAsync(NpgsqlDataSource source, int classId, bool classActive, CancellationToken ct)
     {
-        var active = await ClassRoster.ActiveAsync(db, classId, ct);
+        var active = await ClassRoster.ActiveAsync(source, classId, ct);
         if (active.Count > 0 || classActive)
         {
             return active
@@ -26,9 +27,9 @@ internal static class TransferRoster
                 .ToList();
         }
 
-        var cohort = await db.Database
-            .SqlQuery<Cohort>($"""
-                select m.token as "Token", m.name as "Name", u.email as "Email", m.mobile as "Mobile", (max(cs.removed_at) at time zone 'UTC')::date as "RemovedOn"
+        var cohort = await source.ListAsync(
+            $"""
+                select m.token as "Token", m.name as "Name", u.email as "Email", m.mobile as "Mobile", (max(cs.removed_at) at time zone 'UTC')::date::text as "RemovedOn"
                 from classes.class_students cs
                 join membership.v_members m on m.token = cs.token_no
                 join identity.v_users u on u.id = m.user_id
@@ -37,10 +38,11 @@ internal static class TransferRoster
                 group by m.user_id, m.name, m.token, u.email, m.mobile
                 order by m.name, m.token
                 limit {MaxRows}
-                """)
-            .ToListAsync(ct);
+                """,
+            row => new Cohort(row.Int("Token"), row.TextOrNull("Name"), row.TextOrNull("Email"), row.TextOrNull("Mobile"), row.TextOrNull("RemovedOn")),
+            ct);
         return cohort
-            .Select(c => new Student(c.Token, c.Name, c.Email, c.Mobile, null, c.RemovedOn?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), true))
+            .Select(c => new Student(c.Token, c.Name, c.Email, c.Mobile, null, c.RemovedOn, true))
             .ToList();
     }
 }

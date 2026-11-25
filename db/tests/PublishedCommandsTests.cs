@@ -46,8 +46,7 @@ public sealed class PublishedCommandsTests
     [Test]
     public async Task The_bridge_refuses_a_context_with_no_transaction()
     {
-        await using var scope = factory.Services.CreateAsyncScope();
-        var context = scope.ServiceProvider.GetRequiredService<PlatformContext>();
+        await using var context = EfContexts.Create<PlatformContext>();
 
         Assert.That(context.Database.CurrentTransaction, Is.Null);
         Assert.Throws<InvalidOperationException>(() => EfTransaction.Join(context));
@@ -81,8 +80,7 @@ public sealed class PublishedCommandsTests
     [Test]
     public async Task A_joined_DbTx_kept_after_its_owner_ends_writes_nothing([Values] Ending ending)
     {
-        await using var scope = factory.Services.CreateAsyncScope();
-        var context = scope.ServiceProvider.GetRequiredService<PlatformContext>();
+        await using var context = EfContexts.Create<PlatformContext>();
         var first = await context.Database.BeginTransactionAsync();
         var stale = EfTransaction.Join(context);
         await EndAsync(first, ending);
@@ -102,8 +100,7 @@ public sealed class PublishedCommandsTests
     public async Task A_queued_payload_is_stored_byte_for_byte()
     {
         const string payload = "{\"zeta\":\"\\u00e9 \u00e9\",\"alpha\":[1,2],\"mid\":{\"b\":null,\"a\":\"x\"}}";
-        await using var scope = factory.Services.CreateAsyncScope();
-        var context = scope.ServiceProvider.GetRequiredService<PlatformContext>();
+        await using var context = EfContexts.Create<PlatformContext>();
         await using var transaction = await context.Database.BeginTransactionAsync();
         var tx = EfTransaction.Join(context);
 
@@ -118,8 +115,7 @@ public sealed class PublishedCommandsTests
     [Test]
     public async Task A_write_through_the_bridge_lands_when_Entity_Framework_commits_and_is_gone_when_it_rolls_back()
     {
-        await using var scope = factory.Services.CreateAsyncScope();
-        var context = scope.ServiceProvider.GetRequiredService<PlatformContext>();
+        await using var context = EfContexts.Create<PlatformContext>();
 
         await using (var rolledBack = await context.Database.BeginTransactionAsync())
         {
@@ -142,8 +138,7 @@ public sealed class PublishedCommandsTests
     [Test]
     public async Task A_joined_DbTx_made_after_an_Entity_Framework_savepoint_is_accepted_and_rolls_back_to_it()
     {
-        await using var scope = factory.Services.CreateAsyncScope();
-        var context = scope.ServiceProvider.GetRequiredService<PlatformContext>();
+        await using var context = EfContexts.Create<PlatformContext>();
         await using var transaction = await context.Database.BeginTransactionAsync();
         await InsertAsync(EfTransaction.Join(context), 1);
 
@@ -179,8 +174,7 @@ public sealed class PublishedCommandsTests
             """);
         try
         {
-            await using var scope = factory.Services.CreateAsyncScope();
-            var context = scope.ServiceProvider.GetRequiredService<PlatformContext>();
+            await using var context = EfContexts.Create<PlatformContext>();
             await using (var transaction = await context.Database.BeginTransactionAsync())
             {
                 var tx = EfTransaction.Join(context);
@@ -217,11 +211,9 @@ public sealed class PublishedCommandsTests
             """);
         try
         {
-            await using var scope = factory.Services.CreateAsyncScope();
-            var context = scope.ServiceProvider.GetRequiredService<NotificationsContext>();
-            await using (var transaction = await context.Database.BeginTransactionAsync())
+            var source = factory.Services.GetRequiredService<NpgsqlDataSource>();
+            await using (var tx = await source.BeginAsync(CancellationToken.None))
             {
-                var tx = EfTransaction.Join(context);
                 var announcement = new Announcement("R98 title", "R98 body", "/r98", "r98_type", "k98-announce", [token]);
                 var result = await NotificationsCommands.AnnounceCountedAsync(tx, announcement, CancellationToken.None);
                 Assert.That(result, Is.EqualTo(new AnnounceResult(1, 1)));
@@ -229,7 +221,6 @@ public sealed class PublishedCommandsTests
                     await tx.ScalarAsync<long>($"select count(*) from notifications.user_notifications where user_token = {token}", CancellationToken.None),
                     Is.EqualTo(1),
                     "the command wrote inside the transaction");
-                await transaction.RollbackAsync();
             }
 
             Assert.That(await TestDatabase.ScalarAsync<long>("select count(*) from notifications.notifications where title = 'R98 title'", TestDatabase.OwnerConnection), Is.Zero, "the notification");
@@ -269,8 +260,7 @@ public sealed class PublishedCommandsTests
         await CreateAnchorAsync();
         try
         {
-            await using var scope = factory.Services.CreateAsyncScope();
-            var context = scope.ServiceProvider.GetRequiredService<ClassesContext>();
+            await using var context = EfContexts.Create<ClassesContext>();
             int token;
             await using (var transaction = await context.Database.BeginTransactionAsync())
             {
@@ -305,8 +295,7 @@ public sealed class PublishedCommandsTests
         await CreateAnchorAsync();
         try
         {
-            await using var scope = factory.Services.CreateAsyncScope();
-            var context = scope.ServiceProvider.GetRequiredService<ClassesContext>();
+            await using var context = EfContexts.Create<ClassesContext>();
             int token;
             await using (var transaction = await context.Database.BeginTransactionAsync())
             {
@@ -357,8 +346,7 @@ public sealed class PublishedCommandsTests
         await CreateAnchorAsync();
         try
         {
-            await using var scope = factory.Services.CreateAsyncScope();
-            var context = scope.ServiceProvider.GetRequiredService<ClassesContext>();
+            await using var context = EfContexts.Create<ClassesContext>();
             int token;
             await using (var transaction = await context.Database.BeginTransactionAsync())
             {
@@ -397,8 +385,7 @@ public sealed class PublishedCommandsTests
         await CreateAnchorAsync();
         try
         {
-            await using var scope = factory.Services.CreateAsyncScope();
-            var context = scope.ServiceProvider.GetRequiredService<ClassesContext>();
+            await using var context = EfContexts.Create<ClassesContext>();
             int token;
             await using (var transaction = await context.Database.BeginTransactionAsync())
             {
@@ -654,8 +641,7 @@ public sealed class PublishedCommandsTests
         await TestDatabase.ExecuteAsync(SlowTriggerSql);
         try
         {
-            await using var scope = factory.Services.CreateAsyncScope();
-            var context = scope.ServiceProvider.GetRequiredService<ClassesContext>();
+            await using var context = EfContexts.Create<ClassesContext>();
             await using (var transaction = await context.Database.BeginTransactionAsync())
             {
                 var tx = EfTransaction.Join(context);

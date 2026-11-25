@@ -4,7 +4,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
 using Tsr.Shared.Api;
@@ -39,7 +39,7 @@ internal static class ClassCreateSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(HttpContext context, ClassesContext db, Permissions permissions, MemberRateLimit limit, TimeProvider clock, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(HttpContext context, NpgsqlDataSource source, Permissions permissions, MemberRateLimit limit, TimeProvider clock, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -63,8 +63,8 @@ internal static class ClassCreateSlice
             return Problem.Detail(StatusCodes.Status403Forbidden, "You do not have permission to create a class");
         }
 
-        await ClassGuards.LogAdminAccessAsync(db, context, permissions, caller, ct);
-        var input = await ParseAsync(db, body, (int)gender, ct);
+        await ClassGuards.LogAdminAccessAsync(context, permissions, caller, ct);
+        var input = await ParseAsync(source, body, (int)gender, ct);
         if (!input.IsSuccess)
         {
             return Problem.Detail(StatusCodes.Status422UnprocessableEntity, input.Error!);
@@ -75,8 +75,8 @@ internal static class ClassCreateSlice
             return Problem.Detail(StatusCodes.Status409Conflict, "This class was just created");
         }
 
-        var id = await SaveAsync(db, clock, input.Value!, caller.Token, ct);
-        return Results.Json(new Dictionary<string, object?> { ["classId"] = id }, statusCode: StatusCodes.Status201Created);
+        var id = await SaveAsync(source, clock, input.Value!, caller.Token, ct);
+        return Results.Json(new Dictionary<string, object?> { ["classId"] = id }, ClassesJson.Answers.Answer, contentType: null, statusCode: StatusCodes.Status201Created);
     }
 
     // PHP keys the limit by the lower-cased signature itself; a member-token key is an int, so the signature is hashed to one (a collision only makes two different classes share a minute).
@@ -86,7 +86,7 @@ internal static class ClassCreateSlice
         return BitConverter.ToInt32(SHA256.HashData(Encoding.UTF8.GetBytes(text)), 0);
     }
 
-    private static async Task<Result<Input>> ParseAsync(ClassesContext db, JsonBody body, int gender, CancellationToken ct)
+    private static async Task<Result<Input>> ParseAsync(NpgsqlDataSource source, JsonBody body, int gender, CancellationToken ct)
     {
         if (!PhpValue.IsInt(body.Get("levelId"), out var level) || level <= 0)
         {
@@ -111,7 +111,7 @@ internal static class ClassCreateSlice
         }
 
         var token = (int)Math.Min(teacher, int.MaxValue);
-        if (!await TeacherSearch.IsCandidateAsync(db, token, gender == 1, ct))
+        if (!await TeacherSearch.IsCandidateAsync(source, token, gender == 1, ct))
         {
             return Result.Fail<Input>("teacher is not a member who can be assigned");
         }
@@ -122,9 +122,10 @@ internal static class ClassCreateSlice
             return Result.Fail<Input>(tags.Error!);
         }
 
-        var topicIds = (await db.Database
-            .SqlQuery<int>($"""select id as "Value" from classes.topics where deleted_at is null limit {MaxRows}""")
-            .ToListAsync(ct)).ToHashSet();
+        var topicIds = (await source.ListAsync(
+            $"""select id as "Value" from classes.topics where deleted_at is null limit {MaxRows}""",
+            row => row.Int("Value"),
+            ct)).ToHashSet();
         var slots = ScheduleInput.Parse(body.Get("schedules"), topicIds);
         if (!slots.IsSuccess)
         {
@@ -178,33 +179,33 @@ internal static class ClassCreateSlice
         return Result.Ok(ids);
     }
 
-    private static async Task<int> SaveAsync(ClassesContext db, TimeProvider clock, Input input, int by, CancellationToken ct)
+    private static async Task<int> SaveAsync(NpgsqlDataSource source, TimeProvider clock, Input input, int by, CancellationToken ct)
     {
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        var count = await db.Database
-            .SqlQuery<int>($"""select count(*)::int as "Value" from classes.classes where class_level_id = {input.LevelId} and gender = {input.Gender}""")
-            .SingleAsync(ct) + 1;
-        var levelNames = await db.Database
-            .SqlQuery<string>($"""select name as "Value" from classes.class_levels where id = {input.LevelId} limit 1""")
-            .ToListAsync(ct);
+        await using var tx = await source.BeginAsync(ct);
+        var count = (await tx.ScalarAsync<int>(
+            $"""select count(*)::int as "Value" from classes.classes where class_level_id = {input.LevelId} and gender = {input.Gender}""",
+            ct) ?? throw new InvalidOperationException("A count returned no row.")) + 1;
+        var levelNames = await tx.ListAsync(
+            $"""select name as "Value" from classes.class_levels where id = {input.LevelId} limit 1""",
+            row => row.Text("Value"),
+            ct);
         var codes = input.Gender == 1 ? MenCodes : WomenCodes;
         var code = input.LevelId < codes.Length ? codes[input.LevelId] + count : count.ToString(System.Globalization.CultureInfo.InvariantCulture);
         var name = (levelNames.Count == 0 ? "Unknown" : levelNames[0]) + count;
-        var link = await NewLinkAsync(db, ct);
+        var link = await NewLinkAsync(tx, ct);
 
-        var id = await db.Database
-            .SqlQuery<int>($"""select nextval(pg_get_serial_sequence('classes.classes', 'id'))::int as "Value" """)
-            .SingleAsync(ct);
-        await db.Database.ExecuteSqlAsync(
+        var id = await tx.ScalarAsync<int>($"""select nextval(pg_get_serial_sequence('classes.classes', 'id'))::int as "Value" """, ct)
+            ?? throw new InvalidOperationException("The classes sequence returned no value.");
+        await tx.ExecuteAsync(
             $"""
             insert into classes.classes (id, code, link, name, class_level_id, gender, location, city, country, teacher, created_by)
             values ({id}, {code}, {link}, {name}, {input.LevelId}, {input.Gender}, {input.Location}, {input.City}, {input.Country}, {input.Teacher}, {by})
             """,
             ct);
-        await InsertTagsAsync(db, id, input.Tags, by, ct);
+        await InsertTagsAsync(tx, id, input.Tags, by, ct);
         foreach (var slot in input.Slots)
         {
-            await db.Database.ExecuteSqlAsync(
+            await tx.ExecuteAsync(
                 $"""
                 insert into classes.class_schedules (class_id, day, hour, minute, timezone, created_by)
                 values ({id}, {slot.Day}, {slot.Hour}, {slot.Minute}, {slot.Timezone}, {by})
@@ -212,20 +213,21 @@ internal static class ClassCreateSlice
                 ct);
         }
 
-        await Outbox.WriteAsync(db, "classes.class_created", new ClassCreated(id, by), clock, ct);
-        await transaction.CommitAsync(ct);
+        await Outbox.WriteAsync(tx, "classes.class_created", new ClassCreated(id, by), ClassesJson.Default.ClassCreated, clock, ct);
+        await tx.CommitAsync(ct);
         return id;
     }
 
-    private static async Task InsertTagsAsync(ClassesContext db, int classId, List<int> submitted, int by, CancellationToken ct)
+    private static async Task InsertTagsAsync(DbTx tx, int classId, List<int> submitted, int by, CancellationToken ct)
     {
         var requested = submitted.ToArray();
-        var valid = await db.Database
-            .SqlQuery<int>($"""select id as "Value" from classes.tags where deleted_at is null and id = any({requested}) limit {MaxRows}""")
-            .ToListAsync(ct);
+        var valid = await tx.ListAsync(
+            $"""select id as "Value" from classes.tags where deleted_at is null and id = any({requested}) limit {MaxRows}""",
+            row => row.Int("Value"),
+            ct);
         foreach (var tag in valid)
         {
-            await db.Database.ExecuteSqlAsync(
+            await tx.ExecuteAsync(
                 $"""
                 insert into classes.class_tags (class_id, tag_id, created_by) values ({classId}, {tag}, {by})
                 on conflict (class_id, tag_id) do update set deleted_at = null, deleted_by = null
@@ -235,7 +237,7 @@ internal static class ClassCreateSlice
     }
 
     // PHP's trigger classes_before_create: ten random base-36 characters, redrawn while another class has them (bounded here).
-    private static async Task<string> NewLinkAsync(ClassesContext db, CancellationToken ct)
+    private static async Task<string> NewLinkAsync(DbTx tx, CancellationToken ct)
     {
         for (var attempt = 0; attempt < LinkTries; attempt++)
         {
@@ -246,7 +248,7 @@ internal static class ClassCreateSlice
                     span[i] = Base36[RandomNumberGenerator.GetInt32(Base36.Length)];
                 }
             });
-            if (!await LinkTakenAsync(db, link, ct))
+            if (!await LinkTakenAsync(tx, link, ct))
             {
                 return link;
             }
@@ -255,6 +257,6 @@ internal static class ClassCreateSlice
         throw new InvalidOperationException("Could not draw an unused class link.");
     }
 
-    internal static async Task<bool> LinkTakenAsync(ClassesContext db, string link, CancellationToken ct) =>
-        (await db.Database.SqlQuery<int>($"""select 1 as "Value" from classes.classes where link = {link}::citext limit 1""").ToListAsync(ct)).Count > 0;
+    internal static Task<bool> LinkTakenAsync(DbTx tx, string link, CancellationToken ct) =>
+        tx.AnyAsync($"""select 1 as "Value" from classes.classes where link = {link}::citext limit 1""", ct);
 }

@@ -1,5 +1,22 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
   <!-- The one API process: loads domain modules, wires middleware. Holds no rules. -->
+  <PropertyGroup>
+    <!-- Issue 108: the API, the workers and the content load ship as one native binary (hosts/api/Dockerfile, target native). The migrate job
+         needs Entity Framework, which cannot be native: the same project published with -p:PublishAot=false (target migrate). -->
+    <PublishAot>true</PublishAot>
+    <!-- Trim and AOT analyzers on in every build: any warning fails it. See AotAnalyzerTests. -->
+    <IsAotCompatible>true</IsAotCompatible>
+    <!-- As the native spikes of issues 99 to 102 ran. -->
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- On in both builds: the JIT build (PublishAot=false) would otherwise switch it off and fail its analyzer on Map(string, Delegate). -->
+    <EnableRequestDelegateGenerator>true</EnableRequestDelegateGenerator>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Only in the native publish: the migrate mode is off (HostServices.CanMigrate), so the compiler leaves Entity Framework out and
+         the migrate job refuses. A build, a test run and the JIT publish keep it on. -->
+    <RuntimeHostConfigurationOption Include="Tsr.Host.Api.Migrations" Value="false" Trim="true"
+                                    Condition="'$(PublishAot)' == 'true' And '$(_IsPublishing)' == 'true'" />
+  </ItemGroup>
   <ItemGroup>
     <Compile Remove="tests/**" />
     <Content Remove="tests/**" />

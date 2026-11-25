@@ -2,7 +2,7 @@ using System.Globalization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Notifications.Api.Domain;
 
 namespace Tsr.Notifications.Api.Features.CalendarGet;
@@ -27,7 +27,7 @@ internal static class CalendarGetSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(HttpContext context, NotificationsContext db, TimeProvider clock, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(HttpContext context, NpgsqlDataSource source, TimeProvider clock, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -35,17 +35,17 @@ internal static class CalendarGetSlice
             return Problem.Unauthenticated();
         }
 
-        var classes = await ClassesAsync(db, caller.Token, ct);
-        var settings = await SettingsAsync(db, caller.UserId, ct);
-        var items = await ClassEvents.ItemsByClassAsync(db, null, caller, [.. classes.Select(c => c.ClassId)], ct);
+        var classes = await ClassesAsync(source, caller.Token, ct);
+        var settings = await SettingsAsync(source, caller.UserId, ct);
+        var items = await ClassEvents.ItemsByClassAsync(source, null, caller, [.. classes.Select(c => c.ClassId)], ct);
         var hidden = settings.Where(s => s.DeletedForMe != 0).Select(s => s.EventKey).ToHashSet(StringComparer.Ordinal);
-        return Results.Json(new Dictionary<string, object>
+        return Results.Json(new Dictionary<string, object?>
         {
             ["server_time"] = clock.GetUtcNow().UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture),
-            ["freshness"] = new Dictionary<string, object> { ["max_hours"] = 12, ["target_hours"] = 6 },
+            ["freshness"] = new Dictionary<string, object?> { ["max_hours"] = 12, ["target_hours"] = 6 },
             ["classes"] = classes.Select(c => ClassPayload(c, items[c.ClassId], hidden)).ToList(),
             ["settings"] = settings.ToDictionary(s => s.EventKey, CalendarSettings.Payload, StringComparer.Ordinal),
-        });
+        }, NotificationsJson.Answers.Answer);
     }
 
     private static Dictionary<string, object?> ClassPayload(ClassRow row, ClassCalendarItems items, HashSet<string> hidden) => new()
@@ -60,27 +60,37 @@ internal static class CalendarGetSlice
     private static List<Dictionary<string, object?>> Visible(List<Dictionary<string, object?>> items, HashSet<string> hidden) =>
         [.. items.Where(i => !hidden.Contains((string)i["key"]!))];
 
-    private static async Task<List<ClassRow>> ClassesAsync(NotificationsContext db, int token, CancellationToken ct)
+    private static async Task<List<ClassRow>> ClassesAsync(NpgsqlDataSource source, int token, CancellationToken ct)
     {
         if (token <= 0)
         {
             return [];
         }
 
-        var rows = await db.Database
-            .SqlQuery<ClassRow>($"""
-                select distinct c.id as "ClassId", c.code as "Code", c.name as "Name"
-                from classes.v_classes c join classes.v_enrolments s on s.class_id = c.id
-                where s.token_no = {token} and s.status = 'A' and s.removed_at is null and c.status = 'A'
-                order by c.id limit {MaxClasses + 1}
-                """)
-            .ToListAsync(ct);
+        var rows = await source.ListAsync(
+            $"""
+            select distinct c.id as "ClassId", c.code as "Code", c.name as "Name"
+            from classes.v_classes c join classes.v_enrolments s on s.class_id = c.id
+            where s.token_no = {token} and s.status = 'A' and s.removed_at is null and c.status = 'A'
+            order by c.id limit {MaxClasses + 1}
+            """,
+            row => new ClassRow(row.Int("ClassId"), row.TextOrNull("Code"), row.TextOrNull("Name")),
+            ct);
         return rows.Count > MaxClasses ? throw new InvalidOperationException("Calendar exceeds the supported class limit") : rows;
     }
 
-    private static async Task<List<MemberEventSetting>> SettingsAsync(NotificationsContext db, int userId, CancellationToken ct)
+    private static async Task<List<EventSettingRow>> SettingsAsync(NpgsqlDataSource source, int userId, CancellationToken ct)
     {
-        var rows = await db.MemberEventSettings.AsNoTracking().Where(s => s.UserId == userId).OrderBy(s => s.Id).Take(MaxSettings + 1).ToListAsync(ct);
+        var rows = await source.ListAsync(
+            $"""
+            select id as "Id", user_id as "UserId", class_id as "ClassId", event_key as "EventKey", offset_minutes as "OffsetMinutes", muted as "Muted",
+                   deleted_for_me as "DeletedForMe", client_updated_at as "ClientUpdatedAt", server_updated_at as "ServerUpdatedAt", device_key as "DeviceKey"
+            from notifications.member_event_settings
+            where user_id = {userId}
+            order by id limit {MaxSettings + 1}
+            """,
+            CalendarSettings.ReadRow,
+            ct);
         return rows.Count > MaxSettings ? throw new InvalidOperationException("Calendar exceeds the supported settings limit") : rows;
     }
 }

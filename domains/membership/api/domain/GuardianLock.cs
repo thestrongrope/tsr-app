@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+using Tsr.Shared.Api;
 
 namespace Tsr.Membership.Api.Domain;
 
@@ -12,6 +12,6 @@ internal static class GuardianLock
     /// <summary>The first key of the two-key advisory lock: membership's guardian links. Do not reuse it for anything else.</summary>
     public const int LockClass = 3001;
 
-    public static Task TakeAsync(MembershipContext db, int childUserId, CancellationToken ct) =>
-        db.Database.ExecuteSqlAsync($"select pg_advisory_xact_lock({LockClass}, {childUserId})", ct);
+    public static Task TakeAsync(DbTx tx, int childUserId, CancellationToken ct) =>
+        tx.ExecuteAsync($"select pg_advisory_xact_lock({LockClass}, {childUserId})", ct);
 }

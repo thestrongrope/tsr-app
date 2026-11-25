@@ -1,9 +1,27 @@
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.Extensions.Options;
 
 namespace Tsr.Notifications.Api.Domain;
+
+/// <summary>The body of <c>PUT reminders/{id}</c>.</summary>
+internal sealed record NotifierReminderUpdate(
+    [property: JsonPropertyName("fields")] IReadOnlyDictionary<string, JsonElement> Fields,
+    [property: JsonPropertyName("updated_by")] int UpdatedBy);
+
+/// <summary>The body of <c>POST run-weekly</c>.</summary>
+internal sealed record NotifierRunWeekly(
+    [property: JsonPropertyName("reminder_id")] long ReminderId,
+    [property: JsonPropertyName("dry_run")] bool DryRun,
+    [property: JsonPropertyName("triggered_by")] int TriggeredBy);
+
+/// <summary>The body of <c>POST send-test</c>.</summary>
+internal sealed record NotifierSendTest(
+    [property: JsonPropertyName("mobile")] string Mobile,
+    [property: JsonPropertyName("message")] string Message,
+    [property: JsonPropertyName("triggered_by")] int TriggeredBy);
 
 /// <summary>
 /// The notifier over HTTP, 30 seconds a call as PHP's curl and 1 MB of answer at most (the client's settings). Every path is a literal or built from an integer, so a caller cannot steer a request
@@ -35,13 +53,13 @@ internal sealed class Notifier(HttpClient http, IOptions<NotifierSettings> setti
     public Task<NotifierAnswer> LogoutAsync(CancellationToken ct) => SendAsync(HttpMethod.Post, "logout", "{}", ct);
 
     public Task<NotifierAnswer> UpdateReminderAsync(long id, IReadOnlyDictionary<string, JsonElement> fields, int token, CancellationToken ct) =>
-        SendAsync(HttpMethod.Put, "reminders/" + Id(id), JsonSerializer.Serialize(new { fields, updated_by = token }), ct);
+        SendAsync(HttpMethod.Put, "reminders/" + Id(id), JsonSerializer.Serialize(new NotifierReminderUpdate(fields, token), NotificationsJson.Default.NotifierReminderUpdate), ct);
 
     public Task<NotifierAnswer> RunWeeklyAsync(long reminderId, bool dryRun, int token, CancellationToken ct) =>
-        SendAsync(HttpMethod.Post, "run-weekly", JsonSerializer.Serialize(new { reminder_id = reminderId, dry_run = dryRun, triggered_by = token }), ct);
+        SendAsync(HttpMethod.Post, "run-weekly", JsonSerializer.Serialize(new NotifierRunWeekly(reminderId, dryRun, token), NotificationsJson.Default.NotifierRunWeekly), ct);
 
     public Task<NotifierAnswer> SendTestAsync(string mobile, string message, int token, CancellationToken ct) =>
-        SendAsync(HttpMethod.Post, "send-test", JsonSerializer.Serialize(new { mobile, message, triggered_by = token }), ct);
+        SendAsync(HttpMethod.Post, "send-test", JsonSerializer.Serialize(new NotifierSendTest(mobile, message, token), NotificationsJson.Default.NotifierSendTest), ct);
 
     private static string Id(long id) => id.ToString(CultureInfo.InvariantCulture);
 

@@ -3,7 +3,7 @@ using System.Data.Common;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Microsoft.Extensions.Logging;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
@@ -38,10 +38,10 @@ internal static partial class AdminTeachersTrainingSlice
 
     private static async Task<IResult> HandleAsync(
         HttpContext context,
-        ClassesContext db,
+        NpgsqlDataSource source,
         Permissions permissions,
         TimeProvider clock,
-        ILogger<ClassesContext> log,
+        ILogger<ClassesLog> log,
         CancellationToken ct)
     {
         var caller = context.GetCaller();
@@ -71,7 +71,7 @@ internal static partial class AdminTeachersTrainingSlice
             return Problem.Detail(StatusCodes.Status422UnprocessableEntity, invalid);
         }
 
-        var planned = await PlanAsync(db, permissions, caller, items, ct);
+        var planned = await PlanAsync(source, permissions, caller, items, ct);
         if (planned.Refusal is not null)
         {
             return planned.Refusal;
@@ -79,9 +79,9 @@ internal static partial class AdminTeachersTrainingSlice
 
         try
         {
-            await using var transaction = await db.Database.BeginTransactionAsync(ct);
-            await TeacherWriter.WriteBatchAsync(db, planned.Teachers!, note, caller.Token, clock, ct);
-            await transaction.CommitAsync(ct);
+            await using var tx = await source.BeginAsync(ct);
+            await TeacherWriter.WriteBatchAsync(tx, planned.Teachers!, note, caller.Token, clock, ct);
+            await tx.CommitAsync(ct);
         }
         catch (DbException e)
         {
@@ -89,7 +89,7 @@ internal static partial class AdminTeachersTrainingSlice
             return Problem.Detail(StatusCodes.Status500InternalServerError, "The training could not be changed, and nothing was changed. Please try again.");
         }
 
-        return Results.Json(new Done(planned.Teachers!.Count));
+        return Results.Json(new Done(planned.Teachers!.Count), ClassesJson.Answers.TeachersTrainingDone);
     }
 
     private static string? InvalidInput(string note, int changes)
@@ -120,7 +120,7 @@ internal static partial class AdminTeachersTrainingSlice
     private sealed record Plan(IResult? Refusal, List<(int Token, TeacherTraining.Flags Flags)>? Teachers);
 
     // PHP changeTrainingLevels' loop and updateTeacherLevels' consolidation: judge each change in turn, then fold them per teacher onto the teacher's current flags (all off without a record).
-    private static async Task<Plan> PlanAsync(ClassesContext db, Permissions permissions, Caller caller, IReadOnlyList<KeyValuePair<string, JsonElement>> items, CancellationToken ct)
+    private static async Task<Plan> PlanAsync(NpgsqlDataSource source, Permissions permissions, Caller caller, IReadOnlyList<KeyValuePair<string, JsonElement>> items, CancellationToken ct)
     {
         var genders = new Dictionary<long, int?>();
         var flags = new Dictionary<int, TeacherTraining.Flags>();
@@ -134,7 +134,7 @@ internal static partial class AdminTeachersTrainingSlice
 
             if (!genders.TryGetValue(change.Token, out var gender))
             {
-                gender = await GenderOfAsync(db, change.Token, ct);
+                gender = await GenderOfAsync(source, change.Token, ct);
                 genders[change.Token] = gender;
             }
 
@@ -146,7 +146,7 @@ internal static partial class AdminTeachersTrainingSlice
 
             if (!flags.TryGetValue(change.Token, out var current))
             {
-                current = await TeacherWriter.ExistingAsync(db, change.Token, ct) ?? TeacherTraining.Flags.None;
+                current = await TeacherWriter.ExistingAsync(source, change.Token, ct) ?? TeacherTraining.Flags.None;
             }
 
             flags[change.Token] = current.With(change.Level, change.Added ? 1 : 0);
@@ -167,11 +167,12 @@ internal static partial class AdminTeachersTrainingSlice
     }
 
     // PHP genderOf: the member's stored gender cast with (int) ("Male" is 0), null when there is no such member.
-    private static async Task<int?> GenderOfAsync(ClassesContext db, int token, CancellationToken ct)
+    private static async Task<int?> GenderOfAsync(NpgsqlDataSource source, int token, CancellationToken ct)
     {
-        var rows = await db.Database
-            .SqlQuery<string>($"""select coalesce(gender::text, '') as "Value" from membership.v_members where token = {token} order by user_id limit 1""")
-            .ToListAsync(ct);
+        var rows = await source.ListAsync(
+            $"""select coalesce(gender::text, '') as "Value" from membership.v_members where token = {token} order by user_id limit 1""",
+            row => row.Text("Value"),
+            ct);
         return rows.Count == 0 ? null : (int)Math.Clamp(PhpValue.IntOfText(rows[0]), int.MinValue, int.MaxValue);
     }
 }

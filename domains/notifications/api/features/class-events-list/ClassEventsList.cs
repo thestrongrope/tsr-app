@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Notifications.Api.Domain;
 
@@ -18,7 +19,7 @@ internal static class ClassEventsListSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string class_id, HttpContext context, NotificationsContext db, Permissions permissions, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(string class_id, HttpContext context, NpgsqlDataSource source, Permissions permissions, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -33,7 +34,7 @@ internal static class ClassEventsListSlice
             return refusal;
         }
 
-        var items = (await ClassEvents.ItemsByClassAsync(db, permissions, caller, [classId], ct))[classId];
-        return Results.Json(new Dictionary<string, object> { ["events"] = items.Events, ["slots"] = items.Slots });
+        var items = (await ClassEvents.ItemsByClassAsync(source, permissions, caller, [classId], ct))[classId];
+        return Results.Json(new Dictionary<string, object?> { ["events"] = items.Events, ["slots"] = items.Slots }, NotificationsJson.Answers.Answer);
     }
 }

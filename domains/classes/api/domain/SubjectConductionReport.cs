@@ -1,6 +1,6 @@
 using System.Globalization;
 using Microsoft.AspNetCore.Http;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Shared.Api;
 
@@ -36,7 +36,7 @@ internal static class SubjectConductionReport
         public string[] Topics { get; } = ["", "", "", "", ""];
     }
 
-    public static async Task<(Loaded? Report, IResult? Refusal)> OpenAsync(HttpContext context, ClassesContext db, Permissions permissions, Caller caller, DateOnly today, CancellationToken ct)
+    public static async Task<(Loaded? Report, IResult? Refusal)> OpenAsync(HttpContext context, NpgsqlDataSource db, Permissions permissions, Caller caller, DateOnly today, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(context);
         var (scope, refusal) = await ReportScope.OpenAsync(context, permissions, caller, ct);
@@ -125,21 +125,22 @@ internal static class SubjectConductionReport
     }
 
     // subjectConductionClasses: the classes of the scope whose level and teacher exist, level order then code.
-    private static async Task<List<ClassRow>> ClassesAsync(ClassesContext db, int[] ids, CancellationToken ct) =>
-        await db.Database
-            .SqlQuery<ClassRow>($"""
+    private static async Task<List<ClassRow>> ClassesAsync(NpgsqlDataSource db, int[] ids, CancellationToken ct) =>
+        await db.ListAsync(
+            $"""
                 select c.id as "Id", c.code::text as "Code", cl.name::text as "Level", t.name::text as "Teacher"
                 from classes.classes c
                 join classes.class_levels cl on cl.id = c.class_level_id
                 join membership.v_members t on t.token = c.teacher
                 where c.id = any({ids})
                 order by cl.sort_order, c.code
-                """)
-            .ToListAsync(ct);
+                """,
+            r => new ClassRow(r.Int("Id"), r.Text("Code"), r.Text("Level"), r.TextOrNull("Teacher")),
+            ct);
 
-    private static async Task<List<SessionRow>> SessionsAsync(ClassesContext db, int[] ids, DateOnly first, DateOnly last, CancellationToken ct) =>
-        await db.Database
-            .SqlQuery<SessionRow>($"""
+    private static async Task<List<SessionRow>> SessionsAsync(NpgsqlDataSource db, int[] ids, DateOnly first, DateOnly last, CancellationToken ct) =>
+        await db.ListAsync(
+            $"""
                 select c.code::text as "ClassCode", cl.name::text as "Level", t.name::text as "Teacher", s.conducted_on as "ConductedOn",
                        case when s.arabic_conducted in ('1', 'Y') then coalesce(nullif(s.arabic_topic, ''), 'Conducted')::text else '' end as "Arabic",
                        case when s.aqaed_conducted in ('1', 'Y') then coalesce(nullif(s.aqaed_topic, ''), 'Conducted')::text else '' end as "Aqaed",
@@ -153,6 +154,7 @@ internal static class SubjectConductionReport
                 where s.conducted_on >= {first} and s.conducted_on <= {last} and s.conducted = 1 and c.id = any({ids})
                 order by cl.sort_order, c.code, s.conducted_on, s.id
                 limit {MaxSessions}
-                """)
-            .ToListAsync(ct);
+                """,
+            r => new SessionRow(r.Text("ClassCode"), r.Text("Level"), r.TextOrNull("Teacher"), r.Date("ConductedOn"), r.Text("Arabic"), r.Text("Aqaed"), r.Text("Ahkam"), r.Text("Akhlaq"), r.Text("Other")),
+            ct);
 }

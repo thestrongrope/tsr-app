@@ -71,6 +71,15 @@ public struct Sql
 
     public readonly void AppendFormatted(DateOnly value) => Add(NpgsqlDbType.Date, value);
 
+    public readonly void AppendFormatted(TimeOnly value) => Add(NpgsqlDbType.Time, value);
+
+    public readonly void AppendFormatted(TimeOnly? value) => Add(NpgsqlDbType.Time, value);
+
+    // A wall-clock value for a "timestamp without time zone" column: the wrapper is the only way past the DateTime guard above.
+    public readonly void AppendFormatted(LocalTimestamp value) => Add(NpgsqlDbType.Timestamp, value.Value);
+
+    public readonly void AppendFormatted(LocalTimestamp? value) => Add(NpgsqlDbType.Timestamp, value?.Value);
+
     public readonly void AppendFormatted(string?[] value) => Add(NpgsqlDbType.Array | NpgsqlDbType.Text, value);
 
     public readonly void AppendFormatted(int[] value) => Add(NpgsqlDbType.Array | NpgsqlDbType.Integer, value);
@@ -81,4 +90,20 @@ public struct Sql
         _parameters.Add(new NpgsqlParameter(name, type) { Value = value ?? DBNull.Value });
         _text.Append('@').Append(name);
     }
+}
+
+/// <summary>A date and time read in a row's own time zone, for a <c>timestamp without time zone</c> column. Its <see cref="DateTime.Kind"/> must be <see cref="DateTimeKind.Unspecified"/>.</summary>
+public readonly record struct LocalTimestamp
+{
+    public LocalTimestamp(DateTime value)
+    {
+        if (value.Kind != DateTimeKind.Unspecified)
+        {
+            throw new ArgumentException("A local timestamp must have the kind Unspecified.", nameof(value));
+        }
+
+        Value = value;
+    }
+
+    public DateTime Value { get; }
 }

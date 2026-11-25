@@ -1,5 +1,5 @@
 using Microsoft.AspNetCore.Http;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Shared.Api;
 
@@ -18,7 +18,7 @@ internal static class WaitingRegistrant
     private sealed record Row(int Token, string? Gender);
 
     public static async Task<(Registrant? Registrant, IResult? Refusal)> RequireAsync(
-        ClassesContext db,
+        NpgsqlDataSource source,
         Permissions permissions,
         Caller caller,
         string registrationId,
@@ -31,8 +31,8 @@ internal static class WaitingRegistrant
         }
 
         var id = PhpValue.IntOfText(registrationId);
-        var rows = await db.Database
-            .SqlQuery<Row>($"""
+        var rows = await source.ListAsync(
+            $"""
                 select r.token as "Token", m.gender as "Gender"
                 from (select max(id) as id, max(token) as token, max(status) as status, max(created_at) as created_at from membership.v_registrations group by token) r
                 join membership.v_members m on m.token = r.token
@@ -44,8 +44,9 @@ internal static class WaitingRegistrant
                   and r.id = {id}
                 order by r.created_at desc
                 limit 1
-                """)
-            .ToListAsync(ct);
+                """,
+            row => new Row(row.Int("Token"), row.TextOrNull("Gender")),
+            ct);
         if (rows.Count == 0)
         {
             return (null, Problem.Detail(StatusCodes.Status409Conflict, "This registrant is no longer waiting: they have been placed or rejected."));

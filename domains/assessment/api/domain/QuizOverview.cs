@@ -41,7 +41,7 @@ internal static class QuizOverview
         {
             foreach (var (number, entry) in table)
             {
-                episodes.Add(new JsonObject
+                episodes.Add((JsonNode)new JsonObject
                 {
                     ["episode"] = (int)Math.Clamp(Tsr.Shared.Api.PhpValue.IntOfText(number), int.MinValue, int.MaxValue),
                     ["start"] = NullIfEmpty(Text(entry?["start"])),
@@ -87,7 +87,7 @@ internal static class QuizOverview
         {
             foreach (var (episode, day) in byDay)
             {
-                rows.Add(new JsonObject
+                rows.Add((JsonNode)new JsonObject
                 {
                     ["episode"] = (int)Math.Clamp(Tsr.Shared.Api.PhpValue.IntOfText(episode), int.MinValue, int.MaxValue),
                     ["submissions"] = (int)Math.Clamp(Tsr.Shared.Api.PhpValue.IntOfText(Text(day?["submissions"]) ?? string.Empty), int.MinValue, int.MaxValue),
@@ -137,7 +137,7 @@ internal static class QuizOverview
             }
 
             var status = day.Funnel.Submissions == 0 ? "not_started" : day.Feasible ? "ok" : "blocked";
-            rows.Add(new JsonObject
+            rows.Add((JsonNode)new JsonObject
             {
                 ["episode"] = episode,
                 ["submitted"] = day.Funnel.Submissions,
@@ -218,7 +218,7 @@ internal static class QuizOverview
             var prize = (int)Math.Clamp(Tsr.Shared.Api.PhpValue.IntOfText(Text(winner["prize"]) ?? string.Empty), int.MinValue, int.MaxValue);
             rank[prize] = rank.GetValueOrDefault(prize) + 1;
             var label = prize >= 1 && prize <= labels.Count ? labels[prize - 1] : "Prize " + prize;
-            rows.Add(WinnerView(winner, prize, label, rank[prize]));
+            rows.Add((JsonNode)WinnerView(winner, prize, label, rank[prize]));
         }
 
         return rows;

@@ -2,7 +2,7 @@ using System.Globalization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
 using Tsr.Shared.Api;
@@ -41,7 +41,7 @@ internal static class ReportThisWeekSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(HttpContext context, ClassesContext db, Permissions permissions, TimeProvider clock, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(HttpContext context, NpgsqlDataSource db, Permissions permissions, TimeProvider clock, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -60,7 +60,7 @@ internal static class ReportThisWeekSlice
         var last = ReportCalendar.Range(year, number);
         if (last is null)
         {
-            return Results.Json(new Answer(scope!.Gender, new WeekItem(string.Empty, string.Empty), new ThisWeekRules.Summary(0, 0, 0, null, 0), Empty()));
+            return Results.Json(new Answer(scope!.Gender, new WeekItem(string.Empty, string.Empty), new ThisWeekRules.Summary(0, 0, 0, null, 0), Empty()), ClassesJson.Answers.ReportThisWeek);
         }
 
         var scopeIds = await scope!.ClassIdsAsync(db, 0, ct);
@@ -78,7 +78,7 @@ internal static class ReportThisWeekSlice
         var allWeeks = months.SelectMany(m => m.Weeks).ToList();
         var inputs = classes.Select(c => ToInput(c, conducted.GetValueOrDefault(c.Id) ?? [], allWeeks, weeks, flags, mobiles)).ToList();
         var screen = ThisWeekRules.Assemble([.. weeks.Select(w => w.Start)], inputs, attendance);
-        return Results.Json(new Answer(scope.Gender, new WeekItem(Day(last.Value.Min), Day(last.Value.Max)), screen.Summary, screen.Stages));
+        return Results.Json(new Answer(scope.Gender, new WeekItem(Day(last.Value.Min), Day(last.Value.Max)), screen.Summary, screen.Stages), ClassesJson.Answers.ReportThisWeek);
     }
 
     private static ThisWeekRules.Stages Empty() => new([], [], [], [], [], []);
@@ -99,9 +99,9 @@ internal static class ReportThisWeekSlice
     }
 
     // PHP getAll: the level must exist (inner join), the teacher's name may be missing; order gender, level order, id.
-    private static async Task<List<ClassRow>> ClassesAsync(ClassesContext db, int[] ids, CancellationToken ct) =>
-        await db.Database
-            .SqlQuery<ClassRow>($"""
+    private static async Task<List<ClassRow>> ClassesAsync(NpgsqlDataSource db, int[] ids, CancellationToken ct) =>
+        await db.ListAsync(
+            $"""
                 select c.id as "Id", c.code::text as "Code", cl.name::text as "Level", u.name::text as "Teacher", c.teacher as "TeacherToken",
                        coalesce(c.started_on, (c.created_at at time zone 'UTC')::date) as "StartedOn"
                 from classes.classes c
@@ -109,21 +109,23 @@ internal static class ReportThisWeekSlice
                 left join membership.v_members u on u.token = c.teacher
                 where c.id = any({ids})
                 order by c.gender, cl.sort_order, c.id
-                """)
-            .ToListAsync(ct);
+                """,
+            r => new ClassRow(r.Int("Id"), r.Text("Code"), r.Text("Level"), r.TextOrNull("Teacher"), r.IntOrNull("TeacherToken"), r.Date("StartedOn")),
+            ct);
 
     // PHP subjectsTaughtOnDays: the held sessions of the window with the subjects taught (flag '1' or 'Y').
-    private static async Task<List<(int ClassId, DateOnly On, IReadOnlySet<string> Subjects)>> TaughtAsync(ClassesContext db, int[] ids, DateOnly from, DateOnly to, CancellationToken ct)
+    private static async Task<List<(int ClassId, DateOnly On, IReadOnlySet<string> Subjects)>> TaughtAsync(NpgsqlDataSource db, int[] ids, DateOnly from, DateOnly to, CancellationToken ct)
     {
-        var rows = await db.Database
-            .SqlQuery<TaughtRow>($"""
+        var rows = await db.ListAsync(
+            $"""
                 select s.class_id as "ClassId", s.conducted_on as "ConductedOn", s.arabic_conducted in ('1', 'Y') as "Arabic", s.aqaed_conducted in ('1', 'Y') as "Aqaed",
                        s.ahkam_conducted in ('1', 'Y') as "Ahkam", s.akhlaq_conducted in ('1', 'Y') as "Akhlaq"
                 from classes.class_sessions s
                 where s.conducted_on >= {from} and s.conducted_on <= {to} and s.conducted = 1 and s.class_id = any({ids})
                 limit {MaxRows}
-                """)
-            .ToListAsync(ct);
+                """,
+            r => new TaughtRow(r.Int("ClassId"), r.Date("ConductedOn"), r.Bool("Arabic"), r.Bool("Aqaed"), r.Bool("Ahkam"), r.Bool("Akhlaq")),
+            ct);
         return [.. rows.Select(r => (r.ClassId, r.ConductedOn, (IReadOnlySet<string>)Taught(r)))];
     }
 
@@ -142,22 +144,23 @@ internal static class ReportThisWeekSlice
     }
 
     // PHP weekAttendance: present over marked of the sessions held in the week; a class with nothing marked is left out.
-    private static async Task<Dictionary<int, double>> AttendanceAsync(ClassesContext db, int[] ids, DateOnly from, DateOnly to, CancellationToken ct)
+    private static async Task<Dictionary<int, double>> AttendanceAsync(NpgsqlDataSource db, int[] ids, DateOnly from, DateOnly to, CancellationToken ct)
     {
-        var rows = await db.Database
-            .SqlQuery<AttendanceRow>($"""
+        var rows = await db.ListAsync(
+            $"""
                 select s.class_id as "ClassId", coalesce(sum(a.present), 0)::bigint as "Present", count(a.session_id) as "Marked"
                 from classes.class_attendance a
                 join classes.class_sessions s on s.id = a.session_id
                 where s.conducted = 1 and s.conducted_on >= {from} and s.conducted_on <= {to} and s.class_id = any({ids})
                 group by s.class_id
-                """)
-            .ToListAsync(ct);
+                """,
+            r => new AttendanceRow(r.Int("ClassId"), r.Long("Present"), r.Long("Marked")),
+            ct);
         return rows.Where(r => r.Marked > 0).ToDictionary(r => r.ClassId, r => (double)r.Present / r.Marked);
     }
 
     // PHP teacherMobiles: a teacher's mobile only where TeachersModel::canView allows; the decision depends on the teacher's gender alone (every listed teacher teaches a class).
-    private static async Task<Dictionary<int, string>> MobilesAsync(ClassesContext db, Permissions permissions, Caller caller, List<ClassRow> classes, CancellationToken ct)
+    private static async Task<Dictionary<int, string>> MobilesAsync(NpgsqlDataSource db, Permissions permissions, Caller caller, List<ClassRow> classes, CancellationToken ct)
     {
         var tokens = classes.Where(c => c.TeacherToken is not null).Select(c => c.TeacherToken!.Value).Distinct().ToArray();
         if (tokens.Length == 0 || !await permissions.CanAsync(caller, "teachers:lookup", AccessTarget.None, ct))
@@ -165,12 +168,13 @@ internal static class ReportThisWeekSlice
             return [];
         }
 
-        var rows = await db.Database
-            .SqlQuery<TeacherRow>($"""
+        var rows = await db.ListAsync(
+            $"""
                 select m.token as "Token", m.gender::text as "Gender", m.mobile::text as "Mobile", m.country::text as "Country" from membership.v_members m
                 where m.token = any({tokens}) order by m.user_id
-                """)
-            .ToListAsync(ct);
+                """,
+            r => new TeacherRow(r.Int("Token"), r.TextOrNull("Gender"), r.TextOrNull("Mobile"), r.TextOrNull("Country")),
+            ct);
         var genders = new Dictionary<int, int>();
         foreach (var row in rows)
         {

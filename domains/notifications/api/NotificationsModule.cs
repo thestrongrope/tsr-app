@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -16,9 +17,21 @@ public static class NotificationsModule
     /// <summary>Other domain modules this one may use (domains/CLAUDE.md rule 7): access (permissions), platform (the push queue command and the admin audit row); identity, classes and membership are read through their v_* views.</summary>
     public static readonly IReadOnlyList<string> Dependencies = ["access", "identity", "platform"];
 
-    public static IServiceCollection AddNotifications(this IServiceCollection services)
+    /// <summary>
+    /// Registers only notifications' tables, for the one-off migrate job. The API and the workers start with <see cref="AddNotifications"/>, which does not call this:
+    /// notifications reads and writes through the data source, and its context is for the migrate job only.
+    /// </summary>
+    [RequiresUnreferencedCode("Entity Framework is JIT only: the migrate job.")]
+    [RequiresDynamicCode("Entity Framework is JIT only: the migrate job.")]
+    public static IServiceCollection AddNotificationsMigrations(this IServiceCollection services)
     {
         services.AddDomainContext<NotificationsContext>(NotificationsContext.SchemaName);
+        return services;
+    }
+
+    public static IServiceCollection AddNotifications(this IServiceCollection services)
+    {
+        services.AddTsrDataSource();
         services.TryAddSingleton<MemberRateLimit>();
         NotifierSettings.AddNotifierSettings(services);
         // The notifier over HTTP: 30 seconds and 1 MB of answer at most per call, no redirects (optional setting TSR_NOTIFIER_URL).

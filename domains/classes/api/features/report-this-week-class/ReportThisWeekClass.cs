@@ -3,7 +3,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
 using Tsr.Shared.Api;
@@ -35,7 +35,7 @@ internal static class ReportThisWeekClassSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string class_id, HttpContext context, ClassesContext db, Permissions permissions, TimeProvider clock, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(string class_id, HttpContext context, NpgsqlDataSource db, Permissions permissions, TimeProvider clock, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -50,9 +50,7 @@ internal static class ReportThisWeekClassSlice
         }
 
         var classId = ClassGuards.IdOf(class_id);
-        var genders = await db.Database
-            .SqlQuery<int>($"""select coalesce(gender, 0) as "Value" from classes.classes where id = {classId} and status = 'A' limit 1""")
-            .ToListAsync(ct);
+        var genders = await db.ListAsync($"""select coalesce(gender, 0) as "Gender" from classes.classes where id = {classId} and status = 'A' limit 1""", r => r.Int("Gender"), ct);
         if (genders.Count == 0)
         {
             return NotFound();
@@ -77,22 +75,23 @@ internal static class ReportThisWeekClassSlice
         }
 
         var sessions = weeks.Count == 0 ? [] : await SessionsAsync(db, (int)classId, weeks[0].Start, weeks[^1].End, ct);
-        return Results.Json(new Answer((int)classId, head.Code, head.Level, AlignmentRules.Build(sessions, weeks), SyllabusCatalogue.For(head.Level)));
+        return Results.Json(new Answer((int)classId, head.Code, head.Level, AlignmentRules.Build(sessions, weeks), SyllabusCatalogue.For(head.Level)), ClassesJson.Answers.ReportThisWeekClass);
     }
 
-    private static async Task<Head?> HeadAsync(ClassesContext db, int classId, CancellationToken ct) =>
-        (await db.Database
-            .SqlQuery<Head>($"""
+    private static async Task<Head?> HeadAsync(NpgsqlDataSource db, int classId, CancellationToken ct) =>
+        (await db.ListAsync(
+            $"""
                 select c.code::text as "Code", cl.name::text as "Level" from classes.classes c
                 join classes.class_levels cl on cl.id = c.class_level_id where c.id = {classId}
-                """)
-            .ToListAsync(ct)).FirstOrDefault();
+                """,
+            r => new Head(r.Text("Code"), r.Text("Level")),
+            ct)).FirstOrDefault();
 
     // PHP classSessionsInRange: every session of the weeks, held or not; a subject's topic only where it was taught in a held session.
-    private static async Task<List<AlignmentRules.Session>> SessionsAsync(ClassesContext db, int classId, DateOnly from, DateOnly to, CancellationToken ct)
+    private static async Task<List<AlignmentRules.Session>> SessionsAsync(NpgsqlDataSource db, int classId, DateOnly from, DateOnly to, CancellationToken ct)
     {
-        var rows = await db.Database
-            .SqlQuery<SessionRow>($"""
+        var rows = await db.ListAsync(
+            $"""
                 select s.conducted_on as "ConductedOn", s.conducted::int as "Conducted",
                        case when s.conducted = 1 and s.arabic_conducted in ('1', 'Y') then coalesce(nullif(s.arabic_topic, ''), 'Conducted') else '' end as "Arabic",
                        case when s.conducted = 1 and s.aqaed_conducted in ('1', 'Y') then coalesce(nullif(s.aqaed_topic, ''), 'Conducted') else '' end as "Aqaed",
@@ -103,8 +102,9 @@ internal static class ReportThisWeekClassSlice
                 where s.class_id = {classId} and s.conducted_on >= {from} and s.conducted_on <= {to}
                 order by s.conducted_on, s.id
                 limit {MaxSessions}
-                """)
-            .ToListAsync(ct);
+                """,
+            r => new SessionRow(r.Date("ConductedOn"), r.Int("Conducted"), r.Text("Arabic"), r.Text("Aqaed"), r.Text("Ahkam"), r.Text("Akhlaq"), r.Text("Other")),
+            ct);
         return
         [
             .. rows.Select(r => new AlignmentRules.Session(

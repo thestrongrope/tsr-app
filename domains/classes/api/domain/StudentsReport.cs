@@ -1,6 +1,6 @@
 using System.Globalization;
 using Microsoft.AspNetCore.Http;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Shared.Api;
 
@@ -30,7 +30,7 @@ internal static class StudentsReport
     private sealed record StudentRow(
         long Token, string? Name, string Level, string Class, int Sessions, long Present, int Quizzes, long Questions, int Responded, long Correct);
 
-    public static async Task<(Loaded? Report, IResult? Refusal)> OpenAsync(HttpContext context, ClassesContext db, Permissions permissions, Caller caller, DateOnly today, CancellationToken ct)
+    public static async Task<(Loaded? Report, IResult? Refusal)> OpenAsync(HttpContext context, NpgsqlDataSource db, Permissions permissions, Caller caller, DateOnly today, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(context);
         var (scope, refusal) = await ReportScope.OpenAsync(context, permissions, caller, ct);
@@ -67,20 +67,18 @@ internal static class StudentsReport
     }
 
     // PHP ClassesModel::getLevels (array_flip of the names in order): the levels' names by sort order.
-    public static async Task<List<string>> LevelNamesAsync(ClassesContext db, CancellationToken ct) =>
-        await db.Database
-            .SqlQuery<string>($"""select name::text as "Value" from classes.class_levels order by sort_order, id limit 1000""")
-            .ToListAsync(ct);
+    public static async Task<List<string>> LevelNamesAsync(NpgsqlDataSource db, CancellationToken ct) =>
+        await db.ListAsync($"""select name::text as "Name" from classes.class_levels order by sort_order, id limit 1000""", r => r.Text("Name"), ct);
 
     // PHP studentPerformance: the roster (not removed) of the classes in reach joined to the attendance of the held sessions in the range (inner join: no mark, no row) and to the class's quizzes and the student's answers.
-    private static async Task<List<StudentRow>> StudentsAsync(ClassesContext db, int[] ids, DateRange range, CancellationToken ct)
+    private static async Task<List<StudentRow>> StudentsAsync(NpgsqlDataSource db, int[] ids, DateRange range, CancellationToken ct)
     {
         var from = range.FromDay;
         var to = range.ToDay;
-        var fromTime = range.FromDay.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
-        var toTime = range.ToDay.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
-        return await db.Database
-            .SqlQuery<StudentRow>($"""
+        var fromTime = new DateTimeOffset(range.FromDay.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
+        var toTime = new DateTimeOffset(range.ToDay.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
+        return await db.ListAsync(
+            $"""
                 with att as (
                     select s.class_id, ca.token, count(ca.id)::int as sessions, coalesce(sum(ca.present), 0)::bigint as present
                     from classes.class_sessions s
@@ -109,12 +107,14 @@ internal static class StudentsReport
                 where c.id = any({ids}) and c.status = 'A' and cs.removed_at is null
                 order by c.id, u.token
                 limit {MaxStudents}
-                """)
-            .ToListAsync(ct);
+                """,
+            r => new StudentRow(
+                r.Long("Token"), r.TextOrNull("Name"), r.Text("Level"), r.Text("Class"), r.Int("Sessions"), r.Long("Present"), r.Int("Quizzes"), r.Long("Questions"), r.Int("Responded"), r.Long("Correct")),
+            ct);
     }
 
     // PHP getLeaderboardData(1000, 0, from, to, level 0, gender, minimum 0): the shared leaderboard query (domain/QuranLeaderboard.cs) with no level, minimum 0 and the first 1000 rows.
-    private static async Task<Dictionary<long, long>> RecitationAsync(ClassesContext db, int gender, IReadOnlyList<int>? assigned, DateRange range, CancellationToken ct)
+    private static async Task<Dictionary<long, long>> RecitationAsync(NpgsqlDataSource db, int gender, IReadOnlyList<int>? assigned, DateRange range, CancellationToken ct)
     {
         var rows = await QuranLeaderboard.RankedAsync(db, gender, assigned, range, 0, 0, LeaderboardRows, ct);
         return rows.GroupBy(r => r.Token).ToDictionary(g => g.Key, g => g.Last().Total);

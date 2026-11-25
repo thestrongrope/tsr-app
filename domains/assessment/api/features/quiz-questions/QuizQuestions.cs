@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Assessment.Api.Domain;
 using Tsr.Shared.Api;
@@ -31,7 +31,7 @@ internal static class QuizQuestionsSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string quiz_id, HttpContext context, AssessmentContext db, Permissions permissions, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(string quiz_id, HttpContext context, NpgsqlDataSource source, Permissions permissions, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -44,19 +44,19 @@ internal static class QuizQuestionsSlice
             return Refusals.NotPermitted();
         }
 
-        if (!await QuizAccess.HasNumericGenderAsync(db, caller, ct))
+        if (!await QuizAccess.HasNumericGenderAsync(source, caller, ct))
         {
             return Refusals.GenderNotSet();
         }
 
         var quizId = PhpValue.IntOfText(quiz_id);
-        var attempt = await QuizAccess.AttemptAsync(db, quizId, caller.Token, ct);
+        var attempt = await QuizAccess.AttemptAsync(source, quizId, caller.Token, ct);
         if (attempt.Score is > 0)
         {
             return Problem.Detail(StatusCodes.Status409Conflict, "Quiz already attempted. Cannot retake.");
         }
 
-        var quiz = await QuizAccess.VisibleAsync(db, quizId, caller.Token, ct);
+        var quiz = await QuizAccess.VisibleAsync(source, quizId, caller.Token, ct);
         if (quiz is null)
         {
             return Refusals.QuizNotFound();
@@ -68,16 +68,19 @@ internal static class QuizQuestionsSlice
         }
 
         var paging = Paging.From(context);
-        var rows = await db.Database
-            .SqlQuery<Row>($"""
-                select id as "Id", question::text as "Question", option1::text as "Option1", option2::text as "Option2", option3::text as "Option3",
-                       option4::text as "Option4", option5::text as "Option5", is_arabic as "IsArabic"
-                from assessment.spot_quiz_questions where spot_quiz_id = {quizId} order by id
-                limit {paging.PageSize} offset {paging.Offset}
-                """)
-            .ToListAsync(ct);
-        var total = await QuizAccess.CountQuestionsAsync(db, quizId, ct);
-        return Results.Json(new Body(total, paging.Page, paging.PageSize, rows.Select(r => new Item(r.Id, r.Question ?? string.Empty, r.IsArabic, Options(r))).ToList()));
+        var rows = await source.ListAsync(
+            $"""
+            select id as "Id", question::text as "Question", option1::text as "Option1", option2::text as "Option2", option3::text as "Option3",
+                   option4::text as "Option4", option5::text as "Option5", is_arabic as "IsArabic"
+            from assessment.spot_quiz_questions where spot_quiz_id = {quizId} order by id
+            limit {paging.PageSize} offset {paging.Offset}
+            """,
+            row => new Row(
+                row.Int("Id"), row.TextOrNull("Question"), row.TextOrNull("Option1"), row.TextOrNull("Option2"), row.TextOrNull("Option3"), row.TextOrNull("Option4"),
+                row.TextOrNull("Option5"), row.BoolOrNull("IsArabic")),
+            ct);
+        var total = await QuizAccess.CountQuestionsAsync(source, quizId, ct);
+        return Results.Json(new Body(total, paging.Page, paging.PageSize, rows.Select(r => new Item(r.Id, r.Question ?? string.Empty, r.IsArabic, Options(r))).ToList()), AssessmentJson.Answers.QuizQuestions);
     }
 
     /// <summary>PHP api_shuffle_options: the non-blank options as stored, "I don't know" added, shuffled; no usable option gives a fixed pair.</summary>

@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Membership.Api.Domain;
 using Tsr.Shared.Api;
@@ -18,7 +19,7 @@ internal static class AdminDonorsSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(HttpContext context, MembershipContext db, Permissions permissions, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(HttpContext context, NpgsqlDataSource source, Permissions permissions, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -31,7 +32,7 @@ internal static class AdminDonorsSlice
             return Refusals.NotPermitted();
         }
 
-        var rows = await DonorList.LoadAsync(db, ct);
+        var rows = await DonorList.LoadAsync(source, ct);
         var donors = rows.Select(d => new Dictionary<string, object?>
         {
             ["name"] = d.Name,
@@ -42,6 +43,6 @@ internal static class AdminDonorsSlice
             ["country"] = d.Country,
             ["zip"] = d.Zip,
         }).ToList();
-        return Results.Json(new Dictionary<string, object?> { ["donors"] = donors });
+        return Results.Json(new Dictionary<string, object?> { ["donors"] = donors }, MembershipJson.Answers.Answer);
     }
 }

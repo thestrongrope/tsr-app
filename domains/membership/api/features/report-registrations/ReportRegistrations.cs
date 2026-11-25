@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Membership.Api.Domain;
 using Tsr.Shared.Api;
@@ -22,7 +23,7 @@ internal static class ReportRegistrationsSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(HttpContext context, MembershipContext db, Permissions permissions, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(HttpContext context, NpgsqlDataSource source, Permissions permissions, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -36,7 +37,7 @@ internal static class ReportRegistrationsSlice
             return refusal;
         }
 
-        var rows = await WaitingRegistrations.LoadAsync(db, gender, ct);
-        return Results.Json(new Answer(gender, [.. rows.Select(WaitingRegistrations.ToItem)]));
+        var rows = await WaitingRegistrations.LoadAsync(source, gender, ct);
+        return Results.Json(new Answer(gender, [.. rows.Select(WaitingRegistrations.ToItem)]), MembershipJson.Answers.ReportAnswer);
     }
 }

@@ -2,7 +2,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Membership.Api.Domain;
 using Tsr.Shared.Api;
@@ -31,7 +31,7 @@ internal static class RegistrationRejectSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string registration_id, HttpContext context, MembershipContext db, Permissions permissions, TimeProvider clock, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(string registration_id, HttpContext context, NpgsqlDataSource source, Permissions permissions, TimeProvider clock, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -46,7 +46,7 @@ internal static class RegistrationRejectSlice
         }
 
         var registrationId = PhpValue.IntOfText(registration_id);
-        var registrant = await FindWaitingAsync(db, registrationId, ct);
+        var registrant = (await source.ListAsync(FindWaiting(registrationId), ReadRow, ct)).FirstOrDefault();
         if (registrant is null)
         {
             return Problem.Detail(StatusCodes.Status409Conflict, "This registrant is no longer waiting: they have been placed or rejected.");
@@ -77,55 +77,53 @@ internal static class RegistrationRejectSlice
             return Problem.Detail(StatusCodes.Status422UnprocessableEntity, RejectReason.Required);
         }
 
-        if (!await RejectAsync(db, clock, registrationId, registrant.Token, reason, caller.UserId, ct))
+        if (!await RejectAsync(source, clock, registrationId, registrant.Token, reason, caller.UserId, ct))
         {
             return Problem.Detail(StatusCodes.Status409Conflict, "This registrant is no longer waiting: they have been placed or rejected.");
         }
 
-        return Results.Json(new Dictionary<string, object?> { ["rejected"] = true, ["registrationId"] = registrationId });
+        return Results.Json(new Dictionary<string, object?> { ["rejected"] = true, ["registrationId"] = registrationId }, MembershipJson.Answers.Answer);
     }
 
     // False when the registrant stopped waiting since the handler looked (another rejection got there first): nothing is written. The member's rows are locked, then the
     // waiting check is asked again, so two rejections at the same moment write one event (PHP has the same race, and no event).
-    private static async Task<bool> RejectAsync(MembershipContext db, TimeProvider clock, long registrationId, int token, string reason, int userId, CancellationToken ct)
+    private static async Task<bool> RejectAsync(NpgsqlDataSource source, TimeProvider clock, long registrationId, int token, string reason, int userId, CancellationToken ct)
     {
         var now = clock.GetUtcNow();
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        await db.Database.SqlQuery<long>($"""select id::bigint as "Value" from membership.class_registrations where token = {token} order by id for update""").ToListAsync(ct);
-        if (await FindWaitingAsync(db, registrationId, ct) is null)
+        await using var tx = await source.BeginAsync(ct);
+        await tx.ListAsync($"""select id::bigint as "Value" from membership.class_registrations where token = {token} order by id for update""", row => row.Long("Value"), ct);
+        if ((await tx.ListAsync(FindWaiting(registrationId), ReadRow, ct)).Count == 0)
         {
             return false;
         }
 
-        await db.ClassRegistrations
-            .Where(r => r.Token == token)
-            .ExecuteUpdateAsync(
-                set => set.SetProperty(r => r.Status, "Rejected").SetProperty(r => r.StatusReason, reason)
-                    .SetProperty(r => r.StatusDate, now).SetProperty(r => r.ModifiedAt, now).SetProperty(r => r.ModifiedBy, userId),
-                ct);
-        await Outbox.WriteAsync(db, "membership.registration_rejected", new RegistrationRejected(registrationId, token, userId), clock, ct);
-        await transaction.CommitAsync(ct);
+        await tx.ExecuteAsync(
+            $"""
+            update membership.class_registrations
+            set status = 'Rejected', status_reason = {reason}, status_date = {now}, modified_at = {now}, modified_by = {userId}
+            where token = {token}
+            """,
+            ct);
+        await Outbox.WriteAsync(tx, "membership.registration_rejected", new RegistrationRejected(registrationId, token, userId), MembershipJson.Default.RegistrationRejected, clock, ct);
+        await tx.CommitAsync(ct);
         return true;
     }
 
     // PHP groups the registrations by token and takes each column's MAX, so the "latest" row is the one with the highest id and the status is the highest of the member's.
-    private static async Task<Row?> FindWaitingAsync(MembershipContext db, long registrationId, CancellationToken ct)
-    {
-        var rows = await db.Database
-            .SqlQuery<Row>($"""
-                select r.token as "Token", p.gender as "Gender"
-                from (select max(id) as id, max(token) as token, max(status) as status, max(created_at) as created_at from membership.class_registrations group by token) r
-                join identity.v_users u on u.token = r.token
-                left join membership.member_profiles p on p.user_id = u.id
-                where r.status <> 'Rejected'
-                  and not exists (select 1 from classes.v_enrolments cs join classes.v_classes c on c.id = cs.class_id
-                                  where cs.token_no = r.token and c.status = 'A' and cs.removed_at is null)
-                  and u.email not like '%@thestrongrope.com'
-                  and r.id = {registrationId}
-                order by r.created_at desc, u.id
-                limit 1
-                """)
-            .ToListAsync(ct);
-        return rows.Count == 0 ? null : rows[0];
-    }
+    private static Sql FindWaiting(long registrationId) =>
+        $"""
+        select r.token as "Token", p.gender as "Gender"
+        from (select max(id) as id, max(token) as token, max(status) as status, max(created_at) as created_at from membership.class_registrations group by token) r
+        join identity.v_users u on u.token = r.token
+        left join membership.member_profiles p on p.user_id = u.id
+        where r.status <> 'Rejected'
+          and not exists (select 1 from classes.v_enrolments cs join classes.v_classes c on c.id = cs.class_id
+                          where cs.token_no = r.token and c.status = 'A' and cs.removed_at is null)
+          and u.email not like '%@thestrongrope.com'
+          and r.id = {registrationId}
+        order by r.created_at desc, u.id
+        limit 1
+        """;
+
+    private static Row ReadRow(DbRow row) => new(row.Int("Token"), row.TextOrNull("Gender"));
 }

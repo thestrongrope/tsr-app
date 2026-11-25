@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Assessment.Api.Domain;
 using Tsr.Shared.Api;
@@ -25,7 +26,7 @@ internal static class ManageCreateSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string class_id, HttpContext context, AssessmentContext db, Permissions permissions, TimeProvider clock, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(string class_id, HttpContext context, NpgsqlDataSource source, Permissions permissions, TimeProvider clock, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -34,7 +35,7 @@ internal static class ManageCreateSlice
         }
 
         var classId = PhpValue.IntOfText(class_id);
-        var target = await ManageAccess.ActiveClassAsync(db, classId, ct);
+        var target = await ManageAccess.ActiveClassAsync(source, classId, ct);
         if (target is null)
         {
             return ManageAccess.ClassNotFound();
@@ -59,10 +60,10 @@ internal static class ManageCreateSlice
 
         var restrict = QuizEdit.Restriction(body!.Get("restrictToClass")) ?? 1;
         var fields = new NewQuiz.Fields(target.Id, header.Value.Name, header.Value.Topic, null, restrict, caller.Token);
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        var id = await NewQuiz.InsertAsync(db, fields, ManageAccess.NowToSecond(clock), ct);
-        await Outbox.WriteAsync(db, "assessment.quiz_created", new QuizCreated(id, target.Id, caller.Token, "new"), clock, ct);
-        await transaction.CommitAsync(ct);
-        return Results.Json(new Body(id), statusCode: StatusCodes.Status201Created);
+        await using var tx = await source.BeginAsync(ct);
+        var id = await NewQuiz.InsertAsync(tx, fields, ManageAccess.NowToSecond(clock), ct);
+        await Outbox.WriteAsync(tx, "assessment.quiz_created", new QuizCreated(id, target.Id, caller.Token, "new"), AssessmentJson.Default.QuizCreatedNew, clock, ct);
+        await tx.CommitAsync(ct);
+        return Results.Json(new Body(id), AssessmentJson.Answers.ManageCreate, contentType: null, statusCode: StatusCodes.Status201Created);
     }
 }

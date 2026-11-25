@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
 using Tsr.Shared.Api;
@@ -22,7 +23,7 @@ internal static class ClassScheduleUpdateSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string class_id, HttpContext context, ClassesContext db, Permissions permissions, TimeProvider clock, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(string class_id, HttpContext context, NpgsqlDataSource source, Permissions permissions, TimeProvider clock, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -30,7 +31,7 @@ internal static class ClassScheduleUpdateSlice
             return Problem.Unauthenticated();
         }
 
-        var head = await ClassGuards.FindActiveClassAsync(db, ClassGuards.IdOf(class_id), ct);
+        var head = await ClassGuards.FindActiveClassAsync(source, ClassGuards.IdOf(class_id), ct);
         if (head is null)
         {
             return Refusals.ClassNotFound();
@@ -53,10 +54,13 @@ internal static class ClassScheduleUpdateSlice
             return Problem.Detail(StatusCodes.Status422UnprocessableEntity, slots.Error!);
         }
 
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        await ScheduleWriter.ReplaceAsync(db, head.Id, slots.Value!, caller.Token, ct);
-        await Outbox.WriteAsync(db, "classes.schedule_replaced", new ScheduleReplaced(head.Id, slots.Value!.Count, caller.Token), clock, ct);
-        await transaction.CommitAsync(ct);
-        return Results.Json(await SchedulePayload.BuildAsync(db, head.Id, ct));
+        await using (var tx = await source.BeginAsync(ct))
+        {
+            await ScheduleWriter.ReplaceAsync(tx, head.Id, slots.Value!, caller.Token, ct);
+            await Outbox.WriteAsync(tx, "classes.schedule_replaced", new ScheduleReplaced(head.Id, slots.Value!.Count, caller.Token), ClassesJson.Default.ScheduleReplaced, clock, ct);
+            await tx.CommitAsync(ct);
+        }
+
+        return Results.Json(await SchedulePayload.BuildAsync(source, head.Id, ct), ClassesJson.Answers.Answer);
     }
 }

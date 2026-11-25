@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
 using Tsr.Shared.Api;
@@ -26,7 +26,7 @@ internal static class ConductionListSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string class_id, HttpContext context, ClassesContext db, Permissions permissions, TimeProvider clock, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(string class_id, HttpContext context, NpgsqlDataSource source, Permissions permissions, TimeProvider clock, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -34,7 +34,7 @@ internal static class ConductionListSlice
             return Problem.Unauthenticated();
         }
 
-        var (head, refusal) = await ConductionData.OpenAsync(db, permissions, caller, class_id, "sessions:create", ct);
+        var (head, refusal) = await ConductionData.OpenAsync(source, permissions, caller, class_id, "sessions:create", ct);
         if (refusal is not null)
         {
             return refusal;
@@ -44,14 +44,15 @@ internal static class ConductionListSlice
         var pageSize = Math.Min(MaxPageSize, Math.Max(1, ClassGuards.QueryInt(context, "pageSize", DefaultPageSize)));
         var offset = (page - 1) * pageSize;
         var classId = head!.Id;
-        var ids = await db.Database
-            .SqlQuery<long>($"""select id::bigint as "Value" from classes.class_sessions where class_id = {classId} order by conducted_on desc, id limit {pageSize} offset {offset}""")
-            .ToListAsync(ct);
-        var total = await db.Database.SqlQuery<long>($"""select count(*) as "Value" from classes.class_sessions where class_id = {classId}""").SingleAsync(ct);
+        var ids = await source.ListAsync(
+            $"""select id::bigint as "Value" from classes.class_sessions where class_id = {classId} order by conducted_on desc, id limit {pageSize} offset {offset}""",
+            row => row.Long("Value"),
+            ct);
+        var total = (await source.ListAsync($"""select count(*) as "Value" from classes.class_sessions where class_id = {classId}""", row => row.Long("Value"), ct)).Single();
         var now = clock.GetUtcNow();
-        var sessions = (await ConductionData.GetSessionsAsync(db, ids.ToArray(), ct)).Select(row => ConductionData.ToItem(row, now)).ToList();
+        var sessions = (await ConductionData.GetSessionsAsync(source, ids.ToArray(), ct)).Select(row => ConductionData.ToItem(row, now)).ToList();
 
-        var header = await ConductionData.HeaderAsync(db, classId, ct);
-        return Results.Json(new Listing(header, sessions, total, new PhpFloat(Math.Ceiling(total / (double)pageSize)), page));
+        var header = await ConductionData.HeaderAsync(source, classId, ct);
+        return Results.Json(new Listing(header, sessions, total, new PhpFloat(Math.Ceiling(total / (double)pageSize)), page), ClassesJson.Answers.ConductionListing);
     }
 }

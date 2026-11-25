@@ -3,7 +3,7 @@ using System.Text.Json.Nodes;
 namespace Tsr.Db.Tests;
 
 /// <summary>
-/// The scenarios behind the golden files: each is a fixed list of requests on its own copy of the seeded database. A request that needs a value an earlier
+/// The scenarios of access: each is a fixed list of requests on its own copy of the seeded database. A request that needs a value an earlier
 /// answer gave (a version, a preview hash, a grant id) reads it from that answer, so nothing is typed in that a different run could change.
 /// </summary>
 internal static partial class AccessGoldenScenarios

@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Membership.Api.Domain;
 using Tsr.Shared.Api;
@@ -29,7 +29,7 @@ internal static class MeChildrenSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(HttpContext context, MembershipContext db, Permissions permissions, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(HttpContext context, NpgsqlDataSource source, Permissions permissions, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -44,34 +44,36 @@ internal static class MeChildrenSlice
 
         if (caller.Token <= 0)
         {
-            return Results.Json(Array.Empty<object>());
+            return Results.Json(new List<Dictionary<string, object?>>(), MembershipJson.Answers.AnswerList);
         }
 
         var parent = caller.Token;
-        var children = await db.Database
-            .SqlQuery<ChildRow>($"""
-                select ug.child_token as "Token", ug.relationship as "Relationship", p.name as "Name", p.first_name as "FirstName", p.last_name as "LastName", p.gender as "Gender"
-                from membership.user_guardians ug
-                join identity.v_users u on u.token = ug.child_token
-                join membership.member_profiles p on p.user_id = u.id
-                where ug.parent_token = {parent} and ug.status = 'active'
-                order by ug.id, u.id
-                limit {MaxLinks}
-                """)
-            .ToListAsync(ct);
-        var tokens = children.Select(c => c.Token).Distinct().ToList();
-        var classes = tokens.Count == 0
+        var children = await source.ListAsync(
+            $"""
+            select ug.child_token as "Token", ug.relationship as "Relationship", p.name as "Name", p.first_name as "FirstName", p.last_name as "LastName", p.gender as "Gender"
+            from membership.user_guardians ug
+            join identity.v_users u on u.token = ug.child_token
+            join membership.member_profiles p on p.user_id = u.id
+            where ug.parent_token = {parent} and ug.status = 'active'
+            order by ug.id, u.id
+            limit {MaxLinks}
+            """,
+            row => new ChildRow(row.Int("Token"), row.TextOrNull("Relationship"), row.TextOrNull("Name"), row.TextOrNull("FirstName"), row.TextOrNull("LastName"), row.TextOrNull("Gender")),
+            ct);
+        var tokens = children.Select(c => c.Token).Distinct().ToArray();
+        var classes = tokens.Length == 0
             ? []
-            : await db.Database
-                .SqlQuery<ClassRow>($"""
-                    select cs.token_no as "ChildToken", c.id as "ClassId", c.name as "ClassName", c.code as "ClassCode"
-                    from classes.v_enrolments cs
-                    join classes.v_classes c on c.id = cs.class_id
-                    where cs.token_no = any({tokens}) and cs.status = 'A' and cs.removed_at is null and c.status = 'A'
-                    order by c.id, cs.id
-                    limit {MaxClassRows}
-                    """)
-                .ToListAsync(ct);
+            : await source.ListAsync(
+                $"""
+                select cs.token_no as "ChildToken", c.id as "ClassId", c.name as "ClassName", c.code as "ClassCode"
+                from classes.v_enrolments cs
+                join classes.v_classes c on c.id = cs.class_id
+                where cs.token_no = any({tokens}) and cs.status = 'A' and cs.removed_at is null and c.status = 'A'
+                order by c.id, cs.id
+                limit {MaxClassRows}
+                """,
+                row => new ClassRow(row.Int("ChildToken"), row.Int("ClassId"), row.TextOrNull("ClassName"), row.TextOrNull("ClassCode")),
+                ct);
         var byChild = classes.ToLookup(c => c.ChildToken);
         var answer = children.Select(child => new Dictionary<string, object?>
         {
@@ -89,6 +91,6 @@ internal static class MeChildrenSlice
                 ["status"] = "A",
             }).ToList(),
         }).ToList();
-        return Results.Json(answer);
+        return Results.Json(answer, MembershipJson.Answers.AnswerList);
     }
 }

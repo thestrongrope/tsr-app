@@ -2,7 +2,7 @@ using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Identity.Api;
 using Tsr.Membership.Api.Domain;
@@ -30,7 +30,7 @@ internal static class ChildrenLinkAcceptEndpoint
     }
 }
 
-internal sealed class ChildrenLinkAcceptHandler(MembershipContext db, Permissions permissions, UserDirectory users, TimeProvider clock)
+internal sealed class ChildrenLinkAcceptHandler(NpgsqlDataSource source, Permissions permissions, UserDirectory users, TimeProvider clock)
 {
     public async Task<IResult> HandleAsync(Caller? caller, string code, HttpRequest request, CancellationToken ct)
     {
@@ -57,7 +57,7 @@ internal sealed class ChildrenLinkAcceptHandler(MembershipContext db, Permission
         }
 
         var typed = PhpValue.Text(parsed.Value!.Get("relationship"));
-        var link = await FindAsync(code, ct);
+        var link = await FindAsync(source, code, ct);
         if (link is null)
         {
             return Problem.Detail(StatusCodes.Status404NotFound, GuardianRules.InviteNotFound);
@@ -104,51 +104,57 @@ internal sealed class ChildrenLinkAcceptHandler(MembershipContext db, Permission
 
     private async Task<IResult> ActivateAsync(Caller caller, string code, string relationship, int childUserId, CancellationToken ct)
     {
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        await GuardianLock.TakeAsync(db, childUserId, ct);
+        await using var tx = await source.BeginAsync(ct);
+        await GuardianLock.TakeAsync(tx, childUserId, ct);
 
         // The invite is read again under the lock, so a code used or cancelled since the first read is refused.
-        var link = await FindAsync(code, ct);
+        var link = await FindAsync(tx, code, ct);
         if (link is null || !GuardianRules.IsUsable(link.Status, link.ExpiresAt, clock.GetUtcNow()))
         {
             return Problem.Detail(StatusCodes.Status410Gone, GuardianRules.InviteUsed);
         }
 
         var creator = new Caller(link.CreatedBy, await GuardianChecks.TokenOfUserAsync(users, link.CreatedBy, ct));
-        if (await GuardianChecks.RemovedByChildBlocksAsync(db, users, permissions, caller.Token, link.ChildToken, childUserId, creator, ct))
+        if (await GuardianChecks.RemovedByChildBlocksAsync(tx, users, permissions, caller.Token, link.ChildToken, childUserId, creator, ct))
         {
             return Problem.Detail(StatusCodes.Status403Forbidden, GuardianRules.RemovedByChild);
         }
 
-        if (await db.UserGuardians.AnyAsync(g => g.ParentToken == caller.Token && g.ChildToken == link.ChildToken && g.Status == "active", ct))
+        var linked = await tx.ListAsync(
+            $"select 1 as \"Value\" from membership.user_guardians where parent_token = {caller.Token} and child_token = {link.ChildToken} and status = 'active' limit 1",
+            row => row.Int("Value"),
+            ct);
+        if (linked.Count > 0)
         {
             return Problem.Detail(StatusCodes.Status409Conflict, GuardianRules.AlreadyLinked);
         }
 
         var now = clock.GetUtcNow();
-        var changed = await db.UserGuardians
-            .Where(g => g.Id == link.Id && g.Status == "invited")
-            .ExecuteUpdateAsync(
-                set => set
-                    .SetProperty(g => g.ParentToken, caller.Token)
-                    .SetProperty(g => g.Relationship, relationship)
-                    .SetProperty(g => g.Status, "active")
-                    .SetProperty(g => g.ActivatedAt, now),
-                ct);
+        var changed = await tx.ExecuteAsync(
+            $"""
+            update membership.user_guardians set parent_token = {caller.Token}, relationship = {relationship}, status = 'active', activated_at = {now}
+            where id = {link.Id} and status = 'invited'
+            """,
+            ct);
         if (changed == 0)
         {
             return Problem.Detail(StatusCodes.Status409Conflict, GuardianRules.AlreadyLinked);
         }
 
-        await transaction.CommitAsync(ct);
-        return Results.Json(new JsonObject { ["child_token"] = link.ChildToken, ["relationship"] = relationship, ["status"] = "active" });
+        await tx.CommitAsync(ct);
+        return Results.Json(new JsonObject { ["child_token"] = link.ChildToken, ["relationship"] = relationship, ["status"] = "active" }, MembershipJson.Answers.JsonObject);
     }
 
     private static IResult Invalid() => Problem.Detail(StatusCodes.Status422UnprocessableEntity, GuardianRules.InvalidLink);
 
     // A code is 32 characters; a longer one cannot match a row, so it is not looked up.
-    private async Task<UserGuardian?> FindAsync(string code, CancellationToken ct) =>
-        code.Length > MembershipContext.CodeLength
+    private static async Task<UserGuardian?> FindAsync(NpgsqlDataSource source, string code, CancellationToken ct) =>
+        code.Length > GuardianRows.CodeLength
             ? null
-            : await db.UserGuardians.AsNoTracking().Where(g => g.Code == code).FirstOrDefaultAsync(ct);
+            : (await source.ListAsync(GuardianRows.ByCode(code), GuardianRows.Read, ct)).FirstOrDefault();
+
+    private static async Task<UserGuardian?> FindAsync(DbTx tx, string code, CancellationToken ct) =>
+        code.Length > GuardianRows.CodeLength
+            ? null
+            : (await tx.ListAsync(GuardianRows.ByCode(code), GuardianRows.Read, ct)).FirstOrDefault();
 }

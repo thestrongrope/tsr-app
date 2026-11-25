@@ -1,6 +1,6 @@
 using System.Globalization;
 using Microsoft.AspNetCore.Http;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 
 namespace Tsr.Notifications.Api.Domain;
@@ -33,15 +33,16 @@ internal static class ClassEvents
     public static IResult NotFound() => Problem.Detail(StatusCodes.Status404NotFound, NotFoundError);
 
     /// <summary>The live event with this id in THIS class, or null: another class's id and a deleted event are both absent.</summary>
-    public static async Task<ClassEventRow?> FindAsync(NotificationsContext db, int classId, int id, CancellationToken ct)
+    public static async Task<ClassEventRow?> FindAsync(NpgsqlDataSource source, int classId, int id, CancellationToken ct)
     {
-        var rows = await db.Database
-            .SqlQuery<ClassEventRow>($"""
-                select id as "Id", class_id as "ClassId", created_by as "CreatedBy", created_by_user_id as "CreatedByUserId", message as "Message", description as "Description",
-                       action_link as "ActionLink", weekdays as "Weekdays", send_time as "SendTime", tz as "Tz"
-                from notifications.class_scheduled_events where class_id = {classId} and id = {id} and status = 'active' limit 1
-                """)
-            .ToListAsync(ct);
+        var rows = await source.ListAsync(
+            $"""
+            select id as "Id", class_id as "ClassId", created_by as "CreatedBy", created_by_user_id as "CreatedByUserId", message as "Message", description as "Description",
+                   action_link as "ActionLink", weekdays as "Weekdays", send_time as "SendTime", tz as "Tz"
+            from notifications.class_scheduled_events where class_id = {classId} and id = {id} and status = 'active' limit 1
+            """,
+            ReadEvent,
+            ct);
         return rows.Count == 0 ? null : rows[0];
     }
 
@@ -92,7 +93,7 @@ internal static class ClassEvents
     /// PHP <c>itemsByClass</c>: the live events and live timetable slots of several classes, by id, in two queries however many classes. <paramref name="permissions"/> is null for a
     /// member's own calendar (nothing is editable there, and no permission is asked). More than <see cref="MaxPerClass"/> of either in one class is a broken invariant, not a request error.
     /// </summary>
-    public static async Task<Dictionary<int, ClassCalendarItems>> ItemsByClassAsync(NotificationsContext db, Permissions? permissions, Caller caller, int[] classIds, CancellationToken ct)
+    public static async Task<Dictionary<int, ClassCalendarItems>> ItemsByClassAsync(NpgsqlDataSource source, Permissions? permissions, Caller caller, int[] classIds, CancellationToken ct)
     {
         var items = classIds.ToDictionary(id => id, _ => new ClassCalendarItems([], []));
         if (classIds.Length == 0)
@@ -102,13 +103,13 @@ internal static class ClassEvents
 
         var limit = classIds.Length * (MaxPerClass + 1);
         var ownerCanSend = new Dictionary<int, bool>();
-        foreach (var row in await EventsAsync(db, classIds, limit, ct))
+        foreach (var row in await EventsAsync(source, classIds, limit, ct))
         {
             var editable = permissions is not null && await EditableAsync(permissions, caller, row, ownerCanSend, ct);
             items[row.ClassId].Events.Add(Payload(row, caller.UserId, editable));
         }
 
-        foreach (var slot in await SlotsAsync(db, classIds, limit, ct))
+        foreach (var slot in await SlotsAsync(source, classIds, limit, ct))
         {
             items[slot.ClassId].Slots.Add(SlotPayload(slot));
         }
@@ -121,22 +122,36 @@ internal static class ClassEvents
         return items;
     }
 
-    private static Task<List<ClassEventRow>> EventsAsync(NotificationsContext db, int[] classIds, int limit, CancellationToken ct) =>
-        db.Database
-            .SqlQuery<ClassEventRow>($"""
-                select id as "Id", class_id as "ClassId", created_by as "CreatedBy", created_by_user_id as "CreatedByUserId", message as "Message", description as "Description",
-                       action_link as "ActionLink", weekdays as "Weekdays", send_time as "SendTime", tz as "Tz"
-                from notifications.class_scheduled_events where class_id = any({classIds}) and status = 'active' order by id limit {limit}
-                """)
-            .ToListAsync(ct);
+    private static ClassEventRow ReadEvent(DbRow row) => new(
+        row.Int("Id"),
+        row.Int("ClassId"),
+        row.Int("CreatedBy"),
+        row.Int("CreatedByUserId"),
+        row.Text("Message"),
+        row.TextOrNull("Description"),
+        row.TextOrNull("ActionLink"),
+        row.Text("Weekdays"),
+        row.Time("SendTime"),
+        row.Text("Tz"));
 
-    private static Task<List<ClassSlotRow>> SlotsAsync(NotificationsContext db, int[] classIds, int limit, CancellationToken ct) =>
-        db.Database
-            .SqlQuery<ClassSlotRow>($"""
-                select id as "Id", class_id as "ClassId", coalesce(day, 0) as "Day", coalesce(hour, 0) as "Hour", coalesce(minute, 0) as "Minute", timezone as "Timezone"
-                from classes.v_class_schedules where class_id = any({classIds}) and deleted_at is null order by id limit {limit}
-                """)
-            .ToListAsync(ct);
+    private static Task<List<ClassEventRow>> EventsAsync(NpgsqlDataSource source, int[] classIds, int limit, CancellationToken ct) =>
+        source.ListAsync(
+            $"""
+            select id as "Id", class_id as "ClassId", created_by as "CreatedBy", created_by_user_id as "CreatedByUserId", message as "Message", description as "Description",
+                   action_link as "ActionLink", weekdays as "Weekdays", send_time as "SendTime", tz as "Tz"
+            from notifications.class_scheduled_events where class_id = any({classIds}) and status = 'active' order by id limit {limit}
+            """,
+            ReadEvent,
+            ct);
+
+    private static Task<List<ClassSlotRow>> SlotsAsync(NpgsqlDataSource source, int[] classIds, int limit, CancellationToken ct) =>
+        source.ListAsync(
+            $"""
+            select id as "Id", class_id as "ClassId", coalesce(day, 0) as "Day", coalesce(hour, 0) as "Hour", coalesce(minute, 0) as "Minute", timezone as "Timezone"
+            from classes.v_class_schedules where class_id = any({classIds}) and deleted_at is null order by id limit {limit}
+            """,
+            row => new ClassSlotRow(row.Int("Id"), row.Int("ClassId"), row.Int("Day"), row.Int("Hour"), row.Int("Minute"), row.TextOrNull("Timezone")),
+            ct);
 
     private static Dictionary<string, object?> SlotPayload(ClassSlotRow slot) => new()
     {

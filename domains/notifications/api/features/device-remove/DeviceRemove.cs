@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Notifications.Api.Domain;
 
@@ -21,7 +21,7 @@ internal static class DeviceRemoveSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(HttpContext context, NotificationsContext db, Permissions permissions, TimeProvider clock, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(HttpContext context, NpgsqlDataSource source, Permissions permissions, TimeProvider clock, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -46,20 +46,20 @@ internal static class DeviceRemoveSlice
             return Problem.Detail(StatusCodes.Status422UnprocessableEntity, token.Error!);
         }
 
-        var deleted = await RemoveAsync(db, clock, caller.Token, token.Value!, ct);
-        return Results.Json(new Dictionary<string, object> { ["ok"] = true, ["deleted"] = deleted });
+        var deleted = await RemoveAsync(source, clock, caller.Token, token.Value!, ct);
+        return Results.Json(new Dictionary<string, object?> { ["ok"] = true, ["deleted"] = deleted }, NotificationsJson.Answers.Answer);
     }
 
-    private static async Task<int> RemoveAsync(NotificationsContext db, TimeProvider clock, int member, string device, CancellationToken ct)
+    private static async Task<int> RemoveAsync(NpgsqlDataSource source, TimeProvider clock, int member, string device, CancellationToken ct)
     {
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        var deleted = await db.Database.ExecuteSqlAsync($"delete from notifications.user_devices where token = {member} and device_id = {device}::citext", ct);
+        await using var tx = await source.BeginAsync(ct);
+        var deleted = await tx.ExecuteAsync($"delete from notifications.user_devices where token = {member} and device_id = {device}::citext", ct);
         if (deleted > 0)
         {
-            await Outbox.WriteAsync(db, "notifications.device_removed", new DeviceRemoved(member), clock, ct);
+            await Outbox.WriteAsync(tx, "notifications.device_removed", new DeviceRemoved(member), NotificationsJson.Default.DeviceRemoved, clock, ct);
         }
 
-        await transaction.CommitAsync(ct);
+        await tx.CommitAsync(ct);
         return deleted;
     }
 }

@@ -67,6 +67,6 @@ internal static partial class WhatsappTestSlice
         LogSent(log, runId);
         var status = NotifierRows.Field(data, "status");
         var statusText = status.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null ? "sent" : PhpValue.Text(status);
-        return Results.Json(new Sent(runId, statusText));
+        return Results.Json(new Sent(runId, statusText), NotificationsJson.Answers.TestSent);
     }
 }

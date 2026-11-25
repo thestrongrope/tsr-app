@@ -2,7 +2,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Notifications.Api.Domain;
 
@@ -37,7 +37,7 @@ internal static class NotificationsHistorySlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(HttpContext context, NotificationsContext db, Permissions permissions, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(HttpContext context, NpgsqlDataSource source, Permissions permissions, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -45,7 +45,7 @@ internal static class NotificationsHistorySlice
             return Problem.Unauthenticated();
         }
 
-        var refusal = await NotifyGuards.AdminAsync(context, db, permissions, caller, "view notification history", ct);
+        var refusal = await NotifyGuards.AdminAsync(context, permissions, caller, "view notification history", ct);
         if (refusal is not null)
         {
             return refusal;
@@ -64,8 +64,8 @@ internal static class NotificationsHistorySlice
         }
 
         var (take, skip) = NotifyGuards.Page(limit.Value, offset.Value);
-        var rows = await db.Database
-            .SqlQuery<HistoryRow>($"""
+        var rows = await source.ListAsync(
+            $"""
                 select n.notification_id as "NotificationId", n.title as "Title", n.body as "Body", n.target_audience_criteria as "TargetAudienceCriteria",
                        n.device_count as "DeviceCount", n.success_count as "SuccessCount", n.failure_count as "FailureCount", n.sent_at as "SentAt",
                        n.action_link as "ActionLink", m.name as "SenderName", u.email as "SenderEmail"
@@ -74,8 +74,20 @@ internal static class NotificationsHistorySlice
                 left join membership.v_members m on m.user_id = u.id
                 order by n.sent_at desc, n.notification_id desc
                 limit {take} offset {skip}
-                """)
-            .ToListAsync(ct);
+                """,
+            row => new HistoryRow(
+                row.Int("NotificationId"),
+                row.Text("Title"),
+                row.Text("Body"),
+                row.Text("TargetAudienceCriteria"),
+                row.IntOrNull("DeviceCount"),
+                row.IntOrNull("SuccessCount"),
+                row.IntOrNull("FailureCount"),
+                row.Instant("SentAt"),
+                row.TextOrNull("ActionLink"),
+                row.TextOrNull("SenderName"),
+                row.TextOrNull("SenderEmail")),
+            ct);
 
         // A sender whose token is shared repeats a notification's row: the same id is read twice, so no ToDictionary.
         var criteria = new Dictionary<int, JsonElement?>();
@@ -84,31 +96,32 @@ internal static class NotificationsHistorySlice
             criteria[row.NotificationId] = Criteria.Parse(row.TargetAudienceCriteria);
         }
 
-        var names = await AudienceWords.LookUpAsync(db, AudienceWords.IdsNeeded(criteria.Values), ct);
-        var counts = await RecipientCountsAsync(db, rows.Select(r => r.NotificationId).Distinct().ToArray(), ct);
+        var names = await AudienceWords.LookUpAsync(source, AudienceWords.IdsNeeded(criteria.Values), ct);
+        var counts = await RecipientCountsAsync(source, rows.Select(r => r.NotificationId).Distinct().ToArray(), ct);
         var items = rows.Select(r => Item(r, criteria[r.NotificationId], names, counts)).ToList();
-        return Results.Json(new Dictionary<string, object>
+        return Results.Json(new Dictionary<string, object?>
         {
             ["notifications"] = items,
             ["limit"] = limit.Value,
             ["offset"] = offset.Value,
             ["count"] = items.Count,
-        });
+        }, NotificationsJson.Answers.Answer);
     }
 
-    private static async Task<Dictionary<int, long>> RecipientCountsAsync(NotificationsContext db, int[] ids, CancellationToken ct)
+    private static async Task<Dictionary<int, long>> RecipientCountsAsync(NpgsqlDataSource source, int[] ids, CancellationToken ct)
     {
         if (ids.Length == 0)
         {
             return [];
         }
 
-        var rows = await db.Database
-            .SqlQuery<Recipients>($"""
-                select notification_id as "NotificationId", count(*) as "Count" from notifications.user_notifications
-                where notification_id = any({ids}) group by notification_id
-                """)
-            .ToListAsync(ct);
+        var rows = await source.ListAsync(
+            $"""
+            select notification_id as "NotificationId", count(*) as "Count" from notifications.user_notifications
+            where notification_id = any({ids}) group by notification_id
+            """,
+            row => new Recipients(row.Int("NotificationId"), row.Long("Count")),
+            ct);
         return rows.ToDictionary(r => r.NotificationId, r => r.Count);
     }
 

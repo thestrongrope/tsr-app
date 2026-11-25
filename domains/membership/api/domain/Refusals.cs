@@ -14,5 +14,5 @@ internal static class Refusals
 
     internal sealed record Coded(string Detail, string Code);
 
-    public static IResult AmbiguousToken() => Results.Json(new Coded(AmbiguousTokenText, "ambiguous_token"), statusCode: StatusCodes.Status422UnprocessableEntity);
+    public static IResult AmbiguousToken() => Results.Json(new Coded(AmbiguousTokenText, "ambiguous_token"), MembershipJson.Answers.Coded, statusCode: StatusCodes.Status422UnprocessableEntity);
 }

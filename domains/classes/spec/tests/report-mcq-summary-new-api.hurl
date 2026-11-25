@@ -94,4 +94,7 @@ HTTP 200
 GET {{base_url}}/reports/mcq-summary/a%20b%0Ac/download?format=xlsx&from=2019-03-01&to=2019-03-31
 Authorization: {{auth_r2_coord}}
 HTTP 200
+Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
 Content-Disposition: attachment; filename="MCQ-summary-a b_c-2019-03-01-to-2019-03-31.xlsx"
+[Asserts]
+bytes startsWith hex,504b;

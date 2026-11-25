@@ -28,7 +28,7 @@ b5b_admin /reports/registrations/allocated/download?format=xlsx&gender=2 --filte
 b5b_gents_admin /reports/registrations/allocated/download?format=xlsx --filter B:9021 --filter B:9271 --ignore A
 b5d_coord /reports/registrations/allocated/download?format=xlsx --filter B:9021 --filter B:9271 --ignore A
 # The admin access log (edge lane; tools/contract-edge.sh test|parity --prepare on both sides first): the fixture subjects only. Column A (the time) is ignored: the two sides load their rows seconds apart (the hurl file and the db test prove the time text).
-# The whole subject 927100 is not compared: its row with a "=cmd|calc" device differs by design (ClosedXML hides the leading apostrophe PHP shows; see docs/specs/initial-build/test-edge-notes.md).
+# The whole subject 927100 is not compared: its row with a "=cmd|calc" device differs by design (the workbook hides the leading apostrophe PHP shows, as a quote prefix; see docs/specs/initial-build/test-edge-notes.md).
 edge_download /admin/access-log/download?format=xlsx&token=927101 --filter B:9271 --ignore A
 edge_download /admin/access-log/download?format=xlsx&token=927100&page=alpha --filter B:9271 --ignore A
 edge_download /admin/access-log/download?format=xlsx&token=927100&page=gamma --filter B:9271 --ignore A

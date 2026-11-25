@@ -21,6 +21,7 @@ public sealed partial class SqlCitextCastTests
     [
         ("domains/classes/api/domain/ConductionWriter.cs", "where session_id = {sessionId}", "classes.class_attendance.session_id is an integer; only platform's session_id is citext"),
         ("domains/classes/api/domain/ConductionData.cs", "where ca.session_id = {sessionId}", "classes.class_attendance.session_id is an integer; only platform's session_id is citext"),
+        ("domains/platform/api/Geo.cs", "where c.name = {wanted}", "platform.geo_countries.name is text with the geo_ci_ai collation (case and accents ignored); a citext cast would stop it ignoring accents"),
     ];
 
     [GeneratedRegex(@"\b(where|and|or|on|when|not|\()\s*(?:\w+\.)?(" + Columns + @")\s*(=|<>|!=)\s*(any\(\s*)?\{[^{}]*(?:\[[^\]]*\][^{}]*)*\}(?!\s*::\s*citext)", RegexOptions.IgnoreCase)]

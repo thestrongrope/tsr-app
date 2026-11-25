@@ -71,10 +71,11 @@ services:
       start_period: 10s
 
   migrate:
-    # The same image as the API, run once with --migrate (production: the same, as a Dokploy job).
+    # The API's JIT build (target migrate: Entity Framework cannot be native), run once with --migrate (production: the same, as a Dokploy job).
     build:
       context: .
       dockerfile: hosts/api/Dockerfile
+      target: migrate
     command: ["--migrate"]
     environment:
       # Not Development: migrating must work in any environment, without the dev verifier.
@@ -102,6 +103,7 @@ services:
     build:
       context: .
       dockerfile: hosts/api/Dockerfile
+      target: native
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       TSR_DB: "Host=db;Port=5432;Database=tsr;Username=tsr_app;Password=local-only-app"
@@ -158,6 +160,7 @@ services:
     build:
       context: .
       dockerfile: hosts/api/Dockerfile
+      target: native
     profiles: ["workers"]
     command: ["--workers"]
     environment:

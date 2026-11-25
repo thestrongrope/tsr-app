@@ -1,6 +1,6 @@
 using System.Globalization;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Shared.Api;
 
@@ -44,21 +44,22 @@ internal static class ManagePayload
     private sealed record Destination(int Id, string Code, string? Name);
 
     public static async Task<Dictionary<string, object?>> BuildAsync(
-        ClassesContext db, Permissions permissions, IConfiguration configuration, Caller caller, int classId, CancellationToken ct)
+        NpgsqlDataSource source, Permissions permissions, IConfiguration configuration, Caller caller, int classId, CancellationToken ct)
     {
-        var rows = await db.Database
-            .SqlQuery<ClassRow>($"""
-                select c.id as "Id", c.code as "Code", c.name as "Name", c.class_level_id as "LevelId", cl.name as "LevelName", c.gender as "Gender", g.name as "GenderName",
-                       c.language_id as "LanguageId", c.started_on as "StartedOn", c.format as "Format", c.address as "Address", c.city as "City", c.country as "Country",
-                       c.location as "Location", c.teacher as "Teacher", t.name as "TeacherName", c.link::text as "Link"
-                from classes.classes c
-                join platform.v_genders g on g.id = c.gender
-                join classes.class_levels cl on cl.id = c.class_level_id
-                join membership.v_members t on t.token = c.teacher
-                where c.id = {classId} and c.status = 'A'
-                limit 1
-                """)
-            .ToListAsync(ct);
+        var rows = await source.ListAsync(
+            $"""
+            select c.id as "Id", c.code as "Code", c.name as "Name", c.class_level_id as "LevelId", cl.name as "LevelName", c.gender as "Gender", g.name as "GenderName",
+                   c.language_id as "LanguageId", to_char(c.started_on, 'YYYY-MM-DD') as "StartedOn", c.format as "Format", c.address as "Address", c.city as "City", c.country as "Country",
+                   c.location as "Location", c.teacher as "Teacher", t.name as "TeacherName", c.link::text as "Link"
+            from classes.classes c
+            join platform.v_genders g on g.id = c.gender
+            join classes.class_levels cl on cl.id = c.class_level_id
+            join membership.v_members t on t.token = c.teacher
+            where c.id = {classId} and c.status = 'A'
+            limit 1
+            """,
+            ReadClass,
+            ct);
         if (rows.Count == 0)
         {
             throw new InvalidOperationException("The class vanished between the guard and the payload.");
@@ -68,24 +69,112 @@ internal static class ManagePayload
         var payload = new Dictionary<string, object?>
         {
             ["class"] = ClassWire(rows[0], configuration),
-            ["tags"] = OptionsWire(await TagsAsync(db, classId, ct)),
-            ["schedules"] = await SchedulesWireAsync(db, classId, ct),
+            ["tags"] = OptionsWire(await TagsAsync(source, classId, ct)),
+            ["schedules"] = await SchedulesWireAsync(source, classId, ct),
             ["lookups"] = new Dictionary<string, object?>
             {
                 ["languages"] = Languages.Select(l => new Dictionary<string, object?> { ["id"] = l.Id, ["name"] = l.Name }).ToList(),
-                ["tags"] = OptionsWire(await TagsAsync(db, null, ct)),
-                ["topics"] = OptionsWire(await TopicsAsync(db, ct)),
+                ["tags"] = OptionsWire(await TagsAsync(source, null, ct)),
+                ["topics"] = OptionsWire(await TopicsAsync(source, ct)),
                 ["timezones"] = Timezones.All,
             },
             ["can"] = can.ToWire(),
         };
-        foreach (var (key, value) in await ClassRoster.BuildAsync(db, classId, can, ct))
+        foreach (var (key, value) in await ClassRoster.BuildAsync(source, classId, can, ct))
         {
             payload[key] = value;
         }
 
-        payload["destinations"] = can.Transfer ? await DestinationsAsync(db, permissions, caller, classId, ct) : null;
+        payload["destinations"] = can.Transfer ? await DestinationsAsync(source, permissions, caller, classId, ct) : null;
         return payload;
+    }
+
+    private static ClassRow ReadClass(DbRow row) => new(
+        row.Int("Id"),
+        row.Text("Code"),
+        row.Text("Name"),
+        row.IntOrNull("LevelId"),
+        row.TextOrNull("LevelName"),
+        row.IntOrNull("Gender"),
+        row.TextOrNull("GenderName"),
+        row.IntOrNull("LanguageId"),
+        row.DateOrNull("StartedOn"),
+        row.TextOrNull("Format"),
+        row.TextOrNull("Address"),
+        row.TextOrNull("City"),
+        row.TextOrNull("Country"),
+        row.TextOrNull("Location"),
+        row.IntOrNull("Teacher"),
+        row.TextOrNull("TeacherName"),
+        row.TextOrNull("Link"));
+
+    private static Task<List<Option>> TagsAsync(NpgsqlDataSource source, int? classId, CancellationToken ct) =>
+        classId is int id
+            ? source.ListAsync(
+                $"""
+                select t.id as "Id", t.name as "Name" from classes.class_tags ct join classes.tags t on t.id = ct.tag_id
+                where ct.class_id = {id} and t.deleted_at is null and ct.deleted_at is null
+                order by t.name, t.id
+                limit {MaxRows}
+                """,
+                ReadOption,
+                ct)
+            : source.ListAsync(
+                $"""select id as "Id", name as "Name" from classes.tags where deleted_at is null order by name, id limit {MaxRows}""",
+                ReadOption,
+                ct);
+
+    private static Task<List<Option>> TopicsAsync(NpgsqlDataSource source, CancellationToken ct) =>
+        source.ListAsync($"""select id as "Id", name as "Name" from classes.topics where deleted_at is null order by id limit {MaxRows}""", ReadOption, ct);
+
+    private static Option ReadOption(DbRow row) => new(row.Int("Id"), row.TextOrNull("Name"));
+
+    private static async Task<List<Dictionary<string, object?>>> SchedulesWireAsync(NpgsqlDataSource source, int classId, CancellationToken ct)
+    {
+        var slots = await source.ListAsync(
+            $"""
+            select id as "Id", coalesce(day, 0) as "Day", coalesce(hour, 0) as "Hour", coalesce(minute, 0) as "Minute", timezone as "Timezone"
+            from classes.class_schedules where class_id = {classId} and deleted_at is null order by id limit {MaxRows}
+            """,
+            row => new Slot(row.Int("Id"), row.Int("Day"), row.Int("Hour"), row.Int("Minute"), row.TextOrNull("Timezone")),
+            ct);
+        var topics = (await source.ListAsync(
+            $"""
+            select st.id as "Id", st.class_schedule_id as "ScheduleId", coalesce(st.topic_id, 0) as "TopicId"
+            from classes.class_schedule_topics st join classes.class_schedules s on s.id = st.class_schedule_id
+            where s.class_id = {classId} and s.deleted_at is null and st.deleted_at is null
+            order by st.id
+            limit {MaxRows}
+            """,
+            row => new SlotTopic(row.Int("Id"), row.Int("ScheduleId"), row.Int("TopicId")),
+            ct)).ToLookup(t => t.ScheduleId);
+        return slots.Select(s => new Dictionary<string, object?>
+        {
+            ["id"] = s.Id,
+            ["day"] = s.Day,
+            ["hour"] = s.Hour,
+            ["minute"] = s.Minute,
+            ["timezone"] = s.Timezone ?? string.Empty,
+            ["topics"] = topics[s.Id].Select(t => new Dictionary<string, object?> { ["id"] = t.Id, ["topicId"] = t.TopicId }).ToList(),
+        }).ToList();
+    }
+
+    private static async Task<List<Dictionary<string, object?>>> DestinationsAsync(NpgsqlDataSource source, Permissions permissions, Caller caller, int classId, CancellationToken ct)
+    {
+        var assigned = (await permissions.ReachAsync(caller, "classes:read", ct)).AssignedOnlyIds;
+        var all = assigned is null;
+        var ids = (assigned ?? []).ToArray();
+        var rows = await source.ListAsync(
+            $"""
+            select c.id as "Id", c.code as "Code", c.name as "Name"
+            from classes.classes c join classes.class_levels cl on cl.id = c.class_level_id
+            where c.status = 'A' and c.id <> {classId} and ({all} or c.id = any({ids}))
+            order by c.gender, cl.sort_order, c.id
+            limit {MaxRows}
+            """,
+            row => new Destination(row.Int("Id"), row.Text("Code"), row.TextOrNull("Name")),
+            ct);
+        return rows.Select(d => new Dictionary<string, object?> { ["id"] = d.Id, ["code"] = d.Code, ["name"] = Text(d.Name) ?? string.Empty }).ToList();
     }
 
     // joinUrl: whoever may open the manage screen may share the class (PHP api_manage_payload), so no caller check here.
@@ -110,74 +199,10 @@ internal static class ManagePayload
         ["joinUrl"] = ClassCards.JoinUrl(configuration, c.Link),
     };
 
-    private static async Task<List<Option>> TagsAsync(ClassesContext db, int? classId, CancellationToken ct) =>
-        classId is int id
-            ? await db.Database
-                .SqlQuery<Option>($"""
-                    select t.id as "Id", t.name as "Name" from classes.class_tags ct join classes.tags t on t.id = ct.tag_id
-                    where ct.class_id = {id} and t.deleted_at is null and ct.deleted_at is null
-                    order by t.name, t.id
-                    limit {MaxRows}
-                    """)
-                .ToListAsync(ct)
-            : await db.Database
-                .SqlQuery<Option>($"""select id as "Id", name as "Name" from classes.tags where deleted_at is null order by name, id limit {MaxRows}""")
-                .ToListAsync(ct);
-
-    private static async Task<List<Option>> TopicsAsync(ClassesContext db, CancellationToken ct) =>
-        await db.Database
-            .SqlQuery<Option>($"""select id as "Id", name as "Name" from classes.topics where deleted_at is null order by id limit {MaxRows}""")
-            .ToListAsync(ct);
-
     private static List<Dictionary<string, object?>> OptionsWire(List<Option> options) =>
         options.Select(o => new Dictionary<string, object?> { ["id"] = o.Id, ["name"] = Text(Empty(o.Name)) }).ToList();
 
-    private static async Task<List<Dictionary<string, object?>>> SchedulesWireAsync(ClassesContext db, int classId, CancellationToken ct)
-    {
-        var slots = await db.Database
-            .SqlQuery<Slot>($"""
-                select id as "Id", coalesce(day, 0) as "Day", coalesce(hour, 0) as "Hour", coalesce(minute, 0) as "Minute", timezone as "Timezone"
-                from classes.class_schedules where class_id = {classId} and deleted_at is null order by id limit {MaxRows}
-                """)
-            .ToListAsync(ct);
-        var topics = (await db.Database
-            .SqlQuery<SlotTopic>($"""
-                select st.id as "Id", st.class_schedule_id as "ScheduleId", coalesce(st.topic_id, 0) as "TopicId"
-                from classes.class_schedule_topics st join classes.class_schedules s on s.id = st.class_schedule_id
-                where s.class_id = {classId} and s.deleted_at is null and st.deleted_at is null
-                order by st.id
-                limit {MaxRows}
-                """)
-            .ToListAsync(ct)).ToLookup(t => t.ScheduleId);
-        return slots.Select(s => new Dictionary<string, object?>
-        {
-            ["id"] = s.Id,
-            ["day"] = s.Day,
-            ["hour"] = s.Hour,
-            ["minute"] = s.Minute,
-            ["timezone"] = s.Timezone ?? string.Empty,
-            ["topics"] = topics[s.Id].Select(t => new Dictionary<string, object?> { ["id"] = t.Id, ["topicId"] = t.TopicId }).ToList(),
-        }).ToList();
-    }
-
     // PHP getAll() as the caller sees it: every active class (only the assigned ones for a caller whose classes:read is assigned-only), minus this one.
-    private static async Task<List<Dictionary<string, object?>>> DestinationsAsync(ClassesContext db, Permissions permissions, Caller caller, int classId, CancellationToken ct)
-    {
-        var assigned = (await permissions.ReachAsync(caller, "classes:read", ct)).AssignedOnlyIds;
-        var all = assigned is null;
-        var ids = (assigned ?? []).ToArray();
-        var rows = await db.Database
-            .SqlQuery<Destination>($"""
-                select c.id as "Id", c.code as "Code", c.name as "Name"
-                from classes.classes c join classes.class_levels cl on cl.id = c.class_level_id
-                where c.status = 'A' and c.id <> {classId} and ({all} or c.id = any({ids}))
-                order by c.gender, cl.sort_order, c.id
-                limit {MaxRows}
-                """)
-            .ToListAsync(ct);
-        return rows.Select(d => new Dictionary<string, object?> { ["id"] = d.Id, ["code"] = d.Code, ["name"] = Text(d.Name) ?? string.Empty }).ToList();
-    }
-
     private static string? Empty(string? value) => string.IsNullOrEmpty(value) ? null : value;
 
     private static string? Text(string? value) => value is null ? null : PhpText.HtmlDecode(value);

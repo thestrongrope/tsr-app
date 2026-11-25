@@ -1,6 +1,6 @@
 using System.Globalization;
 using Microsoft.AspNetCore.Http;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Shared.Api;
 
@@ -85,9 +85,9 @@ internal static class ConductionData
 
     /// <summary>PHP's chain on every conduction route: the active class (404), then the permission on it (403, "manage this class"). <paramref name="action"/> is sessions:create or sessions:update.</summary>
     public static async Task<(ClassGuards.ClassHead? Head, IResult? Refusal)> OpenAsync(
-        ClassesContext db, Permissions permissions, Caller caller, string classId, string action, CancellationToken ct)
+        NpgsqlDataSource source, Permissions permissions, Caller caller, string classId, string action, CancellationToken ct)
     {
-        var head = await ClassGuards.FindActiveClassAsync(db, ClassGuards.IdOf(classId), ct);
+        var head = await ClassGuards.FindActiveClassAsync(source, ClassGuards.IdOf(classId), ct);
         if (head is null)
         {
             return (null, Refusals.ClassNotFound());
@@ -104,28 +104,40 @@ internal static class ConductionData
     public static DateOnly Today(TimeProvider clock) => DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
 
     /// <summary>The class header every conduction screen carries: the class, its current roster (PHP getStudents) and its extra students, all marked absent.</summary>
-    public static async Task<ClassPayload> HeaderAsync(ClassesContext db, int classId, CancellationToken ct)
+    public static async Task<ClassPayload> HeaderAsync(NpgsqlDataSource source, int classId, CancellationToken ct)
     {
-        var row = await db.Database
-            .SqlQuery<HeaderRow>($"""
+        var rows = await source.ListAsync(
+            $"""
                 select c.id as "Id", c.code as "Code", c.name as "Name", coalesce(c.class_level_id, 0) as "Level", cl.name as "LevelName", c.gender as "Gender",
                        c.status as "Status", t.name as "TeacherName", c.extra_students as "ExtraStudents"
                 from classes.classes c
                 join classes.class_levels cl on cl.id = c.class_level_id
                 left join membership.v_members t on t.token = c.teacher
                 where c.id = {classId}
-                """)
-            .SingleAsync(ct);
-        var roster = await ClassRoster.ActiveAsync(db, classId, ct);
+                """,
+            row => new HeaderRow(
+                row.Int("Id"),
+                row.Text("Code"),
+                row.Text("Name"),
+                row.Int("Level"),
+                row.TextOrNull("LevelName"),
+                row.Int("Gender"),
+                row.Text("Status"),
+                row.TextOrNull("TeacherName"),
+                row.TextOrNull("ExtraStudents")),
+            ct);
+        var row = rows.Single();
+        var roster = await ClassRoster.ActiveAsync(source, classId, ct);
         var students = roster.Select(s => new Student(s.Token, s.Name ?? string.Empty, false, 0, false)).ToList();
         var extras = ConductionRules.ExtraStudentsOf(row.ExtraStudents).Select(e => new Student(e.Token, e.Name, false, 0, true)).ToList();
         return new ClassPayload(row.Id, row.Code, row.Name, row.Level, Text(row.LevelName), row.Gender, row.Status, Text(row.TeacherName), students, extras, students.Count + extras.Count);
     }
 
-    public static async Task<List<Surah>> HolyQuranAsync(ClassesContext db, CancellationToken ct) =>
-        await db.Database
-            .SqlQuery<Surah>($"""select id as "Id", coalesce(surah, '') as "Name", coalesce(arabic, '') as "Arabic", verses as "Verses" from content.v_quran order by id limit {MaxRows}""")
-            .ToListAsync(ct);
+    public static async Task<List<Surah>> HolyQuranAsync(NpgsqlDataSource source, CancellationToken ct) =>
+        await source.ListAsync(
+            $"""select id as "Id", coalesce(surah, '') as "Name", coalesce(arabic, '') as "Arabic", verses as "Verses" from content.v_quran order by id limit {MaxRows}""",
+            row => new Surah(row.Int("Id"), row.Text("Name"), row.Text("Arabic"), row.Int("Verses")),
+            ct);
 
     public static SessionItem ToItem(SessionRow s, DateTimeOffset now) => new(
         s.Id,
@@ -149,17 +161,18 @@ internal static class ConductionData
         ConductionRules.IsEditable(s.CreatedAt, now));
 
     /// <summary>PHP getById's row (no deleted_at filter), or null.</summary>
-    public static async Task<SessionRow?> GetSessionAsync(ClassesContext db, long sessionId, CancellationToken ct)
+    public static async Task<SessionRow?> GetSessionAsync(NpgsqlDataSource source, long sessionId, CancellationToken ct)
     {
-        var rows = await GetSessionsAsync(db, [sessionId], ct);
+        var rows = await GetSessionsAsync(source, [sessionId], ct);
         return rows.Count == 0 ? null : rows[0];
     }
 
     /// <summary>The rows of these session ids, in the order given (an id that is no session is left out).</summary>
-    public static async Task<List<SessionRow>> GetSessionsAsync(ClassesContext db, long[] sessionIds, CancellationToken ct)
+    public static async Task<List<SessionRow>> GetSessionsAsync(NpgsqlDataSource source, long[] sessionIds, CancellationToken ct)
     {
-        var rows = await db.Database
-            .SqlQuery<SessionRow>($"""
+        var ids = sessionIds.Where(id => id is >= int.MinValue and <= int.MaxValue).Select(id => (int)id).ToArray();
+        var rows = await source.ListAsync(
+            $"""
                 select id as "Id", class_id as "ClassId", conducted_on as "ConductedOn", conducted = 1 as "Conducted", duration as "Duration", attendance as "Attendance",
                        quran_recitation_surah as "Surah", quran_recitation_verse as "Verse",
                        arabic_conducted in ('1', 'Y') as "ArabicConducted", aqaed_conducted in ('1', 'Y') as "AqaedConducted", ahkam_conducted in ('1', 'Y') as "AhkamConducted",
@@ -167,36 +180,60 @@ internal static class ConductionData
                        arabic_topic as "ArabicTopic", aqaed_topic as "AqaedTopic", ahkam_topic as "AhkamTopic", akhlaq_topic as "AkhlaqTopic", other_topic as "OtherTopic",
                        non_conduction_reason as "Reason", created_at as "CreatedAt"
                 from classes.class_sessions
-                where id = any({sessionIds})
+                where id = any({ids})
                 limit {MaxRows}
-                """)
-            .ToListAsync(ct);
+                """,
+            row => new SessionRow(
+                row.Int("Id"),
+                row.IntOrNull("ClassId"),
+                row.Date("ConductedOn"),
+                row.Bool("Conducted"),
+                row.IntOrNull("Duration"),
+                row.IntOrNull("Attendance"),
+                row.IntOrNull("Surah"),
+                row.IntOrNull("Verse"),
+                row.Bool("ArabicConducted"),
+                row.Bool("AqaedConducted"),
+                row.Bool("AhkamConducted"),
+                row.Bool("AkhlaqConducted"),
+                row.Bool("OtherConducted"),
+                row.TextOrNull("ArabicTopic"),
+                row.TextOrNull("AqaedTopic"),
+                row.TextOrNull("AhkamTopic"),
+                row.TextOrNull("AkhlaqTopic"),
+                row.TextOrNull("OtherTopic"),
+                row.TextOrNull("Reason"),
+                row.Instant("CreatedAt")),
+            ct);
         return rows.OrderBy(r => Array.IndexOf(sessionIds, (long)r.Id)).ToList();
     }
 
-    public static async Task<List<AttendanceItem>> AttendanceAsync(ClassesContext db, int sessionId, CancellationToken ct) =>
-        await db.Database
-            .SqlQuery<AttendanceItem>($"""
+    public static async Task<List<AttendanceItem>> AttendanceAsync(NpgsqlDataSource source, int sessionId, CancellationToken ct) =>
+        await source.ListAsync(
+            $"""
                 select coalesce(m.token, ca.token) as "Token", coalesce(m.name, ca.name, '') as "Name", ca.present = 1 as "Present", ca.recitation as "Recitation", ca.extra_student = 1 as "Extra"
                 from classes.class_attendance ca
                 left join membership.v_members m on m.token = ca.token and ca.extra_student = 0
                 where ca.session_id = {sessionId}
                 order by ca.id
                 limit {MaxRows}
-                """)
-            .ToListAsync(ct);
+                """,
+            row => new AttendanceItem(row.Int("Token"), row.Text("Name"), row.Bool("Present"), row.Int("Recitation"), row.Bool("Extra")),
+            ct);
 
     /// <summary>PHP getSessionByDate: a session already on the day (any state), and whether the day's Monday-to-Sunday week already holds as many sessions as the class has schedule rows (deleted ones too, at least one). <paramref name="excludeId"/> 0 excludes nothing.</summary>
-    public static async Task<DayCheck> CheckDayAsync(ClassesContext db, int classId, DateOnly day, int excludeId, CancellationToken ct)
+    public static async Task<DayCheck> CheckDayAsync(DbTx tx, int classId, DateOnly day, int excludeId, CancellationToken ct)
     {
         var (monday, sunday) = ConductionRules.WeekOf(day);
-        var counts = await db.Database
-            .SqlQuery<DayCounts>($"""
+        var rows = await tx.ListAsync(
+            $"""
                 select (select count(*) from classes.class_sessions where class_id = {classId} and id <> {excludeId} and conducted_on = {day}) as "Exact",
                        (select count(*) from classes.class_sessions where class_id = {classId} and id <> {excludeId} and conducted_on between {monday} and {sunday}) as "Week",
                        (select count(*) from classes.class_schedules where class_id = {classId}) as "Slots"
-                """)
-            .SingleAsync(ct);
+                """,
+            row => new DayCounts(row.Long("Exact"), row.Long("Week"), row.Long("Slots")),
+            ct);
+        var counts = rows.Single();
         return new DayCheck(counts.Exact > 0, counts.Week >= Math.Max(counts.Slots, 1));
     }
 }

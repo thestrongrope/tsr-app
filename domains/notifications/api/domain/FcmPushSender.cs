@@ -3,10 +3,41 @@ using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
 namespace Tsr.Notifications.Api.Domain;
+
+/// <summary>The body of one FCM send: <c>{"message": {...}}</c>, in the order FCM's documentation shows it.</summary>
+internal sealed record FcmEnvelope([property: JsonPropertyName("message")] FcmMessage Message);
+
+internal sealed record FcmMessage(
+    [property: JsonPropertyName("token")] string Token,
+    [property: JsonPropertyName("notification")] FcmNotification Notification,
+    [property: JsonPropertyName("data")] IReadOnlyDictionary<string, string> Data,
+    [property: JsonPropertyName("android")] FcmAndroid Android,
+    [property: JsonPropertyName("apns")] FcmApns Apns);
+
+internal sealed record FcmNotification([property: JsonPropertyName("title")] string Title, [property: JsonPropertyName("body")] string Body);
+
+internal sealed record FcmAndroid([property: JsonPropertyName("priority")] string Priority, [property: JsonPropertyName("notification")] FcmAndroidNotification Notification);
+
+internal sealed record FcmAndroidNotification([property: JsonPropertyName("sound")] string Sound, [property: JsonPropertyName("channel_id")] string ChannelId);
+
+internal sealed record FcmApns([property: JsonPropertyName("payload")] FcmApnsPayload Payload);
+
+internal sealed record FcmApnsPayload([property: JsonPropertyName("aps")] FcmAps Aps);
+
+internal sealed record FcmAps([property: JsonPropertyName("sound")] string Sound, [property: JsonPropertyName("badge")] int Badge);
+
+/// <summary>The claims of the signed assertion sent to Google's token endpoint.</summary>
+internal sealed record FcmJwtClaims(
+    [property: JsonPropertyName("iss")] string Iss,
+    [property: JsonPropertyName("scope")] string Scope,
+    [property: JsonPropertyName("aud")] string Aud,
+    [property: JsonPropertyName("iat")] long Iat,
+    [property: JsonPropertyName("exp")] long Exp);
 
 /// <summary>
 /// FCM HTTP v1 called directly (docs/specs/dotnet-stack.md, "Push"): <c>POST https://fcm.googleapis.com/v1/projects/{project}/messages:send</c> with a Bearer access token
@@ -104,28 +135,13 @@ internal sealed partial class FcmPushSender : IPushSender, IDisposable
 
     internal static string BuildBody(PushMessage message, string deviceToken)
     {
-        var payload = new Dictionary<string, object>
-        {
-            ["message"] = new Dictionary<string, object>
-            {
-                ["token"] = deviceToken,
-                ["notification"] = new Dictionary<string, string> { ["title"] = message.Title, ["body"] = message.Body },
-                ["data"] = message.Data,
-                ["android"] = new Dictionary<string, object>
-                {
-                    ["priority"] = "HIGH",
-                    ["notification"] = new Dictionary<string, string> { ["sound"] = "default", ["channel_id"] = "high_importance_channel" },
-                },
-                ["apns"] = new Dictionary<string, object>
-                {
-                    ["payload"] = new Dictionary<string, object>
-                    {
-                        ["aps"] = new Dictionary<string, object> { ["sound"] = "default", ["badge"] = 1 },
-                    },
-                },
-            },
-        };
-        return JsonSerializer.Serialize(payload);
+        var payload = new FcmEnvelope(new FcmMessage(
+            deviceToken,
+            new FcmNotification(message.Title, message.Body),
+            message.Data,
+            new FcmAndroid("HIGH", new FcmAndroidNotification("default", "high_importance_channel")),
+            new FcmApns(new FcmApnsPayload(new FcmAps("default", 1)))));
+        return JsonSerializer.Serialize(payload, NotificationsJson.Default.FcmEnvelope);
     }
 
     // A 401, or a PERMISSION_DENIED / UNAUTHENTICATED that is not a sender mismatch, is about our credentials, not the message: Unavailable (PHP's drain_push_is_channel_error). A sender mismatch is
@@ -299,14 +315,7 @@ internal sealed partial class FcmPushSender : IPushSender, IDisposable
     {
         var issued = now.ToUnixTimeSeconds();
         var header = Base64Url(Encoding.UTF8.GetBytes("""{"alg":"RS256","typ":"JWT"}"""));
-        var claims = JsonSerializer.Serialize(new Dictionary<string, object>
-        {
-            ["iss"] = _clientEmail!,
-            ["scope"] = Scope,
-            ["aud"] = TokenEndpoint,
-            ["iat"] = issued,
-            ["exp"] = issued + 3600,
-        });
+        var claims = JsonSerializer.Serialize(new FcmJwtClaims(_clientEmail!, Scope, TokenEndpoint, issued, issued + 3600), NotificationsJson.Default.FcmJwtClaims);
         var unsigned = header + "." + Base64Url(Encoding.UTF8.GetBytes(claims));
         var signature = _key!.SignData(Encoding.ASCII.GetBytes(unsigned), HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
         return unsigned + "." + Base64Url(signature);

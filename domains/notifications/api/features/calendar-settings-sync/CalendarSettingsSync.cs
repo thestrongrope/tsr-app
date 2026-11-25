@@ -2,7 +2,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Notifications.Api.Domain;
 
 namespace Tsr.Notifications.Api.Features.CalendarSettingsSync;
@@ -40,7 +40,7 @@ internal static class CalendarSettingsSyncSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(HttpContext context, NotificationsContext db, TimeProvider clock, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(HttpContext context, NpgsqlDataSource source, TimeProvider clock, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -68,11 +68,11 @@ internal static class CalendarSettingsSyncSlice
 
         var now = clock.GetUtcNow();
         var outcome = new Outcome();
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        await db.Database.ExecuteSqlAsync($"select pg_advisory_xact_lock(hashtext('notifications.member_event_settings'), {caller.UserId})", ct);
+        await using var tx = await source.BeginAsync(ct);
+        await tx.ExecuteAsync($"select pg_advisory_xact_lock(hashtext('notifications.member_event_settings'), {caller.UserId})", ct);
         foreach (var change in changes)
         {
-            var error = await ApplyAsync(db, caller, device.GetString()!, change, now, outcome, ct);
+            var error = await ApplyAsync(tx, caller, device.GetString()!, change, now, outcome, ct);
             if (error is not null)
             {
                 // The transaction is left uncommitted: the changes before this one are rolled back with it.
@@ -82,17 +82,17 @@ internal static class CalendarSettingsSyncSlice
 
         if (outcome.Written > 0)
         {
-            await Outbox.WriteAsync(db, "notifications.event_settings_synced", new EventSettingsSynced(caller.Token, outcome.Written), clock, ct);
+            await Outbox.WriteAsync(tx, "notifications.event_settings_synced", new EventSettingsSynced(caller.Token, outcome.Written), NotificationsJson.Default.EventSettingsSynced, clock, ct);
         }
 
-        await transaction.CommitAsync(ct);
-        return Results.Json(new Dictionary<string, object>
+        await tx.CommitAsync(ct);
+        return Results.Json(new Dictionary<string, object?>
         {
             ["settings"] = outcome.Settings,
             ["rejected"] = outcome.Rejected,
             ["clock_skew"] = outcome.Skew,
             ["server_time"] = CalendarSettings.Iso(now),
-        });
+        }, NotificationsJson.Answers.Answer);
     }
 
     private static IResult Unprocessable(string detail) => Problem.Detail(StatusCodes.Status422UnprocessableEntity, detail);
@@ -109,7 +109,7 @@ internal static class CalendarSettingsSyncSlice
     }
 
     /// <summary>One change: null when it was kept, lost to a stored one or rejected; else the 422 text that refuses the batch.</summary>
-    private static async Task<string?> ApplyAsync(NotificationsContext db, Caller caller, string device, JsonElement change, DateTimeOffset now, Outcome outcome, CancellationToken ct)
+    private static async Task<string?> ApplyAsync(DbTx tx, Caller caller, string device, JsonElement change, DateTimeOffset now, Outcome outcome, CancellationToken ct)
     {
         if (change.ValueKind is not (JsonValueKind.Object or JsonValueKind.Array))
         {
@@ -122,7 +122,7 @@ internal static class CalendarSettingsSyncSlice
             return key.Error;
         }
 
-        var classId = await ClassOfAsync(db, caller.Token, key.Value, ct);
+        var classId = await ClassOfAsync(tx, caller.Token, key.Value, ct);
         if (classId is null)
         {
             outcome.Rejected.Add(key.Value.Text);
@@ -137,49 +137,85 @@ internal static class CalendarSettingsSyncSlice
 
         var (stamp, skew) = CalendarSettings.Stamp(parsed.Value!.ClientTime, now);
         outcome.Skew = outcome.Skew || skew;
-        var stored = await db.MemberEventSettings
-            .FromSql($"select * from notifications.member_event_settings where user_id = {caller.UserId} and event_key = {key.Value.Text}::citext")
-            .FirstOrDefaultAsync(ct);
+        var stored = (await tx.ListAsync(
+            $"""
+            select id as "Id", user_id as "UserId", class_id as "ClassId", event_key as "EventKey", offset_minutes as "OffsetMinutes", muted as "Muted",
+                   deleted_for_me as "DeletedForMe", client_updated_at as "ClientUpdatedAt", server_updated_at as "ServerUpdatedAt", device_key as "DeviceKey"
+            from notifications.member_event_settings where user_id = {caller.UserId} and event_key = {key.Value.Text}::citext
+            limit 1
+            """,
+            CalendarSettings.ReadRow,
+            ct)).FirstOrDefault();
         if (stored is not null && CalendarSettings.Loses(stamp, device, stored.ClientUpdatedAt, stored.DeviceKey))
         {
             outcome.Settings[key.Value.Text] = CalendarSettings.Payload(stored);
             return null;
         }
 
-        var setting = stored ?? db.MemberEventSettings.Add(new MemberEventSetting { UserId = caller.UserId, EventKey = key.Value.Text }).Entity;
-        setting.ClassId = classId.Value;
-        setting.OffsetMinutes = parsed.Value.OffsetMinutes;
-        setting.Muted = (short)(parsed.Value.Muted ? 1 : 0);
-        setting.DeletedForMe = (short)(parsed.Value.Deleted || setting.DeletedForMe != 0 ? 1 : 0);
-        setting.ClientUpdatedAt = stamp;
-        setting.ServerUpdatedAt = CalendarSettings.Milliseconds(now);
-        setting.DeviceKey = device;
-        await db.SaveChangesAsync(ct);
+        var muted = (short)(parsed.Value.Muted ? 1 : 0);
+        var deleted = (short)(parsed.Value.Deleted || (stored?.DeletedForMe ?? 0) != 0 ? 1 : 0);
+        var serverStamp = CalendarSettings.Milliseconds(now);
+        var offset = parsed.Value.OffsetMinutes;
+        var setting = stored is null
+            ? await InsertAsync(tx, caller.UserId, key.Value.Text, classId.Value, offset, muted, deleted, stamp, serverStamp, device, ct)
+            : await UpdateAsync(tx, stored, classId.Value, offset, muted, deleted, stamp, serverStamp, device, ct);
         outcome.Written++;
         outcome.Settings[key.Value.Text] = CalendarSettings.Payload(setting);
         return null;
     }
 
+    private static async Task<EventSettingRow> InsertAsync(
+        DbTx tx, int userId, string eventKey, int classId, int? offset, short muted, short deleted, DateTimeOffset stamp, DateTimeOffset serverStamp, string device, CancellationToken ct)
+    {
+        var ids = await tx.ListAsync(
+            $"""
+            insert into notifications.member_event_settings (user_id, event_key, class_id, offset_minutes, muted, deleted_for_me, client_updated_at, server_updated_at, device_key)
+            values ({userId}, {eventKey}, {classId}, {offset}, {muted}, {deleted}, {stamp}, {serverStamp}, {device})
+            returning id
+            """,
+            row => row.Int("id"),
+            ct);
+        return new EventSettingRow(ids.Single(), userId, classId, eventKey, offset, muted, deleted, stamp, serverStamp, device);
+    }
+
+    private static async Task<EventSettingRow> UpdateAsync(
+        DbTx tx, EventSettingRow stored, int classId, int? offset, short muted, short deleted, DateTimeOffset stamp, DateTimeOffset serverStamp, string device, CancellationToken ct)
+    {
+        await tx.ExecuteAsync(
+            $"""
+            update notifications.member_event_settings
+            set class_id = {classId}, offset_minutes = {offset}, muted = {muted}, deleted_for_me = {deleted}, client_updated_at = {stamp}, server_updated_at = {serverStamp}, device_key = {device}
+            where id = {stored.Id}
+            """,
+            ct);
+        return stored with { ClassId = classId, OffsetMinutes = offset, Muted = muted, DeletedForMe = deleted, ClientUpdatedAt = stamp, ServerUpdatedAt = serverStamp, DeviceKey = device };
+    }
+
     /// <summary>The class of a live event or slot the member can see as a current student of a live class (PHP <c>settingClass</c>), or null.</summary>
-    private static async Task<int?> ClassOfAsync(NotificationsContext db, int token, EventKey key, CancellationToken ct)
+    private static async Task<int?> ClassOfAsync(DbTx tx, int token, EventKey key, CancellationToken ct)
     {
         if (token <= 0)
         {
             return null;
         }
 
-        var rows = key.IsEvent
-            ? db.Database.SqlQuery<int>($"""
+        var found = key.IsEvent
+            ? await tx.ListAsync(
+                $"""
                 select e.class_id as "Value" from notifications.class_scheduled_events e
                 join classes.v_classes c on c.id = e.class_id join classes.v_enrolments s on s.class_id = c.id
                 where e.id = {key.Id} and s.token_no = {token} and s.status = 'A' and s.removed_at is null and c.status = 'A' and e.status = 'active' limit 1
-                """)
-            : db.Database.SqlQuery<int>($"""
+                """,
+                row => row.Int("Value"),
+                ct)
+            : await tx.ListAsync(
+                $"""
                 select e.class_id as "Value" from classes.v_class_schedules e
                 join classes.v_classes c on c.id = e.class_id join classes.v_enrolments s on s.class_id = c.id
                 where e.id = {key.Id} and s.token_no = {token} and s.status = 'A' and s.removed_at is null and c.status = 'A' and e.deleted_at is null limit 1
-                """);
-        var found = await rows.ToListAsync(ct);
+                """,
+                row => row.Int("Value"),
+                ct);
         return found.Count == 0 ? null : found[0];
     }
 }

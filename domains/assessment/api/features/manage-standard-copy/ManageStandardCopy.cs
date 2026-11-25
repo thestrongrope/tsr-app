@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Assessment.Api.Domain;
 using Tsr.Shared.Api;
@@ -31,7 +31,7 @@ internal static class ManageStandardCopySlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string class_id, string mcq_id, HttpContext context, AssessmentContext db, Permissions permissions, TimeProvider clock, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(string class_id, string mcq_id, HttpContext context, NpgsqlDataSource source, Permissions permissions, TimeProvider clock, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -40,7 +40,7 @@ internal static class ManageStandardCopySlice
         }
 
         var classId = PhpValue.IntOfText(class_id);
-        var target = await ManageAccess.ActiveClassAsync(db, classId, ct);
+        var target = await ManageAccess.ActiveClassAsync(source, classId, ct);
         if (target is null)
         {
             return ManageAccess.ClassNotFound();
@@ -52,12 +52,13 @@ internal static class ManageStandardCopySlice
         }
 
         var mcqId = PhpValue.IntOfText(mcq_id);
-        var standards = await db.Database
-            .SqlQuery<Standard>($"""
+        var standards = await source.ListAsync(
+            $"""
                 select code::text as "Code", left(subject::text || ' - ' || lesson::text || ' - ' || name::text, 300) as "Name", left(topic::text, 300) as "Topic"
                 from assessment.standard_mcqs where id = {mcqId} limit 1
-                """)
-            .ToListAsync(ct);
+                """,
+            row => new Standard(row.Text("Code"), row.Text("Name"), row.TextOrNull("Topic")),
+            ct);
         if (standards.Count == 0)
         {
             return Problem.Detail(StatusCodes.Status404NotFound, "Standard MCQ not found");
@@ -65,17 +66,17 @@ internal static class ManageStandardCopySlice
 
         var standard = standards[0];
         var at = ManageAccess.NowToSecond(clock);
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        var id = await NewQuiz.InsertAsync(db, new NewQuiz.Fields(target.Id, standard.Name, standard.Topic, standard.Code, 1, caller.Token), at, ct);
-        await db.Database.ExecuteSqlAsync(
+        await using var tx = await source.BeginAsync(ct);
+        var id = await NewQuiz.InsertAsync(tx, new NewQuiz.Fields(target.Id, standard.Name, standard.Topic, standard.Code, 1, caller.Token), at, ct);
+        await tx.ExecuteAsync(
             $"""
             insert into assessment.spot_quiz_questions (spot_quiz_id, question, option1, option2, option3, option4, option5, answer, created_at)
             select {id}, question, answer, option1, option2, option3, null, 1, {at}
             from assessment.standard_mcq_questions where mcq_code = {standard.Code}::citext order by id
             """,
             ct);
-        await Outbox.WriteAsync(db, "assessment.quiz_created", new QuizCreated(id, target.Id, caller.Token, "standard"), clock, ct);
-        await transaction.CommitAsync(ct);
-        return Results.Json(new Body(true, id), statusCode: StatusCodes.Status201Created);
+        await Outbox.WriteAsync(tx, "assessment.quiz_created", new QuizCreated(id, target.Id, caller.Token, "standard"), AssessmentJson.Default.QuizCreatedStandard, clock, ct);
+        await tx.CommitAsync(ct);
+        return Results.Json(new Body(true, id), AssessmentJson.Answers.ManageStandardCopy, contentType: null, statusCode: StatusCodes.Status201Created);
     }
 }

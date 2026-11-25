@@ -1,18 +1,18 @@
-using System.Data.Common;
 using System.Globalization;
 using System.Text;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
+using NUnit.Framework;
 using Tsr.Content.Api;
 using Tsr.Content.Api.Domain;
 
 namespace Tsr.Db.Tests;
 
 /// <summary>
-/// The golden set-up of content's characterisation tests (issue 100, plan "Golden files"): the template <c>content_golden_template</c>, migrated as production and seeded
+/// The set-up of content's scenarios (issue 100): the template <c>content_golden_template</c>, migrated as production and seeded
 /// with the synthetic content set (copied by today's refresh at the fixed instant), three surahs, four stub articles and one member, and the one call of a content copy
-/// that the new tests make. A scenario is <see cref="GoldenScenario"/> on <see cref="Set"/>.
+/// that the tests make. A scenario is <see cref="GoldenScenario"/> on <see cref="Set"/>.
 /// </summary>
 internal static class ContentGolden
 {
@@ -22,24 +22,14 @@ internal static class ContentGolden
     /// <summary>The seeded surah with Arabic marks, one with no Arabic name, and one with a non-ASCII name holding characters JSON may escape.</summary>
     public const string OddSurahName = "Ünï Sûra \"Q\" <b> + &amp;";
 
-    public static GoldenSet Set { get; } = new(
-        "content",
-        "content_golden_template",
-        SeedAsync,
-        [
-            "content.published_articles|select row_to_json(t)::text from content.published_articles t order by t.slug collate \"C\"",
-            "content.categories|select row_to_json(t)::text from content.categories t order by t.slug collate \"C\"",
-            "content.publications|select row_to_json(t)::text from content.publications t order by t.position",
-            "content.refresh_state|select row_to_json(t)::text from content.refresh_state t order by t.id",
-        ],
-        null);
+    public static GoldenSet Set { get; } = new("content", "content_golden_template", SeedAsync);
 
     /// <summary>The synthetic content files of the repository (db/synthetic/content).</summary>
     public static string SyntheticDirectory => Path.Combine(TestDatabase.RepoRoot(), "db", "synthetic", "content");
 
     /// <summary>
     /// One content copy over <paramref name="directory"/>, as the worker and the deploy job make it: a new scope of <paramref name="services"/>, no log.
-    /// This is the one call of the copy in the golden tests; the issue's task 9 changes its argument from the context to the data source.
+    /// This is the one call of the copy in the tests.
     /// </summary>
     public static async Task<RefreshOutcome> TickAsync(IServiceProvider services, string? directory, TimeProvider clock, Func<CancellationToken, Task>? beforeCommit = null)
     {
@@ -48,7 +38,7 @@ internal static class ContentGolden
             scope.ServiceProvider.GetRequiredService<NpgsqlDataSource>(), directory, clock, NullLogger.Instance, beforeCommit, CancellationToken.None);
     }
 
-    /// <summary>What a copy answered, as a transcript line.</summary>
+    /// <summary>What a copy answered, as one line of text.</summary>
     public static string Describe(RefreshOutcome outcome) => outcome.Cause is null ? outcome.Result.ToString() : outcome.Result + ": " + outcome.Cause;
 
     /// <summary>A clock that always reads <paramref name="minutes"/> minutes after the scenarios' fixed instant.</summary>
@@ -78,18 +68,72 @@ internal static class ContentGolden
         }
     }
 
-    /// <summary>
-    /// What a failed call is written as in a golden file: that it threw, and the SqlState of the database error inside it. Never the exception's type, which the conversion is allowed to change;
-    /// a failure with no database error inside it is an assertion failure of the caller, so it is written as such.
-    /// </summary>
-    public static string DescribeFailure(Exception failure)
+    internal const string CopyStoresRows = "copy-stores-rows";
+    internal const string CopyKeepPaths = "copy-keep-paths";
+
+    private const string EmptyTables = "truncate content.published_articles, content.categories, content.publications, content.refresh_state";
+
+    /// <summary>The store path: two copies over a run's database, the second of a changed set. Shared with the pool test, which runs it on a pool of one.</summary>
+    internal static async Task StoreAndRecordAsync(GoldenScenario run)
     {
-        var database = Chain(failure).OfType<PostgresException>().FirstOrDefault();
-        return database is null ? "threw, with no database error inside" : "threw, database error " + database.SqlState;
+        await run.ExecuteAsync(EmptyTables);
+        using var files = new ContentTestFiles();
+
+        // The first copy is an insert of the state row, the second an update of it; the clock moves between them, so an unset time shows.
+        var first = await TickAsync(run.Services, SyntheticDirectory, ClockAfter(1));
+
+        CopySyntheticInto(files);
+        var quiet = Path.Combine(files.Root, "articles", "2025-10-20-choosing-a-quiet-hour.md");
+        await File.WriteAllTextAsync(quiet, (await File.ReadAllTextAsync(quiet)).Replace("title: Choosing a Quiet Hour", "title: Choosing a Quieter Hour", StringComparison.Ordinal));
+        var second = await TickAsync(run.Services, files.Root, ClockAfter(6));
+
+        Assert.That(first.Result, Is.EqualTo(RefreshResult.Refreshed));
+        Assert.That(second.Result, Is.EqualTo(RefreshResult.Refreshed));
     }
 
-    /// <summary>Whether a database error (a <see cref="DbException"/>) is somewhere in the failure.</summary>
-    public static bool HoldsDatabaseError(Exception failure) => Chain(failure).Any(e => e is DbException);
+    /// <summary>The keep and unchanged paths over a run's database, each step with the outcome it must have. Shared with the pool test.</summary>
+    internal static async Task KeepAndRecordAsync(GoldenScenario run)
+    {
+        await run.ExecuteAsync(EmptyTables);
+        using var files = new ContentTestFiles();
+        var minute = 0;
+
+        async Task StepAsync(string expected, string? directory)
+        {
+            minute++;
+            var outcome = await TickAsync(run.Services, directory, ClockAfter(minute));
+            Assert.That(Describe(outcome), Is.EqualTo(expected), "step " + minute);
+        }
+
+        await StepAsync("Kept: no content directory", null);
+        foreach (var slug in (string[])["one", "two", "three", "four"])
+        {
+            files.Article(slug);
+        }
+
+        files.Category("shared-category", "title: Shared\norder: 1");
+        await StepAsync("Refreshed", files.Root);
+        await StepAsync("Unchanged", files.Root);
+        files.Write("articles", "broken.md", "---\ntitle: [never closed\nstatus: publish\n---\nBody\n");
+        await StepAsync("Kept: cannot parse file: broken.md", files.Root);
+        files.Delete("articles", "broken.md");
+        files.Write("articles", "big.md", "---\ntitle: Big\nslug: big\npublishedDate: '2024-01-01T08:00:00.000Z'\nstatus: publish\n---\n" + new string('x', (int)ContentFiles.MaxFileBytes));
+        await StepAsync("Kept: file too large: big.md", files.Root);
+        files.Delete("articles", "big.md");
+        foreach (var slug in (string[])["one", "two", "three", "four"])
+        {
+            files.Article(slug, status: "draft");
+        }
+
+        await StepAsync("Kept: too few articles", files.Root);
+        files.Article("one");
+        foreach (var slug in (string[])["two", "three", "four"])
+        {
+            files.Delete("articles", slug + ".md");
+        }
+
+        await StepAsync("Kept: too few articles", files.Root);
+    }
 
     private static async Task SeedAsync(string ownerConnection)
     {
@@ -128,7 +172,7 @@ internal static class ContentGolden
             var outcome = await TickAsync(factory.Services, SyntheticDirectory, GoldenScenario.Clock);
             if (outcome.Result != RefreshResult.Refreshed)
             {
-                throw new InvalidOperationException("The synthetic content set was not copied into the golden template: " + Describe(outcome));
+                throw new InvalidOperationException("The synthetic content set was not copied into the template: " + Describe(outcome));
             }
         }
 

@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Membership.Api.Domain;
 using Tsr.Shared.Api;
@@ -20,7 +20,7 @@ internal static class MemberParentLinksSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string child_token, HttpContext context, MembershipContext db, Permissions permissions, TimeProvider clock, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(string child_token, HttpContext context, NpgsqlDataSource source, Permissions permissions, TimeProvider clock, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -29,7 +29,7 @@ internal static class MemberParentLinksSlice
         }
 
         var childToken = PhpValue.IntOfText(child_token);
-        var refusal = await GuardianChecks.RequireParentLinkAsync(db, permissions, caller, childToken, ct);
+        var refusal = await GuardianChecks.RequireParentLinkAsync(source, permissions, caller, childToken, ct);
         if (refusal is not null)
         {
             return refusal;
@@ -37,21 +37,17 @@ internal static class MemberParentLinksSlice
 
         if (childToken > int.MaxValue)
         {
-            return Results.Json(Array.Empty<object>());
+            return Results.Json(new List<Dictionary<string, object?>>(), MembershipJson.Answers.AnswerList);
         }
 
         var token = (int)childToken;
         var now = clock.GetUtcNow();
-        var rows = await db.UserGuardians.AsNoTracking()
-            .Where(g => g.ChildToken == token && g.CreatedBy == caller.UserId && g.Status == "invited" && (g.ExpiresAt == null || g.ExpiresAt > now))
-            .OrderByDescending(g => g.Id)
-            .Take(GuardianRules.MaxPendingInvites)
-            .ToListAsync(ct);
+        var rows = await source.ListAsync(GuardianRows.OpenInvites(token, caller.UserId, now, GuardianRules.MaxPendingInvites), GuardianRows.Read, ct);
         return Results.Json(rows.Select(r => new Dictionary<string, object?>
         {
             ["id"] = r.Id,
             ["created_at"] = LinkRowView.Stamp(r.CreatedAt),
             ["expires_at"] = r.ExpiresAt is { } expires ? LinkRowView.Stamp(expires) : string.Empty,
-        }).ToList());
+        }).ToList(), MembershipJson.Answers.AnswerList);
     }
 }

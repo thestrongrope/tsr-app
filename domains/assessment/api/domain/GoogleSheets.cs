@@ -1,5 +1,4 @@
 using System.Net.Http.Headers;
-using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -50,12 +49,66 @@ internal sealed class GoogleSheets(HttpClient http, IOptions<GoogleSheetsSetting
         var uri = new Uri(ApiBase + Uri.EscapeDataString(spreadsheetId) + "/values/" + Uri.EscapeDataString(range) + "?valueInputOption=RAW");
         using var request = new HttpRequestMessage(HttpMethod.Put, uri)
         {
-            Content = JsonContent.Create(new { range, majorDimension = "ROWS", values = rows }),
+            Content = ValuesBody(range, rows),
         };
         using var response = await SendAsync(request, ct);
     }
 
     public void Dispose() => _tokenLock.Dispose();
+
+    /// <summary>The values.update body <c>{"range":...,"majorDimension":"ROWS","values":[[...]]}</c>, written by hand: a cell is text, a number, a flag or null (an empty cell).</summary>
+    private static ByteArrayContent ValuesBody(string range, IReadOnlyList<IReadOnlyList<object?>> rows)
+    {
+        using var buffer = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(buffer))
+        {
+            writer.WriteStartObject();
+            writer.WriteString("range", range);
+            writer.WriteString("majorDimension", "ROWS");
+            writer.WriteStartArray("values");
+            foreach (var row in rows)
+            {
+                writer.WriteStartArray();
+                foreach (var cell in row)
+                {
+                    WriteCell(writer, cell);
+                }
+
+                writer.WriteEndArray();
+            }
+
+            writer.WriteEndArray();
+            writer.WriteEndObject();
+        }
+
+        var content = new ByteArrayContent(buffer.ToArray());
+        content.Headers.ContentType = new MediaTypeHeaderValue("application/json") { CharSet = "utf-8" };
+        return content;
+    }
+
+    private static void WriteCell(Utf8JsonWriter writer, object? cell)
+    {
+        switch (cell)
+        {
+            case null:
+                writer.WriteNullValue();
+                break;
+            case string text:
+                writer.WriteStringValue(text);
+                break;
+            case long number:
+                writer.WriteNumberValue(number);
+                break;
+            case int number:
+                writer.WriteNumberValue(number);
+                break;
+            case bool flag:
+                writer.WriteBooleanValue(flag);
+                break;
+            default:
+                throw new ArgumentException("A sheet cell is text, a whole number, a flag or null.", nameof(cell));
+        }
+    }
 
     /// <summary>The response of values.get: <c>{"range":..., "majorDimension":"ROWS", "values":[["a","b"],...]}</c>; <c>values</c> is absent for an empty range. A cell that is not text is read as its raw text.</summary>
     internal static IReadOnlyList<IReadOnlyList<string>> ParseValues(byte[] body)
@@ -209,14 +262,7 @@ internal sealed class GoogleSheets(HttpClient http, IOptions<GoogleSheetsSetting
         public string SignedJwt(DateTimeOffset now)
         {
             var header = Base64Url(Encoding.UTF8.GetBytes("""{"alg":"RS256","typ":"JWT"}"""));
-            var claims = Base64Url(JsonSerializer.SerializeToUtf8Bytes(new Dictionary<string, object>
-            {
-                ["iss"] = ClientEmail,
-                ["scope"] = Scope,
-                ["aud"] = TokenUri.ToString(),
-                ["iat"] = now.ToUnixTimeSeconds(),
-                ["exp"] = now.AddHours(1).ToUnixTimeSeconds(),
-            }));
+            var claims = Base64Url(ClaimsJson(now));
             var unsigned = header + "." + claims;
             using var rsa = RSA.Create();
             try
@@ -230,6 +276,23 @@ internal sealed class GoogleSheets(HttpClient http, IOptions<GoogleSheetsSetting
 
             var signature = rsa.SignData(Encoding.ASCII.GetBytes(unsigned), HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
             return unsigned + "." + Base64Url(signature);
+        }
+
+        private byte[] ClaimsJson(DateTimeOffset now)
+        {
+            using var buffer = new MemoryStream();
+            using (var writer = new Utf8JsonWriter(buffer))
+            {
+                writer.WriteStartObject();
+                writer.WriteString("iss", ClientEmail);
+                writer.WriteString("scope", Scope);
+                writer.WriteString("aud", TokenUri.ToString());
+                writer.WriteNumber("iat", now.ToUnixTimeSeconds());
+                writer.WriteNumber("exp", now.AddHours(1).ToUnixTimeSeconds());
+                writer.WriteEndObject();
+            }
+
+            return buffer.ToArray();
         }
 
         private static string Base64Url(byte[] bytes) => Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');

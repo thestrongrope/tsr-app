@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Notifications.Api.Domain;
 
@@ -21,7 +21,7 @@ internal static class NotificationsStatsSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(HttpContext context, NotificationsContext db, Permissions permissions, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(HttpContext context, NpgsqlDataSource source, Permissions permissions, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -29,19 +29,20 @@ internal static class NotificationsStatsSlice
             return Problem.Unauthenticated();
         }
 
-        var refusal = await NotifyGuards.AdminAsync(context, db, permissions, caller, "view notification statistics", ct);
+        var refusal = await NotifyGuards.AdminAsync(context, permissions, caller, "view notification statistics", ct);
         if (refusal is not null)
         {
             return refusal;
         }
 
-        var rows = await db.Database
-            .SqlQuery<Totals>($"""
+        var rows = await source.ListAsync(
+            $"""
                 select count(*) as "TotalNotifications", sum(device_count)::bigint as "Devices", sum(success_count)::bigint as "Successful",
                        sum(failure_count)::bigint as "Failed", max(sent_at) as "LastSentAt"
                 from notifications.notifications
-                """)
-            .ToListAsync(ct);
+                """,
+            row => new Totals(row.Long("TotalNotifications"), row.LongOrNull("Devices"), row.LongOrNull("Successful"), row.LongOrNull("Failed"), row.InstantOrNull("LastSentAt")),
+            ct);
         var totals = rows[0];
         return Results.Json(new Dictionary<string, object?>
         {
@@ -50,6 +51,6 @@ internal static class NotificationsStatsSlice
             ["total_successful"] = totals.Successful,
             ["total_failed"] = totals.Failed,
             ["last_sent_at"] = totals.LastSentAt is null ? null : NotifyGuards.IsoStamp(totals.LastSentAt.Value),
-        });
+        }, NotificationsJson.Answers.Answer);
     }
 }

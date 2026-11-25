@@ -1,5 +1,5 @@
 using System.Text.Json;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace Tsr.Notifications.Api.Domain;
 
@@ -44,66 +44,66 @@ internal static class Audience
     }
 
     /// <summary>FCM device tokens of the target, demo devices left out.</summary>
-    public static async Task<List<string>> DevicesAsync(NotificationsContext db, Target target, CancellationToken ct)
+    public static async Task<List<string>> DevicesAsync(NpgsqlDataSource source, Target target, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(target);
         var rows = target.Type switch
         {
-            "ALL_USERS" => await db.Database.SqlQuery<string>($"""
+            "ALL_USERS" => await source.ListAsync($"""
                 select distinct ud.device_id as "Value" from notifications.user_devices ud
                 where ud.device_id <> '' and not exists (select 1 from notifications.user_devices d2 join identity.v_users du on du.token = d2.token where d2.device_id = ud.device_id and du.email ilike '%@demo.invalid')
                 order by 1 limit {Fetch}
-                """).ToListAsync(ct),
-            "CLASS_LEVEL" => await LevelDevicesAsync(db, IntList(target.Values), ct),
-            "GENDER" => await GenderDevicesAsync(db, target.Values, ct),
-            "TEACHERS" => await TeacherDevicesAsync(db, IntList(target.Values), ct),
+                """, row => row.Text("Value"), ct),
+            "CLASS_LEVEL" => await LevelDevicesAsync(source, IntList(target.Values), ct),
+            "GENDER" => await GenderDevicesAsync(source, target.Values, ct),
+            "TEACHERS" => await TeacherDevicesAsync(source, IntList(target.Values), ct),
             _ => [],
         };
         return Clean(rows);
     }
 
     /// <summary>Member tokens of the target, for the inbox copies (above zero, demo members left out).</summary>
-    public static async Task<List<int>> MemberTokensAsync(NotificationsContext db, Target target, CancellationToken ct)
+    public static async Task<List<int>> MemberTokensAsync(NpgsqlDataSource source, Target target, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(target);
         return target.Type switch
         {
-            "ALL_USERS" => await db.Database.SqlQuery<int>($"""
+            "ALL_USERS" => await source.ListAsync($"""
                 select distinct u.token as "Value" from identity.v_users u join notifications.user_devices ud on u.token = ud.token
                 where u.token > 0 and u.email not ilike '%@demo.invalid' order by 1 limit {Fetch}
-                """).ToListAsync(ct),
-            "CLASS_LEVEL" => await ClassMembersAsync(db, IntList(target.Values), ct),
-            "GENDER" => await GenderMembersAsync(db, target.Values, ct),
-            "TEACHERS" => await TeacherMembersAsync(db, IntList(target.Values), ct),
+                """, row => row.Int("Value"), ct),
+            "CLASS_LEVEL" => await ClassMembersAsync(source, IntList(target.Values), ct),
+            "GENDER" => await GenderMembersAsync(source, target.Values, ct),
+            "TEACHERS" => await TeacherMembersAsync(source, IntList(target.Values), ct),
             _ => [],
         };
     }
 
     /// <summary>The active students of a class (enrolled, not removed), token above zero.</summary>
-    public static async Task<List<int>> ClassStudentsAsync(NotificationsContext db, int classId, CancellationToken ct) =>
-        await db.Database.SqlQuery<int>($"""
+    public static async Task<List<int>> ClassStudentsAsync(NpgsqlDataSource source, int classId, CancellationToken ct) =>
+        await source.ListAsync($"""
             select distinct cs.token_no as "Value" from classes.v_enrolments cs
             where cs.class_id = {classId} and cs.status = 'A' and cs.removed_at is null and cs.token_no > 0
             order by 1 limit {Fetch}
-            """).ToListAsync(ct);
+            """, row => row.Int("Value"), ct);
 
     /// <summary>Device tokens of those members, demo devices left out.</summary>
-    public static async Task<List<string>> MemberDevicesAsync(NotificationsContext db, int[] tokens, CancellationToken ct) =>
-        Clean(await db.Database.SqlQuery<string>($"""
+    public static async Task<List<string>> MemberDevicesAsync(NpgsqlDataSource source, int[] tokens, CancellationToken ct) =>
+        Clean(await source.ListAsync($"""
             select distinct ud.device_id as "Value" from notifications.user_devices ud
             where ud.token = any({tokens}) and ud.device_id <> ''
               and not exists (select 1 from notifications.user_devices d2 join identity.v_users du on du.token = d2.token where d2.device_id = ud.device_id and du.email ilike '%@demo.invalid')
             order by 1 limit {Fetch}
-            """).ToListAsync(ct));
+            """, row => row.Text("Value"), ct));
 
     private static List<string> Clean(List<string> rows) =>
         [.. rows.Select(PhpText.Trim).Where(t => t.Length > 0).Distinct(StringComparer.Ordinal)];
 
     // The device query matches the class LEVEL id and ignores removed_at and the class's status (PHP).
-    private static async Task<List<string>> LevelDevicesAsync(NotificationsContext db, int[] levels, CancellationToken ct) =>
+    private static async Task<List<string>> LevelDevicesAsync(NpgsqlDataSource source, int[] levels, CancellationToken ct) =>
         levels.Length == 0
             ? []
-            : await db.Database.SqlQuery<string>($"""
+            : await source.ListAsync($"""
                 select distinct ud.device_id as "Value"
                 from notifications.user_devices ud
                 join classes.v_enrolments cs on ud.token = cs.token_no
@@ -111,18 +111,18 @@ internal static class Audience
                 where cs.status = 'A' and c.class_level_id = any({levels}) and ud.device_id <> ''
                   and not exists (select 1 from notifications.user_devices d2 join identity.v_users du on du.token = d2.token where d2.device_id = ud.device_id and du.email ilike '%@demo.invalid')
                 order by 1 limit {Fetch}
-                """).ToListAsync(ct);
+                """, row => row.Text("Value"), ct);
 
     // The member query matches the class id (not the level) and the enrolment must not be removed (PHP's divergence, kept).
-    private static async Task<List<int>> ClassMembersAsync(NotificationsContext db, int[] classes, CancellationToken ct) =>
+    private static async Task<List<int>> ClassMembersAsync(NpgsqlDataSource source, int[] classes, CancellationToken ct) =>
         classes.Length == 0
             ? []
-            : await db.Database.SqlQuery<int>($"""
+            : await source.ListAsync($"""
                 select distinct cs.token_no as "Value" from classes.v_enrolments cs
                 where cs.class_id = any({classes}) and cs.status = 'A' and cs.removed_at is null and cs.token_no > 0
                   and not exists (select 1 from identity.v_users du where du.token = cs.token_no and du.email ilike '%@demo.invalid')
                 order by 1 limit {Fetch}
-                """).ToListAsync(ct);
+                """, row => row.Int("Value"), ct);
 
     // ONE definition of "members of gender g" for both lists (owner decision, 12 Nov 2026; PHP's member query differed and wrote inbox rows for members the push never reached):
     // the FIRST value, numeric and 1 or 2, matched against the member's gender. Anything else is nobody.
@@ -132,7 +132,7 @@ internal static class Audience
         return first.Length == 1 && first[0] is (1 or 2) ? first[0].ToString(System.Globalization.CultureInfo.InvariantCulture) : null;
     }
 
-    private static async Task<List<string>> GenderDevicesAsync(NotificationsContext db, IReadOnlyList<JsonElement> values, CancellationToken ct)
+    private static async Task<List<string>> GenderDevicesAsync(NpgsqlDataSource source, IReadOnlyList<JsonElement> values, CancellationToken ct)
     {
         var gender = GenderCode(values);
         if (gender is null)
@@ -140,18 +140,18 @@ internal static class Audience
             return [];
         }
 
-        return await db.Database.SqlQuery<string>($"""
+        return await source.ListAsync($"""
             select distinct ud.device_id as "Value"
             from notifications.user_devices ud
             join membership.v_members m on m.token = ud.token
-            where m.gender = {gender} and ud.device_id <> ''
+            where m.gender = {gender}::citext and ud.device_id <> ''
               and not exists (select 1 from notifications.user_devices d2 join identity.v_users du on du.token = d2.token where d2.device_id = ud.device_id and du.email ilike '%@demo.invalid')
             order by 1 limit {Fetch}
-            """).ToListAsync(ct);
+            """, row => row.Text("Value"), ct);
     }
 
     // Members with a device to push to, whose gender is the same code as above; a member of that gender whose only devices are shared with a demo member is left out too, as in the push.
-    private static async Task<List<int>> GenderMembersAsync(NotificationsContext db, IReadOnlyList<JsonElement> values, CancellationToken ct)
+    private static async Task<List<int>> GenderMembersAsync(NpgsqlDataSource source, IReadOnlyList<JsonElement> values, CancellationToken ct)
     {
         var gender = GenderCode(values);
         if (gender is null)
@@ -159,30 +159,30 @@ internal static class Audience
             return [];
         }
 
-        return await db.Database.SqlQuery<int>($"""
+        return await source.ListAsync($"""
             select distinct m.token as "Value"
             from membership.v_members m join notifications.user_devices ud on m.token = ud.token
-            where m.token > 0 and m.gender = {gender} and ud.device_id <> ''
+            where m.token > 0 and m.gender = {gender}::citext and ud.device_id <> ''
               and not exists (select 1 from notifications.user_devices d2 join identity.v_users du on du.token = d2.token where d2.device_id = ud.device_id and du.email ilike '%@demo.invalid')
             order by 1 limit {Fetch}
-            """).ToListAsync(ct);
+            """, row => row.Int("Value"), ct);
     }
 
     // No usable class id means every active class's teacher (PHP).
-    private static async Task<List<string>> TeacherDevicesAsync(NotificationsContext db, int[] classes, CancellationToken ct) =>
-        await db.Database.SqlQuery<string>($"""
+    private static async Task<List<string>> TeacherDevicesAsync(NpgsqlDataSource source, int[] classes, CancellationToken ct) =>
+        await source.ListAsync($"""
             select distinct ud.device_id as "Value"
             from notifications.user_devices ud join classes.v_classes c on ud.token = c.teacher
             where c.status = 'A' and (cardinality({classes}) = 0 or c.id = any({classes})) and ud.device_id <> ''
               and not exists (select 1 from notifications.user_devices d2 join identity.v_users du on du.token = d2.token where d2.device_id = ud.device_id and du.email ilike '%@demo.invalid')
             order by 1 limit {Fetch}
-            """).ToListAsync(ct);
+            """, row => row.Text("Value"), ct);
 
-    private static async Task<List<int>> TeacherMembersAsync(NotificationsContext db, int[] classes, CancellationToken ct) =>
-        await db.Database.SqlQuery<int>($"""
+    private static async Task<List<int>> TeacherMembersAsync(NpgsqlDataSource source, int[] classes, CancellationToken ct) =>
+        await source.ListAsync($"""
             select distinct c.teacher as "Value" from classes.v_classes c
             where c.teacher is not null and c.teacher > 0 and c.status = 'A' and (cardinality({classes}) = 0 or c.id = any({classes}))
               and not exists (select 1 from identity.v_users du where du.token = c.teacher and du.email ilike '%@demo.invalid')
             order by 1 limit {Fetch}
-            """).ToListAsync(ct);
+            """, row => row.Int("Value"), ct);
 }

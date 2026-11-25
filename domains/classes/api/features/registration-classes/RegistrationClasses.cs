@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
 using Tsr.Shared.Api;
@@ -25,7 +25,7 @@ internal static class RegistrationClassesSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string registration_id, HttpContext context, ClassesContext db, Permissions permissions, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(string registration_id, HttpContext context, NpgsqlDataSource source, Permissions permissions, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -33,14 +33,14 @@ internal static class RegistrationClassesSlice
             return Problem.Unauthenticated();
         }
 
-        var (registrant, refusal) = await WaitingRegistrant.RequireAsync(db, permissions, caller, registration_id, ct);
+        var (registrant, refusal) = await WaitingRegistrant.RequireAsync(source, permissions, caller, registration_id, ct);
         if (refusal is not null)
         {
             return refusal;
         }
 
         var assigned = (await permissions.ReachAsync(caller, "classes:read", ct)).AssignedOnlyIds;
-        var rows = await ClassesAsync(db, registrant!.Gender, assigned, ct);
+        var rows = await ClassesAsync(source, registrant!.Gender, assigned, ct);
         var classes = new List<Dictionary<string, object?>>();
         foreach (var row in rows)
         {
@@ -58,15 +58,15 @@ internal static class RegistrationClassesSlice
             }
         }
 
-        return Results.Json(new Dictionary<string, object?> { ["classes"] = classes });
+        return Results.Json(new Dictionary<string, object?> { ["classes"] = classes }, ClassesJson.Answers.Answer);
     }
 
-    private static async Task<List<Row>> ClassesAsync(ClassesContext db, int gender, IReadOnlyList<int>? assigned, CancellationToken ct)
+    private static async Task<List<Row>> ClassesAsync(NpgsqlDataSource source, int gender, IReadOnlyList<int>? assigned, CancellationToken ct)
     {
         var limited = assigned is not null;
         var ids = assigned?.ToArray() ?? [];
-        return await db.Database
-            .SqlQuery<Row>($"""
+        return await source.ListAsync(
+            $"""
                 select c.id as "Id", c.code as "Code", cl.name as "Level", t.name as "Teacher", c.location as "Location",
                        (select count(1) from classes.class_students cs where cs.class_id = c.id and cs.removed_at is null) as "Students"
                 from classes.classes c
@@ -77,7 +77,8 @@ internal static class RegistrationClassesSlice
                   and (not {limited} or c.id = any({ids}))
                 order by c.gender, cl.sort_order, c.id
                 limit {MaxRows}
-                """)
-            .ToListAsync(ct);
+                """,
+            row => new Row(row.Int("Id"), row.Text("Code"), row.Text("Level"), row.TextOrNull("Teacher"), row.TextOrNull("Location"), row.Long("Students")),
+            ct);
     }
 }

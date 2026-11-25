@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Http;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Shared.Api;
 
@@ -87,7 +87,7 @@ internal static partial class QuranLeaderboard
     /// (<paramref name="limit"/> null: every ranked row). The caller is signed in already.
     /// </summary>
     public static async Task<(Loaded? Report, IResult? Refusal)> OpenAsync(
-        HttpContext context, ClassesContext db, Permissions permissions, Caller caller, DateOnly today, int? limit, CancellationToken ct)
+        HttpContext context, NpgsqlDataSource db, Permissions permissions, Caller caller, DateOnly today, int? limit, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(permissions);
@@ -131,7 +131,7 @@ internal static partial class QuranLeaderboard
     /// <paramref name="limit"/> null is every row (at most <see cref="MaxRows"/>). Each row carries the count before the limit (PHP SQL_CALC_FOUND_ROWS).
     /// </summary>
     public static async Task<List<Row>> RankedAsync(
-        ClassesContext db, int gender, IReadOnlyList<int>? assigned, DateRange range, int levelId, long minimum, int? limit, CancellationToken ct)
+        NpgsqlDataSource db, int gender, IReadOnlyList<int>? assigned, DateRange range, int levelId, long minimum, int? limit, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(range);
@@ -141,8 +141,8 @@ internal static partial class QuranLeaderboard
         var limited = assigned is not null;
         int[] assignedIds = assigned is null ? [] : [.. assigned];
         var rows = limit ?? MaxRows;
-        return await db.Database
-            .SqlQuery<Row>($"""
+        return await db.ListAsync(
+            $"""
                 with ranked as (
                     select ca.token, sum(ca.recitation) as total, rank() over (order by sum(ca.recitation) desc) as rnk
                     from classes.class_attendance ca
@@ -161,13 +161,11 @@ internal static partial class QuranLeaderboard
                   and ra.total >= {minimum}
                 order by ra.rnk, ra.token, c.id
                 limit {rows}
-                """)
-            .ToListAsync(ct);
+                """,
+            r => new Row(r.Long("Token"), r.TextOrNull("Name"), r.Text("Class"), r.Long("Total"), r.Long("Rank"), r.Long("Count")),
+            ct);
     }
 
-    // PHP ClassesModel::getLevels (id to name, in listLevels order): the levels by sort order.
-    private static async Task<List<LevelRow>> LevelsAsync(ClassesContext db, CancellationToken ct) =>
-        await db.Database
-            .SqlQuery<LevelRow>($"""select id as "Id", name::text as "Name" from classes.class_levels order by sort_order, id limit 1000""")
-            .ToListAsync(ct);
+    private static async Task<List<LevelRow>> LevelsAsync(NpgsqlDataSource db, CancellationToken ct) =>
+        await db.ListAsync($"""select id as "Id", name::text as "Name" from classes.class_levels order by sort_order, id limit 1000""", r => new LevelRow(r.Int("Id"), r.Text("Name")), ct);
 }

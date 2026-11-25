@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
 using Tsr.Shared.Api;
@@ -24,7 +24,7 @@ internal static class AdminSyllabusDeleteSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string syllabus_id, HttpContext context, ClassesContext db, Permissions permissions, TimeProvider clock, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(string syllabus_id, HttpContext context, NpgsqlDataSource source, Permissions permissions, TimeProvider clock, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -32,15 +32,15 @@ internal static class AdminSyllabusDeleteSlice
             return Problem.Unauthenticated();
         }
 
-        var refusal = await AdminGuards.SyllabusAdminAsync(context, db, permissions, caller, ct);
+        var refusal = await AdminGuards.SyllabusAdminAsync(context, permissions, caller, ct);
         if (refusal is not null)
         {
             return refusal;
         }
 
         var id = ClassGuards.IdOf(syllabus_id);
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        var deleted = await db.Database.ExecuteSqlAsync(
+        await using var tx = await source.BeginAsync(ct);
+        var deleted = await tx.ExecuteAsync(
             $"update classes.syllabus set deleted_at = now(), deleted_by = {caller.Token}, modified_at = now() where id = {id} and deleted_at is null",
             ct);
         if (deleted == 0)
@@ -48,8 +48,8 @@ internal static class AdminSyllabusDeleteSlice
             return Problem.Detail(StatusCodes.Status404NotFound, "Syllabus not found");
         }
 
-        await Outbox.WriteAsync(db, "classes.syllabus_item_deleted", new SyllabusItemDeleted((int)id, caller.Token), clock, ct);
-        await transaction.CommitAsync(ct);
-        return Results.Json(new Done(true));
+        await Outbox.WriteAsync(tx, "classes.syllabus_item_deleted", new SyllabusItemDeleted((int)id, caller.Token), ClassesJson.Default.SyllabusItemDeleted, clock, ct);
+        await tx.CommitAsync(ct);
+        return Results.Json(new Done(true), ClassesJson.Answers.SyllabusDone);
     }
 }

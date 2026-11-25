@@ -2,6 +2,7 @@ using System.Globalization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
 using Tsr.Shared.Api;
@@ -34,7 +35,7 @@ internal static class ReportConductionSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(HttpContext context, ClassesContext db, Permissions permissions, TimeProvider clock, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(HttpContext context, NpgsqlDataSource db, Permissions permissions, TimeProvider clock, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -54,7 +55,7 @@ internal static class ReportConductionSlice
 
         return Results.Json(new Answer(
             report.Gender, report.Year, report.Week, Ref(previous), Ref(next), shaped.WeekOf, shaped.SummaryStart, shaped.SummaryEnd,
-            shaped.Levels, [.. shaped.Classes.Select(ToItem)], [.. shaped.LastWeek.Select(ToWeek)]));
+            shaped.Levels, [.. shaped.Classes.Select(ToItem)], [.. shaped.LastWeek.Select(ToWeek)]), ClassesJson.Answers.ReportConduction);
     }
 
     private static WeekRef? Ref(ReportCalendar.Week? week) => week is { } w ? new WeekRef(w.Year, w.Number) : null;

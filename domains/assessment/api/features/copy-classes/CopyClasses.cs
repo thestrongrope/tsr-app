@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Assessment.Api.Domain;
 using Tsr.Shared.Api;
@@ -29,7 +29,7 @@ internal static class CopyClassesSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(HttpContext context, AssessmentContext db, Permissions permissions, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(HttpContext context, NpgsqlDataSource source, Permissions permissions, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -52,23 +52,25 @@ internal static class CopyClassesSlice
         }
 
         var assignedOnly = (await permissions.ReachAsync(caller, "classes:read", ct)).AssignedOnlyIds;
-        var rows = genders.Count == 0 || assignedOnly is { Count: 0 } ? [] : await ReadAsync(db, genders, assignedOnly, ct);
-        return Results.Json(rows.Select(r => new Item(r.Id, r.Code ?? string.Empty, r.Level ?? string.Empty, QuizResult.TextOrNull(r.City), QuizResult.TextOrNull(r.Teacher))).ToList());
+        var rows = genders.Count == 0 || assignedOnly is { Count: 0 } ? [] : await ReadAsync(source, genders, assignedOnly, ct);
+        return Results.Json(rows.Select(r => new Item(r.Id, r.Code ?? string.Empty, r.Level ?? string.Empty, QuizResult.TextOrNull(r.City), QuizResult.TextOrNull(r.Teacher))).ToList(), AssessmentJson.Answers.CopyClasses);
     }
 
-    private static async Task<List<Row>> ReadAsync(AssessmentContext db, IReadOnlyList<int> genders, IReadOnlyList<int>? assignedOnly, CancellationToken ct)
+    private static async Task<List<Row>> ReadAsync(NpgsqlDataSource source, IReadOnlyList<int> genders, IReadOnlyList<int>? assignedOnly, CancellationToken ct)
     {
-        var ids = assignedOnly?.ToArray();
-        return await db.Database
-            .SqlQuery<Row>($"""
+        var restricted = assignedOnly is not null;
+        var ids = assignedOnly?.ToArray() ?? [];
+        return await source.ListAsync(
+            $"""
                 select c.id as "Id", c.code::text as "Code", c.level_name::text as "Level", c.city::text as "City", t.name::text as "Teacher"
                 from classes.v_classes c
                 left join membership.v_members t on t.token = c.teacher
                 where c.status = 'A' and c.level_name is not null and c.gender = any({genders.ToArray()})
-                  and ({ids}::int[] is null or c.id = any({ids}))
+                  and (not {restricted} or c.id = any({ids}))
                 order by c.gender, c.level_sort_order, c.id
                 limit {MaxRows}
-                """)
-            .ToListAsync(ct);
+                """,
+            row => new Row(row.Int("Id"), row.TextOrNull("Code"), row.TextOrNull("Level"), row.TextOrNull("City"), row.TextOrNull("Teacher")),
+            ct);
     }
 }

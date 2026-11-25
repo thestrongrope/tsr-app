@@ -1,8 +1,8 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Notifications.Api.Domain;
 
@@ -30,7 +30,7 @@ internal static class NotificationsCleanupSlice
 
     private static async Task<IResult> HandleAsync(
         HttpContext context,
-        NotificationsContext db,
+        NpgsqlDataSource source,
         Permissions permissions,
         IPushSender sender,
         ILoggerFactory loggers,
@@ -43,17 +43,17 @@ internal static class NotificationsCleanupSlice
             return Problem.Unauthenticated();
         }
 
-        var refusal = await NotifyGuards.AdminAsync(context, db, permissions, caller, "cleanup invalid tokens", ct);
+        var refusal = await NotifyGuards.AdminAsync(context, permissions, caller, "cleanup invalid tokens", ct);
         if (refusal is not null)
         {
             return refusal;
         }
 
         var everyone = new Target("ALL_USERS", []);
-        var tokens = await Audience.DevicesAsync(db, everyone, ct);
+        var tokens = await Audience.DevicesAsync(source, everyone, ct);
         if (tokens.Count == 0)
         {
-            return Results.Json(new Dictionary<string, object> { ["success"] = true, ["message"] = "No device tokens found in database", ["tokens_before"] = 0, ["tokens_removed"] = 0 });
+            return Results.Json(new Dictionary<string, object?> { ["success"] = true, ["message"] = "No device tokens found in database", ["tokens_before"] = 0, ["tokens_removed"] = 0 }, NotificationsJson.Answers.Answer);
         }
 
         var logger = loggers.CreateLogger(NotifyLog.Category);
@@ -71,10 +71,10 @@ internal static class NotificationsCleanupSlice
         var data = new Dictionary<string, string> { ["type"] = "system_check", ["silent"] = "true" };
         // Not the request's token from here on: the push cannot be unsent, so a caller or gateway that goes away must not stop the dead tokens being removed (PHP runs on too). PushBatch keeps its own deadline.
         var report = await PushBatch.SendAsync(sender, "System Check", "Verifying device connectivity", data, tokens, CancellationToken.None);
-        await RemoveAsync(db, clock, logger, report.Invalid, CancellationToken.None);
-        var after = (await Audience.DevicesAsync(db, everyone, CancellationToken.None)).Count;
+        await RemoveAsync(source, clock, logger, report.Invalid, CancellationToken.None);
+        var after = (await Audience.DevicesAsync(source, everyone, CancellationToken.None)).Count;
         var removed = tokens.Count - after;
-        return Results.Json(new Dictionary<string, object>
+        return Results.Json(new Dictionary<string, object?>
         {
             ["success"] = true,
             ["message"] = $"Cleanup completed. Removed {removed} invalid tokens.",
@@ -83,11 +83,11 @@ internal static class NotificationsCleanupSlice
             ["tokens_removed"] = removed,
             ["successful_sends"] = report.Success,
             ["failed_sends"] = report.Failure,
-        });
+        }, NotificationsJson.Answers.Answer);
     }
 
     // PHP logs and moves on when the delete fails; so does this (the recount then shows nothing removed).
-    private static async Task RemoveAsync(NotificationsContext db, TimeProvider clock, ILogger logger, IReadOnlyList<string> invalid, CancellationToken ct)
+    private static async Task RemoveAsync(NpgsqlDataSource source, TimeProvider clock, ILogger logger, IReadOnlyList<string> invalid, CancellationToken ct)
     {
         if (invalid.Count == 0)
         {
@@ -96,19 +96,19 @@ internal static class NotificationsCleanupSlice
 
         try
         {
-            await using var transaction = await db.Database.BeginTransactionAsync(ct);
+            await using var tx = await source.BeginAsync(ct);
             var removed = 0;
             foreach (var chunk in invalid.Chunk(DeleteChunk))
             {
-                removed += await db.Database.ExecuteSqlAsync($"delete from notifications.user_devices where device_id = any({chunk}::citext[])", ct);
+                removed += await tx.ExecuteAsync($"delete from notifications.user_devices where device_id = any({chunk}::citext[])", ct);
             }
 
             if (removed > 0)
             {
-                await Outbox.WriteAsync(db, "notifications.invalid_devices_removed", new DevicesRemoved(removed), clock, ct);
+                await Outbox.WriteAsync(tx, "notifications.invalid_devices_removed", new DevicesRemoved(removed), NotificationsJson.Default.DevicesRemoved, clock, ct);
             }
 
-            await transaction.CommitAsync(ct);
+            await tx.CommitAsync(ct);
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {

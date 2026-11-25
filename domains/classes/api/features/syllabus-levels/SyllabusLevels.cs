@@ -2,7 +2,7 @@ using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
 using Tsr.Shared.Api;
@@ -22,7 +22,7 @@ internal static class SyllabusLevelsSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(HttpContext context, ClassesContext db, Permissions permissions, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(HttpContext context, NpgsqlDataSource source, Permissions permissions, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -35,9 +35,10 @@ internal static class SyllabusLevelsSlice
             return Refusals.NotPermitted();
         }
 
-        var levels = await db.Database
-            .SqlQuery<Level>($"""select id as "Id", code as "Code", name as "Name", sort_order as "SortOrder" from classes.class_levels order by sort_order, id""")
-            .ToListAsync(ct);
-        return Results.Json(levels);
+        var levels = await source.ListAsync(
+            $"""select id as "Id", code as "Code", name as "Name", sort_order as "SortOrder" from classes.class_levels order by sort_order, id""",
+            row => new Level(row.Int("Id"), row.Text("Code"), row.Text("Name"), row.Int("SortOrder")),
+            ct);
+        return Results.Json(levels, ClassesJson.Answers.SyllabusLevelList);
     }
 }

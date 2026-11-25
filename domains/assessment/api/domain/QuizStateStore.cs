@@ -1,5 +1,5 @@
 using System.Text.Json.Nodes;
-using Microsoft.EntityFrameworkCore;
+using Tsr.Shared.Api;
 
 namespace Tsr.Assessment.Api.Domain;
 
@@ -22,31 +22,29 @@ internal static class QuizStateStore
     public static readonly IReadOnlyList<string> CycleDocuments = [Scoreboard, QuizDay, Timestamps, Winners, Participants];
 
     /// <summary>The document, or null when it does not exist (PHP: the file is absent).</summary>
-    public static async Task<JsonNode?> LoadAsync(AssessmentContext db, string name, CancellationToken ct)
+    public static async Task<JsonNode?> LoadAsync(DbTx tx, string name, CancellationToken ct)
     {
-        var text = await db.Database
-            .SqlQuery<string>($"""select document::text as "Value" from assessment.quiz_state where name = {name}::citext""")
-            .FirstOrDefaultAsync(ct);
-        return text is null ? null : JsonNode.Parse(text);
+        var texts = await tx.ListAsync($"""select document::text as "Value" from assessment.quiz_state where name = {name}::citext""", row => row.Text("Value"), ct);
+        return texts.Count == 0 ? null : JsonNode.Parse(texts[0]);
     }
 
-    public static async Task<JsonObject> LoadObjectAsync(AssessmentContext db, string name, CancellationToken ct) =>
-        await LoadAsync(db, name, ct) as JsonObject ?? new JsonObject();
+    public static async Task<JsonObject> LoadObjectAsync(DbTx tx, string name, CancellationToken ct) =>
+        await LoadAsync(tx, name, ct) as JsonObject ?? new JsonObject();
 
-    public static async Task<JsonArray> LoadArrayAsync(AssessmentContext db, string name, CancellationToken ct) =>
-        await LoadAsync(db, name, ct) as JsonArray ?? new JsonArray();
+    public static async Task<JsonArray> LoadArrayAsync(DbTx tx, string name, CancellationToken ct) =>
+        await LoadAsync(tx, name, ct) as JsonArray ?? new JsonArray();
 
-    public static async Task<long> LoadQuizDayAsync(AssessmentContext db, CancellationToken ct) =>
-        await LoadAsync(db, QuizDay, ct) is JsonValue value && value.TryGetValue<long>(out var day) ? day : 0;
+    public static async Task<long> LoadQuizDayAsync(DbTx tx, CancellationToken ct) =>
+        await LoadAsync(tx, QuizDay, ct) is JsonValue value && value.TryGetValue<long>(out var day) ? day : 0;
 
-    public static async Task<bool> ExistsAsync(AssessmentContext db, string name, CancellationToken ct) =>
-        await db.Database.SqlQuery<int>($"""select 1 as "Value" from assessment.quiz_state where name = {name}::citext""").AnyAsync(ct);
+    public static async Task<bool> ExistsAsync(DbTx tx, string name, CancellationToken ct) =>
+        (await tx.ListAsync($"""select 1 as "Value" from assessment.quiz_state where name = {name}::citext""", row => row.Int("Value"), ct)).Count > 0;
 
-    public static async Task SaveAsync(AssessmentContext db, string name, JsonNode document, TimeProvider clock, CancellationToken ct)
+    public static async Task SaveAsync(DbTx tx, string name, JsonNode document, TimeProvider clock, CancellationToken ct)
     {
         var json = document.ToJsonString();
         var now = clock.GetUtcNow();
-        await db.Database.ExecuteSqlAsync(
+        await tx.ExecuteAsync(
             $"""
             insert into assessment.quiz_state (name, document, updated_at) values ({name}, {json}::jsonb, {now})
             on conflict (name) do update set document = excluded.document, updated_at = excluded.updated_at
@@ -54,9 +52,9 @@ internal static class QuizStateStore
             ct);
     }
 
-    public static async Task DeleteAsync(AssessmentContext db, IReadOnlyList<string> names, CancellationToken ct)
+    public static async Task DeleteAsync(DbTx tx, IReadOnlyList<string> names, CancellationToken ct)
     {
         var wanted = names.ToArray();
-        await db.Database.ExecuteSqlAsync($"delete from assessment.quiz_state where name = any({wanted}::citext[])", ct);
+        await tx.ExecuteAsync($"delete from assessment.quiz_state where name = any({wanted}::citext[])", ct);
     }
 }

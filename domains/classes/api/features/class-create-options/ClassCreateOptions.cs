@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
 using Tsr.Shared.Api;
@@ -24,7 +24,7 @@ internal static class ClassCreateOptionsSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(HttpContext context, ClassesContext db, Permissions permissions, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(HttpContext context, NpgsqlDataSource source, Permissions permissions, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -46,10 +46,11 @@ internal static class ClassCreateOptionsSlice
             }
         }
 
-        var tags = await db.Database
-            .SqlQuery<Tag>($"""select id as "Id", name as "Name" from classes.tags where deleted_at is null order by name, id limit {MaxTags}""")
-            .ToListAsync(ct);
+        var tags = await source.ListAsync(
+            $"""select id as "Id", name as "Name" from classes.tags where deleted_at is null order by name, id limit {MaxTags}""",
+            row => new Tag(row.Int("Id"), row.TextOrNull("Name")),
+            ct);
         var wire = tags.Select(t => new Dictionary<string, object?> { ["id"] = t.Id, ["name"] = PhpText.HtmlDecode(t.Name ?? string.Empty) }).ToList();
-        return Results.Json(new Dictionary<string, object?> { ["genders"] = genders, ["tags"] = wire, ["timezones"] = Timezones.All });
+        return Results.Json(new Dictionary<string, object?> { ["genders"] = genders, ["tags"] = wire, ["timezones"] = Timezones.All }, ClassesJson.Answers.Answer);
     }
 }

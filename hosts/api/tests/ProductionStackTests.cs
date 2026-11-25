@@ -126,6 +126,57 @@ public sealed partial class ProductionStackTests
         });
     }
 
+    /// <summary>
+    /// Issue 108: the API, the workers and the content load run the native image; only the migrate job, which needs Entity Framework, runs the JIT one.
+    /// Both are targets of the one Dockerfile; the dev stack (and so the test stack and its lanes) builds the same targets as production.
+    /// </summary>
+    [TestCase("docker-compose.yml", "api", "native")]
+    [TestCase("docker-compose.yml", "workers", "native")]
+    [TestCase("docker-compose.yml", "content-load", "native")]
+    [TestCase("docker-compose.yml", "migrate", "migrate")]
+    [TestCase("docker-compose.dev.yml", "api", "native")]
+    [TestCase("docker-compose.dev.yml", "workers", "native")]
+    [TestCase("docker-compose.dev.yml", "migrate", "migrate")]
+    public void Each_service_runs_its_build_of_the_api_image(string file, string service, string target)
+    {
+        var lines = File.ReadAllLines(Path.Combine(RouteCatalog.RepoRoot(), file)).Where(line => !line.TrimStart().StartsWith('#'));
+        var block = ServiceIn(string.Join('\n', lines), service);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(block, Does.Contain("dockerfile: hosts/api/Dockerfile"));
+            Assert.That(block, Does.Match(@"(?m)^\s+target: " + target + @"\s*$"));
+        });
+    }
+
+    /// <summary>Issue 108: the native target holds the one binary on the runtime dependencies image, no .NET runtime; the migrate target is the JIT build on the ASP.NET image.</summary>
+    [Test]
+    public void The_native_image_carries_no_dotnet_runtime_and_the_migrate_image_is_the_jit_build()
+    {
+        var dockerfile = File.ReadAllText(Path.Combine(RouteCatalog.RepoRoot(), "hosts", "api", "Dockerfile"));
+        var native = Stage(dockerfile, "native");
+        var migrate = Stage(dockerfile, "migrate");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(native, Does.StartWith("FROM mcr.microsoft.com/dotnet/runtime-deps:"));
+            Assert.That(native, Does.Match(@"(?m)^ENTRYPOINT \[""/app/Tsr\.Host\.Api""\]\s*$"));
+            Assert.That(native, Does.Not.Contain("dotnet\""));
+            Assert.That(migrate, Does.StartWith("FROM mcr.microsoft.com/dotnet/aspnet:"));
+            Assert.That(migrate, Does.Match(@"(?m)^ENTRYPOINT \[""dotnet"", ""Tsr\.Host\.Api\.dll""\]\s*$"));
+            Assert.That(dockerfile, Does.Contain("-p:PublishAot=false"));
+            Assert.That(dockerfile.TrimEnd(), Does.EndWith(native.TrimEnd()), "the native target is the last stage, so a build without a target gets it");
+        });
+    }
+
+    // One stage of a Dockerfile: from its "FROM ... AS name" line to the next FROM.
+    private static string Stage(string dockerfile, string name)
+    {
+        var stage = Regex.Match(dockerfile, @"(?ms)^FROM [^\n]* AS " + Regex.Escape(name) + @"\s*$.*?(?=^FROM |\z)");
+        Assert.That(stage.Success, Is.True, "no stage " + name);
+        return stage.Value;
+    }
+
     /// <summary>TC-LIB-D10-01: the API image holds the three text folders and never the publication files (187 MB the API does not read).</summary>
     [Test]
     public void The_api_image_carries_the_text_content_and_not_the_files()
@@ -175,9 +226,11 @@ public sealed partial class ProductionStackTests
         Assert.That(dev, Does.Contain(":/var/tsr/content:ro"));
     }
 
-    private static string Service(string name)
+    private static string Service(string name) => ServiceIn(Stack, name);
+
+    private static string ServiceIn(string stack, string name)
     {
-        var block = Regex.Match(Stack, @"(?ms)^  " + Regex.Escape(name) + @":\n(?<body>.*?)(?=^  \S|\z)");
+        var block = Regex.Match(stack, @"(?ms)^  " + Regex.Escape(name) + @":\n(?<body>.*?)(?=^  \S|\z)");
         Assert.That(block.Success, Is.True, "no service " + name);
         return block.Groups["body"].Value;
     }

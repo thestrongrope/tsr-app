@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Identity.Api;
 using Tsr.Membership.Api.Domain;
@@ -26,7 +26,7 @@ internal static class ProfileGetEndpoint
     }
 }
 
-internal sealed class ProfileGetHandler(MembershipContext db, Permissions permissions, UserDirectory users)
+internal sealed class ProfileGetHandler(NpgsqlDataSource source, Permissions permissions, UserDirectory users)
 {
     public async Task<IResult> HandleAsync(Caller? caller, CancellationToken ct)
     {
@@ -40,7 +40,7 @@ internal sealed class ProfileGetHandler(MembershipContext db, Permissions permis
             return Refusals.NotPermitted();
         }
 
-        var profile = await db.MemberProfiles.AsNoTracking().Where(p => p.UserId == caller.UserId).FirstOrDefaultAsync(ct);
-        return Results.Json(await ProfileAnswer.BuildAsync(caller, profile, users, permissions, ct));
+        var profile = (await source.ListAsync(ProfileRows.ByUserId(caller.UserId), ProfileRows.Read, ct)).FirstOrDefault();
+        return Results.Json(await ProfileAnswer.BuildAsync(caller, profile, users, permissions, ct), MembershipJson.Answers.JsonObject);
     }
 }

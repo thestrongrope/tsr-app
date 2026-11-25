@@ -9,7 +9,6 @@ namespace Tsr.Classes.Api.Domain;
 /// </summary>
 internal static class Timezones
 {
-    private static readonly JsonSerializerOptions Options = new() { PropertyNameCaseInsensitive = true };
     private static readonly Lazy<List<Dictionary<string, object?>>> List = new(Load);
 
     public static IReadOnlyList<Dictionary<string, object?>> All => List.Value;
@@ -20,8 +19,12 @@ internal static class Timezones
     {
         using var stream = typeof(Timezones).Assembly.GetManifestResourceStream("timezones.json")
             ?? throw new InvalidOperationException("The embedded timezones.json is missing");
-        var pairs = JsonSerializer.Deserialize<List<Pair>>(stream, Options)
-            ?? throw new InvalidOperationException("timezones.json is empty");
+        using var document = JsonDocument.Parse(stream);
+        var pairs = document.RootElement.EnumerateArray()
+            .Select(item => new Pair(
+                item.GetProperty("timezone").GetString() ?? throw new InvalidOperationException("timezones.json has a pair without a timezone"),
+                item.GetProperty("label").GetString() ?? throw new InvalidOperationException("timezones.json has a pair without a label")))
+            .ToList();
         return pairs
             .GroupBy(p => p.Timezone)
             .Select(g => new Dictionary<string, object?> { ["timezone"] = g.Key, ["label"] = PhpText.HtmlDecode(g.First().Label) })

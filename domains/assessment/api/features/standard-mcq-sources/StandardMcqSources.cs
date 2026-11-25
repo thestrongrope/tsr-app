@@ -35,7 +35,7 @@ internal static class StandardMcqSourcesSlice
             return Refusals.NotPermitted();
         }
 
-        return Results.Json(new Body(Numbered(StandardMcqCatalog.Languages), Numbered(StandardMcqCatalog.Levels)));
+        return Results.Json(new Body(Numbered(StandardMcqCatalog.Languages), Numbered(StandardMcqCatalog.Levels)), AssessmentJson.Answers.StandardMcqSources);
     }
 
     private static List<Source> Numbered(IReadOnlyList<string> names) => names.Select((name, index) => new Source(index + 1, name)).ToList();
