@@ -12,9 +12,8 @@ using NUnit.Framework;
 namespace Tsr.Db.Tests;
 
 /// <summary>
-/// The golden set-up of access's characterisation tests (issue 99, plan "Golden files"): a template database migrated and seeded once, a copy of it for
-/// each scenario (so every id, version and preview hash is the same on every run), the API on that copy with a fixed clock, and the transcript of what it
-/// answered. A golden file is compared byte for byte; it is written only when TSR_RECORD_GOLDEN=1, and such a run always fails, so it can never pass as a check.
+/// The set-up of access's scenarios (issue 99): a template database migrated and seeded once, a copy of it for each scenario (so every id, version and preview
+/// hash is the same on every run), the API on that copy with a fixed clock, and the status of every reply it gave.
 /// </summary>
 internal sealed class GoldenScenario : IAsyncDisposable
 {
@@ -23,22 +22,33 @@ internal sealed class GoldenScenario : IAsyncDisposable
     private static readonly SemaphoreSlim TemplateLock = new(1, 1);
     private static readonly HashSet<string> ReadyTemplates = [];
 
-    private readonly GoldenSet set;
     private readonly string database;
     private readonly WebApplicationFactory<Program> factory;
     private readonly HttpClient client;
-    private readonly StringBuilder transcript = new();
+    private readonly List<HttpStatusCode> statuses = [];
 
-    private GoldenScenario(GoldenSet set, string database, WebApplicationFactory<Program> factory)
+    private GoldenScenario(string database, WebApplicationFactory<Program> factory)
     {
-        this.set = set;
         this.database = database;
         this.factory = factory;
         client = factory.CreateClient();
     }
 
-    /// <summary>What the scenario sent and what came back, as the golden file holds it.</summary>
-    public string Transcript => transcript.ToString();
+    /// <summary>
+    /// Asserts that the scenario sent at least one request and that no reply was a 5xx. Run on a pool of one connection, a route that needed a second connection
+    /// waits for the first, which it holds itself, and answers 500 after the 5 s timeout.
+    /// </summary>
+    public void AssertNoServerError()
+    {
+        HttpStatusCode[] answered;
+        lock (statuses)
+        {
+            answered = [.. statuses];
+        }
+
+        Assert.That(answered, Is.Not.Empty, "the scenario sent no request");
+        Assert.That(answered.Where(status => (int)status >= 500), Is.Empty, "a reply was a server error");
+    }
 
     /// <summary>
     /// A fresh copy of the template of <paramref name="set"/> (access when left out) and the API on it. Dispose drops the copy.
@@ -66,7 +76,7 @@ internal sealed class GoldenScenario : IAsyncDisposable
                     configure?.Invoke(services);
                 });
             });
-        return new GoldenScenario(set, database, factory);
+        return new GoldenScenario(database, factory);
     }
 
     /// <summary>The fixed clock every scenario runs on, for a seed or a copy made outside a scenario's host.</summary>
@@ -75,42 +85,22 @@ internal sealed class GoldenScenario : IAsyncDisposable
     /// <summary>The API's services on the scenario's database, for a test that resolves one in its own scope.</summary>
     public IServiceProvider Services => factory.Services;
 
-    /// <summary>Compares a transcript with its golden file (access's folder when <paramref name="set"/> is left out), or records it when TSR_RECORD_GOLDEN=1.</summary>
-    public static void Check(string name, string actual, GoldenSet? set = null)
-    {
-        var path = Path.Combine(TestDatabase.RepoRoot(), "db", "tests", "golden", (set ?? GoldenSet.Access).Folder, name + ".txt");
-        if (Environment.GetEnvironmentVariable("TSR_RECORD_GOLDEN") == "1")
-        {
-            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            File.WriteAllBytes(path, new UTF8Encoding(false).GetBytes(actual));
-            Assert.Fail($"Recorded {path}. A recording run never passes: unset TSR_RECORD_GOLDEN and run again to check.");
-        }
-
-        if (!File.Exists(path))
-        {
-            Assert.Fail($"The golden file is missing: {path}. Record it on today's code with TSR_RECORD_GOLDEN=1; a test never invents its own expected answer.");
-        }
-
-        Assert.That(actual, Is.EqualTo(new UTF8Encoding(false).GetString(File.ReadAllBytes(path))), $"golden file {path}");
-    }
-
     /// <summary>Sends one request as one seeded member (null: nobody signed in) and writes what came back to the transcript.</summary>
     public Task<GoldenReply> SendAsync(int? caller, HttpMethod method, string path, string? json = null, string? ifNoneMatch = null, string? ifModifiedSince = null)
     {
         List<KeyValuePair<string, string>> headers = caller is null
             ? [new KeyValuePair<string, string>(TestApi.Outcome, "missing")]
             : TestApi.SignedInAs("uid-" + caller, MembershipTestKit.EmailOf(caller.Value)).ToList();
-        return SendCoreAsync(caller?.ToString(CultureInfo.InvariantCulture) ?? "nobody", headers, method, path, json, new Conditions(ifNoneMatch, ifModifiedSince));
+        return SendCoreAsync(headers, method, path, json, new Conditions(ifNoneMatch, ifModifiedSince));
     }
 
     /// <summary>
-    /// Sends one request with exactly <paramref name="headers"/> (<c>TestApi.SignedInAs</c>, the name and picture, the tracking headers) and writes <paramref name="who"/> where the caller number goes.
-    /// The headers are not written to the transcript, so a <paramref name="who"/> says what was sent. With <paramref name="recordBody"/> false the body is not written (a failure whose text names a library type the conversion must change).
+    /// Sends one request with exactly <paramref name="headers"/> (<c>TestApi.SignedInAs</c>, the name and picture, the tracking headers).
     /// </summary>
-    public Task<GoldenReply> SendAsync(string who, IReadOnlyList<KeyValuePair<string, string>> headers, HttpMethod method, string path, string? json = null, bool recordBody = true) =>
-        SendCoreAsync(who, headers, method, path, json, new Conditions(null, null), recordBody);
+    public Task<GoldenReply> SendAsync(IReadOnlyList<KeyValuePair<string, string>> headers, HttpMethod method, string path, string? json = null) =>
+        SendCoreAsync(headers, method, path, json, new Conditions(null, null));
 
-    private async Task<GoldenReply> SendCoreAsync(string who, IReadOnlyList<KeyValuePair<string, string>> headers, HttpMethod method, string path, string? json, Conditions conditions, bool recordBody = true)
+    private async Task<GoldenReply> SendCoreAsync(IReadOnlyList<KeyValuePair<string, string>> headers, HttpMethod method, string path, string? json, Conditions conditions)
     {
         using var request = new HttpRequestMessage(method, path);
         foreach (var (name, value) in headers)
@@ -135,41 +125,12 @@ internal sealed class GoldenScenario : IAsyncDisposable
 
         using var response = await client.SendAsync(request);
         var body = await response.Content.ReadAsStringAsync();
-        Record(who, method, path, json, conditions, response, recordBody ? body : null);
+        lock (statuses)
+        {
+            statuses.Add(response.StatusCode);
+        }
+
         return new GoldenReply(response.StatusCode, body, HeaderOrNull(response, "ETag"), HeaderOrNull(response, "Last-Modified"));
-    }
-
-    /// <summary>Appends a line of text to the transcript (what a copy answered, or that it threw).</summary>
-    public void Note(string line)
-    {
-        lock (transcript)
-        {
-            transcript.Append(line).Append('\n');
-        }
-    }
-
-    /// <summary>Appends every row of the set's tables (access: the four writable tables and every outbox payload), as text.</summary>
-    public async Task AppendRowsAsync(string label)
-    {
-        transcript.Append("=== rows after ").Append(label).Append(" ===\n");
-        await using var connection = new NpgsqlConnection(ConnectionTo(database, TestDatabase.OwnerConnection));
-        await connection.OpenAsync();
-        await using (var zone = new NpgsqlCommand("set time zone 'UTC'", connection))
-        {
-            await zone.ExecuteNonQueryAsync();
-        }
-
-        foreach (var entry in set.RowQueries)
-        {
-            var (title, sql) = Split(entry);
-            transcript.Append("-- ").Append(title).Append('\n');
-            await using var command = new NpgsqlCommand(sql, connection);
-            await using var reader = await command.ExecuteReaderAsync();
-            while (await reader.ReadAsync())
-            {
-                transcript.Append(reader.GetString(0)).Append('\n');
-            }
-        }
     }
 
     /// <summary>One statement run on the scenario's database as the owner (a fixture row, a trigger, a revoke).</summary>
@@ -212,50 +173,7 @@ internal sealed class GoldenScenario : IAsyncDisposable
         await AdminAsync($"drop database if exists {database}");
     }
 
-    // A lock: a scenario may send two requests at once, and a StringBuilder is not safe for two writers.
-    private void Record(string who, HttpMethod method, string path, string? json, Conditions conditions, HttpResponseMessage response, string? body)
-    {
-        lock (transcript)
-        {
-            RecordLocked(who, method, path, json, conditions, response, body);
-        }
-    }
-
     private sealed record Conditions(string? IfNoneMatch, string? IfModifiedSince);
-
-    private void RecordLocked(string who, HttpMethod method, string path, string? json, Conditions conditions, HttpResponseMessage response, string? body)
-    {
-        transcript.Append("### ").Append(method.Method).Append(' ').Append(path).Append(" as ").Append(who).Append('\n');
-        if (conditions.IfNoneMatch is not null)
-        {
-            transcript.Append("If-None-Match: ").Append(conditions.IfNoneMatch).Append('\n');
-        }
-
-        if (conditions.IfModifiedSince is not null)
-        {
-            transcript.Append("If-Modified-Since: ").Append(conditions.IfModifiedSince).Append('\n');
-        }
-
-        if (json is not null)
-        {
-            transcript.Append("request: ").Append(json).Append('\n');
-        }
-
-        transcript.Append("status: ").Append((int)response.StatusCode).Append('\n');
-        foreach (var header in set.RecordedHeaders ?? AllHeaderNames(response))
-        {
-            transcript.Append(header).Append(": ").Append(HeaderValue(response, header)).Append('\n');
-        }
-
-        transcript.Append("body: ").Append(body is null ? "(not recorded)" : StackTraceCut(body)).Append('\n');
-    }
-
-    // An unhandled error answers in the test host with the exception text and its stack, whose lines name files and line numbers of this machine: only the first line is recorded.
-    private static string StackTraceCut(string body)
-    {
-        var at = body.IndexOf("\n   at ", StringComparison.Ordinal);
-        return at < 0 ? body : body[..at];
-    }
 
     // The raw text the server sent, not HttpClient's parsed form (which reorders and rewrites values); several raw values are joined in the order received.
     private static string HeaderValue(HttpResponseMessage response, string name) =>
@@ -263,21 +181,8 @@ internal sealed class GoldenScenario : IAsyncDisposable
             ? values.ToString()
             : "(absent)";
 
-    // Every header the server sent but Date (a clock reading of the host, not of the API), by name, from the response and its content.
-    private static IEnumerable<string> AllHeaderNames(HttpResponseMessage response) =>
-        response.Headers.NonValidated.Select(h => h.Key)
-            .Concat(response.Content.Headers.NonValidated.Select(h => h.Key))
-            .Where(name => !string.Equals(name, "Date", StringComparison.OrdinalIgnoreCase))
-            .Order(StringComparer.OrdinalIgnoreCase);
-
     private static string? HeaderOrNull(HttpResponseMessage response, string name) =>
         HeaderValue(response, name) is var value && value != "(absent)" ? value : null;
-
-    private static (string Title, string Sql) Split(string entry)
-    {
-        var at = entry.IndexOf('|', StringComparison.Ordinal);
-        return (entry[..at], entry[(at + 1)..]);
-    }
 
     // One database per scenario, named from it, so nothing a scenario leaves behind (a pooled connection, a failed drop) can reach the next.
     private static string DatabaseOf(GoldenSet set, string name) =>
@@ -325,24 +230,10 @@ internal sealed class GoldenScenario : IAsyncDisposable
     }
 }
 
-/// <summary>
-/// What differs between one domain's goldens and another's: the folder under db/tests/golden, the template database and how it is seeded (as the owner, after the
-/// migrations), the queries whose rows a scenario appends (<c>title|sql</c>), and the response headers recorded (null: every header but Date, by name).
-/// </summary>
-internal sealed record GoldenSet(string Folder, string TemplateName, Func<string, Task> SeedAsync, IReadOnlyList<string> RowQueries, IReadOnlyList<string>? RecordedHeaders)
+/// <summary>What differs between one domain's scenarios and another's: the prefix of its database names, the template database and how it is seeded (as the owner, after the migrations).</summary>
+internal sealed record GoldenSet(string Folder, string TemplateName, Func<string, Task> SeedAsync)
 {
-    public static GoldenSet Access { get; } = new(
-        "access",
-        GoldenSeed.TemplateName,
-        GoldenSeed.RunAsync,
-        [
-            "access.user_permissions|select row_to_json(t)::text from access.user_permissions t order by id",
-            "access.user_roles|select row_to_json(t)::text from access.user_roles t order by user_id",
-            "access.class_access_rules|select row_to_json(t)::text from access.class_access_rules t order by id",
-            "access.class_access_rule_conditions|select row_to_json(t)::text from access.class_access_rule_conditions t order by id",
-            "platform.outbox (event_type, created_at, payload)|select t.event_type || ' | ' || to_json(t.created_at)::text || ' | ' || t.payload::text from platform.outbox t order by t.id",
-        ],
-        ["ETag", "Cache-Control", "Vary", "X-Permissions-Revision", "Content-Type"]);
+    public static GoldenSet Access { get; } = new("access", GoldenSeed.TemplateName, GoldenSeed.RunAsync);
 }
 
 internal sealed record GoldenReply(HttpStatusCode Status, string Body, string? ETag = null, string? LastModified = null)

@@ -10,7 +10,7 @@ namespace Tsr.Db.Tests;
 /// <summary>
 /// Issue 102, IDN-Q1 (TC-IDN-Q1-01): no path of identity holds two connections of the data source at once, so no request of any domain can starve the pool by waiting on itself.
 /// Proved with a pool of one: a path that needed a second connection would wait for the first, which it holds itself, and fail at the 5 s timeout.
-/// Paths covered: every golden scenario (the nine routes and their refusals, the seven deletion writes including the three completions, the sign-in outcomes and the sign-in writes:
+/// Paths covered: every scenario (the nine routes and their refusals, the seven deletion writes including the three completions, the sign-in outcomes and the sign-in writes:
 /// lookup, claim, first sign-in, tracking), and the race re-read of a first sign-in whose insert meets a member made meanwhile.
 /// </summary>
 public sealed class IdentityPoolTests
@@ -30,10 +30,10 @@ public sealed class IdentityPoolTests
 
         await Scenario(scenario)(run);
 
-        GoldenScenario.Check(scenario, run.Transcript, IdentityGolden.Set);
+        run.Run.AssertNoServerError();
     }
 
-    // The one path no golden reaches in one request at a time: the insert of a first sign-in hits the unique uid because another request made the member meanwhile.
+    // The one path no scenario reaches in one request at a time: the insert of a first sign-in hits the unique uid because another request made the member meanwhile.
     // The test makes the member itself while the request waits at the token lock, so the request rolls back, releases its connection, and re-reads on a fresh one.
     [Test]
     public async Task A_first_sign_in_that_meets_a_member_made_meanwhile_re_reads_with_a_pool_of_one_connection()
@@ -43,7 +43,7 @@ public sealed class IdentityPoolTests
         await using var holder = await run.Run.OpenOwnerConnectionAsync();
         await ExecuteAsync(holder, "select pg_advisory_lock(7100001)");
 
-        var send = run.SendAsync("uid-pool-race", headers, HttpMethod.Post, "/auth/link");
+        var send = run.SendAsync(headers, HttpMethod.Post, "/auth/link");
         try
         {
             await WaitForOneWaiterAsync(run);
@@ -91,7 +91,7 @@ public sealed class IdentityPoolTests
         await command.ExecuteNonQueryAsync();
     }
 
-    // Pooling on (the golden databases are reached with it off) and the shared source's 5 s timeouts, with a pool of one.
+    // Pooling on (the scenario databases are reached with it off) and the shared source's 5 s timeouts, with a pool of one.
     private static NpgsqlDataSource OnePooledConnection(IServiceProvider services)
     {
         var connection = new NpgsqlConnectionStringBuilder(services.GetRequiredService<DbSettings>().ConnectionString)

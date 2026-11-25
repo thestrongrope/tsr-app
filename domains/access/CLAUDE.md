@@ -99,7 +99,7 @@ also treats `Zürich` and `Zurich` as equal. Not built; settle it when `classes`
 | JSON: answers `AccessJson.Answers` (the host's options, relaxed encoder), events `AccessJson.Default` | `api/domain/AccessJson.cs` |
 | The grant and class access rules | `api/domain/GrantRules.cs`, `ClassAccessRules.cs` (no database), `ClassAccessStore.cs`, `ClassAccessOperator.cs`, `MemberLock.cs` |
 | Words, contract, behaviour | `spec/glossary.md`, `spec/api.yaml`, `spec/tests/*.hurl` |
-| Database tests | `db/tests/AccessTests.cs`, `TestGrantsTests.cs`, `PermissionsRevisionHeaderTests.cs`, `AccessGolden*.cs` (answers, stored rows and events as text, `db/tests/golden/access/`), `AccessFailureTests.cs`, `AccessPoolTests.cs` |
+| Database tests | `db/tests/AccessTests.cs`, `TestGrantsTests.cs`, `PermissionsRevisionHeaderTests.cs`, `AccessRuleConditionTests.cs`, `AccessFailureTests.cs`, `AccessPoolTests.cs` |
 
 ## Checks
 

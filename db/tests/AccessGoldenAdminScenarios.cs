@@ -36,7 +36,7 @@ internal static partial class AccessGoldenScenarios
     private static async Task AdminPermGrantRefusalsAsync(GoldenScenario run)
     {
         var grants = $"/admin/permissions/members/{Subject}/grants";
-        await run.SendAsync(null, Post, grants, """{"permission": "donors:read:all", "reason": "Needs the list"}""");
+        await run.SendAsync((int?)null, Post, grants, """{"permission": "donors:read:all", "reason": "Needs the list"}""");
         await run.SendAsync(Plain, Post, grants, """{"permission": "donors:read:all", "reason": "Needs the list"}""");
         await run.SendAsync(Gents, Post, grants, """{"permission": "donors:read:all", "reason": "Needs the list"}""");
         await run.SendAsync(Super, Post, grants, "not json");
@@ -53,7 +53,6 @@ internal static partial class AccessGoldenScenarios
             await run.SendAsync(Super, Post, grants, $$"""{"permission": "{{permission}}", "reason": "Needs the list"}""");
         }
 
-        await run.AppendRowsAsync("the refused grants");
     }
 
     // A grant to a member with an empty name, a non-ASCII name and a plain one, a second grant that is held (409), and every revoke answer.
@@ -69,7 +68,7 @@ internal static partial class AccessGoldenScenarios
         await run.SendAsync(Subject, Get, "/me/permissions");
         var id = first.Json!["granted"]![0]!["id"]!.GetValue<int>();
         var revoke = $"/admin/permissions/grants/{id}/revoke";
-        await run.SendAsync(null, Post, revoke, """{"reason": "Done"}""");
+        await run.SendAsync((int?)null, Post, revoke, """{"reason": "Done"}""");
         await run.SendAsync(Plain, Post, revoke, """{"reason": "Done"}""");
         await run.SendAsync(Gents, Post, revoke, """{"reason": "Done"}""");
         await run.SendAsync(Super, Post, revoke, "not json");
@@ -136,7 +135,7 @@ internal static partial class AccessGoldenScenarios
     {
         var rules = $"/admin/class-access/members/{Subject}/rules";
         var (version, hash) = await DraftAsync(run, Gents, Subject, 1, Ville);
-        await run.SendAsync(null, Post, rules, SaveBody(1, Ville, "Why", version, hash));
+        await run.SendAsync((int?)null, Post, rules, SaveBody(1, Ville, "Why", version, hash));
         await run.SendAsync(Plain, Post, rules, SaveBody(1, Ville, "Why", version, hash));
         foreach (var body in new[]
         {
@@ -174,7 +173,6 @@ internal static partial class AccessGoldenScenarios
         await run.SendAsync(Gents, Post, rules, SaveBody(1, """{"field": "city", "value": "Goldother"}""", "Why", version, hash));
         var (superVersion, superHash) = await DraftAsync(run, Super, Subject, 2, """{"field": "city", "value": "Goldother"}""");
         await run.SendAsync(Super, Post, rules, SaveBody(2, """{"field": "city", "value": "Goldother"}""", "Why", superVersion, superHash));
-        await run.AppendRowsAsync("the refused saves");
     }
 
     // Save a rule for each kind of member, save the same access again (409), save on a stale version (409), revoke it by another operator (403), by a super admin, again (409), and the revoke refusals.
@@ -192,7 +190,7 @@ internal static partial class AccessGoldenScenarios
         await SaveForAsync(run, GoldenSeed.OddName);
         await SaveForAsync(run, GoldenSeed.EmptyName);
         var revoke = $"/admin/class-access/rules/{ruleId}/revoke";
-        await run.SendAsync(null, Post, revoke, RevokeBody("Moved", current));
+        await run.SendAsync((int?)null, Post, revoke, RevokeBody("Moved", current));
         await run.SendAsync(Plain, Post, revoke, RevokeBody("Moved", current));
         await run.SendAsync(GoldenSeed.PeerGentsAdmin, Post, revoke, RevokeBody("Moved", current));
         await run.SendAsync(Gents, Post, revoke, "not json");

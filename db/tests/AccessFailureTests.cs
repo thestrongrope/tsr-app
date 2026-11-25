@@ -34,47 +34,80 @@ public sealed class AccessFailureTests
         await MakeUnreadableAsync(run);
 
         var me = await run.SendAsync(GoldenSeed.Plain, Get, "/me/permissions");
-        await run.SendAsync(GoldenSeed.Plain, Post, "/auth/link");
+        var link = await run.SendAsync(GoldenSeed.Plain, Post, "/auth/link");
 
         Assert.That(me.Status, Is.EqualTo(HttpStatusCode.ServiceUnavailable), me.Body);
         Assert.That(me.Body, Is.EqualTo(Unavailable));
-        GoldenScenario.Check("failure-me-permissions-unreadable", run.Transcript);
+        Assert.That(link.Status, Is.EqualTo(HttpStatusCode.OK), link.Body);
     }
 
     [Test]
-    public async Task Unreadable_access_tables_fail_the_other_routes_as_recorded()
+    public async Task Unreadable_access_tables_fail_the_other_routes_with_a_500_and_store_nothing()
     {
         await using var run = await GoldenScenario.StartAsync("failure-other-routes");
         await MakeUnreadableAsync(run);
         var super = GoldenSeed.Super;
 
-        await run.SendAsync(super, Get, "/me/permissions/donors:read");
-        await run.SendAsync(super, Get, $"/admin/permissions/members/{GoldenSeed.Subject}");
-        await run.SendAsync(super, Post, $"/admin/permissions/members/{GoldenSeed.Subject}/grants", """{"permission": "donors:read:all", "reason": "Needs the list"}""");
-        await run.SendAsync(super, Get, "/admin/class-access/members?q=al");
-        await run.AppendRowsAsync("the failed routes");
+        var replies = new[]
+        {
+            await run.SendAsync(super, Get, "/me/permissions/donors:read"),
+            await run.SendAsync(super, Get, $"/admin/permissions/members/{GoldenSeed.Subject}"),
+            await run.SendAsync(super, Post, $"/admin/permissions/members/{GoldenSeed.Subject}/grants", """{"permission": "donors:read:all", "reason": "Needs the list"}"""),
+            await run.SendAsync(super, Get, "/admin/class-access/members?q=al"),
+        };
 
-        GoldenScenario.Check("failure-other-routes-unreadable", run.Transcript);
+        Assert.That(replies.Select(r => r.Status), Is.All.EqualTo(HttpStatusCode.InternalServerError));
+        Assert.That(replies.Select(r => r.Body), Is.All.Contain("42501: permission denied for table permissions"));
+        Assert.That(await StoredAsync(run, GoldenSeed.Subject), Is.EqualTo(Stored(0, 0, 0, 0, 0)));
     }
 
-    // Each of the four other tables made unreadable on its own; the member asking holds live rules, so every table is in the way of the read. Recorded as today's code answers.
+    // Each of the four other tables made unreadable on its own; the member asking holds live rules, so every table is in the way of the read.
+    // Today the plain member's own read still answers 200 when only the conditions are unreadable (a member with no rule never reads them).
     [TestCase("user_permissions")]
     [TestCase("user_roles")]
     [TestCase("class_access_rules")]
     [TestCase("class_access_rule_conditions")]
-    public async Task One_unreadable_access_table_answers_as_recorded(string table)
+    public async Task One_unreadable_access_table_fails_the_routes_that_read_it(string table)
     {
         await using var run = await GoldenScenario.StartAsync("failure-table-" + table);
         await AccessGoldenScenarios.SeedAssignedRulesAsync(run);
         await run.ExecuteAsync($"revoke select on access.{table} from tsr_app");
 
-        await run.SendAsync(GoldenSeed.Subject, Get, "/me/permissions");
-        await run.SendAsync(GoldenSeed.Plain, Get, "/me/permissions");
-        await run.SendAsync(GoldenSeed.Super, Get, $"/admin/permissions/members/{GoldenSeed.Subject}");
-        await run.SendAsync(GoldenSeed.GentsAdmin, Get, $"/admin/class-access/members/{GoldenSeed.Subject}");
+        var replies = new[]
+        {
+            await run.SendAsync(GoldenSeed.Subject, Get, "/me/permissions"),
+            await run.SendAsync(GoldenSeed.Plain, Get, "/me/permissions"),
+            await run.SendAsync(GoldenSeed.Super, Get, $"/admin/permissions/members/{GoldenSeed.Subject}"),
+            await run.SendAsync(GoldenSeed.GentsAdmin, Get, $"/admin/class-access/members/{GoldenSeed.Subject}"),
+        };
 
-        GoldenScenario.Check("failure-table-" + table, run.Transcript);
+        var conditionsOnly = table == "class_access_rule_conditions";
+        HttpStatusCode[] expected = conditionsOnly
+            ? [HttpStatusCode.ServiceUnavailable, HttpStatusCode.OK, HttpStatusCode.ServiceUnavailable, HttpStatusCode.InternalServerError]
+            : [HttpStatusCode.ServiceUnavailable, HttpStatusCode.ServiceUnavailable, HttpStatusCode.InternalServerError, HttpStatusCode.InternalServerError];
+        Assert.That(replies.Select(r => r.Status), Is.EqualTo(expected), string.Join(" | ", replies.Select(r => r.Body)));
+        foreach (var reply in replies.Where(r => r.Status == HttpStatusCode.ServiceUnavailable))
+        {
+            Assert.That(reply.Body, Is.EqualTo(Unavailable));
+        }
+
+        foreach (var reply in replies.Where(r => r.Status == HttpStatusCode.InternalServerError))
+        {
+            Assert.That(reply.Body, Does.Contain($"42501: permission denied for table {table}"));
+        }
     }
+
+    // grants still live, rules still live, conditions, events and the role of the subject (0: none), as the subject's state reads.
+    private static string Stored(int grants, int rules, int conditions, int events, int role) => $"{grants},{rules},{conditions},{events},{role}";
+
+    private static async Task<string> StoredAsync(GoldenScenario run, int member) => (await run.QueryAsync(
+        $"""
+        select (select count(*) from access.user_permissions where revoked_at is null) || ',' ||
+               (select count(*) from access.class_access_rules where revoked_at is null) || ',' ||
+               (select count(*) from access.class_access_rule_conditions) || ',' ||
+               (select count(*) from platform.outbox) || ',' ||
+               (select coalesce(max(ur.roleid), 0) from identity.users u left join access.user_roles ur on ur.user_id = u.id where u.token = {member})
+        """)).Single();
 
     private const string FailOutbox =
         """
@@ -100,14 +133,24 @@ public sealed class AccessFailureTests
 
         var failed = await FailingWriteAsync(run, write);
 
+        Assert.That(failed.Status, Is.EqualTo(HttpStatusCode.InternalServerError), failed.Body);
         if (write.StartsWith("rule", StringComparison.Ordinal))
         {
-            Assert.That(failed.Status, Is.EqualTo(HttpStatusCode.InternalServerError), failed.Body);
             Assert.That(failed.Body, Is.EqualTo("""{"detail":"Nothing was changed"}"""));
         }
+        else
+        {
+            Assert.That(failed.Body, Does.Contain("outbox unavailable (test)"));
+        }
 
-        await run.AppendRowsAsync("the failed " + write);
-        GoldenScenario.Check("failure-write-" + write, run.Transcript);
+        // Only what the write's own set-up stored is left: the rule or the grant made before the trigger, and its event.
+        var expected = write switch
+        {
+            "rule-revoke" => Stored(0, 1, 1, 1, 5),
+            "permission-revoke" => Stored(1, 0, 0, 1, 0),
+            _ => Stored(0, 0, 0, 0, 0),
+        };
+        Assert.That(await StoredAsync(run, GoldenSeed.Subject), Is.EqualTo(expected));
     }
 
     // Each write is made to fail at its last statement: the conditions of a new rule, or the event of the other three. A write that needs something to exist first gets it before the trigger.

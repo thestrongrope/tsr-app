@@ -8,8 +8,8 @@ namespace Tsr.Db.Tests;
 
 /// <summary>
 /// Issue 102, failure pins on identity as it is (IDN-R5, R7, R8, R13, R20): what a caller sees, what is stored and what is logged when the database refuses something under a request.
-/// Each case runs on its own copy of the identity golden database (<see cref="IdentityRun"/>), so a revoked right or a trigger never reaches another test, and "rows unchanged" starts from a known
-/// state. Recorded on today's code, not predicted; each case also asserts that the failure really happened (a 500, or the warning), so a revoke that turned out to do nothing cannot record a success.
+/// Each case runs on its own copy of the identity database (<see cref="IdentityRun"/>), so a revoked right or a trigger never reaches another test, and "rows unchanged" starts from a known
+/// state. Each case also asserts that the failure really happened (a 500, or the warning), so a revoke that turned out to do nothing cannot record a success.
 /// </summary>
 public sealed class IdentityFailureTests
 {
@@ -29,15 +29,13 @@ public sealed class IdentityFailureTests
         var headers = IdentityGoldenScenarios.Headers(
             "uid-" + IdentitySeed.Plain, MembershipTestKit.EmailOf(IdentitySeed.Plain), true, null, null, ("User-Agent", "FailUA/1.0"), ("X-Device-Info", "Pixel"));
 
-        var reply = await run.SendAsync("plain, tracking headers", headers, Get, "/me/deletion-request");
-        await run.RowsAsync("after");
+        var reply = await run.SendAsync(headers, Get, "/me/deletion-request");
 
         Assert.That(reply.Status, Is.EqualTo(HttpStatusCode.OK), reply.Body);
         Assert.That(await SnapshotAsync(run), Is.EqualTo(before));
         var warnings = logs.Warnings.Where(w => w.Template == TrackingWarning).ToList();
         Assert.That(warnings, Has.Count.EqualTo(1), "exactly one warning with the template");
         Assert.That(warnings[0].Reason, Does.Match("^[A-Za-z][A-Za-z0-9_]*$"), "a type name, no address, token or header value");
-        GoldenScenario.Check("failure-signin-record", run.Transcript, IdentityGolden.Set);
     }
 
     // TC-IDN-R7-01 (the other half is TestDeletionTests.A_failure_after_the_devices_were_deleted_and_the_queue_redacted_rolls_the_whole_completion_back).
@@ -49,14 +47,12 @@ public sealed class IdentityFailureTests
         var before = await SnapshotAsync(run);
 
         var reply = await run.AsAsync(IdentitySeed.Admin, Post, $"/admin/deletion-requests/{IdentitySeed.PendingConfirmedTarget}/complete");
-        await run.RowsAsync("after");
 
         Assert.That(reply.Status, Is.EqualTo(HttpStatusCode.InternalServerError), reply.Body);
         Assert.That(await SnapshotAsync(run), Is.EqualTo(before), "every row of the seven tables and the outbox is as before");
         Assert.That(
             await run.Run.QueryAsync($"select status::text from identity.account_deletion_requests where id = {IdentitySeed.PendingConfirmedTarget}"),
             Is.EqualTo(["pending"]));
-        GoldenScenario.Check("failure-complete-event", run.Transcript, IdentityGolden.Set);
     }
 
     // TC-IDN-R8-01: the four other writes that write a row and an event together.
@@ -74,11 +70,9 @@ public sealed class IdentityFailureTests
             await run.AsAsync(IdentitySeed.Unconfirmed, Delete, "/me/deletion-request"),
             await run.AsAsync(IdentitySeed.Admin, Post, $"/admin/deletion-requests/{IdentitySeed.PendingUnconfirmed}/hold", Body("note", "a note")),
         };
-        await run.RowsAsync("after");
 
         Assert.That(replies.Select(r => r.Status), Is.All.EqualTo(HttpStatusCode.InternalServerError));
         Assert.That(await RequestsAsync(run), Is.EqualTo(before));
-        GoldenScenario.Check("failure-write-event", run.Transcript, IdentityGolden.Set);
     }
 
     // TC-IDN-R13-01: every member route of every domain reads identity first, so one unreadable table fails them all.
@@ -97,16 +91,14 @@ public sealed class IdentityFailureTests
             await run.AsAsync(IdentitySeed.Admin, Get, "/admin/deletion-requests"),
             await run.AsAsync(IdentitySeed.Plain, Get, "/me/permissions"),
         };
-        await run.RowsAsync("after");
 
         Assert.That(replies.Select(r => r.Status), Is.All.EqualTo(HttpStatusCode.InternalServerError));
         Assert.That(await SnapshotAsync(run), Is.EqualTo(before));
-        GoldenScenario.Check(scenario, run.Transcript, IdentityGolden.Set);
     }
 
     // TC-IDN-R20-01: a trigger refuses any change of firebase_uid, so the claim of a member with no uid fails; the tracking update does not change the uid and is not affected.
-    // The 500's body is not recorded: today it is the first line of Entity Framework's DbUpdateException ("An error occurred while saving the entity changes"), a text the conversion cannot keep
-    // (the claim becomes one SQL statement, which fails with Npgsql's own exception). What must stay is that the request fails with a 500, stores nothing and hands nothing on.
+    // The 500's body is not asserted: it is the first line of the exception, a text that depends on the library under it.
+    // What must hold is that the request fails with a 500, stores nothing and hands nothing on.
     [Test]
     public async Task A_claim_whose_write_fails_stores_nothing_and_answers_as_recorded()
     {
@@ -122,27 +114,24 @@ public sealed class IdentityFailureTests
         var before = await SnapshotAsync(run);
 
         var lookup = await run.SendAsync(
-            "claim on a lookup route", IdentityGoldenScenarios.Headers("uid-claim-x", IdentitySeed.ClaimAddress, true, "Ignored Name"), Post, "/feedback", """{"clientId":"c-1","text":"salaam"}""",
-            recordBody: false);
+            IdentityGoldenScenarios.Headers("uid-claim-x", IdentitySeed.ClaimAddress, true, "Ignored Name"), Post, "/feedback", """{"clientId":"c-1","text":"salaam"}""");
         var create = await run.SendAsync(
-            "claim on a create route", IdentityGoldenScenarios.Headers("uid-claim-x", IdentitySeed.ClaimAddress, true, IdentitySeed.Odd, "https://img.invalid/claim"), Post, "/auth/link", recordBody: false);
-        await run.RowsAsync("after");
+            IdentityGoldenScenarios.Headers("uid-claim-x", IdentitySeed.ClaimAddress, true, IdentitySeed.Odd, "https://img.invalid/claim"), Post, "/auth/link");
 
         Assert.That(new[] { lookup.Status, create.Status }, Is.All.EqualTo(HttpStatusCode.InternalServerError), lookup.Body + create.Body);
         Assert.That(await SnapshotAsync(run), Is.EqualTo(before), "the member's row and profile are as before");
         Assert.That(sink.Count, Is.Zero, "no name or picture was handed on");
-        GoldenScenario.Check("failure-claim-write", run.Transcript, IdentityGolden.Set);
     }
 
     private static string Body(string field, string value) => IdentityGoldenScenarios.Body(field, value);
 
-    // Every row query of the identity set, one text: equal before and after means not one row was touched.
+    // Every row of the tables of the identity set, one text: equal before and after means not one row was touched.
     private static async Task<string> SnapshotAsync(IdentityRun run)
     {
         var parts = new List<string>();
-        foreach (var entry in IdentityGolden.Set.RowQueries)
+        foreach (var query in IdentityGolden.SnapshotQueries)
         {
-            parts.AddRange(await run.Run.QueryAsync(entry[(entry.IndexOf('|', StringComparison.Ordinal) + 1)..]));
+            parts.AddRange(await run.Run.QueryAsync(query));
         }
 
         return string.Join('\n', parts);

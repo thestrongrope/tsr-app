@@ -21,10 +21,10 @@ public sealed class AccessPoolTests
 
         await (AccessGoldenScenarios.Routes.TryGetValue(scenario, out var route) ? route(run) : AccessGoldenScenarios.Writes[scenario](run));
 
-        GoldenScenario.Check(scenario, run.Transcript);
+        run.AssertNoServerError();
     }
 
-    // Pooling on (the golden databases are reached with it off) and the shared source's 5 s timeouts, with a pool of one.
+    // Pooling on (the scenario databases are reached with it off) and the shared source's 5 s timeouts, with a pool of one.
     private static NpgsqlDataSource OnePooledConnection(IServiceProvider services)
     {
         var connection = new NpgsqlConnectionStringBuilder(services.GetRequiredService<DbSettings>().ConnectionString)

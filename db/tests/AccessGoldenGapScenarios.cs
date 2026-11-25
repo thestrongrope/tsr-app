@@ -1,8 +1,8 @@
 namespace Tsr.Db.Tests;
 
 /// <summary>
-/// Scenarios added after the first review of the golden set: a member who holds live class access rules, an unprivileged member asking after a member that does not exist,
-/// and a ladies admin on the paths that succeed for her. Each is recorded on today's code like the others.
+/// Scenarios added after the first review of the set: a member who holds live class access rules, an unprivileged member asking after a member that does not exist,
+/// and a ladies admin on the paths that succeed for her.
 /// </summary>
 internal static partial class AccessGoldenScenarios
 {
@@ -67,13 +67,11 @@ internal static partial class AccessGoldenScenarios
         var rules = $"/admin/class-access/members/{LadiesMember}/rules";
         var (version, hash) = await DraftAsync(run, LadiesAdmin, LadiesMember, 2, LadiesRule);
         var saved = await run.SendAsync(LadiesAdmin, Post, rules, SaveBody(2, LadiesRule, "Teaches there", version, hash));
-        await run.AppendRowsAsync("the ladies admin's save");
         await run.SendAsync(LadiesAdmin, Get, $"/admin/class-access/members/{LadiesMember}");
         await run.SendAsync(LadiesMember, Get, "/me/permissions");
         await run.SendAsync(LadiesAdmin, Post, rules, SaveBody(1, LadiesRule, "Wrong gender", StringOf(saved.Json, "version"), hash));
         await run.SendAsync(LadiesAdmin, Get, "/admin/permissions/members?q=Gold");
         var ruleId = saved.Json!["rules"]![0]!["id"]!.GetValue<int>();
         await run.SendAsync(LadiesAdmin, Post, $"/admin/class-access/rules/{ruleId}/revoke", RevokeBody("Moved", StringOf(saved.Json, "version")));
-        await run.AppendRowsAsync("the ladies admin's revoke");
     }
 }

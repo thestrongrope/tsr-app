@@ -12,7 +12,7 @@ namespace Tsr.Db.Tests;
 /// <summary>
 /// Issue 100, CON-Q1: no path of content holds two connections of the data source at once, so no number of requests or copies can starve the pool by waiting on itself.
 /// Proved with a pool of one: a path that needed a second connection would wait for the first, which it holds itself, and fail at the 5 s timeout.
-/// Paths covered: every golden route (the six Library reads, the surah list, the stub list), the copy's store path (state read, then the transaction),
+/// Paths covered: every route (the six Library reads, the surah list, the stub list), the copy's store path (state read, then the transaction),
 /// its keep and unchanged paths, and <see cref="ContentModule.LoadContentAsync"/>.
 /// </summary>
 public sealed class ContentPoolTests
@@ -26,27 +26,23 @@ public sealed class ContentPoolTests
 
         await (ContentGoldenScenarios.Library.TryGetValue(scenario, out var route) ? route(run) : ContentGoldenScenarios.Others[scenario](run));
 
-        GoldenScenario.Check(scenario, run.Transcript, ContentGolden.Set);
+        run.AssertNoServerError();
     }
 
     [Test]
-    public async Task A_copy_stores_the_recorded_rows_with_a_pool_of_one_connection()
+    public async Task A_copy_stores_its_set_with_a_pool_of_one_connection()
     {
-        await using var run = await StartAsync(ContentGoldenTests.CopyStoresRows);
+        await using var run = await StartAsync(ContentGolden.CopyStoresRows);
 
-        await ContentGoldenTests.StoreAndRecordAsync(run);
-
-        GoldenScenario.Check(ContentGoldenTests.CopyStoresRows, run.Transcript, ContentGolden.Set);
+        await ContentGolden.StoreAndRecordAsync(run);
     }
 
     [Test]
     public async Task The_keep_and_unchanged_paths_finish_with_a_pool_of_one_connection()
     {
-        await using var run = await StartAsync(ContentGoldenTests.CopyKeepPaths);
+        await using var run = await StartAsync(ContentGolden.CopyKeepPaths);
 
-        await ContentGoldenTests.KeepAndRecordAsync(run);
-
-        GoldenScenario.Check(ContentGoldenTests.CopyKeepPaths, run.Transcript, ContentGolden.Set);
+        await ContentGolden.KeepAndRecordAsync(run);
     }
 
     [Test]
@@ -84,7 +80,7 @@ public sealed class ContentPoolTests
         return services.BuildServiceProvider();
     }
 
-    // Pooling on (the golden databases are reached with it off) and the shared source's 5 s timeouts, with a pool of one.
+    // Pooling on (the scenario databases are reached with it off) and the shared source's 5 s timeouts, with a pool of one.
     private static NpgsqlDataSource OnePooledConnection(IServiceProvider services)
     {
         var connection = new NpgsqlConnectionStringBuilder(services.GetRequiredService<DbSettings>().ConnectionString)

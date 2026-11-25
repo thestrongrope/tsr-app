@@ -7,127 +7,85 @@ using Tsr.Identity.Api;
 namespace Tsr.Db.Tests;
 
 /// <summary>
-/// The golden set-up of identity's characterisation tests (issue 102, plan "Golden files"): the template <c>identity_golden_template</c>, migrated as production and seeded with
-/// <see cref="IdentitySeed"/>, and <see cref="IdentityRun"/>, a <see cref="GoldenScenario"/> that also records every call the account-service port received. Every row query
-/// reads a table a route or a sign-in writes, ordered by its key, so a golden file is the same on every run.
+/// The set-up of identity's scenarios (issue 102): the template <c>identity_golden_template</c>, migrated as production and seeded with
+/// <see cref="IdentitySeed"/>, and <see cref="IdentityRun"/>, a <see cref="GoldenScenario"/> with a fake account service in place of the real one.
 /// </summary>
 internal static class IdentityGolden
 {
-    public static GoldenSet Set { get; } = new(
-        "identity",
-        "identity_golden_template",
-        IdentitySeed.RunAsync,
-        [
-            "identity.users|select row_to_json(t)::text from identity.users t order by t.id",
-            "identity.account_deletion_requests|select row_to_json(t)::text from identity.account_deletion_requests t order by t.id",
-            "membership.member_profiles|select row_to_json(t)::text from membership.member_profiles t order by t.user_id",
-            "notifications.user_devices|select row_to_json(t)::text from notifications.user_devices t order by t.id",
-            "notifications.member_event_settings|select row_to_json(t)::text from notifications.member_event_settings t order by t.user_id, t.class_id, t.event_key",
-            // The feedback route a lookup-route sign-in reaches stamps created_at from the database's own clock, which a golden file cannot hold.
-            "platform.feedback (without created_at)|select (to_jsonb(t) - 'created_at')::text from platform.feedback t order by t.id",
-            "platform.outbound_messages|select row_to_json(t)::text from platform.outbound_messages t order by t.id",
-            "platform.outbox (created_at, event_type, payload)|select to_json(t.created_at)::text || ' | ' || t.event_type || ' | ' || t.payload::text from platform.outbox t order by t.created_at, t.event_type, t.payload::text",
-        ],
-        null);
+    public static GoldenSet Set { get; } = new("identity", "identity_golden_template", IdentitySeed.RunAsync);
+
+    /// <summary>
+    /// Every table a route or a sign-in writes, one row to a line and ordered by its key: equal before and after means not one row was touched. The feedback table is read
+    /// without created_at, which the database's own clock stamps.
+    /// </summary>
+    public static IReadOnlyList<string> SnapshotQueries { get; } =
+    [
+        "select row_to_json(t)::text from identity.users t order by t.id",
+        "select row_to_json(t)::text from identity.account_deletion_requests t order by t.id",
+        "select row_to_json(t)::text from membership.member_profiles t order by t.user_id",
+        "select row_to_json(t)::text from notifications.user_devices t order by t.id",
+        "select row_to_json(t)::text from notifications.member_event_settings t order by t.user_id, t.class_id, t.event_key",
+        "select (to_jsonb(t) - 'created_at')::text from platform.feedback t order by t.id",
+        "select row_to_json(t)::text from platform.outbound_messages t order by t.id",
+        "select to_json(t.created_at)::text || ' | ' || t.event_type || ' | ' || t.payload::text from platform.outbox t order by t.created_at, t.event_type, t.payload::text",
+    ];
 }
 
-/// <summary>A scenario on the identity template, with the recording account service in place of the real one.</summary>
+/// <summary>A scenario on the identity template, with a fake account service in place of the real one.</summary>
 internal sealed class IdentityRun : IAsyncDisposable
 {
-    private readonly RecordingFirebase firebase;
-
-    private IdentityRun(GoldenScenario run, RecordingFirebase firebase)
+    private IdentityRun(GoldenScenario run)
     {
         Run = run;
-        this.firebase = firebase;
     }
 
     public GoldenScenario Run { get; }
 
-    public string Transcript => Run.Transcript;
-
     /// <summary>A fresh copy of the identity template; <paramref name="configure"/> replaces more services of the API.</summary>
     public static async Task<IdentityRun> StartAsync(string name, Action<IServiceCollection>? configure = null)
     {
-        var firebase = new RecordingFirebase();
         var run = await GoldenScenario.StartAsync(
             name,
             services =>
             {
-                services.AddSingleton<IFirebaseAccounts>(firebase);
+                services.AddSingleton<IFirebaseAccounts>(new RecordingFirebase());
                 configure?.Invoke(services);
             },
             IdentityGolden.Set);
-        return new IdentityRun(run, firebase);
+        return new IdentityRun(run);
     }
 
-    /// <summary>Sends one request signed in as one seeded member (uid and address as the seed gives them), then writes the account-service calls it made.</summary>
+    /// <summary>Sends one request signed in as one seeded member (uid and address as the seed gives them).</summary>
     public Task<GoldenReply> AsAsync(int token, HttpMethod method, string path, string? json = null) =>
-        SendAsync(token.ToString(CultureInfo.InvariantCulture), [.. TestApi.SignedInAs("uid-" + token, MembershipTestKit.EmailOf(token))], method, path, json);
+        SendAsync([.. TestApi.SignedInAs("uid-" + token, MembershipTestKit.EmailOf(token))], method, path, json);
 
-    /// <summary>Sends one request with these headers, then writes the account-service calls it made, in order, after the answer.</summary>
-    public async Task<GoldenReply> SendAsync(string who, IReadOnlyList<KeyValuePair<string, string>> headers, HttpMethod method, string path, string? json = null, bool recordBody = true)
-    {
-        var reply = await Run.SendAsync(who, headers, method, path, json, recordBody);
-        foreach (var call in firebase.Drain())
-        {
-            Run.Note(call);
-        }
-
-        return reply;
-    }
+    /// <summary>Sends one request with these headers.</summary>
+    public Task<GoldenReply> SendAsync(IReadOnlyList<KeyValuePair<string, string>> headers, HttpMethod method, string path, string? json = null) =>
+        Run.SendAsync(headers, method, path, json);
 
     /// <summary>A request with nobody signed in.</summary>
     public Task<GoldenReply> AsNobodyAsync(HttpMethod method, string path, string? json = null) =>
-        SendAsync("nobody", [new(TestApi.Outcome, "missing")], method, path, json);
-
-    public Task RowsAsync(string label) => Run.AppendRowsAsync(label);
+        SendAsync([new(TestApi.Outcome, "missing")], method, path, json);
 
     public ValueTask DisposeAsync() => Run.DisposeAsync();
 }
 
-/// <summary>The account service as a recording fake: what it was asked, in order, as transcript lines. A seeded address with no stored uid answers <c>fb-&lt;local part&gt;</c>; any other has no account.</summary>
+/// <summary>The account service as a fake. A seeded address with no stored uid answers <c>fb-&lt;local part&gt;</c>; any other has no account.</summary>
 internal sealed class RecordingFirebase : IFirebaseAccounts
 {
-    private readonly List<string> calls = [];
-
     public Task<string?> FindUidByEmailAsync(string email, CancellationToken ct)
     {
         var known = IdentitySeed.NoUidAddresses.Contains(email, StringComparer.OrdinalIgnoreCase);
-        var uid = known ? "fb-" + email[..email.IndexOf('@', StringComparison.Ordinal)] : null;
-        Add("firebase: lookup " + email + " -> " + (uid ?? "(none)"));
-        return Task.FromResult(uid);
+        return Task.FromResult(known ? "fb-" + email[..email.IndexOf('@', StringComparison.Ordinal)] : null);
     }
 
-    public Task DeleteAsync(string? uid, string? email, CancellationToken ct)
-    {
-        Add("firebase: delete " + uid);
-        return Task.CompletedTask;
-    }
-
-    public List<string> Drain()
-    {
-        lock (calls)
-        {
-            var taken = calls.ToList();
-            calls.Clear();
-            return taken;
-        }
-    }
-
-    private void Add(string line)
-    {
-        lock (calls)
-        {
-            calls.Add(line);
-        }
-    }
+    public Task DeleteAsync(string? uid, string? email, CancellationToken ct) => Task.CompletedTask;
 }
 
 /// <summary>
-/// The synthetic members and requests of the identity goldens: tokens 900101 to 900199, addresses on .invalid (one on @demo.invalid, the reviewer cohort), request ids 9800001 and up.
+/// The synthetic members and requests of the identity scenarios: tokens 900101 to 900199, addresses on .invalid (one on @demo.invalid, the reviewer cohort), request ids 9800001 and up.
 /// Every timestamp is a literal relative to the scenarios' fixed instant (2026-01-01T00:00:00Z); nothing reads the database's clock. Every free text holds a plus, quotes, angle brackets,
-/// an ampersand, an HTML entity and non-ASCII text, so an encoder slip or a lost entity decode shows in a golden file.
+/// an ampersand, an HTML entity and non-ASCII text, so an encoder slip or a lost entity decode shows in an answer.
 /// </summary>
 internal static class IdentitySeed
 {
