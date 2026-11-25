@@ -7,7 +7,7 @@ What was last measured is in `docs/status.md`.
 
 | Stack | What it holds | Rule |
 |---|---|---|
-| dev (`docker-compose.dev.yml`, gateway :8088) | may hold REAL member data and device tokens | no contract script, seed or reset; never a sending worker (`push-drain`, `class-schedules`) |
+| dev (`docker-compose.dev.yml`, `https://gateway.tsr-app-dev.orb.local`, an OrbStack name) | may hold REAL member data and device tokens | no contract script, seed or reset; never a sending worker (`push-drain`, `class-schedules`) |
 | test (`tools/test-stack.sh`, project `tsr-app-test`, gateway :8089) | synthetic data only | the only kind of stack Hurl may run against |
 | lane n (`TSR_STACK=n`, 1 to 8, gateway `8100+n`) | synthetic data, one per parallel worktree | built from the checkout its script is in |
 | parity (`tools/parity-php/`, PHP on 127.0.0.1:18091) | the PHP reference on synthetic data | one shared stack; `parity` runs take a lock |
@@ -20,7 +20,7 @@ Required settings (the API does not start without them): `TSR_DB`, `TSR_FIREBASE
 
 | Task | Command |
 |---|---|
-| Start the local stack (the dev database may hold REAL data: no contract script, seed or reset on it; PostgreSQL, migrate, seed, API, gateway on :8088) | `docker compose -f docker-compose.dev.yml up -d --build` |
+| Start the local stack (the dev database may hold REAL data: no contract script, seed or reset on it; PostgreSQL, migrate, seed, API, gateway at `https://gateway.tsr-app-dev.orb.local`) | `docker compose -f docker-compose.dev.yml up -d --build` |
 | Update the local dev stack once its database holds real data (migrations, rebuilt API and workers, gateway, Elasticsearch with the `search-feed` worker only; NEVER the seed step, never a sending worker) | `tools/dev-stack.sh up` (also `status`) |
 | Reset the local database | `docker compose -f docker-compose.dev.yml down -v` |
 | Start, stop, remove the synthetic TEST stack (own project `tsr-app-test`, gateway :8089, db :5434, emulator :19100, plus the internal-only `gotenberg` PDF renderer, no host port; the only stack Hurl may run against, because dev holds real data) | `tools/test-stack.sh up`, `down` (keeps its volume), `remove` (deletes it), `status` |

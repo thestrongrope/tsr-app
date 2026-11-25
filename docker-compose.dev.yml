@@ -1,7 +1,7 @@
 # Local development stack. Run from the repo root on Windows or Mac (no Bash needed):
 #   docker compose -f docker-compose.dev.yml up -d --build
-# Then: gateway http://localhost:8088, database localhost:5433 (owner tsr / password local-only).
-# Both ports are published on 127.0.0.1 only. Every password here is a local-only placeholder,
+# Then, by OrbStack's names (no port): gateway https://gateway.tsr-app-dev.orb.local, database db.tsr-app-dev.orb.local (owner tsr / password local-only).
+# The gateway, the database and the auth emulator are also published on 127.0.0.1 (the Android emulator and tools/dev-auth reach them there). Every password here is a local-only placeholder,
 # never a production value.
 # Two database roles: tsr (owner, runs migrate and seed) and tsr_app (limited, the API; db/init/).
 # Start order: db healthy, then migrate (one-off: every domain's EF migrations), then seed (one-off:

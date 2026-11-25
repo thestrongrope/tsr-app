@@ -121,7 +121,7 @@ from the old `tsr-app/spikes/` path, so `docker start` breaks their bind mounts:
 `docker compose up -d` from the folder in `~/Projects/tsr-spikes/` to recreate one.
 
 ## Traps
-- Host port 8080 belongs to OrbStack; the gateway is on 8088.
+- The dev gateway is reached by its OrbStack name, `https://gateway.tsr-app-dev.orb.local` (host port 8080 belongs to OrbStack).
 - NuGet audit fails on old pins. Package versions live only in `Directory.Packages.props`.
 - `FeedbackText` counts code points, to match PHP `mb_strlen`.
 - Dev DB is PostgreSQL 18: compose runs `migrate` (API image `--migrate`) then `seed` (`db/synthetic/seed.sql`, psql). `postgres:18` data mounts at `/var/lib/postgresql`. EF migrations stay as generated (public): `PublicSurfaceTests` skips EF migration and snapshot classes by base type, so no hand edit is needed (command in root `CLAUDE.md`). The API connects as the limited `tsr_app` role (`db/init/01-app-role.sql`); `migrate` runs as the owner `tsr` in Production mode and grants `tsr_app` its rights. `dotnet test db/tests` needs Docker.

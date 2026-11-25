@@ -11,7 +11,7 @@ info:
     X-Permissions-Revision (components.headers.PermissionsRevision): success, 304, a download and the route's own refusals alike.
     A request refused at sign-in (401, and the 403 and 404 of the sign-in itself) and a route without sign-in carry none.
 servers:
-  - url: http://localhost:8088
+  - url: https://gateway.tsr-app-dev.orb.local
     description: Local dev stack (gateway)
 paths:
   /me/permissions:

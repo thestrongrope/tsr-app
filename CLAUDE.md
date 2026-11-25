@@ -74,7 +74,7 @@ What the product does today and what is still missing: `docs/specs/capability-ma
 
 ## Stacks: the rules that must not be broken
 
-- **The dev stack (:8088) may hold REAL member data and device tokens.** Never run a contract script, a seed or a reset on it. Never name a sending worker
+- **The dev stack (`https://gateway.tsr-app-dev.orb.local`, an OrbStack name, no port) may hold REAL member data and device tokens.** Never run a contract script, a seed or a reset on it. Never name a sending worker
   (`push-drain`, `class-schedules`) on it: with FCM credentials it would push to real phones. Update it only with `tools/dev-stack.sh up`.
 - **Hurl runs only against a synthetic stack**: the test stack (:8089) or a lane (`TSR_STACK=n`, 1 to 8, gateway `8100+n`).
 - **Never run `docker-compose.yml` (production) locally with real settings.** It holds no secret, no published port, no seed and no emulator
