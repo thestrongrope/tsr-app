@@ -43,3 +43,6 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Patrol writes this on every run
+**/patrol_test/test_bundle.dart

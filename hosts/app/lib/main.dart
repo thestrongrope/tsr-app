@@ -61,7 +61,14 @@ final appInitializationProvider = FutureProvider<void>((ref) async {
   // function throws in release).
   final emulator = authEmulatorTarget(release: kReleaseMode);
   if (emulator != null) {
-    await FirebaseAuth.instance.useAuthEmulator(emulator.host, emulator.port);
+    // No host rewrite: on Android the plugin would turn 127.0.0.1 into 10.0.2.2,
+    // which the debug network config does not allow plain HTTP to. The emulator
+    // is reached on 127.0.0.1 through `adb reverse` (docs/dev/mobile.md).
+    await FirebaseAuth.instance.useAuthEmulator(
+      emulator.host,
+      emulator.port,
+      automaticHostMapping: false,
+    );
   }
 
   // Analytics, release builds only, so developer testing does not land in the

@@ -164,22 +164,35 @@ Finder textMatching(RegExp pattern) => find.byWidgetPredicate(
 );
 
 /// Scrolls the class list until the card with [code] is built, then taps it.
+///
+/// The list is lazy and can rebuild under a settle (a refresh that lands after
+/// a search was cleared), which drops the card between finding it and tapping
+/// it. So the card is looked for again until it is on screen at the tap.
 Future<void> openClassFromList(PatrolIntegrationTester $, String code) async {
   // Text widgets only: find.text also matches the search box's own text, so a
   // query still typed there would be tapped instead of the class card.
   final card = find.byWidgetPredicate(
     (widget) => widget is Text && widget.data == code,
   );
-  await _stepClassList($, () => card.evaluate().isNotEmpty);
   // Tap the whole card, not the small code chip inside it: the chip can sit at
   // the clipped edge of the list under the app bar, where a tap lands on nothing.
-  final tile = find
-      .ancestor(of: card.first, matching: find.byType(InkWell))
-      .first;
-  await $.tester.ensureVisible(tile);
-  await $.pumpAndSettle(timeout: const Duration(seconds: 10));
-  await $.tester.tap(tile);
-  await $.pumpAndSettle(timeout: const Duration(seconds: 30));
+  Finder tile() =>
+      find.ancestor(of: card.first, matching: find.byType(InkWell)).first;
+  const looks = 5;
+  for (var look = 1; look <= looks; look++) {
+    await _stepClassList($, () => card.evaluate().isNotEmpty);
+    if (card.evaluate().isEmpty) {
+      await $.pumpAndSettle(timeout: const Duration(seconds: 10));
+      continue;
+    }
+    await $.tester.ensureVisible(tile());
+    await $.pumpAndSettle(timeout: const Duration(seconds: 10));
+    if (card.evaluate().isEmpty) continue;
+    await $.tester.tap(tile());
+    await $.pumpAndSettle(timeout: const Duration(seconds: 30));
+    return;
+  }
+  fail('class $code was not on the class list after $looks looks');
 }
 
 /// Pops the current route through the app's own router.
