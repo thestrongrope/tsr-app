@@ -63,26 +63,21 @@ void main() {
     }
   });
 
-  test('the server file claims join, MCQ, invite and guide links', () {
+  // The website hosts' file is served by this repo's site. The account host's
+  // file (invite and guide links) is served by the PHP app in tsr-account and
+  // is checked there.
+  test('the website file claims join, MCQ and article links', () {
     final aasa = File(
-      '../web/.well-known/apple-app-site-association',
+      '../site/wwwroot/.well-known/apple-app-site-association',
     ).readAsStringSync();
-    expect(aasa, contains('"/": "/join/*"'));
-    expect(aasa, contains('"/": "/mcq/*"'));
-    expect(aasa, contains('"/": "/link/*"'));
-    // A guide link names its guide in the query, so only that form is claimed.
     final components =
         (jsonDecode(aasa)['applinks']['details'][0]['components']
             as List<dynamic>);
-    expect(
-      components,
-      contains(
-        equals({
-          '/': '/guide.php',
-          '?': {'guide': '?*'},
-        }),
-      ),
-    );
+    expect(components, [
+      {'/': '/join/*'},
+      {'/': '/mcq/*'},
+      {'/': '/articles/*'},
+    ]);
     expect(aasa, contains('6GBKBN5BK5.com.thestrongrope'));
   });
 }
