@@ -1,5 +1,7 @@
 # Capability map: the Flutter app (tsr-account `mobile/`, version 1.6.0+23)
 
+Since 26 Nov 2026 the same app is `hosts/app` in this repository (1.6.1+24, tsr-account `b2a5fc70`). The rows below were read at 1.6.0 and have not been read again.
+
 Read on 15 Nov 2026 from source. Nothing was built or run: every statement is from reading code and docs.
 
 ## Summary
@@ -128,7 +130,9 @@ Every report screen pins a gender admin to their own gender; only a member whose
 
 ## Web and desktop readiness
 
-**This is an assessment from reading `pubspec.yaml` and the code, not a build result.** Plugin platform support below is from the plugins' general documentation as I know it, not from this project's lock file; treat each "yes" as "expected", and each "unsure" as needing a build.
+**Update, 26 Nov 2026, from a build.** The app in `hosts/app` builds for the web (profile and release) and starts in a browser against a synthetic lane; a member signs in by email through the Auth emulator and reaches profile completion. So three statements below no longer hold: `lib/firebase_options.dart` now has web options, start-up does not throw on the web, and the `dart:io` imports compile for the web. Still true: macOS, Windows and Linux have no Firebase options; `web/` has no messaging service worker. Not checked in a browser: every other item below (exports and downloads, push, deep links, the web view, layout), Google and Apple sign-in.
+
+**The rest is the assessment of 15 Nov 2026 from reading `pubspec.yaml` and the code, not a build result.** Plugin platform support below is from the plugins' general documentation as I know it, not from this project's lock file; treat each "yes" as "expected", and each "unsure" as needing a build.
 
 ### What the folders hold
 
