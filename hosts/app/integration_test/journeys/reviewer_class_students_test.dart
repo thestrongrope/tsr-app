@@ -29,7 +29,9 @@ void main() {
 
       // The positive comes first: an absence only means something once the tile
       // that should be there is known to have rendered.
-      await manage.classStudentsTile.waitUntilVisible();
+      // scrollTo, not waitUntilVisible: the tile is the last quick action and
+      // sits below the fold since Class events joined the list (#975).
+      await manage.classStudentsTile.scrollTo();
       // A teacher's Edit class opens the schedule only; the editor's tile also
       // offers the details and the students.
       expect(

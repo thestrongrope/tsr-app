@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:patrol/patrol.dart';
+import 'package:the_strong_rope/core/widgets/app_surface_card.dart';
 import 'package:the_strong_rope/core/widgets/glass_bottom_nav_bar.dart';
 
 /// Finders for the Publications screen and the way a guest reaches it.
@@ -14,10 +15,13 @@ class PublicationsScreenObject {
 
   final PatrolIntegrationTester $;
 
-  /// The Library tab, and its Publications item.
+  /// The Library tab, and its Publications shortcut. By key: the Library
+  /// screen also heads a section "Publications", so the text alone is two
+  /// widgets, and the shortcut has been a chip, not a list tile, since #1000.
   PatrolFinder get libraryTab => $(GlassBottomNavBar).$('Library');
 
-  PatrolFinder get libraryItem => $(ListTile).containing('Publications');
+  PatrolFinder get libraryItem =>
+      $(const ValueKey('libraryShortcut:publications'));
 
   PatrolFinder get title => $(AppBar).$('Publications');
 
@@ -27,8 +31,8 @@ class PublicationsScreenObject {
 
   PatrolFinder get hindiChip => $(ChoiceChip).containing('Hindi');
 
-  /// One per publication shown.
-  PatrolFinder get cards => $(Card);
+  /// One per publication shown: the screen's only [AppSurfaceCard]s.
+  PatrolFinder get cards => $(AppSurfaceCard);
 
   /// A card's language line, e.g. "Hindi · PDF · Updated Apr 06, 2024".
   PatrolFinder detailsIn(String language) =>
