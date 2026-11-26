@@ -1,0 +1,20 @@
+// Barrel file for all class screens
+export 'class_dashboard_screen.dart';
+export 'class_detail_screen.dart';
+export 'class_registration_screen.dart';
+export 'class_performance_screen.dart';
+export 'conduction_list_screen.dart';
+export 'conduction_form_screen.dart';
+export 'quiz_list_screen.dart';
+export 'quiz_taking_screen.dart';
+export 'join_link_screen.dart';
+export 'mcq_link_screen.dart';
+export 'quiz_result_screen.dart';
+export 'guide_link_screen.dart';
+export 'guide_screen.dart';
+export 'syllabus_screen.dart';
+export 'class_send_notification_screen.dart';
+export 'scheduled_notifications_screen.dart';
+export 'class_manage_screen.dart';
+export 'class_schedule_screen.dart';
+export 'class_student_figures_screen.dart';

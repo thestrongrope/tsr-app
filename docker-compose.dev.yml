@@ -197,6 +197,23 @@ services:
       timeout: 3s
       retries: 5
 
+  # The web copy of the member app (hosts/app/Dockerfile). It starts only with the compose profile "app", because the image
+  # takes minutes to build. The API address and the Auth emulator's address are compiled in, as the BROWSER reaches them, so
+  # the literal values here are the dev stack's; the test stack and the lanes override them with their own. The API answers
+  # the app only when TSR_CORS_ORIGINS names the app's origin (here http://localhost:8078).
+  app:
+    profiles: ["app"]
+    build:
+      context: .
+      dockerfile: hosts/app/Dockerfile
+      args:
+        TSR_API_BASE_URL: http://localhost:8088
+        TSR_AUTH_EMULATOR_HOST: 127.0.0.1:19099
+    ports:
+      - "127.0.0.1:8078:80"
+    depends_on:
+      - gateway
+
 volumes:
   db-data:
   emulator-cache:
