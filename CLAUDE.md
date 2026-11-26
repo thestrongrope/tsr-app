@@ -2,7 +2,7 @@
 
 `tsr-app`: The Strong Rope's monorepo, **domain-first**. One product, two delivery paths (a
 Flutter app, a static public site), one API. The API is a C# rebuild of the PHP API in tsr-account and is checked
-against it; it is not deployed yet. The full design is `docs/specs/repo-structure.md` (Part 1 is the one-page summary).
+against it; it is deployed (0.9.0) but holds no members' data yet, and the store apps still call PHP. The full design is `docs/specs/repo-structure.md` (Part 1 is the one-page summary).
 
 ## North star (Asif, 11 Nov 2026): everything else is secondary
 
@@ -35,7 +35,7 @@ read it before editing.
 | A new feature or change: spec, plan, verification | GitHub issue (spec), draft PR description (plan) | `spec-driven-development` skill; templates in `.github/` and `docs/templates/` |
 | API startup, module list, middleware | `hosts/api/` | `Program.cs`, `Modules.cs` |
 | The gateway of the dev and test stacks (per path: PHP or the new API; production has none) | `hosts/gateway/` | `default.conf` |
-| The Flutter shell | `hosts/app/` | `lib/main.dart` |
+| The Flutter app (the whole member app, moved from tsr-account; screens move into `domains/<context>/app/` as they are touched) and its web image | `hosts/app/` | `lib/main.dart`, `Dockerfile` |
 | The static site generator | `hosts/site/` | `SiteModules.cs`, `Program.cs`; a domain's pages are in `domains/<context>/site/` |
 | Plumbing every domain uses (DB, outbox, HTTP client, site API reader) | `shared/api/`, `shared/app/`, `shared/site/` | the file you need; no rules live here |
 | A table or migration | the domain's `api/<Context>Context.cs` and `api/Migrations/` (add: `dotnet ef migrations add <Name> --context <Domain>Context --project domains/<d>/api --startup-project hosts/api --output-dir Migrations -- --TSR_DB=Host=unused --TSR_FIREBASE_PROJECT_ID=demo-design --environment=Production --migrate`; a converted domain's context is registered in migrate mode only, so `--migrate` is needed; the generated files need no edit) | `docs/specs/initial-build/phase-0-design.md` |
