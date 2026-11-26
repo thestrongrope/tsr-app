@@ -1,11 +1,11 @@
 {
-    "name": "tsr_app",
-    "short_name": "tsr_app",
+    "name": "The Strong Rope",
+    "short_name": "the_strong_rope",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "The Strong Rope app: Islamic duas, lectures & Ahlul Bayt (a.s.) content.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

@@ -1,0 +1,122 @@
+{
+  "project_info": {
+    "project_number": "1084079686627",
+    "project_id": "the-strong-rope",
+    "storage_bucket": "the-strong-rope.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1084079686627:android:c7b82a126ee2b8747c96d6",
+        "android_client_info": {
+          "package_name": "com.example.mobile"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1084079686627-4vq37e05bf21c6f9b0ud6915pkautrk6.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.mobile",
+            "certificate_hash": "052174bb078cfb9225bbe367b7df3e6243bf1002"
+          }
+        },
+        {
+          "client_id": "1084079686627-l3v64qlhs9be1fmi2iedu2c5o7gdbcs6.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBCtnSeM8Fv73-jQDENsZBxMLMu7w6uYCw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1084079686627-l3v64qlhs9be1fmi2iedu2c5o7gdbcs6.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "1084079686627-0dh8pvou1ecbgr4hgt47tgn1sb24g2nb.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.tsrFlutter"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1084079686627:android:5bf22b5e1621ef967c96d6",
+        "android_client_info": {
+          "package_name": "com.thestrongrope"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1084079686627-cgt0oh4hc35moc6csnm9cncs73r24d8b.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.thestrongrope",
+            "certificate_hash": "052174bb078cfb9225bbe367b7df3e6243bf1002"
+          }
+        },
+        {
+          "client_id": "1084079686627-lv3r6p0p3tio8tkfibcirjkpr2polbl4.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.thestrongrope",
+            "certificate_hash": "5512d62b5557376cf6a61b0a1828c97678d9f49a"
+          }
+        },
+        {
+          "client_id": "1084079686627-m0f8b6eaku1b0afdpk0klc6oklpffnvi.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.thestrongrope",
+            "certificate_hash": "5869371bdd660e1438e4dbee6603bdb2f07ae95f"
+          }
+        },
+        {
+          "client_id": "1084079686627-sf2rik7prqdj58kj9mode6dts0t32o5g.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.thestrongrope",
+            "certificate_hash": "ec00c92e42d4d37a9b0fd8b25cfe898db9e098fa"
+          }
+        },
+        {
+          "client_id": "1084079686627-l3v64qlhs9be1fmi2iedu2c5o7gdbcs6.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBCtnSeM8Fv73-jQDENsZBxMLMu7w6uYCw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1084079686627-l3v64qlhs9be1fmi2iedu2c5o7gdbcs6.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "1084079686627-0dh8pvou1ecbgr4hgt47tgn1sb24g2nb.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.tsrFlutter"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

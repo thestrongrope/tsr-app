@@ -1,25 +1,125 @@
-# The Flutter shell: main.dart, navigation, theme, platform folders. Holds no screens of its own;
-# each screen lives in its domain's package (domains/<context>/app). Built by Codemagic.
-name: tsr_app
-description: "The Strong Rope app shell (tsr-app sample)."
-publish_to: none
-version: 0.1.0+1
+name: the_strong_rope
+description: "The Strong Rope app: Islamic duas, lectures & Ahlul Bayt (a.s.) content."
+publish_to: 'none'
+
+version: 1.6.1+24
+
+resolution: workspace
 
 environment:
   sdk: ^3.8.1
 
-resolution: workspace
-
 dependencies:
   flutter:
     sdk: flutter
-  tsr_shared_app: any
-  tsr_platform_app: any
+  # Needed by flutter_quill's localization delegates (see lib/main.dart).
+  flutter_localizations:
+    sdk: flutter
+
+  # Firebase & Authentication
+
+
+  firebase_core: ^4.2.0
+  firebase_auth: ^6.1.1  
+  google_sign_in: ^7.2.0  
+  firebase_messaging: ^16.0.3 
+  flutter_local_notifications: ^19.5.0 
+
+  # State Management & Navigation
+  flutter_riverpod: ^3.0.3
+  go_router: ^16.2.5 
+
+  # Network & API
+  dio: ^5.9.0 
+
+  # HTML rendering (WordPress content)
+  flutter_html: ^3.0.0
+
+  # PDF viewing & storage helpers
+  path_provider: ^2.1.5
+
+  # URL launching for external links
+  url_launcher: ^6.3.2  
+
+  # Internationalization utilities (date formatting)
+  intl: ^0.20.2
+
+  # Timezone data for scheduled local notifications (TZDateTime)
+  timezone: ^0.10.0
+
+  # Storage (hive_ce = community-maintained fork of hive, drop-in API)
+  hive_ce: ^2.19.3
+  hive_ce_flutter: ^2.3.4
+  flutter_secure_storage: ^11.2.0
+
+  # Code Generation
+  freezed_annotation: ^3.1.0
+  json_annotation: ^4.9.0
+
+  # Device & Package Info
+  device_info_plus: ^13.2.0
+  package_info_plus: ^10.2.1
+  riverpod: ^3.0.3
+  share_plus: ^13.2.0
+  open_filex: ^4.7.0
+  firebase_crashlytics: ^5.3.0
+  firebase_analytics: ^12.5.0
+  flutter_quill: ^11.6.0
+  html: ^0.15.6
+  vsc_quill_delta_to_html: ^1.0.5
+  qr_flutter: ^4.1.0
+  webview_flutter: ^4.14.1
+  connectivity_plus: ^7.3.1
+  cached_network_image: ^4.0.5
+  flutter_timezone: ^5.1.1
 
 dev_dependencies:
-  flutter_lints: ^6.0.0
   flutter_test:
     sdk: flutter
 
+  flutter_launcher_icons: ^0.14.4
+
+  flutter_lints: ^6.0.0
+  
+  # Codegen toolchain pinned to a mutually-compatible set for Flutter 3.44/Dart 3.12.
+  # All share analyzer 8.x / build 4.x / source_gen 4.x. (hive_generator 2.0.1 is
+  # unmaintained and hard-conflicts with the modern analyzer, so hive_ce is used.)
+  build_runner: 2.9.0
+  hive_ce_generator: 1.10.0
+  freezed: 3.2.3
+  json_serializable: 6.11.2
+  patrol: ^4.10.0
+
+dependency_overrides:
+  # Pin html to 0.15.6: html 0.15.7 removed the top-level `matches(node, selector)`
+  # which flutter_html 3.0.0 relies on via package:html/src/query_selector.dart.
+  html: 0.15.6
+
 flutter:
   uses-material-design: true
+  
+  assets:
+    - assets/images/logo/
+
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "design/icon.png"
+  # App Store upload is rejected with error 90717 if the large app icon has an
+  # alpha channel, and design/icon.png has transparent corners because it bakes
+  # in its own rounding. icon_ios.png is the same artwork with those corners
+  # filled from the adjacent edge colour, so iOS masks it to an identical shape.
+  image_path_ios: "design/icon_ios.png"
+  remove_alpha_ios: true
+  min_sdk_android: 21 # android min sdk min:16, default 21
+
+# Patrol integration tests. Identifiers match android/app/build.gradle.kts
+# (applicationId/namespace) and the iOS bundle id; patrol_cli reads them to
+# install and drive the app under test.
+# Design: docs/specs/patrol-integration-testing/design.md
+patrol:
+  app_name: The Strong Rope
+  android:
+    package_name: com.thestrongrope
+  ios:
+    bundle_id: com.thestrongrope
