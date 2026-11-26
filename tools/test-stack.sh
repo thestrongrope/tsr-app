@@ -4,6 +4,7 @@
 # the project name, and the published ports differ. The internal-only gotenberg PDF renderer has no host port.
 # Usage: [TSR_STACK=n] tools/test-stack.sh up | down | remove | status
 #   up      build and start (migrate and seed run once); waits for the API through the gateway
+#           TSR_WITH_APP=1 also builds and starts the web app (8079; a lane: 8110+n)
 #   down    stop and delete the containers, KEEP the volume
 #   remove  stop and delete the containers AND the volume (a clean database next time)
 # Default (TSR_STACK unset): project tsr-app-test, gateway :8089, database :5434, Auth emulator :19100, docker-compose.test.yml.
@@ -41,6 +42,13 @@ services:
   gateway:
     ports: !override
       - "127.0.0.1:$TSR_TEST_GATEWAY_PORT:8080"
+  app:
+    build:
+      args:
+        TSR_API_BASE_URL: http://localhost:$TSR_TEST_GATEWAY_PORT
+        TSR_AUTH_EMULATOR_HOST: 127.0.0.1:$TSR_TEST_EMULATOR_PORT
+    ports: !override
+      - "127.0.0.1:$TSR_TEST_APP_PORT:80"
 YML
   case "${TSR_LANE_WORKERS:-}" in
     "") ;;
@@ -91,7 +99,13 @@ fi
 # lane names the profile too, so a workers or Elasticsearch container started with TSR_LANE_WORKERS is removed whether or not the variable is set now.
 PROFILE=()
 if [ -z "${TSR_STACK:-}" ]; then PROFILE=(--profile workers); fi
-case "${1:-}" in down|remove) PROFILE=(--profile workers) ;; esac
+case "${1:-}" in down|remove) PROFILE=(--profile workers --profile app) ;; esac
+# TSR_WITH_APP=1 at `up` also builds and starts the web app (compose profile "app", several minutes the first time) on
+# http://localhost:$TSR_TEST_APP_PORT, and lets that origin call the API unless TSR_CORS_ORIGINS already names others.
+if [ "${1:-}" = up ] && [ "${TSR_WITH_APP:-}" = 1 ]; then
+  PROFILE+=(--profile app)
+  export TSR_CORS_ORIGINS="${TSR_CORS_ORIGINS:-http://localhost:$TSR_TEST_APP_PORT}"
+fi
 stack() { docker compose -p "$TSR_TEST_PROJECT" -f docker-compose.dev.yml -f "$OVERRIDE" ${PROFILE[@]+"${PROFILE[@]}"} "$@"; }
 
 case "${1:?usage: test-stack.sh up|down|remove|status}" in

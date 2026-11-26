@@ -26,3 +26,11 @@ services:
       TSR_WORKERS: search-feed,content-refresh
       TSR_CONTENT_DIR: /var/tsr/content
       TSR_YOUTUBE_CHANNEL_ID: ""
+  # The web app of the test stack (TSR_WITH_APP=1 tools/test-stack.sh up): built for this stack's gateway and Auth emulator.
+  app:
+    build:
+      args:
+        TSR_API_BASE_URL: http://localhost:8089
+        TSR_AUTH_EMULATOR_HOST: 127.0.0.1:19100
+    ports: !override
+      - "127.0.0.1:8079:80"

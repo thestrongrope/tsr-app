@@ -1,0 +1,18 @@
+# The ignore file of hosts/app/Dockerfile alone (the root .dockerignore leaves every Flutter folder out, so it cannot be used).
+# Everything is left out except what the web build reads.
+*
+!pubspec.yaml
+!pubspec.lock
+!hosts/app
+!shared/app
+!domains/platform/app
+**/.dart_tool
+**/build
+hosts/app/android
+hosts/app/ios
+hosts/app/macos
+hosts/app/linux
+hosts/app/windows
+hosts/app/design
+hosts/app/test
+hosts/app/integration_test
