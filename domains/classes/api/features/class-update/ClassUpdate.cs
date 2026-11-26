@@ -4,7 +4,7 @@ using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Microsoft.Extensions.Configuration;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
@@ -47,7 +47,7 @@ internal static partial class ClassUpdateSlice
     }
 
     private static async Task<IResult> HandleAsync(
-        string class_id, HttpContext context, ClassesContext db, Permissions permissions, IConfiguration configuration, TimeProvider clock, CancellationToken ct)
+        string class_id, HttpContext context, NpgsqlDataSource source, Permissions permissions, IConfiguration configuration, TimeProvider clock, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -55,7 +55,7 @@ internal static partial class ClassUpdateSlice
             return Problem.Unauthenticated();
         }
 
-        var head = await ClassGuards.FindActiveClassAsync(db, ClassGuards.IdOf(class_id), ct);
+        var head = await ClassGuards.FindActiveClassAsync(source, ClassGuards.IdOf(class_id), ct);
         if (head is null)
         {
             return Refusals.ClassNotFound();
@@ -66,24 +66,24 @@ internal static partial class ClassUpdateSlice
             return Problem.Detail(StatusCodes.Status403Forbidden, "You do not have permission to manage this class");
         }
 
-        await ClassGuards.LogAdminAccessAsync(db, context, permissions, caller, ct);
+        await ClassGuards.LogAdminAccessAsync(context, permissions, caller, ct);
         var (body, refusal) = await RequestBodies.ReadAsync(context.Request, ct);
         if (refusal is not null)
         {
             return refusal;
         }
 
-        var changes = await ParseAsync(db, body!, head, ct);
+        var changes = await ParseAsync(source, body!, head, ct);
         if (!changes.IsSuccess)
         {
             return Problem.Detail(StatusCodes.Status422UnprocessableEntity, changes.Error!);
         }
 
-        await SaveAsync(db, clock, head.Id, changes.Value!, caller.Token, ct);
-        return Results.Json(await ManagePayload.BuildAsync(db, permissions, configuration, caller, head.Id, ct));
+        await SaveAsync(source, clock, head.Id, changes.Value!, caller.Token, ct);
+        return Results.Json(await ManagePayload.BuildAsync(source, permissions, configuration, caller, head.Id, ct), ClassesJson.Answers.Answer);
     }
 
-    private static async Task<Result<Changes>> ParseAsync(ClassesContext db, JsonBody body, ClassGuards.ClassHead head, CancellationToken ct)
+    private static async Task<Result<Changes>> ParseAsync(NpgsqlDataSource source, JsonBody body, ClassGuards.ClassHead head, CancellationToken ct)
     {
         if (!TryLanguage(body.Get("languageId"), out var language))
         {
@@ -114,7 +114,7 @@ internal static partial class ClassUpdateSlice
             text[field] = parsed.Value;
         }
 
-        var teacher = await TeacherAsync(db, body.Get("teacher"), head, ct);
+        var teacher = await TeacherAsync(source, body.Get("teacher"), head, ct);
         if (!teacher.IsSuccess)
         {
             return Result.Fail<Changes>(teacher.Error!);
@@ -126,9 +126,10 @@ internal static partial class ClassUpdateSlice
             return Result.Fail<Changes>(tags.Error!);
         }
 
-        var topicIds = (await db.Database
-            .SqlQuery<int>($"""select id as "Value" from classes.topics where deleted_at is null limit {MaxRows}""")
-            .ToListAsync(ct)).ToHashSet();
+        var topicIds = (await source.ListAsync(
+            $"""select id as "Value" from classes.topics where deleted_at is null limit {MaxRows}""",
+            row => row.Int("Value"),
+            ct)).ToHashSet();
         var slots = ScheduleInput.Parse(body.Get("schedules"), topicIds);
         if (!slots.IsSuccess)
         {
@@ -211,7 +212,7 @@ internal static partial class ClassUpdateSlice
         return Result.Ok<string?>(trimmed.Length == 0 ? null : trimmed);
     }
 
-    private static async Task<Result<int>> TeacherAsync(ClassesContext db, JsonElement value, ClassGuards.ClassHead head, CancellationToken ct)
+    private static async Task<Result<int>> TeacherAsync(NpgsqlDataSource source, JsonElement value, ClassGuards.ClassHead head, CancellationToken ct)
     {
         if (!PhpValue.IsInt(value, out var number) || number <= 0)
         {
@@ -219,10 +220,11 @@ internal static partial class ClassUpdateSlice
         }
 
         var teacher = (int)Math.Min(number, int.MaxValue);
-        var current = await db.Database
-            .SqlQuery<int>($"""select coalesce(teacher, 0) as "Value" from classes.classes where id = {head.Id}""")
-            .SingleAsync(ct);
-        if (teacher != current && !await TeacherSearch.IsCandidateAsync(db, teacher, head.Gender == 1, ct))
+        var current = (await source.ListAsync(
+            $"""select coalesce(teacher, 0) as "Value" from classes.classes where id = {head.Id}""",
+            row => row.Int("Value"),
+            ct)).Single();
+        if (teacher != current && !await TeacherSearch.IsCandidateAsync(source, teacher, head.Gender == 1, ct))
         {
             return Result.Fail<int>("teacher is not a member who can be assigned");
         }
@@ -256,40 +258,41 @@ internal static partial class ClassUpdateSlice
         return Result.Ok(ids);
     }
 
-    private static async Task SaveAsync(ClassesContext db, TimeProvider clock, int classId, Changes c, int by, CancellationToken ct)
+    private static async Task SaveAsync(NpgsqlDataSource source, TimeProvider clock, int classId, Changes c, int by, CancellationToken ct)
     {
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        var started = c.StartedOn is null ? (DateOnly?)null : DateOnly.ParseExact(c.StartedOn, "yyyy-MM-dd", CultureInfo.InvariantCulture);
-        await db.Database.ExecuteSqlAsync(
+        await using var tx = await source.BeginAsync(ct);
+        await tx.ExecuteAsync(
             $"""
-            update classes.classes set started_on = {started}, language_id = {c.LanguageId}, location = {c.Text["location"]}, format = {c.Format}, address = {c.Text["address"]},
+            update classes.classes set started_on = {c.StartedOn}::date, language_id = {c.LanguageId}, location = {c.Text["location"]}, format = {c.Format}, address = {c.Text["address"]},
                    city = {c.Text["city"]}, country = {c.Text["country"]}, teacher = {c.Teacher}, updated_by = {by}
             where id = {classId}
             """,
             ct);
-        await SaveTagsAsync(db, classId, c.Tags, by, ct);
-        await ScheduleWriter.ApplyAsync(db, classId, c.Slots, by, ct);
-        await Outbox.WriteAsync(db, "classes.class_updated", new ClassUpdated(classId, by), clock, ct);
-        await transaction.CommitAsync(ct);
+        await SaveTagsAsync(tx, classId, c.Tags, by, ct);
+        await ScheduleWriter.ApplyAsync(tx, classId, c.Slots, by, ct);
+        await Outbox.WriteAsync(tx, "classes.class_updated", new ClassUpdated(classId, by), ClassesJson.Default.ClassUpdated, clock, ct);
+        await tx.CommitAsync(ct);
     }
 
     // PHP: the submitted ids that are live tags; added ones are (re)activated, ids the class had and no longer lists are soft-deleted.
-    private static async Task SaveTagsAsync(ClassesContext db, int classId, List<int> submitted, int by, CancellationToken ct)
+    private static async Task SaveTagsAsync(DbTx tx, int classId, List<int> submitted, int by, CancellationToken ct)
     {
         var requested = submitted.ToArray();
-        var valid = (await db.Database
-            .SqlQuery<int>($"""select id as "Value" from classes.tags where deleted_at is null and id = any({requested}) limit {MaxRows}""")
-            .ToListAsync(ct)).ToHashSet();
-        var current = (await db.Database
-            .SqlQuery<int>($"""
-                select t.id as "Value" from classes.class_tags ct join classes.tags t on t.id = ct.tag_id
-                where ct.class_id = {classId} and t.deleted_at is null and ct.deleted_at is null limit {MaxRows}
-                """)
-            .ToListAsync(ct)).ToHashSet();
+        var valid = (await tx.ListAsync(
+            $"""select id as "Value" from classes.tags where deleted_at is null and id = any({requested}) limit {MaxRows}""",
+            row => row.Int("Value"),
+            ct)).ToHashSet();
+        var current = (await tx.ListAsync(
+            $"""
+            select t.id as "Value" from classes.class_tags ct join classes.tags t on t.id = ct.tag_id
+            where ct.class_id = {classId} and t.deleted_at is null and ct.deleted_at is null limit {MaxRows}
+            """,
+            row => row.Int("Value"),
+            ct)).ToHashSet();
 
         foreach (var tag in valid.Except(current))
         {
-            await db.Database.ExecuteSqlAsync(
+            await tx.ExecuteAsync(
                 $"""
                 insert into classes.class_tags (class_id, tag_id, created_by) values ({classId}, {tag}, {by})
                 on conflict (class_id, tag_id) do update set deleted_at = null, deleted_by = null
@@ -299,7 +302,7 @@ internal static partial class ClassUpdateSlice
 
         foreach (var tag in current.Except(valid))
         {
-            await db.Database.ExecuteSqlAsync(
+            await tx.ExecuteAsync(
                 $"update classes.class_tags set deleted_at = now(), deleted_by = {by} where class_id = {classId} and tag_id = {tag} and deleted_at is null",
                 ct);
         }

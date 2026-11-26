@@ -53,6 +53,6 @@ internal static partial class WhatsappReminderRunSlice
 
         var runId = NotifierRows.Int(NotifierRows.Field(data, "run_id")) ?? 0;
         LogStarted(log, id, dryRun, runId);
-        return Results.Json(new Started(runId, dryRun), statusCode: StatusCodes.Status202Accepted);
+        return Results.Json(new Started(runId, dryRun), NotificationsJson.Answers.Started, contentType: null, statusCode: StatusCodes.Status202Accepted);
     }
 }

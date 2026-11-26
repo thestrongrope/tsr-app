@@ -1,9 +1,9 @@
 using System.Net;
 using System.Text.Json.Nodes;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using NUnit.Framework;
 using Tsr.Identity.Api;
+using Tsr.Shared.Api;
 
 namespace Tsr.Db.Tests;
 
@@ -184,7 +184,7 @@ internal sealed class FakeFirebase : IFirebaseAccounts
 /// <summary>An erasure port that fails after the earlier steps of a completion ran in the transaction.</summary>
 internal sealed class FailingErasure : IMemberErasure
 {
-    public Task EraseAsync(DbContext db, int token, CancellationToken ct) => throw new InvalidOperationException("injected failure");
+    public Task EraseAsync(DbTx tx, int token, CancellationToken ct) => throw new InvalidOperationException("injected failure");
 }
 
 internal static class ReplyAssert

@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
 using Tsr.Shared.Api;
@@ -21,7 +22,7 @@ internal static class ConductionUpdateSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string class_id, string session_id, HttpContext context, ClassesContext db, Permissions permissions, TimeProvider clock, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(string class_id, string session_id, HttpContext context, NpgsqlDataSource source, Permissions permissions, TimeProvider clock, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -29,13 +30,13 @@ internal static class ConductionUpdateSlice
             return Problem.Unauthenticated();
         }
 
-        var (head, refusal) = await ConductionData.OpenAsync(db, permissions, caller, class_id, "sessions:update", ct);
+        var (head, refusal) = await ConductionData.OpenAsync(source, permissions, caller, class_id, "sessions:update", ct);
         if (refusal is not null)
         {
             return refusal;
         }
 
-        var session = await ConductionData.GetSessionAsync(db, ClassGuards.IdOf(session_id), ct);
+        var session = await ConductionData.GetSessionAsync(source, ClassGuards.IdOf(session_id), ct);
         if (session is null || session.ClassId != head!.Id)
         {
             return Problem.Detail(StatusCodes.Status404NotFound, "Session not found");
@@ -58,12 +59,12 @@ internal static class ConductionUpdateSlice
             return Problem.Detail(StatusCodes.Status422UnprocessableEntity, payload.Error!);
         }
 
-        if (!await ConductionWriter.UpdateAsync(db, clock, head.Id, session.Id, caller.Token, payload.Value!, ct))
+        if (!await ConductionWriter.UpdateAsync(source, clock, head.Id, session.Id, caller.Token, payload.Value!, ct))
         {
             return Problem.Detail(StatusCodes.Status409Conflict, "Another session already exists for this date");
         }
 
-        var saved = await ConductionData.GetSessionAsync(db, session.Id, ct);
-        return Results.Json(ConductionData.ToItem(saved!, clock.GetUtcNow()));
+        var saved = await ConductionData.GetSessionAsync(source, session.Id, ct);
+        return Results.Json(ConductionData.ToItem(saved!, clock.GetUtcNow()), ClassesJson.Answers.ConductionSessionItem);
     }
 }

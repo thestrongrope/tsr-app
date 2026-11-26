@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Npgsql;
 using Tsr.Access.Api.Domain;
 using Tsr.Shared.Api;
 
@@ -17,7 +18,7 @@ internal static class AdminPermissionMemberSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string token, HttpContext context, AccessContext db, Permissions permissions, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(string token, HttpContext context, NpgsqlDataSource source, Permissions permissions, CancellationToken ct)
     {
         var refusal = await PermissionGrants.GuardAsync(context, permissions, ct);
         if (refusal is not null)
@@ -25,7 +26,7 @@ internal static class AdminPermissionMemberSlice
             return refusal;
         }
 
-        var view = await PermissionGrants.ViewAsync(db, permissions, AdminMembers.TokenOf(token), ct);
-        return view is null ? Problem.Detail(StatusCodes.Status404NotFound, "Member not found") : Results.Json(view);
+        var view = await PermissionGrants.ViewAsync(source, permissions, AdminMembers.TokenOf(token), ct);
+        return view is null ? Problem.Detail(StatusCodes.Status404NotFound, "Member not found") : Results.Json(view, AccessJson.Answers.GrantMemberView);
     }
 }

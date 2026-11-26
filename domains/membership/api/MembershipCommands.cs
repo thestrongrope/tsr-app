@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+using Tsr.Membership.Api.Domain;
 using Tsr.Shared.Api;
 
 namespace Tsr.Membership.Api;
@@ -13,15 +13,10 @@ public static class MembershipCommands
     /// PHP <c>writeEnrolment</c>'s first step: a member who has no class request at all gets an Accepted one naming the class they were placed in. A member who has any row
     /// (whatever its status) is left alone. Run inside the caller's transaction.
     /// </summary>
-    public static async Task RecordAcceptedRegistrationAsync(DbContext db, int token, int classId, CancellationToken ct)
+    public static async Task RecordAcceptedRegistrationAsync(DbTx tx, int token, int classId, CancellationToken ct)
     {
-        ArgumentNullException.ThrowIfNull(db);
-        if (db.Database.CurrentTransaction is null)
-        {
-            throw new InvalidOperationException("An accepted registration is written inside the transaction of the enrolment it belongs to.");
-        }
-
-        await db.Database.ExecuteSqlAsync(
+        ArgumentNullException.ThrowIfNull(tx);
+        await tx.ExecuteAsync(
             $"""
             insert into membership.class_registrations (token, for_classid, status)
             select {token}, {classId}, 'Accepted'
@@ -39,9 +34,9 @@ public static class MembershipCommands
     /// token is written, as PHP wrote every users row of it; a token with no profile changes nothing. No history row (PHP writes none). Writes one outbox row, <c>membership.member_contact_changed</c>.
     /// Run inside the caller's transaction.
     /// </summary>
-    public static async Task ChangeContactAsync(DbContext db, int token, string? name, string mobile, TimeProvider clock, CancellationToken ct)
+    public static async Task ChangeContactAsync(DbTx tx, int token, string? name, string mobile, TimeProvider clock, CancellationToken ct)
     {
-        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(tx);
         ArgumentNullException.ThrowIfNull(mobile);
         ArgumentNullException.ThrowIfNull(clock);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(token);
@@ -52,29 +47,22 @@ public static class MembershipCommands
             ArgumentOutOfRangeException.ThrowIfGreaterThan(name.Length, MaxNameLength);
         }
 
-        if (db.Database.CurrentTransaction is null)
-        {
-            throw new InvalidOperationException("A contact change is written inside the transaction of the edit it belongs to.");
-        }
-
-        await db.Database.ExecuteSqlAsync(
+        await tx.ExecuteAsync(
             $"""
             update membership.member_profiles set name = coalesce({name}, name), mobile = {mobile}
             where user_id in (select id from identity.v_users where token = {token})
             """,
             ct);
-        await Outbox.WriteAsync(db, "membership.member_contact_changed", new MemberContactChanged(token, name is not null), clock, ct);
+        await Outbox.WriteAsync(tx, "membership.member_contact_changed", new MemberContactChanged(token, name is not null), MembershipJson.Default.MemberContactChanged, clock, ct);
     }
-
-    private sealed record MemberContactChanged(int Token, bool NameChanged);
 
     /// <summary>
     /// PHP <c>createClassStudent</c>'s profile columns for a member just created by <c>IdentityCommands.CreateMemberAsync</c>: the name, the gender (the raw text PHP keeps, the class's number) and the mobile
     /// (may be empty). No other profile column is written. The token must name an existing user without a profile. Writes one outbox row, <c>membership.member_created</c>. Run inside the caller's transaction.
     /// </summary>
-    public static async Task CreateProfileAsync(DbContext db, int token, string name, string gender, string mobile, TimeProvider clock, CancellationToken ct)
+    public static async Task CreateProfileAsync(DbTx tx, int token, string name, string gender, string mobile, TimeProvider clock, CancellationToken ct)
     {
-        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(tx);
         ArgumentNullException.ThrowIfNull(clock);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(token);
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
@@ -83,12 +71,7 @@ public static class MembershipCommands
         ArgumentOutOfRangeException.ThrowIfGreaterThan(name.Length, MaxNameLength);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(gender.Length, MaxGenderLength);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(mobile.Length, MaxMobileLength);
-        if (db.Database.CurrentTransaction is null)
-        {
-            throw new InvalidOperationException("A member profile is created inside the transaction of the add it belongs to.");
-        }
-
-        var written = await db.Database.ExecuteSqlAsync(
+        var written = await tx.ExecuteAsync(
             $"""
             insert into membership.member_profiles (user_id, name, gender, mobile)
             select id, {name}, {gender}, {mobile} from identity.v_users where token = {token}
@@ -99,7 +82,7 @@ public static class MembershipCommands
             throw new InvalidOperationException("No member has that token.");
         }
 
-        await Outbox.WriteAsync(db, "membership.member_created", new MemberCreated(token), clock, ct);
+        await Outbox.WriteAsync(tx, "membership.member_created", new MemberCreated(token), MembershipJson.Default.MemberCreated, clock, ct);
     }
 
     private const int MaxGenderLength = 200;
@@ -111,16 +94,11 @@ public static class MembershipCommands
     /// interests (and other), education block (education, field of study and other, professional courses and other, occupation type, field of work, years of experience, role level),
     /// LinkedIn URL and the status reason are null; status, class and dates are kept. Run inside the caller's transaction.
     /// </summary>
-    public static async Task EraseMemberAsync(DbContext db, int token, CancellationToken ct)
+    public static async Task EraseMemberAsync(DbTx tx, int token, CancellationToken ct)
     {
-        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(tx);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(token);
-        if (db.Database.CurrentTransaction is null)
-        {
-            throw new InvalidOperationException("A member is erased inside the transaction of the deletion it belongs to.");
-        }
-
-        await db.Database.ExecuteSqlAsync(
+        await tx.ExecuteAsync(
             $"""
             update membership.member_profiles
             set name = 'Deleted member', first_name = null, last_name = null, picture = null, gender = null, age_range = null,
@@ -128,7 +106,7 @@ public static class MembershipCommands
             where user_id in (select id from identity.v_users where token = {token})
             """,
             ct);
-        await db.Database.ExecuteSqlAsync(
+        await tx.ExecuteAsync(
             $"""
             update membership.class_registrations
             set residence_location = null, work_location = null, preferred_location = null, birth_year = null, profession = null,
@@ -139,6 +117,4 @@ public static class MembershipCommands
             """,
             ct);
     }
-
-    private sealed record MemberCreated(int Token);
 }

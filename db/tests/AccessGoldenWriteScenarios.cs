@@ -1,0 +1,50 @@
+namespace Tsr.Db.Tests;
+
+internal static partial class AccessGoldenScenarios
+{
+    internal const string MixedConditions =
+        """{"field": "level", "value": 3}, {"field": "city", "value": "goldville"}, {"field": "tag", "value": "ALPHA"}, {"field": "level", "value": 2}""";
+
+    /// <summary>The conditions a rule sent as <see cref="MixedConditions"/> stores, in the order of their ids: today's code puts them in key order (field, then value), not in the order sent.</summary>
+    internal static readonly string[] StoredConditionOrder = ["city=Goldville", "level=2", "level=3", "tag=alpha"];
+
+    private static async Task GrantAndRevokeAsync(GoldenScenario run)
+    {
+        await run.SendAsync(Super, Post, $"/admin/permissions/members/{Subject}/grants", """{"permission": "donors:read:all", "reason": "  Needs the list  "}""");
+        await run.SendAsync(Super, Post, $"/admin/permissions/members/{GoldenSeed.OddName}/grants", """{"permission": "audit-log:read:all", "reason": "Odd +\" < name"}""");
+        await run.SendAsync(Super, Post, "/admin/permissions/grants/1/revoke", """{"reason": "  Done  "}""");
+        await run.SendAsync(Super, Post, "/admin/permissions/grants/2/revoke", """{"reason": "Done too"}""");
+    }
+
+    private static async Task RuleSaveAndRevokeAsync(GoldenScenario run)
+    {
+        var rules = $"/admin/class-access/members/{Subject}/rules";
+        var (version, hash) = await DraftAsync(run, Gents, Subject, 1, Ville);
+        var saved = await run.SendAsync(Gents, Post, rules, SaveBody(1, Ville, "  Teaches there  ", version, hash));
+        var (_, secondHash) = await DraftAsync(run, Super, Subject, 1, MixedConditions);
+        await run.SendAsync(Super, Post, rules, SaveBody(1, MixedConditions, "Second rule", AccessGoldenScenarios.StringOf(saved.Json, "version"), secondHash));
+        await run.SendAsync(Super, Post, "/admin/class-access/rules/1/revoke", RevokeBody("  Moved  ", await VersionOfAsync(run, Subject)));
+        await run.SendAsync(Super, Post, "/admin/class-access/rules/2/revoke", RevokeBody("Moved too", await VersionOfAsync(run, Subject)));
+    }
+
+    // One rule sent with conditions level 3, city, tag, level 2: the stored order of its conditions (TC-ACC-R2-02), in the member view.
+    private static async Task ConditionOrderAsync(GoldenScenario run)
+    {
+        var (version, hash) = await DraftAsync(run, Gents, Subject, 1, MixedConditions);
+        await run.SendAsync(Gents, Post, $"/admin/class-access/members/{Subject}/rules", SaveBody(1, MixedConditions, "Order", version, hash));
+        await run.SendAsync(Gents, Get, $"/admin/class-access/members/{Subject}");
+    }
+
+    // TC-ACC-Q1-02: a super admin saves a rule on a gents admin and on a ladies admin (a gents admin may not: the refusals scenario).
+    private static async Task RuleSaveOnAdminsAsync(GoldenScenario run)
+    {
+        foreach (var (member, gender) in new[] { (GoldenSeed.PeerGentsAdmin, 1), (GoldenSeed.LadiesAdmin, 2) })
+        {
+            var (version, hash) = await DraftAsync(run, Super, member, gender, Ville);
+            await run.SendAsync(Super, Post, $"/admin/class-access/members/{member}/rules", SaveBody(gender, Ville, "Admin rule " + member, version, hash));
+        }
+    }
+
+    private static async Task<string> VersionOfAsync(GoldenScenario run, int member) =>
+        AccessGoldenScenarios.StringOf((await run.SendAsync(Super, Get, $"/admin/class-access/members/{member}")).Json, "version");
+}

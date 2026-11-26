@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Notifications.Api.Domain;
 
@@ -29,7 +29,7 @@ internal static class DeviceRegisterSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(HttpContext context, NotificationsContext db, Permissions permissions, MemberRateLimit limiter, TimeProvider clock, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(HttpContext context, NpgsqlDataSource source, Permissions permissions, MemberRateLimit limiter, TimeProvider clock, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -54,20 +54,20 @@ internal static class DeviceRegisterSlice
             return Problem.Detail(StatusCodes.Status422UnprocessableEntity, token.Error!);
         }
 
-        if (!await SaveAsync(db, clock, limiter, caller.Token, token.Value!, ct))
+        if (!await SaveAsync(source, clock, limiter, caller.Token, token.Value!, ct))
         {
             return Problem.Detail(StatusCodes.Status429TooManyRequests, "Too many device registrations. Please wait a while and try again.");
         }
 
-        return Results.Json(new Dictionary<string, object> { ["ok"] = true }, statusCode: StatusCodes.Status201Created);
+        return Results.Json(new Dictionary<string, object?> { ["ok"] = true }, NotificationsJson.Answers.Answer, contentType: null, statusCode: StatusCodes.Status201Created);
     }
 
     // False when a device id new to the member is over the hourly limit (nothing is written). A device the member already holds is never limited: an app may register on every start.
-    private static async Task<bool> SaveAsync(NotificationsContext db, TimeProvider clock, MemberRateLimit limiter, int member, string device, CancellationToken ct)
+    private static async Task<bool> SaveAsync(NpgsqlDataSource source, TimeProvider clock, MemberRateLimit limiter, int member, string device, CancellationToken ct)
     {
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        await db.Database.ExecuteSqlAsync($"select pg_advisory_xact_lock(hashtextextended(lower({device}), 0))", ct);
-        var touched = await db.Database.ExecuteSqlAsync(
+        await using var tx = await source.BeginAsync(ct);
+        await tx.ExecuteAsync($"select pg_advisory_xact_lock(hashtextextended(lower({device}), 0))", ct);
+        var touched = await tx.ExecuteAsync(
             $"update notifications.user_devices set last_accessed_at = now() where token = {member} and device_id = {device}::citext",
             ct);
         if (touched == 0)
@@ -77,19 +77,19 @@ internal static class DeviceRegisterSlice
                 return false;
             }
 
-            await db.Database.ExecuteSqlAsync($"insert into notifications.user_devices (token, device_id) values ({member}, {device})", ct);
-            await TrimToCapAsync(db, member, ct);
+            await tx.ExecuteAsync($"insert into notifications.user_devices (token, device_id) values ({member}, {device})", ct);
+            await TrimToCapAsync(tx, member, ct);
         }
 
-        var moved = await db.Database.ExecuteSqlAsync($"delete from notifications.user_devices where device_id = {device}::citext and token <> {member}", ct);
-        await Outbox.WriteAsync(db, "notifications.device_registered", new DeviceRegistered(member, moved), clock, ct);
-        await transaction.CommitAsync(ct);
+        var moved = await tx.ExecuteAsync($"delete from notifications.user_devices where device_id = {device}::citext and token <> {member}", ct);
+        await Outbox.WriteAsync(tx, "notifications.device_registered", new DeviceRegistered(member, moved), NotificationsJson.Default.DeviceRegistered, clock, ct);
+        await tx.CommitAsync(ct);
         return true;
     }
 
     // A member holds at most MaxDevices: a phone must always be able to register, so the least recently used rows (oldest last_accessed_at, then oldest id) make room.
-    private static async Task TrimToCapAsync(NotificationsContext db, int member, CancellationToken ct) =>
-        await db.Database.ExecuteSqlAsync($"""
+    private static async Task TrimToCapAsync(DbTx tx, int member, CancellationToken ct) =>
+        await tx.ExecuteAsync($"""
             delete from notifications.user_devices where id in (
                 select id from notifications.user_devices where token = {member}
                 order by last_accessed_at desc, id desc offset {MaxDevices})

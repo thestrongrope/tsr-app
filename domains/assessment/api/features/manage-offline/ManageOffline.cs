@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Assessment.Api.Domain;
 using Tsr.Shared.Api;
@@ -38,7 +38,7 @@ internal static class ManageOfflineSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string quiz_id, HttpContext context, AssessmentContext db, Permissions permissions, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(string quiz_id, HttpContext context, NpgsqlDataSource source, Permissions permissions, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -46,7 +46,7 @@ internal static class ManageOfflineSlice
             return Problem.Unauthenticated();
         }
 
-        var (quiz, refusal) = await ManageAccess.ResolveQuizAsync(db, PhpValue.IntOfText(quiz_id), ct);
+        var (quiz, refusal) = await ManageAccess.ResolveQuizAsync(source, PhpValue.IntOfText(quiz_id), ct);
         if (refusal is not null)
         {
             return refusal;
@@ -57,26 +57,30 @@ internal static class ManageOfflineSlice
             return ManageAccess.NotPermitted();
         }
 
-        var rows = await db.Database
-            .SqlQuery<Row>($"""
+        var rows = await source.ListAsync(
+            $"""
                 select id as "Id", question::text as "Question", option1::text as "Option1", option2::text as "Option2", option3::text as "Option3",
                        option4::text as "Option4", option5::text as "Option5", option_display_order::text as "Order"
                 from assessment.spot_quiz_questions where spot_quiz_id = {quiz.Id} order by id limit {MaxQuestions}
-                """)
-            .ToListAsync(ct);
+                """,
+            row => new Row(
+                row.Int("Id"), row.TextOrNull("Question"), row.TextOrNull("Option1"), row.TextOrNull("Option2"), row.TextOrNull("Option3"), row.TextOrNull("Option4"),
+                row.TextOrNull("Option5"), row.TextOrNull("Order")),
+            ct);
         var questions = rows
             .Select(r => new QuestionWire(
                 r.Id, r.Question ?? string.Empty, OptionOrder.Ordered(r.Order, [r.Option1, r.Option2, r.Option3, r.Option4, r.Option5]).Select(o => new OptionWire(o.Text, o.IsCorrect)).ToList()))
             .ToList();
 
-        var submitted = (await db.Database
-            .SqlQuery<int>($"""select distinct token as "Value" from assessment.spot_quiz_submissions where spot_quiz_id = {quiz.Id} and token is not null limit 5000""")
-            .ToListAsync(ct)).ToHashSet();
-        var students = (await ClassStudents.ListAsync(db, quiz.ClassId, ct))
+        var submitted = (await source.ListAsync(
+            $"""select distinct token as "Value" from assessment.spot_quiz_submissions where spot_quiz_id = {quiz.Id} and token is not null limit 5000""",
+            row => row.Int("Value"),
+            ct)).ToHashSet();
+        var students = (await ClassStudents.ListAsync(source, quiz.ClassId, ct))
             .Select(s => new StudentWire(s.Token, s.Name, ClassStudents.IsOffline(s.Email), submitted.Contains(s.Token)))
             .ToList();
 
         return Results.Json(new Body(
-            new QuizWire(quiz.Id, quiz.Name ?? string.Empty, quiz.Topic, quiz.ClassCode ?? string.Empty, quiz.ClassName ?? string.Empty), questions, students));
+            new QuizWire(quiz.Id, quiz.Name ?? string.Empty, quiz.Topic, quiz.ClassCode ?? string.Empty, quiz.ClassName ?? string.Empty), questions, students), AssessmentJson.Answers.ManageOffline);
     }
 }

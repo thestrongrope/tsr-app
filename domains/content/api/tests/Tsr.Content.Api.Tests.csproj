@@ -2,7 +2,11 @@
   <!-- Unit tests for content: the guard over the published content folder. The reader's own tests are in db/tests. -->
   <PropertyGroup>
     <IsPackable>false</IsPackable>
+    <JsonSerializerIsReflectionEnabledByDefault>false</JsonSerializerIsReflectionEnabledByDefault>
   </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../**/*.Tests.cs" Exclude="../tests/**" />
+  </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../Tsr.Content.Api.csproj" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />

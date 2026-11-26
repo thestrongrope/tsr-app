@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Notifications.Api.Domain;
 
@@ -18,7 +18,7 @@ internal static class UserNotificationsUnreadCountSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(HttpContext context, NotificationsContext db, Permissions permissions, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(HttpContext context, NpgsqlDataSource source, Permissions permissions, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -31,9 +31,10 @@ internal static class UserNotificationsUnreadCountSlice
             return NotifyGuards.NotPermitted();
         }
 
-        var counts = await db.Database
-            .SqlQuery<long>($"""select count(*) as "Value" from notifications.user_notifications where user_token = {caller.Token} and is_read = 0""")
-            .ToListAsync(ct);
-        return Results.Json(new Dictionary<string, object> { ["unread_count"] = counts[0] });
+        var counts = await source.ListAsync(
+            $"""select count(*) as "Value" from notifications.user_notifications where user_token = {caller.Token} and is_read = 0""",
+            row => row.Long("Value"),
+            ct);
+        return Results.Json(new Dictionary<string, object?> { ["unread_count"] = counts[0] }, NotificationsJson.Answers.Answer);
     }
 }

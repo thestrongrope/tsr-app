@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
 using Tsr.Shared.Api;
@@ -19,7 +20,7 @@ internal static class ClassScheduleSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string class_id, HttpContext context, ClassesContext db, Permissions permissions, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(string class_id, HttpContext context, NpgsqlDataSource source, Permissions permissions, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -27,7 +28,7 @@ internal static class ClassScheduleSlice
             return Problem.Unauthenticated();
         }
 
-        var head = await ClassGuards.FindActiveClassAsync(db, ClassGuards.IdOf(class_id), ct);
+        var head = await ClassGuards.FindActiveClassAsync(source, ClassGuards.IdOf(class_id), ct);
         if (head is null)
         {
             return Refusals.ClassNotFound();
@@ -38,6 +39,6 @@ internal static class ClassScheduleSlice
             return ClassGuards.ScheduleRefusal();
         }
 
-        return Results.Json(await SchedulePayload.BuildAsync(db, head.Id, ct));
+        return Results.Json(await SchedulePayload.BuildAsync(source, head.Id, ct), ClassesJson.Answers.Answer);
     }
 }

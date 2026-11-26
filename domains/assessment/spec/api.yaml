@@ -8,7 +8,7 @@ info:
     never remove or change one without the release process. Every error body is {"detail": "..."}.
     Every route signs the caller in with PHP's member-creating sign-in (api_authenticate(true)).
 servers:
-  - url: http://localhost:8088
+  - url: https://gateway.tsr-app-dev.orb.local
     description: Local dev stack (gateway)
 paths:
   /mcq/quizzes/{quiz_id}:

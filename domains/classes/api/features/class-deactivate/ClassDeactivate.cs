@@ -1,9 +1,8 @@
-using System.Text.Encodings.Web;
 using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
 using Tsr.Shared.Api;
@@ -21,8 +20,6 @@ namespace Tsr.Classes.Api.Features.ClassDeactivate;
 
 internal static class ClassDeactivateSlice
 {
-    private static readonly JsonSerializerOptions AuditJson = new() { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
-
     internal sealed record ClassDeactivated(int ClassId, string Type, string EffectiveDate, long AuditId, int[] RemovedTokens, int DeactivatedBy);
 
     private sealed record Existing(int Id, string Status);
@@ -36,7 +33,7 @@ internal static class ClassDeactivateSlice
     private static async Task<IResult> HandleAsync(
         string class_id,
         HttpContext context,
-        ClassesContext db,
+        NpgsqlDataSource source,
         Permissions permissions,
         TimeProvider clock,
         CancellationToken ct)
@@ -71,9 +68,10 @@ internal static class ClassDeactivateSlice
         }
 
         var id = ClassGuards.IdOf(class_id);
-        var rows = await db.Database
-            .SqlQuery<Existing>($"""select id as "Id", status as "Status" from classes.classes where id = {id} limit 1""")
-            .ToListAsync(ct);
+        var rows = await source.ListAsync(
+            $"""select id as "Id", status as "Status" from classes.classes where id = {id} limit 1""",
+            row => new Existing(row.Int("Id"), row.Text("Status")),
+            ct);
         if (rows.Count == 0)
         {
             return Problem.Detail(StatusCodes.Status404NotFound, $"Class #{id} not found");
@@ -84,13 +82,13 @@ internal static class ClassDeactivateSlice
             return NotActive(id, rows[0].Status);
         }
 
-        var auditId = await SaveAsync(db, clock, rows[0].Id, input.Value!, caller.Token, ct);
+        var auditId = await SaveAsync(source, clock, rows[0].Id, input.Value!, caller.Token, ct);
         if (auditId is null)
         {
             return NotActive(id, "I");
         }
 
-        return Results.Json(new Dictionary<string, object> { ["deactivated"] = true, ["classId"] = id, ["auditId"] = auditId.Value });
+        return Results.Json(new Dictionary<string, object?> { ["deactivated"] = true, ["classId"] = id, ["auditId"] = auditId.Value }, ClassesJson.Answers.Answer);
     }
 
     private static IResult NotActive(long id, string status) =>
@@ -99,15 +97,16 @@ internal static class ClassDeactivateSlice
     private static string TextOf(JsonElement value) => value.ValueKind == JsonValueKind.String ? value.GetString()! : string.Empty;
 
     // The audit id, or null when another request deactivated the class first.
-    private static async Task<long?> SaveAsync(ClassesContext db, TimeProvider clock, int classId, DeactivationRules.Input input, int admin, CancellationToken ct)
+    private static async Task<long?> SaveAsync(NpgsqlDataSource source, TimeProvider clock, int classId, DeactivationRules.Input input, int admin, CancellationToken ct)
     {
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        var completed = input.Type == "completed" ? input.EffectiveDate : (DateOnly?)null;
-        var shutdown = input.Type == "shutdown" ? input.EffectiveDate : (DateOnly?)null;
-        var changed = await db.Database.ExecuteSqlAsync(
+        await using var tx = await source.BeginAsync(ct);
+        var date = input.EffectiveDate.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
+        var completed = input.Type == "completed" ? date : null;
+        var shutdown = input.Type == "shutdown" ? date : null;
+        var changed = await tx.ExecuteAsync(
             $"""
             update classes.classes
-            set status = 'I', comments = {input.Reason}, completed_on = {completed}, shutdown_on = {shutdown},
+            set status = 'I', comments = {input.Reason}, completed_on = {completed}::date, shutdown_on = {shutdown}::date,
                 updated_by = {admin}, updated_at = now(), deleted_by = {admin}, deleted_at = now()
             where id = {classId} and status = 'A'
             """,
@@ -117,37 +116,41 @@ internal static class ClassDeactivateSlice
             return null;
         }
 
-        var tokens = await db.Database
-            .SqlQuery<int>($"""select token_no as "Value" from classes.class_students where class_id = {classId} and removed_at is null and status = 'A' order by token_no""")
-            .ToListAsync(ct);
+        var tokens = await tx.ListAsync(
+            $"""select token_no as "Value" from classes.class_students where class_id = {classId} and removed_at is null and status = 'A' order by token_no""",
+            row => row.Int("Value"),
+            ct);
         var studentReason = DeactivationRules.StudentReason(input.Reason);
-        await db.Database.ExecuteSqlAsync(
+        await tx.ExecuteAsync(
             $"update classes.class_students set removed_at = now(), removed_by = {admin}, status = 'I', removed_reason = {studentReason} where class_id = {classId} and removed_at is null and status = 'A'",
             ct);
-        await db.Database.ExecuteSqlAsync(
+        await tx.ExecuteAsync(
             $"""
             update classes.class_schedule_topics set deleted_at = now(), deleted_by = {admin}
             where deleted_at is null and class_schedule_id in (select id from classes.class_schedules where class_id = {classId})
             """,
             ct);
-        await db.Database.ExecuteSqlAsync(
+        await tx.ExecuteAsync(
             $"update classes.class_schedules set deleted_at = now(), deleted_by = {admin} where class_id = {classId} and deleted_at is null", ct);
 
-        var date = input.EffectiveDate.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
         var details = JsonSerializer.Serialize(
             new Dictionary<string, string> { ["type"] = input.Type, ["effective_date"] = date, ["reason"] = input.Reason },
-            AuditJson);
-        var audit = new ClassAuditEntry { ClassId = classId, Action = "deactivated", Details = details, PerformedBy = admin };
-        db.Set<ClassAuditEntry>().Add(audit);
-        await db.SaveChangesAsync(ct);
+            ClassesJson.Answers.StringMap);
+        var auditId = await tx.ScalarAsync<long>(
+            $"""
+            insert into classes.class_audit_log (class_id, action, details, performed_by) values ({classId}, 'deactivated', {details}, {admin})
+            returning id as "Value"
+            """,
+            ct) ?? throw new InvalidOperationException("The audit row returned no id.");
 
         await Outbox.WriteAsync(
-            db,
+            tx,
             "classes.class_deactivated",
-            new ClassDeactivated(classId, input.Type, date, audit.Id, [.. tokens], admin),
+            new ClassDeactivated(classId, input.Type, date, auditId, [.. tokens], admin),
+            ClassesJson.Default.ClassDeactivated,
             clock,
             ct);
-        await transaction.CommitAsync(ct);
-        return audit.Id;
+        await tx.CommitAsync(ct);
+        return auditId;
     }
 }

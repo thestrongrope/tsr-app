@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Notifications.Api.Domain;
 
@@ -24,7 +24,7 @@ internal static class ClassEventDeleteSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string class_id, string event_id, HttpContext context, NotificationsContext db, Permissions permissions, TimeProvider clock, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(string class_id, string event_id, HttpContext context, NpgsqlDataSource source, Permissions permissions, TimeProvider clock, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -39,7 +39,7 @@ internal static class ClassEventDeleteSlice
             return refusal;
         }
 
-        var row = await ClassEvents.FindAsync(db, classId, NotifyGuards.IdOf(event_id), ct);
+        var row = await ClassEvents.FindAsync(source, classId, NotifyGuards.IdOf(event_id), ct);
         if (row is null)
         {
             return ClassEvents.NotFound();
@@ -50,24 +50,24 @@ internal static class ClassEventDeleteSlice
             return Problem.Detail(StatusCodes.Status403Forbidden, NotOwner);
         }
 
-        return await DeleteAsync(db, clock, row, caller.Token, ct)
-            ? Results.Json(new Dictionary<string, object> { ["success"] = true })
+        return await DeleteAsync(source, clock, row, caller.Token, ct)
+            ? Results.Json(new Dictionary<string, object?> { ["success"] = true }, NotificationsJson.Answers.Answer)
             : ClassEvents.NotFound();
     }
 
-    private static async Task<bool> DeleteAsync(NotificationsContext db, TimeProvider clock, ClassEventRow row, int token, CancellationToken ct)
+    private static async Task<bool> DeleteAsync(NpgsqlDataSource source, TimeProvider clock, ClassEventRow row, int token, CancellationToken ct)
     {
         var now = clock.GetUtcNow();
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        var deleted = await db.Database.ExecuteSqlAsync(
+        await using var tx = await source.BeginAsync(ct);
+        var deleted = await tx.ExecuteAsync(
             $"update notifications.class_scheduled_events set status = 'deleted', deleted_at = {now}, updated_at = {now} where id = {row.Id} and class_id = {row.ClassId} and status = 'active'", ct);
         if (deleted == 0)
         {
             return false;
         }
 
-        await Outbox.WriteAsync(db, "notifications.class_event_deleted", new ClassEventDeleted(row.Id, row.ClassId, token), clock, ct);
-        await transaction.CommitAsync(ct);
+        await Outbox.WriteAsync(tx, "notifications.class_event_deleted", new ClassEventDeleted(row.Id, row.ClassId, token), NotificationsJson.Default.ClassEventDeleted, clock, ct);
+        await tx.CommitAsync(ct);
         return true;
     }
 }

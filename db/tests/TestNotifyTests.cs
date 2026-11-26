@@ -1,11 +1,12 @@
 using System.Collections.Concurrent;
 using System.Net;
 using System.Text.Json;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Microsoft.Extensions.DependencyInjection;
 using NUnit.Framework;
 using Tsr.Notifications.Api;
 using Tsr.Notifications.Api.Domain;
+using Tsr.Shared.Api;
 
 namespace Tsr.Db.Tests;
 
@@ -536,15 +537,12 @@ public sealed class TestNotifyTests
 
     // ---- the published commands ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-    private static async Task<T> InRolledBackTransactionAsync<T>(Func<NotificationsContext, Task<T>> act)
+    private static async Task<T> InRolledBackTransactionAsync<T>(Func<DbTx, Task<T>> act)
     {
         using var factory = TestApi.Create();
-        using var scope = factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<NotificationsContext>();
-        await using var transaction = await db.Database.BeginTransactionAsync();
-        var result = await act(db);
-        await transaction.RollbackAsync();
-        return result;
+        var source = factory.Services.GetRequiredService<NpgsqlDataSource>();
+        await using var tx = await source.BeginAsync(CancellationToken.None);
+        return await act(tx);
     }
 
     [Test]
@@ -555,8 +553,8 @@ public sealed class TestNotifyTests
         {
             var a = await NotificationsCommands.AnnounceCountedAsync(db, first, CancellationToken.None);
             var b = await NotificationsCommands.AnnounceCountedAsync(db, first, CancellationToken.None);
-            var n = await db.Database.SqlQuery<long>($"""select count(*) as "Value" from notifications.notifications where created_by = 0 and title = 'Nt Sys'""").SingleAsync();
-            var i = await db.Database.SqlQuery<long>($"""select count(*) as "Value" from notifications.user_notifications""").SingleAsync();
+            var n = (await db.ListAsync($"""select count(*) as "Value" from notifications.notifications where created_by = 0 and title = 'Nt Sys'""", row => row.Long("Value"), CancellationToken.None)).Single();
+            var i = (await db.ListAsync($"""select count(*) as "Value" from notifications.user_notifications""", row => row.Long("Value"), CancellationToken.None)).Single();
             return (a, b, n, i);
         });
 
@@ -577,7 +575,7 @@ public sealed class TestNotifyTests
         {
             await NotificationsCommands.AnnounceCountedAsync(db, first, CancellationToken.None);
             await NotificationsCommands.AnnounceCountedAsync(db, again, CancellationToken.None);
-            return await db.Database.SqlQuery<long>($"""select count(*) as "Value" from notifications.notifications where title = 'Nt Case'""").SingleAsync();
+            return (await db.ListAsync($"""select count(*) as "Value" from notifications.notifications where title = 'Nt Case'""", row => row.Long("Value"), CancellationToken.None)).Single();
         });
 
         Assert.That(notifications, Is.EqualTo(1), "MariaDB compares title, body and link without regard to letter case, so the second call reuses the first notification");
@@ -593,7 +591,7 @@ public sealed class TestNotifyTests
         {
             var a = await NotificationsCommands.AnnounceCountedAsync(db, announcement, CancellationToken.None);
             var b = await NotificationsCommands.AnnounceCountedAsync(db, announcement with { DedupeKey = "nt-key-3" }, CancellationToken.None);
-            var r = await db.Database.SqlQuery<string>($"""select created_by::text || '|' || device_count || '|' || success_count || '|' || failure_count || '|' || target_audience_criteria::text as "Value" from notifications.notifications order by notification_id""").ToListAsync();
+            var r = await db.ListAsync($"""select created_by::text || '|' || device_count || '|' || success_count || '|' || failure_count || '|' || target_audience_criteria::text as "Value" from notifications.notifications order by notification_id""", row => row.Text("Value"), CancellationToken.None);
             return (a, b, r);
         });
 
@@ -613,13 +611,13 @@ public sealed class TestNotifyTests
             + $"('n3', 'b', '{{\"type\":\"CC_NUDGE\",\"teacher\":{T2}}}', now() - interval '1 hours', 0), "
             + $"('n4', 'b', '{{\"type\":\"OTHER\",\"teacher\":{T1}}}', now() - interval '1 hours', 0)");
         using var factory = TestApi.Create();
-        using var scope = factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<NotificationsContext>();
-        var within = await NotificationsCommands.LastNudgeAsync(db, T1, 24, CancellationToken.None);
+        var source = factory.Services.GetRequiredService<NpgsqlDataSource>();
+        await using var tx = await source.BeginAsync(CancellationToken.None);
+        var within = await NotificationsCommands.LastNudgeAsync(tx, T1, 24, CancellationToken.None);
         Assert.That(within, Is.Not.Null);
         Assert.That(DateTimeOffset.UtcNow - within!.Value, Is.InRange(TimeSpan.FromHours(1.9), TimeSpan.FromHours(2.1)));
-        Assert.That(await NotificationsCommands.LastNudgeAsync(db, T1, 1, CancellationToken.None), Is.Null);
-        Assert.That(await NotificationsCommands.LastNudgeAsync(db, T3, 24, CancellationToken.None), Is.Null);
+        Assert.That(await NotificationsCommands.LastNudgeAsync(tx, T1, 1, CancellationToken.None), Is.Null);
+        Assert.That(await NotificationsCommands.LastNudgeAsync(tx, T3, 24, CancellationToken.None), Is.Null);
     }
 
     [Test]
@@ -628,11 +626,47 @@ public sealed class TestNotifyTests
         var ids = await InRolledBackTransactionAsync(async db =>
         {
             var erased = await NotificationsErasure.EraseDevicesAsync(db, A, CancellationToken.None);
-            Assert.That(await db.Database.SqlQuery<long>($"""select count(*) as "Value" from notifications.user_devices where token = {A}""").SingleAsync(), Is.Zero);
-            Assert.That(await db.Database.SqlQuery<long>($"""select count(*) as "Value" from notifications.user_devices where token = {B}""").SingleAsync(), Is.EqualTo(1));
+            Assert.That((await db.ListAsync($"""select count(*) as "Value" from notifications.user_devices where token = {A}""", row => row.Long("Value"), CancellationToken.None)).Single(), Is.Zero);
+            Assert.That((await db.ListAsync($"""select count(*) as "Value" from notifications.user_devices where token = {B}""", row => row.Long("Value"), CancellationToken.None)).Single(), Is.EqualTo(1));
             return erased;
         });
         Assert.That(ids.Order(StringComparer.Ordinal), Is.EqualTo((string[])["dev-a1", "dev-a2"]));
         Assert.That(await CountAsync("notifications.user_devices", $"token = {A}"), Is.EqualTo(2));
+    }
+
+    // TC-NTF-R14-01: a device id reaches the system in any letter case and is found whatever the case (the column is citext, the comparison needs its cast).
+    [Test]
+    public async Task A_device_removed_in_another_letter_case_is_removed()
+    {
+        var reply = await kit.SendAsync(A, HttpMethod.Delete, "/devices", """{"fcmToken": "DEV-A1"}""");
+
+        Assert.That(reply.Status, Is.EqualTo(HttpStatusCode.OK), reply.Body);
+        Assert.That(reply.Json!["deleted"]!.GetValue<int>(), Is.EqualTo(1));
+        Assert.That(await CountAsync("notifications.user_devices", $"token = {A} and device_id = 'dev-a1'"), Is.Zero);
+        Assert.That(await CountAsync("notifications.user_devices", $"token = {A} and device_id = 'dev-a2'"), Is.EqualTo(1));
+    }
+
+    // TC-NTF-R14-02: a gender announcement reaches the devices and members of that gender, the demo cohort and other spellings of a gender left out. Gender is a plain text column compared with a text value.
+    [Test]
+    public async Task A_gender_announcement_reaches_exactly_that_genders_devices_and_members()
+    {
+        var gents = await SendAnnouncementAsync("GENDER", "1");
+        Assert.That(gents.Status, Is.EqualTo(HttpStatusCode.OK), gents.Body);
+        Assert.That(fake.Tokens, Is.EqualTo((string[])["dev-a1", "dev-a2", "dev-s1", "dev-s2", "dev-s3", "dev-t1", "dev-t3"]), "no demo device, no device of gender 2, none of the member whose gender is the word Male");
+        Assert.That(await InboxOfAsync(gents.Json!["notification_id"]!.GetValue<int>()), Is.EqualTo((long[])[A, T1, T3, S1, S2, S3]));
+
+        fake.Sent.Clear();
+        var ladies = await SendAnnouncementAsync("GENDER", 2);
+        Assert.That(fake.Tokens, Is.EqualTo((string[])["dev-b1"]));
+        Assert.That(await InboxOfAsync(ladies.Json!["notification_id"]!.GetValue<int>()), Is.EqualTo((long[])[B]));
+
+        fake.Sent.Clear();
+        var number = await SendAnnouncementAsync("GENDER", 1);
+        Assert.That(number.Json!["device_count"]!.GetValue<int>(), Is.EqualTo(7), "the number 1 is the same audience as the text \"1\"");
+
+        fake.Sent.Clear();
+        var nobody = await SendAnnouncementAsync("GENDER", 3);
+        Assert.That(nobody.Json!["device_count"]!.GetValue<int>(), Is.Zero);
+        Assert.That(fake.Sent, Is.Empty);
     }
 }

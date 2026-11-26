@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Assessment.Api.Domain;
 using Tsr.Shared.Api;
@@ -33,7 +33,7 @@ internal static class ManageCopySlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string quiz_id, HttpContext context, AssessmentContext db, Permissions permissions, TimeProvider clock, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(string quiz_id, HttpContext context, NpgsqlDataSource source, Permissions permissions, TimeProvider clock, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -41,7 +41,7 @@ internal static class ManageCopySlice
             return Problem.Unauthenticated();
         }
 
-        var (quiz, refusal) = await ManageAccess.ResolveQuizAsync(db, PhpValue.IntOfText(quiz_id), ct);
+        var (quiz, refusal) = await ManageAccess.ResolveQuizAsync(source, PhpValue.IntOfText(quiz_id), ct);
         if (refusal is not null)
         {
             return refusal;
@@ -64,7 +64,7 @@ internal static class ManageCopySlice
             return Problem.Detail(StatusCodes.Status422UnprocessableEntity, "targetClassId is required");
         }
 
-        var target = await ManageAccess.ActiveClassAsync(db, targetId, ct);
+        var target = await ManageAccess.ActiveClassAsync(source, targetId, ct);
         if (target is null)
         {
             return ManageAccess.ClassNotFound();
@@ -75,42 +75,44 @@ internal static class ManageCopySlice
             return Problem.Detail(StatusCodes.Status403Forbidden, NotPermittedText);
         }
 
-        return await CopyAsync(db, clock, quiz.Id, target.Id, caller.Token, ct);
+        return await CopyAsync(source, clock, quiz.Id, target.Id, caller.Token, ct);
     }
 
-    private static async Task<IResult> CopyAsync(AssessmentContext db, TimeProvider clock, int quizId, int targetClassId, int token, CancellationToken ct)
+    private static async Task<IResult> CopyAsync(NpgsqlDataSource source, TimeProvider clock, int quizId, int targetClassId, int token, CancellationToken ct)
     {
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        var sources = await db.Database
-            .SqlQuery<Source>($"""select name::text as "Name", topic::text as "Topic", restrict_to_class::int as "RestrictToClass" from assessment.spot_quizzes where id = {quizId}""")
-            .ToListAsync(ct);
+        await using var tx = await source.BeginAsync(ct);
+        var sources = await tx.ListAsync(
+            $"""select name::text as "Name", topic::text as "Topic", restrict_to_class::int as "RestrictToClass" from assessment.spot_quizzes where id = {quizId}""",
+            row => new Source(row.TextOrNull("Name"), row.TextOrNull("Topic"), row.Int("RestrictToClass")),
+            ct);
         if (sources.Count == 0)
         {
             return Refusals.QuizNotFound();
         }
 
-        var source = sources[0];
-        var duplicate = await db.Database
-            .SqlQuery<bool>($"""
-                select exists (select 1 from assessment.spot_quizzes where class_id = {targetClassId} and name = {source.Name}::citext and topic = {source.Topic}::citext) as "Value"
-                """)
-            .SingleAsync(ct);
+        var original = sources[0];
+        var duplicate = (await tx.ListAsync(
+            $"""
+            select exists (select 1 from assessment.spot_quizzes where class_id = {targetClassId} and name = {original.Name}::citext and topic = {original.Topic}::citext) as "Value"
+            """,
+            row => row.Bool("Value"),
+            ct)).Single();
         if (duplicate)
         {
             return Problem.Detail(StatusCodes.Status409Conflict, "A quiz with the same name & topic already exists in target class");
         }
 
         var at = ManageAccess.NowToSecond(clock);
-        var id = await NewQuiz.InsertAsync(db, new NewQuiz.Fields(targetClassId, source.Name ?? string.Empty, source.Topic, null, source.RestrictToClass, token), at, ct);
-        await db.Database.ExecuteSqlAsync(
+        var id = await NewQuiz.InsertAsync(tx, new NewQuiz.Fields(targetClassId, original.Name ?? string.Empty, original.Topic, null, original.RestrictToClass, token), at, ct);
+        await tx.ExecuteAsync(
             $"""
             insert into assessment.spot_quiz_questions (spot_quiz_id, question, option1, option2, option3, option4, option5, answer, created_at)
             select {id}, question, option1, option2, option3, option4, option5, answer, {at}
             from assessment.spot_quiz_questions where spot_quiz_id = {quizId} order by id
             """,
             ct);
-        await Outbox.WriteAsync(db, "assessment.quiz_created", new QuizCreated(id, targetClassId, token, "copy"), clock, ct);
-        await transaction.CommitAsync(ct);
-        return Results.Json(new Body(true, id), statusCode: StatusCodes.Status201Created);
+        await Outbox.WriteAsync(tx, "assessment.quiz_created", new QuizCreated(id, targetClassId, token, "copy"), AssessmentJson.Default.QuizCreatedCopy, clock, ct);
+        await tx.CommitAsync(ct);
+        return Results.Json(new Body(true, id), AssessmentJson.Answers.ManageCopy, contentType: null, statusCode: StatusCodes.Status201Created);
     }
 }

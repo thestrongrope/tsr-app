@@ -1,6 +1,7 @@
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Identity.Api;
 using Tsr.Membership.Api.Domain;
+using Tsr.Shared.Api;
 
 namespace Tsr.Membership.Api;
 
@@ -11,7 +12,7 @@ namespace Tsr.Membership.Api;
 /// cut to fit (PHP's strict database would refuse the sign-in; a name is never worth that). One atomic upsert, so two sign-ins
 /// racing on the same member cannot collide.
 /// </summary>
-internal sealed class ProfileSink(MembershipContext db) : IProfileSink
+internal sealed class ProfileSink(NpgsqlDataSource source) : IProfileSink
 {
     private const int NameLength = 200;
     private const int PictureLength = 2000;
@@ -22,7 +23,7 @@ internal sealed class ProfileSink(MembershipContext db) : IProfileSink
         var newPicture = ProfileText.Cut(picture, PictureLength);
         if (isNewMember)
         {
-            await db.Database.ExecuteSqlAsync(
+            await source.ExecuteAsync(
                 $"""
                 insert into membership.member_profiles (user_id, name, picture) values ({userId}, {newName ?? string.Empty}, {newPicture ?? string.Empty})
                 on conflict (user_id) do update set name = excluded.name, picture = excluded.picture
@@ -36,7 +37,7 @@ internal sealed class ProfileSink(MembershipContext db) : IProfileSink
             return;
         }
 
-        await db.Database.ExecuteSqlAsync(
+        await source.ExecuteAsync(
             $"""
             insert into membership.member_profiles (user_id, name, picture) values ({userId}, {newName}, {newPicture})
             on conflict (user_id) do update set

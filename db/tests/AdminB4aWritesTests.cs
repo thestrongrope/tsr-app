@@ -1,8 +1,10 @@
 using System.Net;
 using Microsoft.Extensions.DependencyInjection;
+using Npgsql;
 using NUnit.Framework;
 using Tsr.Classes.Api;
 using Tsr.Classes.Api.Features.ClassCreate;
+using Tsr.Shared.Api;
 
 namespace Tsr.Db.Tests;
 
@@ -345,9 +347,10 @@ public sealed class AdminB4aWritesTests
     {
         using var factory = TestApi.Create();
         using var scope = factory.Services.CreateScope();
-        var classes = scope.ServiceProvider.GetRequiredService<ClassesContext>();
+        var source = scope.ServiceProvider.GetRequiredService<NpgsqlDataSource>();
+        await using var tx = await source.BeginAsync(CancellationToken.None);
 
-        Assert.That(await ClassCreateSlice.LinkTakenAsync(classes, "B4LINK1", CancellationToken.None), Is.True, "joining by link ignores letter case, so a link differing only by case is taken");
-        Assert.That(await ClassCreateSlice.LinkTakenAsync(classes, "b4link9", CancellationToken.None), Is.False);
+        Assert.That(await ClassCreateSlice.LinkTakenAsync(tx, "B4LINK1", CancellationToken.None), Is.True, "joining by link ignores letter case, so a link differing only by case is taken");
+        Assert.That(await ClassCreateSlice.LinkTakenAsync(tx, "b4link9", CancellationToken.None), Is.False);
     }
 }

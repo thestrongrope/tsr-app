@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -110,9 +111,18 @@ public static class ClassesModule
     /// <summary>Other domain modules this one may use (domains/CLAUDE.md rule 7). access (permissions, and the port it supplies), platform (the admin audit command), membership (the accepted-registration command), identity (membership starts only with it registered; the email command); other domains are read through their v_* views.</summary>
     public static readonly IReadOnlyList<string> Dependencies = ["access", "platform", "membership", "identity", "notifications"];
 
-    public static IServiceCollection AddClasses(this IServiceCollection services)
+    /// <summary>Registers only classes' tables, for the one-off migrate job. The API itself starts with <see cref="AddClasses"/>, which does not call this: classes reads and writes through the data source.</summary>
+    [RequiresUnreferencedCode("Entity Framework is JIT only: the migrate job.")]
+    [RequiresDynamicCode("Entity Framework is JIT only: the migrate job.")]
+    public static IServiceCollection AddClassesMigrations(this IServiceCollection services)
     {
         services.AddDomainContext<ClassesContext>(ClassesContext.SchemaName);
+        return services;
+    }
+
+    public static IServiceCollection AddClasses(this IServiceCollection services)
+    {
+        services.AddTsrDataSource();
         services.Replace(ServiceDescriptor.Scoped<IClassScopes, ClassScopes>());
         services.TryAddSingleton<MemberRateLimit>();
         return services;

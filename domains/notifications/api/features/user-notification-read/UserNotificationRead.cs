@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Notifications.Api.Domain;
 
@@ -20,7 +20,7 @@ internal static class UserNotificationReadSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string notification_id, HttpContext context, NotificationsContext db, Permissions permissions, TimeProvider clock, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(string notification_id, HttpContext context, NpgsqlDataSource source, Permissions permissions, TimeProvider clock, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -35,7 +35,7 @@ internal static class UserNotificationReadSlice
 
         var id = NotifyGuards.IdOf(notification_id);
         var now = clock.GetUtcNow();
-        await db.Database.ExecuteSqlAsync($"update notifications.user_notifications set is_read = 1, read_at = {now} where id = {id} and user_token = {caller.Token}", ct);
-        return Results.Json(new Dictionary<string, object> { ["ok"] = true });
+        await source.ExecuteAsync($"update notifications.user_notifications set is_read = 1, read_at = {now} where id = {id} and user_token = {caller.Token}", ct);
+        return Results.Json(new Dictionary<string, object?> { ["ok"] = true }, NotificationsJson.Answers.Answer);
     }
 }

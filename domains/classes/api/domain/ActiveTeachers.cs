@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace Tsr.Classes.Api.Domain;
 
@@ -19,35 +19,37 @@ internal static class ActiveTeachers
 
     internal sealed record Item(int Token, string Name, string? AttendingClass, string? SelfTeacher, string MaxLevel, int TotalClasses, string ConductingClasses);
 
-    public static async Task<IReadOnlyList<Item>> LoadAsync(ClassesContext db, ReportScope scope, CancellationToken ct)
+    public static async Task<IReadOnlyList<Item>> LoadAsync(NpgsqlDataSource db, ReportScope scope, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(scope);
         var ids = await scope.ClassIdsAsync(db, 0, ct);
         var gender = scope.Gender.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        var classes = await db.Database
-            .SqlQuery<ClassRow>($"""
-                select c.teacher as "Teacher", coalesce(m.name, '')::text as "Name", c.id as "ClassId", c.code::text as "Code",
-                       cl.id as "LevelId", cl.sort_order as "SortOrder", cl.name::text as "Level"
-                from classes.classes c
-                join classes.class_levels cl on cl.id = c.class_level_id
-                join membership.v_members m on m.token = c.teacher and m.gender = {gender}
-                where c.id = any({ids})
-                """)
-            .ToListAsync(ct);
+        var classes = await db.ListAsync(
+            $"""
+            select c.teacher as "Teacher", coalesce(m.name, '')::text as "Name", c.id as "ClassId", c.code::text as "Code",
+                   cl.id as "LevelId", cl.sort_order as "SortOrder", cl.name::text as "Level"
+            from classes.classes c
+            join classes.class_levels cl on cl.id = c.class_level_id
+            join membership.v_members m on m.token = c.teacher and m.gender = {gender}
+            where c.id = any({ids})
+            """,
+            r => new ClassRow(r.Int("Teacher"), r.Text("Name"), r.Int("ClassId"), r.Text("Code"), r.Int("LevelId"), r.Int("SortOrder"), r.Text("Level")),
+            ct);
 
         var teachers = classes.Select(c => c.Teacher).Distinct().ToArray();
-        var attends = await db.Database
-            .SqlQuery<AttendRow>($"""
-                select cs.token_no as "Token", c.id as "ClassId", c.code::text as "Code", cl.sort_order as "SortOrder", tu.name::text as "TeacherName"
-                from classes.class_students cs
-                join classes.classes c on c.id = cs.class_id
-                join classes.class_levels cl on cl.id = c.class_level_id
-                left join membership.v_members tu on tu.token = c.teacher
-                where cs.removed_at is null and c.id = any({ids}) and cs.token_no = any({teachers})
-                limit {MaxAttended}
-                """)
-            .ToListAsync(ct);
+        var attends = await db.ListAsync(
+            $"""
+            select cs.token_no as "Token", c.id as "ClassId", c.code::text as "Code", cl.sort_order as "SortOrder", tu.name::text as "TeacherName"
+            from classes.class_students cs
+            join classes.classes c on c.id = cs.class_id
+            join classes.class_levels cl on cl.id = c.class_level_id
+            left join membership.v_members tu on tu.token = c.teacher
+            where cs.removed_at is null and c.id = any({ids}) and cs.token_no = any({teachers})
+            limit {MaxAttended}
+            """,
+            r => new AttendRow(r.Int("Token"), r.Int("ClassId"), r.Text("Code"), r.Int("SortOrder"), r.TextOrNull("TeacherName")),
+            ct);
 
         return Build(classes, attends);
     }

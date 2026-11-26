@@ -1,4 +1,5 @@
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
+using Tsr.Shared.Api;
 
 namespace Tsr.Membership.Api.Domain;
 
@@ -10,7 +11,7 @@ namespace Tsr.Membership.Api.Domain;
 internal static class GuardianRevoker
 {
     /// <summary>True when at least one active link ended.</summary>
-    public static async Task<bool> RevokePairAsync(MembershipContext db, long parentToken, long childToken, int callerUserId, DateTimeOffset now, CancellationToken ct)
+    public static async Task<bool> RevokePairAsync(NpgsqlDataSource source, long parentToken, long childToken, int callerUserId, DateTimeOffset now, CancellationToken ct)
     {
         // No token outside the integer range can be held, so no row can match.
         if (parentToken is < int.MinValue or > int.MaxValue || childToken is < int.MinValue or > int.MaxValue)
@@ -20,14 +21,12 @@ internal static class GuardianRevoker
 
         var parent = (int)parentToken;
         var child = (int)childToken;
-        var changed = await db.UserGuardians
-            .Where(g => g.ParentToken == parent && g.ChildToken == child && g.Status == "active")
-            .ExecuteUpdateAsync(
-                set => set
-                    .SetProperty(g => g.Status, "revoked")
-                    .SetProperty(g => g.RevokedAt, now)
-                    .SetProperty(g => g.RevokedBy, callerUserId),
-                ct);
+        var changed = await source.ExecuteAsync(
+            $"""
+            update membership.user_guardians set status = 'revoked', revoked_at = {now}, revoked_by = {callerUserId}
+            where parent_token = {parent} and child_token = {child} and status = 'active'
+            """,
+            ct);
         return changed > 0;
     }
 }

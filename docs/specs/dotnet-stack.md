@@ -14,9 +14,9 @@ otherwise; our own small code where a library adds risk. Avoid libraries that we
 |---|---|---|---|
 | Runtime | .NET 10 LTS; move between LTS releases only | Microsoft | Supported to Nov 2028 |
 | Web | ASP.NET Core **Minimal APIs**: route groups per module, endpoint filters, built-in OpenAPI | Microsoft | Already the sample's style; fastest stack in the benchmark |
-| Compilation | JIT for the API, written **AOT-ready** (source-generated JSON, slim builder, no runtime reflection). NativeAOT only for small standalone workers. | Microsoft | AOT: fast start and small image, but about 85% throughput and EF Core AOT is experimental |
+| Compilation | **NativeAOT** for the API, the workers and the content load (issue 108: source-generated JSON, no runtime reflection). The one-off migrate job is the same project published JIT (`-p:PublishAot=false`), because EF migrations cannot be native. | Microsoft | AOT: fast start and small image, but about 85% throughput and EF Core AOT is experimental |
 | Database | **PostgreSQL, moved before the new API** | | Strongest EF provider; MySQL EF options lag (Pomelo stops at EF 9). Estimated move: medium, 3-5 weeks (case-insensitive matching via `citext`/ICU, `mis.php`, zero dates) |
-| Data access | **EF Core 10 + Npgsql**. Hand-written SQL via `SqlQuery<T>`/`FromSql`, LINQ where simpler, no tracking for queries | Microsoft / Npgsql | One DbContext and one Postgres schema per domain, so every table has one owner. EF used mainly as the mapper. |
+| Data access | **EF Core 10 + Npgsql**. Hand-written SQL via `SqlQuery<T>`/`FromSql`, LINQ where simpler, no tracking for queries | Microsoft / Npgsql | One DbContext and one Postgres schema per domain, so every table has one owner. EF used mainly as the mapper. While domains are converted (issue 95), a slim Npgsql data source (`Sql`, `Db`, `DbTx`, `DbRow` in `shared/api`) runs beside EF. |
 | Migrations | **EF migrations**, all schema and base data (permissions catalog, role grants, lookups, synthetic dev data) in this public repo. Deployed as a migration bundle, run as a one-off Dokploy job before the app starts. | Microsoft | Review the idempotent SQL script in each PR. Expand-then-contract; never edit an applied migration. Explicit `InsertData`, not `HasData`. Baseline migration from the current schema. |
 | Private repo | Member data and prod config only; never schema | | Secrets belong in Dokploy's secret store, not git |
 | Hosting | **2 OVH servers + Dokploy Cloud**, Swarm with 1 manager and 1 worker; **self-hosted Postgres** on the manager | | Off-server backups, a tested restore, `unattended-upgrades`. Why not AKS or managed DBs: `stack-research.md` |
@@ -38,7 +38,7 @@ otherwise; our own small code where a library adds risk. Avoid libraries that we
 | E2E | Patrol (Flutter app), Playwright (static site) | LeanCode / Microsoft | |
 | Load | k6 | Grafana Labs | |
 | Quality gates | Nullable, `TreatWarningsAsErrors`, analyzers at `latest-recommended`, central package versions, module-boundary tests | Microsoft / ours | |
-| Images | Chiseled ASP.NET runtime images | Microsoft | |
+| Images | `runtime-deps` chiseled (`11.0-resolute-chiseled-extra`: no shell, with time zone data) for the native image, the ASP.NET runtime image for the JIT migrate job | Microsoft | |
 
 ## AOT per host, persistence per domain (Asif, 2026-11-09)
 - NativeAOT is decided **per host process**, not per module: every module in one host shares one binary.
@@ -46,7 +46,7 @@ otherwise; our own small code where a library adds risk. Avoid libraries that we
   boundary. It is not a shared repository layer, so the "no repository layer" rule still holds.
   - **AOT-safe domains**: Npgsql plus hand-written or source-generated mapping, no EF. They can run in an
     **AOT host**: fast start, low RSS, small image. Good for small, hot or rarely used domains.
-  - **Other domains**: EF Core as the mapper, in the **main JIT host**.
+  - **Other domains**: EF Core as the mapper, in the **main JIT host**. Since issue 108 none is left: the API host is native, and EF runs only in the JIT migrate job.
 - Moving a domain between hosts is a wiring change (as in the plan's section 3.2). When EF Core's AOT support is
   stable (spike: EF 10 + Npgsql + `SqlQuery<T>` + compiled model + precompiled queries, after the
   Postgres move), the main host can switch to AOT too.
@@ -93,10 +93,10 @@ Outcome (2026-11-09): **works.**
 | CI/CD | Dokploy builds, tests and deploys on merge to main; GitHub Actions for release builds only (CodeQL, NuGet audit). See "Build pipeline". iOS stays on Codemagic. |
 | Flutter API client | Generated from the built-in OpenAPI document; the tool is picked in the first Flutter story |
 | API versioning | No library. Changes are additive only (rule 7). |
-| Search | **Keep Elasticsearch**: tsr-web, which already uses it, merges in. Official client `Elastic.Clients.Elasticsearch` (Elastic). It is **not AOT-supported** (maintainer statement and AOT failure reports on 8.x; its transport library is not AOT-ready), so `search` runs in the **JIT host**. |
+| Search | **Keep Elasticsearch**: tsr-web, which already uses it, merges in. Official client `Elastic.Clients.Elasticsearch` (Elastic). Maintainer statements and failure reports said it is not AOT-supported; measured in issue 97, client 9.5.3 ran natively against Elasticsearch 9.2.3 once it was given a generated reader for the document type (`SearchJson`, the client's source serializer). Measured again in issue 101: with the document type absent from the generated context a native build lists every kind as unavailable while JIT returns results, which only a native run shows. The source serializer makes that absence fail the unit tests as well, and `ConvertedJsonUseTests` checks it is passed. |
 | Push | **Firebase Cloud Messaging** (iOS through APNs, and Android, from one API), called **directly over HTTP**: `POST https://fcm.googleapis.com/v1/projects/{id}/messages:send` with a Bearer token. The token: sign a JWT with the service-account key (built-in `RSA`), exchange it at Google's token endpoint, cache it for about 1 h. About 50-80 lines, no SDK, **AOT-safe**; the standard resilience handler covers 429/5xx and timeouts. One request per device (FCM v1 has no multicast). Delete device tokens on `UNREGISTERED`/`INVALID_ARGUMENT`. |
 | WhatsApp | **Stays TypeScript**, because of Baileys: a separate worker consuming `notifications` events from Redis Streams. One implementation per concern, in the language that earns it. |
-| Report export: Excel | **ClosedXML** (MIT, on Microsoft's Open XML SDK) replaces PhpSpreadsheet. Keep `reportexport.php`'s rules: sheet names (31 characters, none of `[]:*?/\`) and **neutralise values starting with `=`** (formula injection). AOT status unverified, so it starts in the JIT host. |
+| Report export: Excel | **Our own writer** (`ReportXlsx`: `System.IO.Compression` and `XmlWriter`, no library) replaces PhpSpreadsheet; ClosedXML was replaced because it raises trim warning IL2090 in a native build (spike 97, issue 112). Keep `reportexport.php`'s rules: sheet names (31 characters, none of `[]:*?/\`) and **neutralise values starting with `=`** (formula injection). ClosedXML and the Open XML SDK stay in the test projects as independent readers. |
 | Report export: PDF | **Gotenberg** container (HTML → PDF with Chromium, over HTTP) replaces Dompdf. Same HTML-template model; shapes Urdu and Arabic correctly. One extra container (heavy image, a few hundred MB of RAM when busy). |
 | Email | None: the app sends no email |
 | File uploads | A mounted volume, or an S3-compatible container. Verify MinIO's 2025 community-edition changes before choosing it (alternatives: Garage, SeaweedFS). |

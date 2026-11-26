@@ -1,5 +1,5 @@
 using System.Text.Json;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace Tsr.Notifications.Api.Domain;
 
@@ -95,16 +95,18 @@ internal static class AudienceWords
 
     public sealed record Named(int Id, string Name);
 
-    public static async Task<AudienceNames> LookUpAsync(NotificationsContext db, (List<int> Levels, List<int> Classes, List<int> Teachers) ids, CancellationToken ct)
+    private static Named ReadNamed(DbRow row) => new(row.Int("Id"), row.Text("Name"));
+
+    public static async Task<AudienceNames> LookUpAsync(NpgsqlDataSource source, (List<int> Levels, List<int> Classes, List<int> Teachers) ids, CancellationToken ct)
     {
         var levelIds = ids.Levels.Distinct().ToArray();
         var teacherIds = ids.Teachers.Distinct().ToArray();
         var levels = levelIds.Length == 0
             ? []
-            : (await db.Database.SqlQuery<Named>($"""select id as "Id", trim(name) as "Name" from classes.v_class_levels where id = any({levelIds})""").ToListAsync(ct)).ToDictionary(n => n.Id, n => n.Name);
+            : (await source.ListAsync($"""select id as "Id", trim(name) as "Name" from classes.v_class_levels where id = any({levelIds})""", ReadNamed, ct)).ToDictionary(n => n.Id, n => n.Name);
         var teachers = teacherIds.Length == 0
             ? []
-            : (await db.Database.SqlQuery<Named>($"""select distinct on (token) token as "Id", trim(coalesce(name, '')) as "Name" from membership.v_members where token = any({teacherIds}) order by token, user_id""").ToListAsync(ct)).ToDictionary(n => n.Id, n => n.Name);
-        return new AudienceNames(levels, await Criteria.ClassNamesAsync(db, ids.Classes, ct), teachers);
+            : (await source.ListAsync($"""select distinct on (token) token as "Id", trim(coalesce(name, '')) as "Name" from membership.v_members where token = any({teacherIds}) order by token, user_id""", ReadNamed, ct)).ToDictionary(n => n.Id, n => n.Name);
+        return new AudienceNames(levels, await Criteria.ClassNamesAsync(source, ids.Classes, ct), teachers);
     }
 }

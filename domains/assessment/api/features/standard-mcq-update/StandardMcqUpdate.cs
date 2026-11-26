@@ -3,9 +3,8 @@ using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Assessment.Api.Domain;
 using Tsr.Shared.Api;
@@ -50,7 +49,7 @@ internal static partial class StandardMcqUpdateSlice
     }
 
     private static async Task<IResult> HandleAsync(
-        HttpContext context, AssessmentContext db, Permissions permissions, ISheets sheets, TimeProvider clock, ILoggerFactory loggers, CancellationToken ct)
+        HttpContext context, NpgsqlDataSource source, Permissions permissions, ISheets sheets, TimeProvider clock, ILoggerFactory loggers, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -82,8 +81,8 @@ internal static partial class StandardMcqUpdateSlice
         }
 
         var log = loggers.CreateLogger("Tsr.Assessment.Api.StandardMcqUpdate");
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        if (!await AssessmentLocks.TryTakeAsync(db, AssessmentLocks.StandardMcqUpdate, ct))
+        await using var tx = await source.BeginAsync(ct);
+        if (!await AssessmentLocks.TryTakeAsync(tx, AssessmentLocks.StandardMcqUpdate, ct))
         {
             return Problem.Detail(StatusCodes.Status409Conflict, "An update is already running. Try again in a minute.");
         }
@@ -93,11 +92,11 @@ internal static partial class StandardMcqUpdateSlice
         var results = new List<Result>();
         foreach (var draft in drafts)
         {
-            results.Add(await ResultOfAsync(db, transaction, clock, log, draft, anyUnreadable, ct));
+            results.Add(await ResultOfAsync(tx, clock, log, draft, anyUnreadable, ct));
         }
 
-        await transaction.CommitAsync(ct);
-        return Results.Json(new Body(results));
+        await tx.CommitAsync(ct);
+        return Results.Json(new Body(results), AssessmentJson.Answers.StandardMcqUpdate);
     }
 
     /// <summary>PHP api_standard_mcq_ids: a non-empty array (a JSON list or object) of whole numbers from 1; duplicates dropped.</summary>
@@ -165,7 +164,7 @@ internal static partial class StandardMcqUpdateSlice
     }
 
     private static async Task<Result> ResultOfAsync(
-        AssessmentContext db, IDbContextTransaction transaction, TimeProvider clock, ILogger log, Draft draft, bool anyUnreadable, CancellationToken ct)
+        DbTx tx, TimeProvider clock, ILogger log, Draft draft, bool anyUnreadable, CancellationToken ct)
     {
         Result Failed(string reason) => new(draft.LanguageId, draft.LevelId, draft.Language, draft.Level, "failed", null, reason);
 
@@ -185,7 +184,7 @@ internal static partial class StandardMcqUpdateSlice
             return Failed("The sheet has no MCQs for this language and level");
         }
 
-        if (!await SaveAsync(db, transaction, clock, log, draft, quizzes, ct))
+        if (!await SaveAsync(tx, clock, log, draft, quizzes, ct))
         {
             return Failed("The save failed and nothing was changed");
         }
@@ -195,50 +194,50 @@ internal static partial class StandardMcqUpdateSlice
 
     /// <summary>One pair in a savepoint: the delete, the inserts and the event commit together or not at all (a database error rolls back to the savepoint and is reported as false).</summary>
     private static async Task<bool> SaveAsync(
-        AssessmentContext db, IDbContextTransaction transaction, TimeProvider clock, ILogger log, Draft draft, IReadOnlyList<StandardMcqRows.Quiz> quizzes, CancellationToken ct)
+        DbTx tx, TimeProvider clock, ILogger log, Draft draft, IReadOnlyList<StandardMcqRows.Quiz> quizzes, CancellationToken ct)
     {
-        await transaction.CreateSavepointAsync("standard_mcq_pair", ct);
+        await tx.ExecuteAsync($"savepoint standard_mcq_pair", ct);
         try
         {
             var savedLevel = draft.LevelId + 1;
-            await ReplaceAsync(db, draft.LanguageId, savedLevel, quizzes, ct);
-            await Outbox.WriteAsync(db, "assessment.standard_mcqs_updated", new Updated(draft.LanguageId, savedLevel, quizzes.Count), clock, ct);
-            await transaction.ReleaseSavepointAsync("standard_mcq_pair", ct);
+            await ReplaceAsync(tx, draft.LanguageId, savedLevel, quizzes, ct);
+            await Outbox.WriteAsync(tx, "assessment.standard_mcqs_updated", new Updated(draft.LanguageId, savedLevel, quizzes.Count), AssessmentJson.Default.Updated, clock, ct);
+            await tx.ExecuteAsync($"release savepoint standard_mcq_pair", ct);
             return true;
         }
-        catch (Exception e) when (e is DbException or DbUpdateException)
+        catch (DbException e)
         {
             LogSaveFailed(log, e.GetType().Name);
-            await transaction.RollbackToSavepointAsync("standard_mcq_pair", ct);
+            await tx.ExecuteAsync($"rollback to savepoint standard_mcq_pair", ct);
             return false;
         }
     }
 
-    private static async Task ReplaceAsync(AssessmentContext db, long languageId, long levelId, IReadOnlyList<StandardMcqRows.Quiz> quizzes, CancellationToken ct)
+    private static async Task ReplaceAsync(DbTx tx, long languageId, long levelId, IReadOnlyList<StandardMcqRows.Quiz> quizzes, CancellationToken ct)
     {
-        await db.Database.ExecuteSqlAsync(
+        await tx.ExecuteAsync(
             $"""
             delete from assessment.standard_mcq_questions
             where mcq_code in (select code from assessment.standard_mcqs where language_id = {languageId} and level_id = {levelId})
             """,
             ct);
-        await db.Database.ExecuteSqlAsync($"delete from assessment.standard_mcqs where language_id = {languageId} and level_id = {levelId}", ct);
+        await tx.ExecuteAsync($"delete from assessment.standard_mcqs where language_id = {languageId} and level_id = {levelId}", ct);
 
         var order = 0;
         foreach (var quiz in quizzes)
         {
             order++;
-            await InsertQuizAsync(db, languageId, levelId, order, quiz, ct);
+            await InsertQuizAsync(tx, languageId, levelId, order, quiz, ct);
         }
     }
 
-    private static async Task InsertQuizAsync(AssessmentContext db, long languageId, long levelId, int order, StandardMcqRows.Quiz quiz, CancellationToken ct)
+    private static async Task InsertQuizAsync(DbTx tx, long languageId, long levelId, int order, StandardMcqRows.Quiz quiz, CancellationToken ct)
     {
         var code = quiz.Code ?? string.Empty;
         var subject = quiz.Subject ?? string.Empty;
         var lesson = quiz.Lesson ?? string.Empty;
         var name = quiz.Name ?? string.Empty;
-        await db.Database.ExecuteSqlAsync(
+        await tx.ExecuteAsync(
             $"""
             insert into assessment.standard_mcqs (code, language_id, level_id, topic, subject, lesson, name, sort_order)
             values ({code}, {languageId}, {levelId}, {quiz.Topic}, {subject}, {lesson}, {name}, {order})
@@ -252,7 +251,7 @@ internal static partial class StandardMcqUpdateSlice
             var text = q.Text ?? string.Empty;
             var answer = q.Answer ?? string.Empty;
             var option1 = q.Option1 ?? string.Empty;
-            await db.Database.ExecuteSqlAsync(
+            await tx.ExecuteAsync(
                 $"""
                 insert into assessment.standard_mcq_questions (mcq_code, question, answer, option1, option2, option3, reason_option1, reason_option2, reason_option3, sort_order)
                 values ({code}, {text}, {answer}, {option1}, {q.Option2}, {q.Option3}, {q.Reason1}, {q.Reason2}, {q.Reason3}, {position})

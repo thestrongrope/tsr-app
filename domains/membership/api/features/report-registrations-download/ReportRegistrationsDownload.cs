@@ -2,6 +2,7 @@ using System.Globalization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Membership.Api.Domain;
 using Tsr.Platform.Api;
@@ -27,7 +28,7 @@ internal static class ReportRegistrationsDownloadSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(HttpContext context, MembershipContext db, Permissions permissions, ReportExport export, TimeProvider clock, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(HttpContext context, NpgsqlDataSource source, Permissions permissions, ReportExport export, TimeProvider clock, CancellationToken ct)
     {
         if (!ReportExport.TryGetFormat(context, out var format))
         {
@@ -46,7 +47,7 @@ internal static class ReportRegistrationsDownloadSlice
             return refusal;
         }
 
-        var people = await WaitingRegistrations.LoadAsync(db, gender, ct);
+        var people = await WaitingRegistrations.LoadAsync(source, gender, ct);
         IReadOnlyList<IReadOnlyList<object?>> rows = [.. people.Select((p, i) => Row(i + 1, p))];
         var day = clock.GetUtcNow().UtcDateTime;
         var name = gender == 2 ? "Ladies" : "Gents";

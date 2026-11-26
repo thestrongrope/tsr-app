@@ -385,12 +385,21 @@ public sealed class TestDeletionTests
         api.Dispose();
         api = new TestDeletionKit(firebase, new FailingErasure());
         var requestId = await AddTargetWithRequestAsync();
+        await TestDatabase.ExecuteAsync(
+            $"""
+            insert into notifications.member_event_settings (user_id, class_id, event_key, client_updated_at, server_updated_at, device_key)
+            select id, 98400, 'event:1', now(), now(), 'aaaaaaaaaaaaaaaa' from identity.users where token = {TestDeletionKit.Target};
+            """);
         var before = await TestDeletionKit.WholeDatabaseAsync();
 
         var reply = await api.CompleteAsync(TestDeletionKit.Admin, requestId);
 
         Assert.That(reply.Status, Is.EqualTo(HttpStatusCode.InternalServerError), "PHP answers 409 carrying the exception text; here a bug is a 500 (the test host runs in Development and so shows the developer page; a Production host shows no text)");
         Assert.That(await TestDeletionKit.WholeDatabaseAsync(), Is.EqualTo(before), "devices, outbound rows, users, request and outbox are all as before");
+        Assert.That(
+            await MembershipTestKit.CountAsync("notifications.member_event_settings", $"user_id in (select id from identity.users where token = {TestDeletionKit.Target})"),
+            Is.EqualTo(1),
+            "the member's event settings are still there");
         Assert.That(firebase.Calls, Has.Count.EqualTo(1), "the Google call cannot be rolled back: the sign-in is gone and the request stays open for a retry (PHP's order)");
     }
 

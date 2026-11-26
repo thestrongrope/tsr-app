@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
 using Tsr.Shared.Api;
@@ -22,7 +23,7 @@ internal static class ConductionCreateSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string class_id, HttpContext context, ClassesContext db, Permissions permissions, TimeProvider clock, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(string class_id, HttpContext context, NpgsqlDataSource source, Permissions permissions, TimeProvider clock, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -30,7 +31,7 @@ internal static class ConductionCreateSlice
             return Problem.Unauthenticated();
         }
 
-        var (head, refusal) = await ConductionData.OpenAsync(db, permissions, caller, class_id, "sessions:create", ct);
+        var (head, refusal) = await ConductionData.OpenAsync(source, permissions, caller, class_id, "sessions:create", ct);
         if (refusal is not null)
         {
             return refusal;
@@ -49,13 +50,13 @@ internal static class ConductionCreateSlice
         }
 
         var recordedAt = ConductionRules.RecordedAt(body!.Has("recordedAt") ? PhpValue.Text(body.Get("recordedAt")) : null, clock.GetUtcNow());
-        var saved = await ConductionWriter.CreateAsync(db, clock, head!.Id, caller.Token, payload.Value!, recordedAt, ct);
+        var saved = await ConductionWriter.CreateAsync(source, clock, head!.Id, caller.Token, payload.Value!, recordedAt, ct);
         if (saved.Duplicate)
         {
             return Problem.Detail(StatusCodes.Status409Conflict, "A conduction record already exists for this date");
         }
 
-        var row = await ConductionData.GetSessionAsync(db, saved.SessionId, ct);
-        return Results.Json(ConductionData.ToItem(row!, clock.GetUtcNow()), statusCode: saved.Replayed ? StatusCodes.Status200OK : StatusCodes.Status201Created);
+        var row = await ConductionData.GetSessionAsync(source, saved.SessionId, ct);
+        return Results.Json(ConductionData.ToItem(row!, clock.GetUtcNow()), ClassesJson.Answers.ConductionSessionItem, statusCode: saved.Replayed ? StatusCodes.Status200OK : StatusCodes.Status201Created);
     }
 }

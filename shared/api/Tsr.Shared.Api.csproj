@@ -3,10 +3,18 @@
   <PropertyGroup>
     <!-- CA1716: "Shared" is a VB keyword. Nothing here is consumed from VB, so the folder name wins. -->
     <NoWarn>$(NoWarn);CA1716</NoWarn>
+    <!-- Trim and AOT analyzers on: any warning fails the build. See AotAnalyzerTests. -->
+    <IsAotCompatible>true</IsAotCompatible>
   </PropertyGroup>
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Sql and DbRow keep their parts internal; the unit tests next to them read those parts. -->
+    <InternalsVisibleTo Include="Tsr.Shared.Api.Tests" />
+    <!-- Two database tests join a raw connection and transaction, which the Entity Framework bridge cannot give them. -->
+    <InternalsVisibleTo Include="Tsr.Db.Tests" />
   </ItemGroup>
   <ItemGroup>
     <!-- Tests sit next to the code they test; tests/ compiles them. -->

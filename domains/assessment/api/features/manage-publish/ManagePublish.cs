@@ -3,9 +3,9 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Assessment.Api.Domain;
 using Tsr.Notifications.Api;
@@ -36,7 +36,7 @@ internal static partial class ManagePublishSlice
     }
 
     private static async Task<IResult> HandleAsync(
-        string quiz_id, HttpContext context, AssessmentContext db, Permissions permissions, TimeProvider clock, IQuizRandom random, IConfiguration configuration, ILoggerFactory loggers, CancellationToken ct)
+        string quiz_id, HttpContext context, NpgsqlDataSource source, Permissions permissions, TimeProvider clock, IQuizRandom random, IConfiguration configuration, ILoggerFactory loggers, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -44,7 +44,7 @@ internal static partial class ManagePublishSlice
             return Problem.Unauthenticated();
         }
 
-        var (quiz, refusal) = await ManageAccess.ResolveQuizAsync(db, PhpValue.IntOfText(quiz_id), ct);
+        var (quiz, refusal) = await ManageAccess.ResolveQuizAsync(source, PhpValue.IntOfText(quiz_id), ct);
         if (refusal is not null)
         {
             return refusal;
@@ -55,40 +55,40 @@ internal static partial class ManagePublishSlice
             return ManageAccess.NotPermitted();
         }
 
-        await OptionOrder.FillMissingAsync(db, quiz.Id, random, ct);
+        await OptionOrder.FillMissingAsync(source, quiz.Id, random, ct);
         var at = ManageAccess.NowToSecond(clock);
-        if (!await PublishAsync(db, clock, quiz, caller.Token, at, ct))
+        if (!await PublishAsync(source, clock, quiz, caller.Token, at, ct))
         {
             return Refusals.QuizNotFound();
         }
 
-        var result = await AnnounceAsync(db, quiz, caller.Token, configuration, loggers.CreateLogger("Tsr.Assessment.ManagePublish"), ct);
-        return Results.Json(new Body(true, QuizAccess.Stamp(at), result.Devices, result.Queued, result.Devices - result.Queued));
+        var result = await AnnounceAsync(source, quiz, caller.Token, configuration, loggers.CreateLogger("Tsr.Assessment.ManagePublish"), ct);
+        return Results.Json(new Body(true, QuizAccess.Stamp(at), result.Devices, result.Queued, result.Devices - result.Queued), AssessmentJson.Answers.ManagePublish);
     }
 
-    private static async Task<bool> PublishAsync(AssessmentContext db, TimeProvider clock, ManageAccess.QuizRow quiz, int token, DateTimeOffset at, CancellationToken ct)
+    private static async Task<bool> PublishAsync(NpgsqlDataSource source, TimeProvider clock, ManageAccess.QuizRow quiz, int token, DateTimeOffset at, CancellationToken ct)
     {
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        var updated = await db.Database.ExecuteSqlAsync($"update assessment.spot_quizzes set published_at = {at}, published_by = {token} where id = {quiz.Id}", ct);
+        await using var tx = await source.BeginAsync(ct);
+        var updated = await tx.ExecuteAsync($"update assessment.spot_quizzes set published_at = {at}, published_by = {token} where id = {quiz.Id}", ct);
         if (updated == 0)
         {
             return false;
         }
 
-        await Outbox.WriteAsync(db, "assessment.quiz_published", new QuizPublished(quiz.Id, quiz.ClassId, token), clock, ct);
-        await transaction.CommitAsync(ct);
+        await Outbox.WriteAsync(tx, "assessment.quiz_published", new QuizPublished(quiz.Id, quiz.ClassId, token), AssessmentJson.Default.QuizPublished, clock, ct);
+        await tx.CommitAsync(ct);
         return true;
     }
 
-    private static async Task<AnnounceResult> AnnounceAsync(AssessmentContext db, ManageAccess.QuizRow quiz, int token, IConfiguration configuration, ILogger logger, CancellationToken ct)
+    private static async Task<AnnounceResult> AnnounceAsync(NpgsqlDataSource source, ManageAccess.QuizRow quiz, int token, IConfiguration configuration, ILogger logger, CancellationToken ct)
     {
         try
         {
-            var students = await ClassStudents.ListAsync(db, quiz.ClassId, ct);
+            var students = await ClassStudents.ListAsync(source, quiz.ClassId, ct);
             var announcement = Announce(quiz, token, students.Select(s => s.Token).ToList(), configuration);
-            await using var transaction = await db.Database.BeginTransactionAsync(ct);
-            var result = await NotificationsCommands.AnnounceCountedAsync(db, announcement, ct);
-            await transaction.CommitAsync(ct);
+            await using var tx = await source.BeginAsync(ct);
+            var result = await NotificationsCommands.AnnounceCountedAsync(tx, announcement, ct);
+            await tx.CommitAsync(ct);
             return result;
         }
         catch (DbException e)
@@ -113,7 +113,8 @@ internal static partial class ManagePublishSlice
             ["body"] = body,
             ["url"] = Url(configuration, quiz.Code),
         };
-        var criteria = JsonSerializer.Serialize(new { type = "CLASS", value = new[] { quiz.ClassId.ToString(System.Globalization.CultureInfo.InvariantCulture) } });
+        var criteria = JsonSerializer.Serialize(
+            new AnnounceCriteria("CLASS", [quiz.ClassId.ToString(System.Globalization.CultureInfo.InvariantCulture)]), AssessmentJson.Default.AnnounceCriteria);
         return new Announcement(
             title, body, $"/quizzes/{quiz.Id}", "quiz_released", $"quiz-{quiz.Id}", students, token, criteria, data, ReuseExisting: false, CountsFromQueue: true);
     }

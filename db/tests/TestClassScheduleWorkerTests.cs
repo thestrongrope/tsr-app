@@ -5,11 +5,13 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Npgsql;
 using NUnit.Framework;
 using Tsr.Access.Api;
 using Tsr.Notifications.Api;
 using Tsr.Notifications.Api.Domain;
 using Tsr.Notifications.Api.Workers;
+using Tsr.Shared.Api;
 
 namespace Tsr.Db.Tests;
 
@@ -115,7 +117,7 @@ public sealed class TestClassScheduleWorkerTests
     {
         await using var scope = factory.Services.CreateAsyncScope();
         return await ClassScheduleSend.TickAsync(
-            scope.ServiceProvider.GetRequiredService<NotificationsContext>(), scope.ServiceProvider.GetRequiredService<Permissions>(), clock, log, CancellationToken.None);
+            scope.ServiceProvider.GetRequiredService<NpgsqlDataSource>(), scope.ServiceProvider.GetRequiredService<Permissions>(), clock, log, CancellationToken.None);
     }
 
     private static string Quote(string? value) => value is null ? "null" : "'" + value.Replace("'", "''", StringComparison.Ordinal) + "'";
@@ -606,9 +608,10 @@ public sealed class TestClassScheduleWorkerTests
             $"insert into notifications.notifications (title, body, target_audience_criteria, created_by, device_count, success_count, failure_count, action_link) values ('t', 'b', '{stored}', {Teacher}, 0, 0, 0, '') returning notification_id",
             TestDatabase.OwnerConnection);
 
-        await using var scope = factory.Services.CreateAsyncScope();
+        var source = factory.Services.GetRequiredService<NpgsqlDataSource>();
+        await using var tx = await source.BeginAsync(CancellationToken.None);
         var written = await NotificationWriter.WriteAsync(
-            scope.ServiceProvider.GetRequiredService<NotificationsContext>(), clock, new NewNotification("t", "b", asked, 0, 0, 0, "", Teacher), [S1], "class", reuseSameCriteria: true, CancellationToken.None);
+            tx, clock, new NewNotification("t", "b", asked, 0, 0, 0, "", Teacher), [S1], "class", reuseSameCriteria: true, CancellationToken.None);
 
         Assert.That(written.NotificationId, Is.EqualTo(existing));
         Assert.That(await CountAsync("notifications.notifications"), Is.EqualTo(1));

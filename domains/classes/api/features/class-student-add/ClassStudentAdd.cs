@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
 using Tsr.Shared.Api;
@@ -22,7 +22,7 @@ internal static class ClassStudentAddSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string class_id, HttpContext context, ClassesContext db, Permissions permissions, TimeProvider clock, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(string class_id, HttpContext context, NpgsqlDataSource source, Permissions permissions, TimeProvider clock, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -30,7 +30,7 @@ internal static class ClassStudentAddSlice
             return Problem.Unauthenticated();
         }
 
-        var head = await ClassGuards.FindActiveClassAsync(db, ClassGuards.IdOf(class_id), ct);
+        var head = await ClassGuards.FindActiveClassAsync(source, ClassGuards.IdOf(class_id), ct);
         if (head is null)
         {
             return Refusals.ClassNotFound();
@@ -59,28 +59,28 @@ internal static class ClassStudentAddSlice
         }
 
         var member = (int)token;
-        if (!await ClassRoster.IsActiveAsync(db, head.Id, member, ct) && !await SaveAsync(db, clock, head.Id, member, caller.Token, ct))
+        if (!await ClassRoster.IsActiveAsync(source, head.Id, member, ct) && !await SaveAsync(source, clock, head.Id, member, caller.Token, ct))
         {
             return Refused(token);
         }
 
-        return Results.Json(await ClassRoster.BuildAsync(db, permissions, caller, head.Id, ct));
+        return Results.Json(await ClassRoster.BuildAsync(source, permissions, caller, head.Id, ct), ClassesJson.Answers.Answer);
     }
 
     private static IResult Refused(long token) => Problem.Detail(
         StatusCodes.Status422UnprocessableEntity,
         "Could not add " + token.ToString(System.Globalization.CultureInfo.InvariantCulture) + ": not a registered member, or their gender does not match this class.");
 
-    private static async Task<bool> SaveAsync(ClassesContext db, TimeProvider clock, int classId, int token, int by, CancellationToken ct)
+    private static async Task<bool> SaveAsync(NpgsqlDataSource source, TimeProvider clock, int classId, int token, int by, CancellationToken ct)
     {
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        if (!await Enrolment.AddAsync(db, classId, token, by, ct))
+        await using var tx = await source.BeginAsync(ct);
+        if (!await Enrolment.AddAsync(tx, classId, token, by, ct))
         {
             return false;
         }
 
-        await Outbox.WriteAsync(db, "classes.student_enrolled", new StudentEnrolled(classId, token, by, "added"), clock, ct);
-        await transaction.CommitAsync(ct);
+        await Outbox.WriteAsync(tx, "classes.student_enrolled", new StudentEnrolled(classId, token, by, "added"), ClassesJson.Default.StudentEnrolled, clock, ct);
+        await tx.CommitAsync(ct);
         return true;
     }
 }

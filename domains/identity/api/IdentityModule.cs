@@ -1,9 +1,11 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
+using Npgsql;
 using Tsr.Identity.Api.Features.AdminDeletionComplete;
 using Tsr.Identity.Api.Features.AdminDeletionConfirmationSent;
 using Tsr.Identity.Api.Features.AdminDeletionHold;
@@ -29,8 +31,11 @@ public static class IdentityModule
 
     /// <summary>
     /// Registers only identity's tables, for the one-off migrate job, which serves no requests and
-    /// so needs no Firebase settings. The API itself starts with <see cref="AddIdentity"/>.
+    /// so needs no Firebase settings. The API itself starts with <see cref="AddIdentity"/>, which does not call this:
+    /// identity reads and writes through the data source, and its context is for the migrate job only.
     /// </summary>
+    [RequiresUnreferencedCode("Entity Framework is JIT only: the migrate job.")]
+    [RequiresDynamicCode("Entity Framework is JIT only: the migrate job.")]
     public static IServiceCollection AddIdentityTables(this IServiceCollection services)
     {
         services.AddDomainContext<IdentityContext>(IdentityContext.SchemaName);
@@ -44,14 +49,14 @@ public static class IdentityModule
     public static IServiceCollection AddIdentity(this IServiceCollection services, IHostEnvironment env, IConfiguration configuration)
     {
         var settings = FirebaseSettings.Create(configuration, env);
-        services.AddIdentityTables();
+        services.AddTsrDataSource();
         services.AddFirebaseVerification(settings);
         services.AddScoped<MemberDirectory>();
         services.TryAddScoped<IProfileSink, NoProfileSink>();
         services.TryAddScoped<IMemberErasure, NoMemberErasure>();
         services.TryAddSingleton<MemberRateLimit>();
         AddFirebaseAccounts(services, settings, configuration);
-        services.AddScoped(provider => new UserDirectory(provider.GetRequiredService<IdentityContext>()));
+        services.AddScoped(provider => new UserDirectory(provider.GetRequiredService<NpgsqlDataSource>()));
         return services;
     }
 

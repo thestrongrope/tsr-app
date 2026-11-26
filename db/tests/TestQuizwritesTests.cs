@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Npgsql;
 using NUnit.Framework;
 using Tsr.Assessment.Api;
 using Tsr.Assessment.Api.Domain;
@@ -321,12 +322,12 @@ public sealed class TestQuizwritesTests
         await TestDatabase.ExecuteAsync("insert into assessment.spot_quizzes (code, name, class_id, created_by) values ('TAKEN001', 'first', 98201, 1)");
         using var factory = TestApi.Create();
         using var scope = factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<AssessmentContext>();
+        var source = scope.ServiceProvider.GetRequiredService<NpgsqlDataSource>();
         var draws = new Queue<string>(["TAKEN001", "taken001", "FREE0002"]);
-        await using var transaction = await db.Database.BeginTransactionAsync();
+        await using var tx = await source.BeginAsync(CancellationToken.None);
 
-        var id = await NewQuiz.InsertAsync(db, new NewQuiz.Fields(98201, "second", null, null, 1, 1), DateTimeOffset.UtcNow, CancellationToken.None, draws.Dequeue);
-        await transaction.CommitAsync();
+        var id = await NewQuiz.InsertAsync(tx, new NewQuiz.Fields(98201, "second", null, null, 1, 1), DateTimeOffset.UtcNow, CancellationToken.None, draws.Dequeue);
+        await tx.CommitAsync(CancellationToken.None);
 
         Assert.That(await Count("assessment.spot_quizzes", $"id = {id} and code = 'FREE0002'"), Is.EqualTo(1));
         Assert.That(await Count("assessment.spot_quizzes", "code = 'taken001'"), Is.EqualTo(1), "the first quiz is untouched");
@@ -338,15 +339,15 @@ public sealed class TestQuizwritesTests
         await TestDatabase.ExecuteAsync("insert into assessment.spot_quizzes (code, name, class_id, created_by) values ('TAKEN001', 'first', 98201, 1)");
         using var factory = TestApi.Create();
         using var scope = factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<AssessmentContext>();
+        var source = scope.ServiceProvider.GetRequiredService<NpgsqlDataSource>();
         var attempts = 0;
-        await using var transaction = await db.Database.BeginTransactionAsync();
+        await using var tx = await source.BeginAsync(CancellationToken.None);
 
         await Assert.ThatAsync(
-            () => NewQuiz.InsertAsync(db, new NewQuiz.Fields(98201, "second", null, null, 1, 1), DateTimeOffset.UtcNow, CancellationToken.None, () => { attempts++; return "TAKEN001"; }),
+            () => NewQuiz.InsertAsync(tx, new NewQuiz.Fields(98201, "second", null, null, 1, 1), DateTimeOffset.UtcNow, CancellationToken.None, () => { attempts++; return "TAKEN001"; }),
             Throws.InvalidOperationException);
         Assert.That(attempts, Is.EqualTo(NewQuiz.MaxAttempts));
-        Assert.That(await db.Database.SqlQueryRaw<int>("select 1 as \"Value\"").SingleAsync(), Is.EqualTo(1), "a failed draw does not abort the transaction");
+        Assert.That(await tx.ScalarAsync<int>($"select 1", CancellationToken.None), Is.EqualTo(1), "a failed draw does not abort the transaction");
     }
 
     // ---------------------------------------------------------------- copy from a standard MCQ and between classes
@@ -379,12 +380,14 @@ public sealed class TestQuizwritesTests
     {
         using var factory = TestApi.Create();
         using var scope = factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<AssessmentContext>();
-        await QuizStateStore.SaveAsync(db, "winners", new System.Text.Json.Nodes.JsonObject(), TimeProvider.System, CancellationToken.None);
+        var source = scope.ServiceProvider.GetRequiredService<NpgsqlDataSource>();
+        await using var tx = await source.BeginAsync(CancellationToken.None);
+        await QuizStateStore.SaveAsync(tx, "winners", new System.Text.Json.Nodes.JsonObject(), TimeProvider.System, CancellationToken.None);
 
-        Assert.That(await QuizStateStore.ExistsAsync(db, "WINNERS", CancellationToken.None), Is.True, "the name matches without regard to letter case");
-        Assert.That(await QuizStateStore.LoadAsync(db, "Winners", CancellationToken.None), Is.Not.Null);
-        await QuizStateStore.DeleteAsync(db, ["WINNERS"], CancellationToken.None);
+        Assert.That(await QuizStateStore.ExistsAsync(tx, "WINNERS", CancellationToken.None), Is.True, "the name matches without regard to letter case");
+        Assert.That(await QuizStateStore.LoadAsync(tx, "Winners", CancellationToken.None), Is.Not.Null);
+        await QuizStateStore.DeleteAsync(tx, ["WINNERS"], CancellationToken.None);
+        await tx.CommitAsync(CancellationToken.None);
         Assert.That(await Count("assessment.quiz_state", "name = 'winners'"), Is.Zero);
     }
 

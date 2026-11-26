@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Npgsql;
 using NUnit.Framework;
 using Tsr.Content.Api;
 using Tsr.Content.Api.Domain;
@@ -70,13 +71,13 @@ public sealed class ContentRefreshTests
     private async Task<RefreshOutcome> TickAsync(string? directory, Func<CancellationToken, Task>? beforeCommit = null)
     {
         await using var scope = factory.Services.CreateAsyncScope();
-        return await ContentRefresh.TickAsync(scope.ServiceProvider.GetRequiredService<ContentContext>(), directory, clock, log, beforeCommit, CancellationToken.None);
+        return await ContentRefresh.TickAsync(scope.ServiceProvider.GetRequiredService<NpgsqlDataSource>(), directory, clock, log, beforeCommit, CancellationToken.None);
     }
 
     private async Task<RefreshOutcome> StoreAsync(ContentSet set)
     {
         await using var scope = factory.Services.CreateAsyncScope();
-        return await ContentRefresh.StoreAsync(scope.ServiceProvider.GetRequiredService<ContentContext>(), Result.Ok(set), clock, log, beforeCommit: null, CancellationToken.None);
+        return await ContentRefresh.StoreAsync(scope.ServiceProvider.GetRequiredService<NpgsqlDataSource>(), Result.Ok(set), clock, log, beforeCommit: null, CancellationToken.None);
     }
 
     private static PublishedArticle AnArticle() => new()
@@ -530,7 +531,7 @@ public sealed class ContentRefreshTests
 
         await using var scope = factory.Services.CreateAsyncScope();
         Assert.That(
-            async () => await ContentRefresh.TickAsync(scope.ServiceProvider.GetRequiredService<ContentContext>(), files.Root, clock, log, stopping.Token),
+            async () => await ContentRefresh.TickAsync(scope.ServiceProvider.GetRequiredService<NpgsqlDataSource>(), files.Root, clock, log, stopping.Token),
             Throws.InstanceOf<OperationCanceledException>());
 
         Assert.That(await StateAsync(), Is.EqualTo(before));

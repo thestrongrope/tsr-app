@@ -25,7 +25,7 @@ ones into `content`'s tables and the reads answer from that copy.
 `HP` = `v1-publications.hurl`, `HV` = `v1-videos.hurl` (case numbers are the numbered comments in each file);
 in `db/tests/`: `DA` = `V1ArticlesTests.cs`, `D1` = `V1ArticleTests.cs`, `DT` = `V1TaxonomiesTests.cs`,
 `DP` = `V1PublicationsTests.cs`, `DR` = `ContentRefreshTests.cs`, `CL` = `ContentLoadTests.cs`, `DF` = `ContentFilesTests.cs`,
-`DV` = `LatestVideosTests.cs`, `DY` = `YouTubeFeedTests.cs`;
+`DV` = `LatestVideosTests.cs`, `DY` = `YouTubeFeedTests.cs`, `DX` = `ContentFailureTests.cs`;
 in `api/tests/`: `GT` = `ContentGuardTests.cs`, `GR` = `RepositoryContentTests.cs`; `PI` = `tools/prove-content-import.sh` (cases numbered as printed).
 
 **All reads**
@@ -97,7 +97,7 @@ in `api/tests/`: `GT` = `ContentGuardTests.cs`, `GR` = `RepositoryContentTests.c
 | LIB-R20 | WHEN an article is published in the content files THEN the system SHALL include it in every read after the next refresh, which runs at start and every 5 minutes, with no manual step | an editor runs nothing by hand | Must | Test: `DR` `A_new_published_file_is_read_on_the_next_tick`. Inspection: the interval in `api/workers/ContentRefreshWorker.cs`. The 10 minute bound over the real content: not verified (section 9) |
 | LIB-R21 | WHEN a published article is changed in the content files THEN the system SHALL return the changed article after the next refresh | corrections reach readers | Must | Test: `DR` `A_changed_file_replaces_the_article`, `A_change_to_any_stored_field_of_an_article_a_category_or_a_publication_is_a_change` |
 | LIB-R22 | WHEN an article is removed from the content files or set to a draft THEN the system SHALL stop returning it after the next refresh | a mistake does not stay public | Must | Test: `DR` `A_file_removed_or_set_to_draft_is_no_longer_returned` |
-| LIB-R23 | WHILE a refresh is running, the system SHALL keep answering from the last complete set | a half-loaded Library is worse than a stale one | Must | Test: `DR` `A_reader_sees_the_last_complete_set_until_the_refresh_commits`, `A_refresh_that_throws_before_its_commit_leaves_the_last_set` |
+| LIB-R23 | WHILE a refresh is running, the system SHALL keep answering from the last complete set | a half-loaded Library is worse than a stale one | Must | Test: `DR` `A_reader_sees_the_last_complete_set_until_the_refresh_commits`, `A_refresh_that_throws_before_its_commit_leaves_the_last_set`; `DX` `A_copy_that_fails_part_way_keeps_the_last_set`, `A_state_write_that_changes_no_row_fails_and_keeps_the_last_set` |
 | LIB-R24 | IF a refresh cannot read the files, finds no published article, or finds fewer than half the articles of the last complete set, THEN the system SHALL keep the last complete set, store the time and cause in `refresh_state`, and log one warning with the cause | a refresh that "succeeds" empty must not empty the Library | Must | Test: `DR` `A_refresh_that_fails_or_shrinks_keeps_the_last_set_and_records_why`, `Four_articles_down_to_two_is_not_a_halved_refresh`, `A_read_that_throws_keeps_the_last_set_and_records_the_exception_type` |
 
 ## 4. Quality requirements (ISO/IEC 25010)

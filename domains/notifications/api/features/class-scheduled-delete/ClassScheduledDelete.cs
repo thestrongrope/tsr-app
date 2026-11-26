@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Notifications.Api.Domain;
 
@@ -21,7 +21,7 @@ internal static class ClassScheduledDeleteSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string class_id, string scheduled_id, HttpContext context, NotificationsContext db, Permissions permissions, TimeProvider clock, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(string class_id, string scheduled_id, HttpContext context, NpgsqlDataSource source, Permissions permissions, TimeProvider clock, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -30,32 +30,32 @@ internal static class ClassScheduledDeleteSlice
         }
 
         var classId = NotifyGuards.IdOf(class_id);
-        var refusal = await NotifyGuards.ClassAccessAsync(db, permissions, caller, classId, ct);
+        var refusal = await NotifyGuards.ClassAccessAsync(source, permissions, caller, classId, ct);
         if (refusal is not null)
         {
             return refusal;
         }
 
         var id = NotifyGuards.IdOf(scheduled_id);
-        if (!await DeleteAsync(db, clock, classId, id, caller.Token, ct))
+        if (!await DeleteAsync(source, clock, classId, id, caller.Token, ct))
         {
             return Problem.Detail(StatusCodes.Status404NotFound, "Scheduled notification not found");
         }
 
-        return Results.Json(new Dictionary<string, object> { ["success"] = true });
+        return Results.Json(new Dictionary<string, object?> { ["success"] = true }, NotificationsJson.Answers.Answer);
     }
 
-    private static async Task<bool> DeleteAsync(NotificationsContext db, TimeProvider clock, int classId, int id, int token, CancellationToken ct)
+    private static async Task<bool> DeleteAsync(NpgsqlDataSource source, TimeProvider clock, int classId, int id, int token, CancellationToken ct)
     {
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        var deleted = await db.Database.ExecuteSqlAsync($"delete from notifications.class_scheduled_notifications where id = {id} and class_id = {classId}", ct);
+        await using var tx = await source.BeginAsync(ct);
+        var deleted = await tx.ExecuteAsync($"delete from notifications.class_scheduled_notifications where id = {id} and class_id = {classId}", ct);
         if (deleted == 0)
         {
             return false;
         }
 
-        await Outbox.WriteAsync(db, "notifications.class_schedule_deleted", new ScheduleDeleted(id, classId, token), clock, ct);
-        await transaction.CommitAsync(ct);
+        await Outbox.WriteAsync(tx, "notifications.class_schedule_deleted", new ScheduleDeleted(id, classId, token), NotificationsJson.Default.ScheduleDeleted, clock, ct);
+        await tx.CommitAsync(ct);
         return true;
     }
 }

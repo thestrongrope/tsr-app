@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
 using System.Text.Json;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Npgsql;
 using Tsr.Shared.Api;
 
 namespace Tsr.Content.Api.Domain;
@@ -33,32 +33,36 @@ internal static partial class ContentRefresh
 
     private const int MaxCauseLength = 200;
 
-    public static Task<RefreshOutcome> TickAsync(ContentContext db, string? directory, TimeProvider clock, ILogger log, CancellationToken ct) =>
-        TickAsync(db, directory, clock, log, beforeCommit: null, ct);
+    /// <summary>What the last copy recorded: the two columns the rules read. Null when no copy or failure has ever been recorded.</summary>
+    private sealed record StoredState(string ContentHash, int ArticleCount);
+
+    public static Task<RefreshOutcome> TickAsync(NpgsqlDataSource source, string? directory, TimeProvider clock, ILogger log, CancellationToken ct) =>
+        TickAsync(source, directory, clock, log, beforeCommit: null, ct);
 
     /// <summary><paramref name="beforeCommit"/> is awaited inside the transaction just before the commit: the one seam, for the test that reads while a refresh is open.</summary>
     internal static async Task<RefreshOutcome> TickAsync(
-        ContentContext db, string? directory, TimeProvider clock, ILogger log, Func<CancellationToken, Task>? beforeCommit, CancellationToken ct)
+        NpgsqlDataSource source, string? directory, TimeProvider clock, ILogger log, Func<CancellationToken, Task>? beforeCommit, CancellationToken ct)
     {
         var read = ContentFiles.Read(directory, clock, ct);
-        return await StoreAsync(db, read, clock, log, beforeCommit, ct);
+        return await StoreAsync(source, read, clock, log, beforeCommit, ct);
     }
 
     /// <summary>Rules 3 to 6 over one read: what the tick does once the files are in memory (or could not be read).</summary>
     internal static async Task<RefreshOutcome> StoreAsync(
-        ContentContext db, Result<ContentSet> read, TimeProvider clock, ILogger log, Func<CancellationToken, Task>? beforeCommit, CancellationToken ct)
+        NpgsqlDataSource source, Result<ContentSet> read, TimeProvider clock, ILogger log, Func<CancellationToken, Task>? beforeCommit, CancellationToken ct)
     {
-        var state = await db.RefreshStates.SingleOrDefaultAsync(s => s.Id == StateId, ct);
+        // Read on its own pooled connection, released before the transaction opens: no path holds two.
+        var state = await ReadStateAsync(source, ct);
         if (!read.IsSuccess)
         {
-            return await KeepAsync(db, state, read.Error!, clock, log, ct);
+            return await KeepAsync(source, state, read.Error!, clock, log, ct);
         }
 
         var set = read.Value!;
         // A missing row counts as 0, which switches the half rule off.
         if (set.Articles.Count == 0 || set.Articles.Count * 2 < (state?.ArticleCount ?? 0))
         {
-            return await KeepAsync(db, state, TooFewArticles, clock, log, ct);
+            return await KeepAsync(source, state, TooFewArticles, clock, log, ct);
         }
 
         var hash = Hash(set);
@@ -67,36 +71,104 @@ internal static partial class ContentRefresh
             return new RefreshOutcome(RefreshResult.Unchanged);
         }
 
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        await db.PublishedArticles.ExecuteDeleteAsync(ct);
-        await db.Categories.ExecuteDeleteAsync(ct);
-        await db.Publications.ExecuteDeleteAsync(ct);
-        db.PublishedArticles.AddRange(set.Articles);
-        db.Categories.AddRange(set.Categories);
-        db.Publications.AddRange(set.Publications);
-        state = state ?? db.RefreshStates.Add(new RefreshState { Id = StateId }).Entity;
-        state.ContentHash = hash;
-        state.ArticleCount = set.Articles.Count;
-        state.RefreshedAt = clock.GetUtcNow();
-        await db.SaveChangesAsync(ct);
+        await using var tx = await source.BeginAsync(ct);
+        await ReplaceRowsAsync(tx, set, ct);
+        await WriteStateAsync(tx, state is null, hash, set.Articles.Count, clock.GetUtcNow(), ct);
         if (beforeCommit is not null)
         {
             await beforeCommit(ct);
         }
 
-        await transaction.CommitAsync(ct);
+        await tx.CommitAsync(ct);
         LogRefreshed(log, set.Articles.Count, set.Categories.Count, set.Publications.Count);
         return new RefreshOutcome(RefreshResult.Refreshed);
     }
 
+    private static async Task<StoredState?> ReadStateAsync(NpgsqlDataSource source, CancellationToken ct)
+    {
+        var rows = await source.ListAsync(
+            $"select content_hash, article_count from content.refresh_state where id = {StateId}",
+            row => new StoredState(row.Text("content_hash"), row.Int("article_count")),
+            ct);
+        return rows.Count == 0 ? null : rows[0];
+    }
+
+    // One insert per row (plan, Approach 4). Delete, never truncate: truncate's lock would block readers (CON-R4).
+    private static async Task ReplaceRowsAsync(DbTx tx, ContentSet set, CancellationToken ct)
+    {
+        _ = await tx.ExecuteAsync($"delete from content.published_articles", ct);
+        _ = await tx.ExecuteAsync($"delete from content.categories", ct);
+        _ = await tx.ExecuteAsync($"delete from content.publications", ct);
+        foreach (var article in set.Articles)
+        {
+            _ = await tx.ExecuteAsync(
+                $"""
+                insert into content.published_articles
+                    (slug, slug_decoded, legacy_id, title, excerpt, body_markdown, body_html, published_at, published_date_text,
+                     modified_at, modified_date_text, author, language, reading_minutes, categories, tags)
+                values
+                    ({article.Slug}, {article.SlugDecoded}, {article.LegacyId}, {article.Title}, {article.Excerpt}, {article.BodyMarkdown}, {article.BodyHtml}, {article.PublishedAt}, {article.PublishedDateText},
+                     {article.ModifiedAt}, {article.ModifiedDateText}, {article.Author}, {article.Language}, {article.ReadingMinutes}, {article.Categories}, {article.Tags})
+                """,
+                ct);
+        }
+
+        foreach (var category in set.Categories)
+        {
+            _ = await tx.ExecuteAsync(
+                $"""
+                insert into content.categories (slug, title, description, sort_order, parent_slug)
+                values ({category.Slug}, {category.Title}, {category.Description}, {category.SortOrder}, {category.ParentSlug})
+                """,
+                ct);
+        }
+
+        foreach (var publication in set.Publications)
+        {
+            _ = await tx.ExecuteAsync(
+                $"""
+                insert into content.publications (position, title, summary, type, size, updated, language, file, read_online_url, download_only)
+                values ({publication.Position}, {publication.Title}, {publication.Summary}, {publication.Type}, {publication.Size}, {publication.Updated}, {publication.Language}, {publication.File}, {publication.ReadOnlineUrl}, {publication.DownloadOnly})
+                """,
+                ct);
+        }
+    }
+
+    // As EF wrote it: an insert when no row was read, else an update of the three columns a store changes.
+    private static async Task WriteStateAsync(DbTx tx, bool insert, string hash, int count, DateTimeOffset now, CancellationToken ct)
+    {
+        var changed = insert
+            ? await tx.ExecuteAsync(
+                $"insert into content.refresh_state (id, content_hash, article_count, refreshed_at) values ({StateId}, {hash}, {count}, {now})",
+                ct)
+            : await tx.ExecuteAsync(
+                $"update content.refresh_state set content_hash = {hash}, article_count = {count}, refreshed_at = {now} where id = {StateId}",
+                ct);
+        RequireOneStateRow(changed);
+    }
+
+    // As EF's update did: a state write that changes no row (the row went between the read and the write) is a failure, so the copy rolls back.
+    private static void RequireOneStateRow(int changed)
+    {
+        if (changed != 1)
+        {
+            throw new InvalidOperationException($"The content refresh state write changed {changed} rows, not 1.");
+        }
+    }
+
     /// <summary>Records why the last set was kept (inserting the one row when no refresh has ever succeeded) and logs one warning. A cause names a file at most, cut to what the column holds.</summary>
-    private static async Task<RefreshOutcome> KeepAsync(ContentContext db, RefreshState? state, string cause, TimeProvider clock, ILogger log, CancellationToken ct)
+    private static async Task<RefreshOutcome> KeepAsync(NpgsqlDataSource source, StoredState? state, string cause, TimeProvider clock, ILogger log, CancellationToken ct)
     {
         var stored = cause.Length > MaxCauseLength ? cause[..MaxCauseLength] : cause;
-        state ??= db.RefreshStates.Add(new RefreshState { Id = StateId }).Entity;
-        state.LastFailureAt = clock.GetUtcNow();
-        state.LastFailureCause = stored;
-        await db.SaveChangesAsync(ct);
+        var now = clock.GetUtcNow();
+        var changed = state is null
+            ? await source.ExecuteAsync(
+                $"insert into content.refresh_state (id, content_hash, article_count, last_failure_at, last_failure_cause) values ({StateId}, '', 0, {now}, {stored})",
+                ct)
+            : await source.ExecuteAsync(
+                $"update content.refresh_state set last_failure_at = {now}, last_failure_cause = {stored} where id = {StateId}",
+                ct);
+        RequireOneStateRow(changed);
         LogKept(log, stored);
         return new RefreshOutcome(RefreshResult.Kept, stored);
     }

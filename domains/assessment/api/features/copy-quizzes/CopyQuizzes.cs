@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Assessment.Api.Domain;
 using Tsr.Shared.Api;
@@ -28,7 +28,7 @@ internal static class CopyQuizzesSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string class_id, HttpContext context, AssessmentContext db, Permissions permissions, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(string class_id, HttpContext context, NpgsqlDataSource source, Permissions permissions, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -37,7 +37,7 @@ internal static class CopyQuizzesSlice
         }
 
         var classId = PhpValue.IntOfText(class_id);
-        if (await ManageAccess.ActiveClassAsync(db, classId, ct) is null)
+        if (await ManageAccess.ActiveClassAsync(source, classId, ct) is null)
         {
             return ManageAccess.ClassNotFound();
         }
@@ -54,18 +54,19 @@ internal static class CopyQuizzesSlice
             return Problem.Detail(StatusCodes.Status422UnprocessableEntity, "topic is required");
         }
 
-        var rows = topic.Contains('\0', StringComparison.Ordinal) ? [] : await ReadAsync(db, classId, topic, ct);
-        return Results.Json(rows.Select(r => new Item(r.Id, r.Name ?? string.Empty, QuizAccess.Stamp(r.CreatedAt))).ToList());
+        var rows = topic.Contains('\0', StringComparison.Ordinal) ? [] : await ReadAsync(source, classId, topic, ct);
+        return Results.Json(rows.Select(r => new Item(r.Id, r.Name ?? string.Empty, QuizAccess.Stamp(r.CreatedAt))).ToList(), AssessmentJson.Answers.CopyQuizzes);
     }
 
-    private static async Task<List<Row>> ReadAsync(AssessmentContext db, long classId, string topic, CancellationToken ct) =>
-        await db.Database
-            .SqlQuery<Row>($"""
+    private static async Task<List<Row>> ReadAsync(NpgsqlDataSource source, long classId, string topic, CancellationToken ct) =>
+        await source.ListAsync(
+            $"""
                 select q.id as "Id", q.name::text as "Name", q.created_at as "CreatedAt"
                 from assessment.spot_quizzes q
                 where q.class_id = {classId} and q.topic like {topic}::citext
                 order by q.created_at desc, q.id desc
                 limit {MaxRows}
-                """)
-            .ToListAsync(ct);
+                """,
+            row => new Row(row.Int("Id"), row.TextOrNull("Name"), row.Instant("CreatedAt")),
+            ct);
 }

@@ -2,7 +2,7 @@ using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Microsoft.Extensions.Logging;
 using Tsr.Access.Api;
 using Tsr.Identity.Api;
@@ -34,7 +34,7 @@ internal static class ChildrenLinkInspectEndpoint
 }
 
 internal sealed partial class ChildrenLinkInspectHandler(
-    MembershipContext db,
+    NpgsqlDataSource source,
     Permissions permissions,
     UserDirectory users,
     MemberRateLimit limit,
@@ -63,17 +63,17 @@ internal sealed partial class ChildrenLinkInspectHandler(
         var state = GuardianRules.InspectState(link?.Status, link?.ExpiresAt, clock.GetUtcNow());
         if (state != "valid")
         {
-            return Results.Json(new JsonObject { ["state"] = state });
+            return Results.Json(new JsonObject { ["state"] = state }, MembershipJson.Answers.JsonObject);
         }
 
-        return Results.Json(new JsonObject { ["state"] = state, ["first_name"] = await FirstNameAsync(link!.ChildToken, ct) });
+        return Results.Json(new JsonObject { ["state"] = state, ["first_name"] = await FirstNameAsync(link!.ChildToken, ct) }, MembershipJson.Answers.JsonObject);
     }
 
     // A code is 32 characters; a longer one cannot match a row, so it is not looked up.
     private async Task<UserGuardian?> FindAsync(string code, CancellationToken ct) =>
-        code.Length > MembershipContext.CodeLength
+        code.Length > GuardianRows.CodeLength
             ? null
-            : await db.UserGuardians.AsNoTracking().Where(g => g.Code == code).FirstOrDefaultAsync(ct);
+            : (await source.ListAsync(GuardianRows.ByCode(code), GuardianRows.Read, ct)).FirstOrDefault();
 
     // PHP: LEFT JOIN users ON token ... LIMIT 1: the first holder of the child's token, whose first name may be null.
     private async Task<string?> FirstNameAsync(int childToken, CancellationToken ct)
@@ -85,7 +85,7 @@ internal sealed partial class ChildrenLinkInspectHandler(
         }
 
         var holderId = holders[0].Id;
-        return await db.MemberProfiles.AsNoTracking().Where(p => p.UserId == holderId).Select(p => p.FirstName).FirstOrDefaultAsync(ct);
+        return (await source.ListAsync($"select first_name from membership.member_profiles where user_id = {holderId}", row => row.TextOrNull("first_name"), ct)).FirstOrDefault();
     }
 
     // PHP: log_event('parent_invite_inspect.rate_limited'). No member token in the log line.

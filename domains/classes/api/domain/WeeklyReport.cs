@@ -1,6 +1,6 @@
 using System.Globalization;
 using Microsoft.AspNetCore.Http;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Shared.Api;
 
@@ -23,7 +23,7 @@ internal static class WeeklyReport
     private sealed record ClassRow(int Id, string Level, string Code, string? TeacherName);
 
     /// <summary>The gender and reports:read (403), then the months (422), then the report. PHP's order.</summary>
-    public static async Task<(Loaded? Report, IResult? Refusal)> OpenAsync(HttpContext context, ClassesContext db, Permissions permissions, Caller caller, DateOnly today, CancellationToken ct)
+    public static async Task<(Loaded? Report, IResult? Refusal)> OpenAsync(HttpContext context, NpgsqlDataSource db, Permissions permissions, Caller caller, DateOnly today, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(context);
         var (scope, refusal) = await ReportScope.OpenAsync(context, permissions, caller, ct);
@@ -55,17 +55,18 @@ internal static class WeeklyReport
     }
 
     // PHP getAll: the class's level must exist (inner join), the teacher's name may be missing (left join); order gender, level order, id.
-    private static async Task<List<ClassRow>> ClassesAsync(ClassesContext db, int[] ids, CancellationToken ct) =>
-        await db.Database
-            .SqlQuery<ClassRow>($"""
+    private static async Task<List<ClassRow>> ClassesAsync(NpgsqlDataSource db, int[] ids, CancellationToken ct) =>
+        await db.ListAsync(
+            $"""
                 select c.id as "Id", cl.name::text as "Level", c.code::text as "Code", u.name::text as "TeacherName"
                 from classes.classes c
                 join classes.class_levels cl on cl.id = c.class_level_id
                 left join membership.v_members u on u.token = c.teacher
                 where c.id = any({ids})
                 order by c.gender, cl.sort_order, c.id
-                """)
-            .ToListAsync(ct);
+                """,
+            r => new ClassRow(r.Int("Id"), r.Text("Level"), r.Text("Code"), r.TextOrNull("TeacherName")),
+            ct);
 
     private static ClassItem ToItem(ClassRow c, Dictionary<DateOnly, int> conducted, IReadOnlyList<WeeklyGrid.Month> months)
     {

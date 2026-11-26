@@ -1,5 +1,5 @@
-using Microsoft.EntityFrameworkCore;
 using Tsr.Membership.Api;
+using Tsr.Shared.Api;
 
 namespace Tsr.Classes.Api.Domain;
 
@@ -16,36 +16,37 @@ internal static class Enrolment
 {
     private sealed record Pair(string? MemberGender, int? ClassGender);
 
-    public static async Task<bool> AddAsync(ClassesContext db, int classId, int token, int? addedBy, CancellationToken ct)
+    public static async Task<bool> AddAsync(DbTx tx, int classId, int token, int? addedBy, CancellationToken ct)
     {
         if (token <= 0)
         {
             return false;
         }
 
-        var pairs = await db.Database
-            .SqlQuery<Pair>($"""
-                select m.gender as "MemberGender", c.gender as "ClassGender"
-                from membership.v_members m, classes.classes c
-                where m.token = {token} and c.id = {classId}
-                order by m.user_id
-                limit 1
-                """)
-            .ToListAsync(ct);
+        var pairs = await tx.ListAsync(
+            $"""
+            select m.gender as "MemberGender", c.gender as "ClassGender"
+            from membership.v_members m, classes.classes c
+            where m.token = {token} and c.id = {classId}
+            order by m.user_id
+            limit 1
+            """,
+            row => new Pair(row.TextOrNull("MemberGender"), row.IntOrNull("ClassGender")),
+            ct);
         if (pairs.Count == 0 || !EnrolmentRules.GenderAllows(pairs[0].MemberGender, pairs[0].ClassGender))
         {
             return false;
         }
 
-        await MembershipCommands.RecordAcceptedRegistrationAsync(db, token, classId, ct);
+        await MembershipCommands.RecordAcceptedRegistrationAsync(tx, token, classId, ct);
         if (addedBy is null)
         {
-            await db.Database.ExecuteSqlAsync(
+            await tx.ExecuteAsync(
                 $"insert into classes.class_students (class_id, token_no, joined_on) values ({classId}, {token}, (now() at time zone 'UTC')::date)", ct);
         }
         else
         {
-            await db.Database.ExecuteSqlAsync(
+            await tx.ExecuteAsync(
                 $"insert into classes.class_students (class_id, token_no, joined_on, added_by) values ({classId}, {token}, (now() at time zone 'UTC')::date, {addedBy})", ct);
         }
 

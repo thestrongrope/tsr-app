@@ -36,6 +36,6 @@ internal static class WhatsappRunsSlice
         var query = context.Request.Query;
         var answer = await notifier.RecentRunsAsync(Digits(query["limit"].LastOrDefault()), Digits(query["reminderId"].LastOrDefault()), ct);
         var (data, failed) = NotifierAsk.Interpret(answer);
-        return failed ?? Results.Json(new Listed(NotifierRows.Rows(data).Select(NotifierRows.Run).ToList()));
+        return failed ?? Results.Json(new Listed(NotifierRows.Rows(data).Select(NotifierRows.Run).ToList()), NotificationsJson.Answers.RunsListed);
     }
 }

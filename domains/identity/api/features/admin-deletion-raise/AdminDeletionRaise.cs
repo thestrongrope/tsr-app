@@ -2,8 +2,9 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
+using Tsr.Identity.Api.Domain;
 using Tsr.Shared.Api;
 
 namespace Tsr.Identity.Api.Features.AdminDeletionRaise;
@@ -26,7 +27,7 @@ internal static class AdminDeletionRaiseSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(HttpContext context, IdentityContext db, Permissions permissions, TimeProvider clock, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(HttpContext context, NpgsqlDataSource source, Permissions permissions, TimeProvider clock, CancellationToken ct)
     {
         var refusal = await DeletionRequests.RefuseAsync(context.GetCaller(), permissions, "deletion-requests:manage", ct);
         if (refusal is not null)
@@ -47,40 +48,57 @@ internal static class AdminDeletionRaiseSlice
             return Problem.Detail(StatusCodes.Status422UnprocessableEntity, "Enter the email address the request came from");
         }
 
-        var member = email.Contains('\0', StringComparison.Ordinal) ? null : await FindMemberAsync(db, email, ct);
+        Member? member = null;
+        if (!email.Contains('\0', StringComparison.Ordinal))
+        {
+            await using var read = await source.BeginAsync(ct);
+            member = await FindMemberAsync(read, email, ct);
+        }
+
         if (member is null)
         {
             return Problem.Detail(StatusCodes.Status404NotFound, "No account matches " + email);
         }
 
-        var (row, created) = await DeletionRequests.RaiseAsync(db, clock, member.Token, "web", Reason, Cut(member.Name), Cut(member.Email), ct);
-        var demo = await DeletionRequests.DemoTokensAsync(db, ct);
+        var (row, created) = await DeletionRequests.RaiseAsync(source, clock, member.Token, "web", Reason, Cut(member.Name), Cut(member.Email), ct);
+        List<int> demo;
+        await using (var read = await source.BeginAsync(ct))
+        {
+            demo = await DeletionRequests.DemoTokensAsync(read, ct);
+        }
+
         return Results.Json(
             new Dictionary<string, object?> { ["request"] = DeletionViews.AdminView(row, demo), ["created"] = created },
+            IdentityJson.Answers.Answer,
+            contentType: null,
             statusCode: created ? StatusCodes.Status201Created : StatusCodes.Status200OK);
     }
 
     // PHP tokenForEmail (lower(email) = lower(:email), order by token, limit 1) then member(token) (the first row of that token).
-    private static async Task<Member?> FindMemberAsync(IdentityContext db, string email, CancellationToken ct)
+    private static async Task<Member?> FindMemberAsync(DbTx tx, string email, CancellationToken ct)
     {
-        var tokens = await db.Database
-            .SqlQuery<int>($"""select token as "Value" from identity.users where lower(email) = lower({email}) order by token limit 1""")
-            .ToListAsync(ct);
+        var tokens = await tx.ListAsync(
+            $"""select token as "Value" from identity.users where lower(email) = lower({email}) order by token limit 1""",
+            row => row.Int("Value"),
+            ct);
         if (tokens.Count == 0 || tokens[0] <= 0)
         {
             return null;
         }
 
-        return (await db.Database
-            .SqlQuery<Member>($"""
-                select u.token as "Token", u.email as "Email", m.name as "Name"
-                from identity.users u left join membership.v_members m on m.user_id = u.id
-                where u.token = {tokens[0]}
-                order by u.id
-                limit 1
-                """)
-            .ToListAsync(ct)).FirstOrDefault();
+        return (await tx.ListAsync(
+            $"""
+            select u.token as "Token", u.email as "Email", m.name as "Name"
+            from identity.users u left join membership.v_members m on m.user_id = u.id
+            where u.token = {tokens[0]}
+            order by u.id
+            limit 1
+            """,
+            ReadMember,
+            ct)).FirstOrDefault();
     }
+
+    private static Member ReadMember(DbRow row) => new(row.Int("Token"), row.TextOrNull("Email"), row.TextOrNull("Name"));
 
     private static string? Cut(string? value) => value is null || value.Length <= ContactLength ? value : value[..ContactLength];
 }

@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
 using Tsr.Shared.Api;
@@ -24,7 +25,7 @@ internal static class AdminTransferStudentsSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string class_id, HttpContext context, ClassesContext db, Permissions permissions, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(string class_id, HttpContext context, NpgsqlDataSource source, Permissions permissions, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -38,15 +39,15 @@ internal static class AdminTransferStudentsSlice
             return refusal;
         }
 
-        var found = await ClassListing.FindAsync(db, await ClassListing.AssignedAsync(permissions, caller, ct), ClassGuards.IdOf(class_id), ct);
+        var found = await ClassListing.FindAsync(source, await ClassListing.AssignedAsync(permissions, caller, ct), ClassGuards.IdOf(class_id), ct);
         if (found is null)
         {
             return Refusals.ClassNotFound();
         }
 
-        var roster = await TransferRoster.ForAsync(db, found.Id, found.Status == "A", ct);
+        var roster = await TransferRoster.ForAsync(source, found.Id, found.Status == "A", ct);
         return Results.Json(new Body(roster
             .Select(s => new Student(s.Token, PhpCast.Text(s.Name), PhpCast.StrOrNull(s.Email), PhpCast.StrOrNull(s.Mobile), s.JoinedOn, s.RemovedOn, s.FromDeactivation))
-            .ToList()));
+            .ToList()), ClassesJson.Answers.TransferStudentsBody);
     }
 }

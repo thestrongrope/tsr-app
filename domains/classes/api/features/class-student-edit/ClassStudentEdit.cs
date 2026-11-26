@@ -3,7 +3,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
 using Tsr.Identity.Api;
@@ -39,7 +39,7 @@ internal static class ClassStudentEditSlice
         string class_id,
         string token,
         HttpContext context,
-        ClassesContext db,
+        NpgsqlDataSource source,
         Permissions permissions,
         TimeProvider clock,
         CancellationToken ct)
@@ -50,7 +50,7 @@ internal static class ClassStudentEditSlice
             return Problem.Unauthenticated();
         }
 
-        var head = await ClassGuards.FindActiveClassAsync(db, ClassGuards.IdOf(class_id), ct);
+        var head = await ClassGuards.FindActiveClassAsync(source, ClassGuards.IdOf(class_id), ct);
         if (head is null)
         {
             return Refusals.ClassNotFound();
@@ -62,7 +62,7 @@ internal static class ClassStudentEditSlice
         }
 
         var student = ClassGuards.TokenOf(token);
-        if (!await ClassRoster.IsActiveAsync(db, head.Id, student, ct))
+        if (!await ClassRoster.IsActiveAsync(source, head.Id, student, ct))
         {
             return Problem.Detail(StatusCodes.Status404NotFound, "Student not found in this class");
         }
@@ -85,13 +85,13 @@ internal static class ClassStudentEditSlice
             return Problem.Detail(StatusCodes.Status422UnprocessableEntity, emailError);
         }
 
-        var saved = await SaveAsync(db, clock, head.Id, student, values, caller.Token, ct);
+        var saved = await SaveAsync(source, clock, head.Id, student, values, caller.Token, ct);
         return saved switch
         {
             Outcome.EmailTaken => Problem.Detail(StatusCodes.Status422UnprocessableEntity, "This email already belongs to another member."),
             Outcome.EmailRefused => Problem.Detail(StatusCodes.Status422UnprocessableEntity, "This member signs in with their own email; it cannot be changed here."),
             Outcome.Failed => Problem.Detail(StatusCodes.Status422UnprocessableEntity, "Failed to update student"),
-            _ => Results.Json(await ClassRoster.BuildAsync(db, permissions, caller, head.Id, ct)),
+            _ => Results.Json(await ClassRoster.BuildAsync(source, permissions, caller, head.Id, ct), ClassesJson.Answers.Answer),
         };
     }
 
@@ -123,17 +123,17 @@ internal static class ClassStudentEditSlice
         Failed,
     }
 
-    private static async Task<Outcome> SaveAsync(ClassesContext db, TimeProvider clock, int classId, int student, Dictionary<string, string> values, int by, CancellationToken ct)
+    private static async Task<Outcome> SaveAsync(NpgsqlDataSource source, TimeProvider clock, int classId, int student, Dictionary<string, string> values, int by, CancellationToken ct)
     {
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        await using var tx = await source.BeginAsync(ct);
         try
         {
-            if (values["email"].Length > 0 && await IdentityCommands.EmailTakenAsync(db, student, values["email"], ct))
+            if (values["email"].Length > 0 && await IdentityCommands.EmailTakenAsync(tx, student, values["email"], ct))
             {
                 return Outcome.EmailTaken;
             }
 
-            if (values["email"].Length > 0 && !await IdentityCommands.ChangeEmailAsync(db, student, values["email"], clock, ct))
+            if (values["email"].Length > 0 && !await IdentityCommands.ChangeEmailAsync(tx, student, values["email"], clock, ct))
             {
                 return Outcome.EmailRefused;
             }
@@ -144,11 +144,11 @@ internal static class ClassStudentEditSlice
                 return Outcome.Failed;
             }
 
-            await MembershipCommands.ChangeContactAsync(db, student, name, values["mobile"], clock, ct);
+            await MembershipCommands.ChangeContactAsync(tx, student, name, values["mobile"], clock, ct);
             var notes = values["notes"];
-            await db.Database.ExecuteSqlAsync($"update classes.class_students set notes = {notes} where class_id = {classId} and token_no = {student}", ct);
-            await Outbox.WriteAsync(db, "classes.student_edited", new StudentEdited(classId, student, by), clock, ct);
-            await transaction.CommitAsync(ct);
+            await tx.ExecuteAsync($"update classes.class_students set notes = {notes} where class_id = {classId} and token_no = {student}", ct);
+            await Outbox.WriteAsync(tx, "classes.student_edited", new StudentEdited(classId, student, by), ClassesJson.Default.StudentEdited, clock, ct);
+            await tx.CommitAsync(ct);
             return Outcome.Saved;
         }
         catch (DbException)

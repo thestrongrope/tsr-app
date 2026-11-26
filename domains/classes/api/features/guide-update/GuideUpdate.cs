@@ -3,7 +3,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
 using Tsr.Shared.Api;
@@ -27,7 +27,7 @@ internal static class GuideUpdateSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string level_id, HttpContext context, ClassesContext db, Permissions permissions, TimeProvider clock, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(string level_id, HttpContext context, NpgsqlDataSource source, Permissions permissions, TimeProvider clock, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -69,15 +69,15 @@ internal static class GuideUpdateSlice
             return Problem.Detail(StatusCodes.Status422UnprocessableEntity, "guide must not contain a NUL byte");
         }
 
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        await db.Database.ExecuteSqlAsync(
+        await using var tx = await source.BeginAsync(ct);
+        await tx.ExecuteAsync(
             $"""
             insert into classes.guides (level_id, language_id, guide) values ({levelId}, 1, {guide})
             on conflict (level_id, language_id) do update set guide = excluded.guide
             """,
             ct);
-        await Outbox.WriteAsync(db, "classes.guide_saved", new GuideSaved(levelId, 1, caller.Token), clock, ct);
-        await transaction.CommitAsync(ct);
-        return Results.Json(new Dictionary<string, object?> { ["guide"] = guide });
+        await Outbox.WriteAsync(tx, "classes.guide_saved", new GuideSaved(levelId, 1, caller.Token), ClassesJson.Default.GuideSaved, clock, ct);
+        await tx.CommitAsync(ct);
+        return Results.Json(new Dictionary<string, object?> { ["guide"] = guide }, ClassesJson.Answers.Answer);
     }
 }

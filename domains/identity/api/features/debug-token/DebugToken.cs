@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Tsr.Identity.Api.Domain;
 using Tsr.Shared.Api;
 
 namespace Tsr.Identity.Api.Features.DebugToken;
@@ -50,7 +51,7 @@ internal static partial class DebugTokenSlice
             ["uid"] = principal.FindFirstValue("sub"),
             ["name"] = TextClaim(principal, "name"),
             ["provider"] = null,
-        });
+        }, IdentityJson.Answers.Answer);
     }
 
     private static string? TextClaim(ClaimsPrincipal principal, string type) =>

@@ -39,7 +39,7 @@ internal static class WhatsappLinkQrSlice
         }
 
         var code = Interpret(await notifier.QrAsync(ct));
-        return code is null ? NotifierAsk.LinkUnreachable() : Results.Json(code);
+        return code is null ? NotifierAsk.LinkUnreachable() : Results.Json(code, NotificationsJson.Answers.Code);
     }
 
     /// <summary>PHP linkQr: the code to send, or null when the notifier cannot be asked.</summary>

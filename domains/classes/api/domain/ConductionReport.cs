@@ -1,6 +1,6 @@
 using System.Globalization;
 using Microsoft.AspNetCore.Http;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Shared.Api;
 
@@ -75,23 +75,23 @@ internal static class ConductionReport
     /// numeric part of the code, week start. MariaDB's <c>cast(substr(code, 3) as unsigned)</c> reads "-7" of "SM-7" as 2^64 - 7 (a negative wraps), so "SM-7" sorts before "SM-5" and a code with no
     /// number after the dash gives 0; ported as it is. A row is kept when its week starts no earlier than the class's start (its first day, else its creation time).
     /// </summary>
-    public static async Task<List<Row>> RowsAsync(ClassesContext db, int[] classIds, IReadOnlyList<ReportCalendar.Week> weeks, CancellationToken ct)
+    public static async Task<List<Row>> RowsAsync(NpgsqlDataSource db, int[] classIds, IReadOnlyList<ReportCalendar.Week> weeks, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(weeks);
         var years = weeks.Select(w => w.Year).ToArray();
         var numbers = weeks.Select(w => w.Number).ToArray();
-        var firsts = weeks.Select(w => w.Min).ToArray();
-        var lasts = weeks.Select(w => w.Max).ToArray();
-        return await db.Database
-            .SqlQuery<Row>($"""
+        var firsts = weeks.Select(w => w.Min.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)).ToArray();
+        var lasts = weeks.Select(w => w.Max.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)).ToArray();
+        return await db.ListAsync(
+            $"""
                 select c.id as "Id", l.name::text as "Level", case when c.gender = 1 then 'Gents' else 'Ladies' end as "Gender", c.code::text as "Class", t.name::text as "Teacher",
                        coalesce(c.started_on::timestamp, c.created_at at time zone 'UTC') as "StartedOn",
                        wk.y as "Year", wk.w as "Week", wk.min_dt as "From", wk.max_dt as "To",
                        case when s.conducted is null then 'Not Filled' when s.conducted = 1 then 'Yes' else 'No' end as "Conducted",
-                       s.conducted_on as "ConductedOn", s.non_conduction_reason::text as "Reason", s.duration as "Duration", s.attendance as "Attendance",
+                       to_char(s.conducted_on, 'YYYY-MM-DD') as "ConductedOn", s.non_conduction_reason::text as "Reason", s.duration as "Duration", s.attendance as "Attendance",
                        st.cnt as "Registered", char_length(c.extra_students) - char_length(replace(c.extra_students, E'\n', '')) as "Extra", s.aqaed_topic::text as "AqaedTopic"
-                from unnest({years}, {numbers}, {firsts}, {lasts}) as wk(y, w, min_dt, max_dt)
+                from unnest({years}, {numbers}, {firsts}::date[], {lasts}::date[]) as wk(y, w, min_dt, max_dt)
                 join classes.classes c on c.id = any({classIds}) and (c.started_on is null or c.started_on <= wk.max_dt)
                 join classes.class_levels l on l.id = c.class_level_id
                 join membership.v_members t on t.token = c.teacher
@@ -105,8 +105,11 @@ internal static class ConductionReport
                                else coalesce(substring(substr(c.code::text, 3) from '^\s*[+-]?[0-9]+'), '0')::numeric end),
                          wk.min_dt, s.conducted_on, s.id
                 limit {MaxRows}
-                """)
-            .ToListAsync(ct);
+                """,
+            r => new Row(
+                r.Int("Id"), r.Text("Level"), r.Text("Gender"), r.Text("Class"), r.TextOrNull("Teacher"), r.LocalTimestamp("StartedOn"), r.Int("Year"), r.Int("Week"), r.Date("From"), r.Date("To"),
+                r.Text("Conducted"), r.DayOrNull("ConductedOn"), r.TextOrNull("Reason"), r.IntOrNull("Duration"), r.IntOrNull("Attendance"), r.IntOrNull("Registered"), r.IntOrNull("Extra"), r.TextOrNull("AqaedTopic")),
+            ct);
     }
 
     /// <summary>The CSV of <c>conductionDetailsCsv</c>: every raw row, PHP's column names and formats ("%age Conduction" is a four-decimal quotient, 0 for no students, empty when unknown).</summary>
@@ -180,7 +183,7 @@ internal static class ConductionReport
     /// <c>conductionReport</c>: the months of the week's first and last day, the window over them, the rows. A week the table does not have reads as the epoch (PHP's <c>strtotime(null)</c>: 1970 dates,
     /// no rows). A window wholly in the future gives no rows (PHP dies on it with a warning and a fatal error: not copied).
     /// </summary>
-    public static async Task<(Loaded? Report, IResult? Refusal)> OpenAsync(HttpContext context, ClassesContext db, Permissions permissions, Caller caller, DateOnly today, CancellationToken ct)
+    public static async Task<(Loaded? Report, IResult? Refusal)> OpenAsync(HttpContext context, NpgsqlDataSource db, Permissions permissions, Caller caller, DateOnly today, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(context);
         var (scope, refusal) = await ReportScope.OpenAsync(context, permissions, caller, ct);

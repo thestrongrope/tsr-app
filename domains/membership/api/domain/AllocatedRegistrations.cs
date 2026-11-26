@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Shared.Api;
 
 namespace Tsr.Membership.Api.Domain;
@@ -41,14 +41,14 @@ internal static class AllocatedRegistrations
         extra is null || PhpText.Trim(extra).Length == 0 ? 0 : extra.Count(c => c == '\n') + 1;
 
     /// <summary>The people placed in a class for one gender. <paramref name="classOnly"/>: only registrations that name a class. <paramref name="classIds"/>: only people placed in those classes (null: any class).</summary>
-    public static async Task<List<Row>> LoadAsync(MembershipContext db, int gender, bool classOnly, int[]? classIds, CancellationToken ct)
+    public static async Task<List<Row>> LoadAsync(NpgsqlDataSource source, int gender, bool classOnly, int[]? classIds, CancellationToken ct)
     {
-        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(source);
         var limited = classIds is not null;
         var ids = classIds ?? [];
         var ladies = gender == 2;
-        return await db.Database
-            .SqlQuery<Row>($"""
+        return await source.ListAsync(
+            $"""
                 select r.token as "Token", p.name::text as "Name", to_char(u.created_on at time zone 'UTC', 'YYYY-MM-DD HH24:MI:SS') as "UserCreated", p.gender::text as "Gender", p.mobile::text as "Mobile", u.email::text as "Email",
                        p.age_range::text as "AgeRange", p.city::text as "City", p.state::text as "State", p.country::text as "Country", p.zip::text as "Zip",
                        to_char(r.created_at at time zone 'UTC', 'YYYY-MM-DD HH24:MI:SS') as "CreatedAt", to_char(r.modified_at at time zone 'UTC', 'YYYY-MM-DD HH24:MI:SS') as "ModifiedAt",
@@ -79,9 +79,16 @@ internal static class AllocatedRegistrations
                   and u.email not ilike '%@thestrongrope.com'
                 order by r.created_at desc, r.token
                 limit {MaxRows}
-                """)
-            .ToListAsync(ct);
+                """,
+            ReadRow,
+            ct);
     }
+
+    private static Row ReadRow(DbRow row) => new(
+        row.Int("Token"), row.TextOrNull("Name"), row.TextOrNull("UserCreated"), row.TextOrNull("Gender"), row.TextOrNull("Mobile"), row.TextOrNull("Email"), row.TextOrNull("AgeRange"), row.TextOrNull("City"),
+        row.TextOrNull("State"), row.TextOrNull("Country"), row.TextOrNull("Zip"), row.TextOrNull("CreatedAt"), row.TextOrNull("ModifiedAt"), row.TextOrNull("Residence"), row.TextOrNull("Work"),
+        row.TextOrNull("ClassLevel"), row.TextOrNull("ClassNumber"), row.TextOrNull("Profession"), row.TextOrNull("Interests"), row.TextOrNull("OtherInterests"), row.TextOrNull("ClassCode"),
+        row.TextOrNull("AllocatedLevel"), row.IntOrNull("Teacher"), row.TextOrNull("TeacherName"), row.TextOrNull("ExtraStudents"));
 
     private static string? Label(string[] labels, string? stored)
     {

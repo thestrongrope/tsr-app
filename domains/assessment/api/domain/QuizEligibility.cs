@@ -127,10 +127,10 @@ internal static class QuizEligibility
             var row = new JsonArray(counter, token, member.Name.UpperWords(), JsonValue.Create(NormalizeCityAndCountry(member.City.UpperWords(), member.Country.UpperWords())));
             for (var day = 1; day <= f.TotalQuizzes; day++)
             {
-                row.Add(scores.TryGetValue(day, out var score) ? score : string.Empty);
+                row.Add((JsonNode?)JsonValue.Create(scores.TryGetValue(day, out var score) ? score : string.Empty));
             }
 
-            rows.Add(row);
+            rows.Add((JsonNode)row);
             counter++;
         }
 

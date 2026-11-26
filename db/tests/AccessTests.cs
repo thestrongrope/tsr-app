@@ -154,7 +154,7 @@ public sealed class AccessTests
         var permissions = scope.ServiceProvider.GetRequiredService<Permissions>();
         var member = new Caller(await UserIdAsync(900101), 900101);
 
-        _ = Assert.ThrowsAsync<ArgumentException>(() => permissions.CanAsync(member, "feedback:create:self", AccessTarget.None, CancellationToken.None));
+        _ = await Assert.ThrowsAsync<ArgumentException>(() => permissions.CanAsync(member, "feedback:create:self", AccessTarget.None, CancellationToken.None));
     }
 
     [Test]

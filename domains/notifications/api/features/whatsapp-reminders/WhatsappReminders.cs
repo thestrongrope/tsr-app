@@ -28,6 +28,6 @@ internal static class WhatsappRemindersSlice
         }
 
         var (data, failed) = NotifierAsk.Interpret(await notifier.RemindersAsync(ct));
-        return failed ?? Results.Json(new Listed(NotifierRows.Rows(data).Select(NotifierRows.Reminder).ToList()));
+        return failed ?? Results.Json(new Listed(NotifierRows.Rows(data).Select(NotifierRows.Reminder).ToList()), NotificationsJson.Answers.RemindersListed);
     }
 }

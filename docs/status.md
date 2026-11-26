@@ -28,10 +28,11 @@ Built workers, what is not built and what is unverified are in "Background worke
 
 | What | Result | When |
 |---|---|---|
-| Every Hurl file on the new API (default test stack) | 250 files, 3,344 requests, 0 failed | 15 Nov 2026, `develop` at `2b02cd8` |
+| The API host (epic 95's outcome, lane 1 on an arm64 Mac) | a NativeAOT image on the chiseled `runtime-deps` base, 123 MB (asked: 220 MB or less; JIT was 330 MB); first `GET /api/v1/articles` after a start 17 to 29 ms in 6 restarts (asked: 30 ms or less; JIT about 310 ms); 68 MiB 15 s after a start (asked: 80 MiB or less; JIT 116 MiB); no domain uses Entity Framework at run time; the migrate job is the same host published JIT | 25 Nov 2026 |
+| Every Hurl file on the new API (lane 1, native image) | 250 files, 0 failed (243 in the main run, 6 content with `content-refresh` on, search with `search-feed` on) | 25 Nov 2026, `develop` at `638eb21` plus the chiseled image, workstation GC and the connection warm-up |
 | Every contract script on PHP at `c78ff6b4` | 14 scripts, 218 files, 0 failed | 15 Nov 2026 |
-| Database tests | 1,355 passed | 15 Nov 2026 |
-| Host tests | 97 passed | 15 Nov 2026 |
+| Database tests | 1,534 passed | 25 Nov 2026 |
+| Host tests | 314 passed | 25 Nov 2026 |
 | Website parity | 67 cases and 501 articles, none failed | 13 Nov 2026 (`docs/specs/website-port/parity-results.md`) |
-| Patrol on Android against the new API | reviewer 20 of 20; personas 33 of 36 | 14 Nov 2026 |
+| Patrol on Android against the new API | reviewer 20 of 20 (24 Nov 2026, the JIT build before the native switch); personas 33 of 36 on 14 Nov 2026, and incomplete on 24 Nov 2026: 18 passed, 1 failed, 17 not run (the emulator stalled) | 24 Nov 2026 |
 | Load test | `docs/specs/load-test/results.md` | 14 Nov 2026 |

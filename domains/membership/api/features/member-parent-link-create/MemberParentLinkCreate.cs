@@ -2,7 +2,7 @@ using System.Security.Cryptography;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Microsoft.Extensions.Configuration;
 using Tsr.Access.Api;
 using Tsr.Identity.Api;
@@ -32,7 +32,7 @@ internal static class MemberParentLinkCreateSlice
     private static async Task<IResult> HandleAsync(
         string child_token,
         HttpContext context,
-        MembershipContext db,
+        NpgsqlDataSource source,
         Permissions permissions,
         UserDirectory users,
         IConfiguration configuration,
@@ -46,13 +46,13 @@ internal static class MemberParentLinkCreateSlice
         }
 
         var childToken = PhpValue.IntOfText(child_token);
-        var refusal = await GuardianChecks.RequireParentLinkAsync(db, permissions, caller, childToken, ct);
+        var refusal = await GuardianChecks.RequireParentLinkAsync(source, permissions, caller, childToken, ct);
         if (refusal is not null)
         {
             return refusal;
         }
 
-        var child = await GuardianChecks.ValidateMemberAsync(db, users, childToken, ct);
+        var child = await GuardianChecks.ValidateMemberAsync(source, users, childToken, ct);
         if (child.Status != MemberCheck.Ok)
         {
             return Problem.Detail(StatusCodes.Status404NotFound, GuardianChecks.StudentNotFound);
@@ -61,24 +61,31 @@ internal static class MemberParentLinkCreateSlice
         var code = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(16));
         var now = clock.GetUtcNow();
         var expires = now.AddDays(GuardianRules.InviteExpiryDays);
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        await GuardianLock.TakeAsync(db, child.UserId, ct);
+        await using var tx = await source.BeginAsync(ct);
+        await GuardianLock.TakeAsync(tx, child.UserId, ct);
         var token = (int)childToken;
-        var pending = await db.UserGuardians.CountAsync(g => g.ChildToken == token && g.Status == "invited" && (g.ExpiresAt == null || g.ExpiresAt > now), ct);
+        var pending = await tx.ScalarAsync<long>(
+            $"select count(*) as \"Value\" from membership.user_guardians where child_token = {token} and status = 'invited' and (expires_at is null or expires_at > {now})",
+            ct);
         if (pending >= GuardianRules.MaxPendingInvites)
         {
             return Problem.Detail(StatusCodes.Status422UnprocessableEntity, "At most 5 pending invites allowed");
         }
 
-        var invite = new UserGuardian { ChildToken = token, Status = "invited", Source = "link", Code = code, ExpiresAt = expires, CreatedBy = caller.UserId, CreatedAt = now };
-        db.UserGuardians.Add(invite);
-        await db.SaveChangesAsync(ct);
-        await Outbox.WriteAsync(db, "membership.parent_invite_created", new InviteCreated(invite.Id, token, caller.UserId), clock, ct);
-        await transaction.CommitAsync(ct);
+        var inviteId = await tx.ScalarAsync<int>(
+            $"""
+            insert into membership.user_guardians (child_token, status, source, code, expires_at, created_by, created_at)
+            values ({token}, 'invited', 'link', {code}, {expires}, {caller.UserId}, {now})
+            returning id as "Value"
+            """,
+            ct);
+        await Outbox.WriteAsync(tx, "membership.parent_invite_created", new InviteCreated(inviteId!.Value, token, caller.UserId), MembershipJson.Default.InviteCreated, clock, ct);
+        await tx.CommitAsync(ct);
 
         var link = (configuration["TSR_PUBLIC_WEB_BASE"] ?? string.Empty).TrimEnd('/') + "/link/" + code;
         return Results.Json(
             new Dictionary<string, object?> { ["code"] = code, ["link"] = link, ["url"] = link, ["expires_at"] = LinkRowView.Stamp(expires) },
+            MembershipJson.Answers.Answer,
             statusCode: StatusCodes.Status201Created);
     }
 }

@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -49,9 +50,21 @@ public static class AssessmentModule
     /// <summary>Other domain modules this one may use (domains/CLAUDE.md rule 7). access (permissions); notifications (the quiz announcement command); platform (ReportExport: the PDF of a quiz sheet); classes, membership and identity are read through their v_* views.</summary>
     public static readonly IReadOnlyList<string> Dependencies = ["access", "notifications", "platform"];
 
-    public static IServiceCollection AddAssessment(this IServiceCollection services)
+    /// <summary>
+    /// Registers assessment's context and migrations for the migrate job only (Entity Framework is JIT only). The host calls it
+    /// in migrate mode just before <see cref="AddAssessment"/>, so the migration order is unchanged.
+    /// </summary>
+    [RequiresUnreferencedCode("Entity Framework is JIT only: it reflects over the context.")]
+    [RequiresDynamicCode("Entity Framework is JIT only: it reflects over the context.")]
+    public static IServiceCollection AddAssessmentMigrations(this IServiceCollection services)
     {
         services.AddDomainContext<AssessmentContext>(AssessmentContext.SchemaName);
+        return services;
+    }
+
+    public static IServiceCollection AddAssessment(this IServiceCollection services)
+    {
+        services.AddTsrDataSource();
         // Google Sheets: one client for the process (it caches the access token); the credential is an optional setting, so the API starts without it and a sheet route then answers 502 or "could not be read".
         services.AddOptions<GoogleSheetsSettings>().Configure<IConfiguration>((settings, configuration) =>
         {

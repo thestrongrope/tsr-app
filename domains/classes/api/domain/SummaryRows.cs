@@ -1,4 +1,5 @@
-using Microsoft.EntityFrameworkCore;
+using System.Globalization;
+using Npgsql;
 
 namespace Tsr.Classes.Api.Domain;
 
@@ -15,7 +16,7 @@ internal static class SummaryRows
         int Arabic, int Aqaed, int Ahkam, int Akhlaq, int Other);
 
     /// <summary>The rows of the classes <paramref name="ids"/> for the months <paramref name="from"/> to <paramref name="to"/> ('MM-YYYY', already checked); none when the window starts after it ends. One query.</summary>
-    public static async Task<List<Row>> ForMonthsAsync(ClassesContext db, int[] ids, string from, string to, DateOnly today, CancellationToken ct)
+    public static async Task<List<Row>> ForMonthsAsync(NpgsqlDataSource db, int[] ids, string from, string to, DateOnly today, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(ids);
@@ -31,14 +32,14 @@ internal static class SummaryRows
 
     // `e`: each class's schedule slots in the finished weeks of the window (a week counts when it lies inside the class's own start and end and is over); `a`: its sessions of the window;
     // `t`: the attendance marks of its held sessions. The class must have slots (inner join), the others are left joins.
-    private static async Task<List<Row>> RowsAsync(ClassesContext db, int[] ids, IReadOnlyList<ReportCalendar.Week> weeks, DateOnly start, DateOnly end, DateOnly today, CancellationToken ct)
+    private static async Task<List<Row>> RowsAsync(NpgsqlDataSource db, int[] ids, IReadOnlyList<ReportCalendar.Week> weeks, DateOnly start, DateOnly end, DateOnly today, CancellationToken ct)
     {
-        var mins = weeks.Select(w => w.Min).ToArray();
-        var maxs = weeks.Select(w => w.Max).ToArray();
+        var mins = weeks.Select(w => w.Min.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)).ToArray();
+        var maxs = weeks.Select(w => w.Max.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)).ToArray();
         var schoolStart = SchoolStart;
-        return await db.Database
-            .SqlQuery<Row>($"""
-                with wk as (select min_dt, max_dt from unnest({mins}, {maxs}) as w(min_dt, max_dt)),
+        return await db.ListAsync(
+            $"""
+                with wk as (select min_dt, max_dt from unnest({mins}::date[], {maxs}::date[]) as w(min_dt, max_dt)),
                 e as (
                     select c.id, count(cs.id)::int as expected
                     from classes.classes c
@@ -80,7 +81,10 @@ internal static class SummaryRows
                 left join m on m.class_id = c.id
                 where c.status = 'A' and c.id = any({ids})
                 order by cl.sort_order, c.id
-                """)
-            .ToListAsync(ct);
+                """,
+            r => new Row(
+                r.Int("Id"), r.Text("Level"), r.Text("Class"), r.TextOrNull("Teacher"), r.Int("Expected"), r.Int("Submitted"), r.Int("Conducted"), r.Long("Attended"), r.Long("Marked"),
+                r.Int("DurationCount"), r.Long("Duration"), r.Int("Arabic"), r.Int("Aqaed"), r.Int("Ahkam"), r.Int("Akhlaq"), r.Int("Other")),
+            ct);
     }
 }

@@ -1,5 +1,6 @@
 using System.Globalization;
 using Microsoft.AspNetCore.Http;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Shared.Api;
 
@@ -18,7 +19,7 @@ internal static class PendingReport
 {
     internal sealed record Loaded(int Gender, string From, string To, IReadOnlyList<string> Levels, IReadOnlyList<PendingRules.PendingTeacher> Teachers);
 
-    public static async Task<(Loaded? Report, IResult? Refusal)> OpenAsync(HttpContext context, ClassesContext db, Permissions permissions, Caller caller, DateOnly today, CancellationToken ct)
+    public static async Task<(Loaded? Report, IResult? Refusal)> OpenAsync(HttpContext context, NpgsqlDataSource db, Permissions permissions, Caller caller, DateOnly today, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(context);
         var (scope, refusal) = await ReportScope.OpenAsync(context, permissions, caller, ct);
@@ -39,7 +40,7 @@ internal static class PendingReport
     }
 
     /// <summary>The report for a scope already opened and months already checked (the nudge takes its months from its body); a level of "" narrows nothing.</summary>
-    public static async Task<Loaded> LoadAsync(ReportScope scope, string from, string to, string level, ClassesContext db, Permissions permissions, Caller caller, DateOnly today, CancellationToken ct)
+    public static async Task<Loaded> LoadAsync(ReportScope scope, string from, string to, string level, NpgsqlDataSource db, Permissions permissions, Caller caller, DateOnly today, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(scope);
         var ids = await ReportScope.KeepAssignedAsync(await scope.ClassIdsAsync(db, 0, ct), permissions, caller, ct);

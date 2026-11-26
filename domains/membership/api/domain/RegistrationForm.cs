@@ -117,6 +117,6 @@ internal static partial class RegistrationForm
             }
         }
 
-        return kept.Count > 0 ? JsonSerializer.Serialize(kept) : null;
+        return kept.Count > 0 ? JsonSerializer.Serialize(kept, MembershipJson.Default.ListString) : null;
     }
 }

@@ -1,7 +1,9 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
+using Npgsql;
 using Tsr.Platform.Api.Domain;
 using Tsr.Platform.Api.Features.AdminAccessLog;
 using Tsr.Platform.Api.Features.AdminAccessLogDownload;
@@ -26,9 +28,21 @@ public static class PlatformModule
     /// <summary>Other domain modules this one may use (domains/CLAUDE.md rule 7).</summary>
     public static readonly IReadOnlyList<string> Dependencies = ["access", "membership", "identity"];
 
-    public static IServiceCollection AddPlatform(this IServiceCollection services)
+    /// <summary>
+    /// Registers platform's context and migrations for the migrate job only (Entity Framework is JIT only). The host calls it
+    /// in migrate mode just before <see cref="AddPlatform"/>, so the migration order is unchanged.
+    /// </summary>
+    [RequiresUnreferencedCode("Entity Framework is JIT only: it reflects over the context.")]
+    [RequiresDynamicCode("Entity Framework is JIT only: it reflects over the context.")]
+    public static IServiceCollection AddPlatformMigrations(this IServiceCollection services)
     {
         services.AddDomainContext<PlatformContext>(PlatformContext.SchemaName);
+        return services;
+    }
+
+    public static IServiceCollection AddPlatform(this IServiceCollection services)
+    {
+        services.AddTsrDataSource();
         services.AddScoped<SubmitFeedbackHandler>();
         services.AddSingleton<AppCatalogSource>();
         services.AddScoped<AppVersionHandler>();
@@ -38,8 +52,8 @@ public static class PlatformModule
         services.AddScoped<GeoCountriesHandler>();
         services.AddScoped<GeoPostalHandler>();
         services.AddScoped<GeoCitiesHandler>();
-        services.AddScoped(provider => new Lookups(provider.GetRequiredService<PlatformContext>()));
-        services.AddScoped(provider => new Geo(provider.GetRequiredService<PlatformContext>(), provider.GetRequiredService<ILogger<Geo>>()));
+        services.AddScoped(provider => new Lookups(provider.GetRequiredService<NpgsqlDataSource>()));
+        services.AddScoped(provider => new Geo(provider.GetRequiredService<NpgsqlDataSource>(), provider.GetRequiredService<ILogger<Geo>>()));
         // The PDF renderer: Gotenberg over HTTP, 60 seconds and 50 MB at most per call (required setting TSR_GOTENBERG_URL, checked at start).
         GotenbergSettings.AddGotenbergSettings(services);
         services.AddHttpClient<IPdfRenderer, GotenbergRenderer>(client =>

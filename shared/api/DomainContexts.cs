@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -17,7 +18,7 @@ public static partial class DomainContexts
     /// <summary>The limited database role the API connects as. Created by infrastructure (db/init/01-app-role.sql locally).</summary>
     public const string AppRole = "tsr_app";
 
-    private const int TimeoutSeconds = 5;
+    internal const int TimeoutSeconds = 5;
     private const int MigrationTimeoutSeconds = 300;
 
     /// <summary>
@@ -25,6 +26,8 @@ public static partial class DomainContexts
     /// domain's own schema. Register domains in dependency order: a domain's migrations may refer to
     /// tables another domain owns, and they run in this order.
     /// </summary>
+    [RequiresUnreferencedCode("Entity Framework is JIT only: it reflects over the context. A domain converted to Db registers no context.")]
+    [RequiresDynamicCode("Entity Framework is JIT only: it reflects over the context. A domain converted to Db registers no context.")]
     public static IServiceCollection AddDomainContext<TContext>(this IServiceCollection services, string schema)
         where TContext : TsrDbContext
     {
@@ -56,6 +59,8 @@ public static partial class DomainContexts
     /// <see cref="AppRole"/> select/insert/update/delete on each schema's tables and usage on its sequences,
     /// with default privileges so tables a later migration creates are covered. Idempotent. Run as the owner role.
     /// </summary>
+    [RequiresUnreferencedCode("Entity Framework migrations are JIT only: the migrate job runs on the JIT host.")]
+    [RequiresDynamicCode("Entity Framework migrations are JIT only: the migrate job runs on the JIT host.")]
     public static async Task MigrateDatabasesAsync(this IServiceProvider services, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(services);

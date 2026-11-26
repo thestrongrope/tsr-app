@@ -43,7 +43,7 @@ Each is marked `security: []` in `spec/api.yaml`. Why each is public, and why it
 
 The six `/api/v1/` routes answer in the website's shape, `{success, data, meta, pagination}`, and fail as
 `{success: false, error: {code, message}, meta}` (`api/domain/V1.cs`): the named exception to the `{"detail"}` rule
-(root `CLAUDE.md` rule 7). Map a new one with `V1.MapGet`, so an unexpected failure is answered in that shape too.
+(root `CLAUDE.md` rule 7). Map a new one in its own slice with `routes.MapGet(pattern, HandleAsync).WithV1Failures()` (see `api/features/v1-tags/V1Tags.cs`), so an unexpected failure is answered in that shape too. `db/tests/V1FailureTests.cs` fails when a `/api/v1/` endpoint lacks it.
 
 ## The worker: `content-refresh`, and the job `content-load`
 
@@ -54,7 +54,8 @@ refresh at start, then every 5 minutes. A tick (`api/domain/ContentRefresh.cs`) 
 (`articles/*.md`, `categories/*.md`, `pages/tsr-publications.md`; never `downloads/`), keeps only articles whose `status` is `publish` or
 `published`, and replaces `published_articles`, `categories` and `publications` in one transaction. Nothing is written
 when the set's hash equals the last one. A read that fails, finds no published article, or finds fewer than half of the
-last count keeps the last set, writes the cause to `content.refresh_state` and logs one warning. It sends nothing
+last count keeps the last set, writes the cause (cut to 200 characters) and the time to `content.refresh_state`, and logs one warning. When no state row exists yet, it inserts one. A state write that changes
+no row fails the tick: a copy rolls back and the last set stays. The tick runs on the shared `NpgsqlDataSource`, and no path holds two connections at once. It sends nothing
 outward. One worker instance is the supported setup.
 
 ## Settings (as the code reads them)
@@ -82,7 +83,8 @@ None is required: the API starts without them.
 | The fields of an article in a list | `api/domain/ArticleListItem.cs` |
 | Reading the content files, their bounds and failures | `api/domain/ContentFiles.cs`, `FrontMatter.cs` |
 | Markdown to safe HTML (CommonMark with footnotes, pipe tables and bare web addresses as links, LIB-D18), reading time | `api/domain/ArticleHtml.cs` |
-| One refresh, the half rule, the hash | `api/domain/ContentRefresh.cs` |
+| One refresh, the half rule, the hash (the reads and the copy run on the shared `NpgsqlDataSource`, `shared/api`) | `api/domain/ContentRefresh.cs` |
+| The two answers written from a value (surahs, the stub list), by a source-generated JSON context | `api/domain/ContentJson.cs` (`ContentJson.Tests.cs` writes them with reflection off) |
 | The feed reader and the 30 minute copy | `api/domain/LatestVideos.cs` |
 | Database-backed tests | `db/tests/V1*Tests.cs`, `ContentRefreshTests.cs`, `ContentFilesTests.cs`, `LatestVideosTests.cs`, `YouTubeFeedTests.cs`, `LibraryReadsSchemaTests.cs` |
 | The published content of the repository (published only, LIB-D19; the publication PDFs in `content/downloads/`, LIB-D10, carried by the site image only, LIB-R36): where it comes from, the import, the guard (LIB-R37) | `/content/README.md` (at the repository root), `tools/content-import.sh`, `tools/prove-content-import.sh`, `api/tests/ContentGuard.cs` |
@@ -94,7 +96,8 @@ None is required: the API starts without them.
 | The Lectures page of the static site (`/lectures/`, browse and a language filter; read from `content/lectures/lectures.ndjson` at build time, not from the API: `capabilities/lectures.md`) | `site/Lectures.cs`, `site/LecturesPage.razor` |
 | The fixed pages of the static site (`/<slug>/` for each `content/pages/*.md` but the publications page; read from `content/pages/` at build time, not from the API; the front matter, the text clean-up and the classes are `site/PageFiles.cs`, the markup `site/FixedPage.razor`; the build copies the files beside the program as `content-pages/`) | `site/PageFiles.cs` |
 | The Self-reflection pages of the static site (`/self-reflection/en`, `/ur`, `/gu` and the entry; the words are `site/self-reflection.json`, the rules of what is written are `site/SelfReflection.cs`; scoring and storage are pure functions in `hosts/site/wwwroot/self-reflection.js`) | `site/SelfReflectionPage.razor` |
-| Tables | schema `content` in `api/ContentContext.cs`, migrations in `api/Migrations/`: `published_articles`, `categories`, `publications`, `refresh_state` (the Library copy); `articles` (the stub); `holy_quran` |
+| Failure and pool tests of the reads and the copy (Docker) | `db/tests/ContentFailureTests.cs`, `ContentPoolTests.cs` (every route and the copy on a pool of one connection) |
+| Tables | schema `content` in `api/ContentContext.cs` (used by the migrate job only), migrations in `api/Migrations/`, the three row types the copy stores (article, category, publication) in `api/ContentRows.cs`. The tables: `published_articles`, `categories`, `publications`, `refresh_state` (the Library copy); `articles` (the stub); `holy_quran` |
 
 Slugs, categories and tags of the Library copy are case-sensitive `text`, the written exception to "every text column
 is citext" (`db/tests/SchemaGuardTests.cs`).

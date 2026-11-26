@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
 using Tsr.Shared.Api;
@@ -27,7 +28,7 @@ internal static class MyAttendanceSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string class_id, HttpContext context, ClassesContext db, Permissions permissions, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(string class_id, HttpContext context, NpgsqlDataSource source, Permissions permissions, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -40,21 +41,21 @@ internal static class MyAttendanceSlice
             return Refusals.NotPermitted();
         }
 
-        if (!await ClassGuards.HasNumericGenderAsync(db, caller, ct))
+        if (!await ClassGuards.HasNumericGenderAsync(source, caller, ct))
         {
             return Refusals.GenderNotSet();
         }
 
         var classId = ClassGuards.IdOf(class_id);
-        if (!await ClassGuards.CanViewClassAsync(db, classId, caller.Token, ct))
+        if (!await ClassGuards.CanViewClassAsync(source, classId, caller.Token, ct))
         {
             return Problem.Detail(StatusCodes.Status404NotFound, "Class not found or not enrolled");
         }
 
         var history = await StudentAttendance.HistoryAsync(
-            db, (int)classId, caller.Token, context.Request.Query["start_date"].LastOrDefault(), context.Request.Query["end_date"].LastOrDefault(), ct);
+            source, (int)classId, caller.Token, context.Request.Query["start_date"].LastOrDefault(), context.Request.Query["end_date"].LastOrDefault(), ct);
         return Results.Json(history
             .Select(s => new Item(s.SessionId, s.ConductedOn.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), s.Present, s.Recitation))
-            .ToList());
+            .ToList(), ClassesJson.Answers.MyAttendanceItems);
     }
 }

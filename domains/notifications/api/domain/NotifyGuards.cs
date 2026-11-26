@@ -1,5 +1,5 @@
 using Microsoft.AspNetCore.Http;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Platform.Api;
 
@@ -46,36 +46,37 @@ internal static class NotifyGuards
     /// PHP's <c>api_require_notification_admin</c>: notifications:broadcast (super administrator) or 403 "Only super administrators can {what}", then the admin audit row
     /// (platform's published command). Null when the caller passes.
     /// </summary>
-    public static async Task<IResult?> AdminAsync(HttpContext context, NotificationsContext db, Permissions permissions, Caller caller, string what, CancellationToken ct)
+    public static async Task<IResult?> AdminAsync(HttpContext context, Permissions permissions, Caller caller, string what, CancellationToken ct)
     {
         if (!await permissions.CanAsync(caller, "notifications:broadcast", AccessTarget.None, ct))
         {
             return Problem.Detail(StatusCodes.Status403Forbidden, "Only super administrators can " + what);
         }
 
-        await PlatformCommands.RecordAdminAccessAsync(db, context, caller.UserId, caller.Token, await permissions.RoleIdAsync(caller, ct), ct);
+        await PlatformCommands.RecordAdminAccessAsync(context, caller.UserId, caller.Token, await permissions.RoleIdAsync(caller, ct), ct);
         return null;
     }
 
     /// <summary>PHP <c>api_find_class</c>: the active class whose gender, level and teacher rows all exist.</summary>
-    public static async Task<bool> ClassExistsAsync(NotificationsContext db, int classId, CancellationToken ct)
+    public static async Task<bool> ClassExistsAsync(NpgsqlDataSource source, int classId, CancellationToken ct)
     {
-        var rows = await db.Database
-            .SqlQuery<int>($"""
-                select c.id as "Value" from classes.v_classes c
-                join platform.v_genders g on g.id = c.gender
-                join membership.v_members t on t.token = c.teacher
-                where c.id = {classId} and c.status = 'A' and c.level_name is not null
-                limit 1
-                """)
-            .ToListAsync(ct);
+        var rows = await source.ListAsync(
+            $"""
+            select c.id as "Value" from classes.v_classes c
+            join platform.v_genders g on g.id = c.gender
+            join membership.v_members t on t.token = c.teacher
+            where c.id = {classId} and c.status = 'A' and c.level_name is not null
+            limit 1
+            """,
+            row => row.Int("Value"),
+            ct);
         return rows.Count > 0;
     }
 
     /// <summary>The class guard chain of the four class routes: 404 when there is no such class, then 403 unless the caller may send notifications for it. Null when both pass.</summary>
-    public static async Task<IResult?> ClassAccessAsync(NotificationsContext db, Permissions permissions, Caller caller, int classId, CancellationToken ct)
+    public static async Task<IResult?> ClassAccessAsync(NpgsqlDataSource source, Permissions permissions, Caller caller, int classId, CancellationToken ct)
     {
-        if (!await ClassExistsAsync(db, classId, ct))
+        if (!await ClassExistsAsync(source, classId, ct))
         {
             return ClassNotFound();
         }

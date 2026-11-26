@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
 using Tsr.Shared.Api;
@@ -36,7 +36,7 @@ internal static class ConductionNewSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string class_id, HttpContext context, ClassesContext db, Permissions permissions, TimeProvider clock, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(string class_id, HttpContext context, NpgsqlDataSource source, Permissions permissions, TimeProvider clock, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -44,7 +44,7 @@ internal static class ConductionNewSlice
             return Problem.Unauthenticated();
         }
 
-        var (head, refusal) = await ConductionData.OpenAsync(db, permissions, caller, class_id, "sessions:create", ct);
+        var (head, refusal) = await ConductionData.OpenAsync(source, permissions, caller, class_id, "sessions:create", ct);
         if (refusal is not null)
         {
             return refusal;
@@ -52,56 +52,61 @@ internal static class ConductionNewSlice
 
         var classId = head!.Id;
         var today = ConductionData.Today(clock);
-        var last = await LastSessionDayAsync(db, classId, ct);
-        var days = await db.Database
-            .SqlQuery<int>($"""select day::int as "Value" from classes.class_schedules where class_id = {classId} order by day, id limit {MaxSessions}""")
-            .ToListAsync(ct);
+        var last = await LastSessionDayAsync(source, classId, ct);
+        var days = await source.ListAsync(
+            $"""select day::int as "Value" from classes.class_schedules where class_id = {classId} order by day, id limit {MaxSessions}""",
+            row => row.Int("Value"),
+            ct);
         var next = ConductionRules.NextSessionDate(last, today, days);
-        var latestSurah = await db.Database
-            .SqlQuery<int>($"""
+        var latestSurah = await source.ListAsync(
+            $"""
                 select quran_recitation_surah as "Value" from classes.class_sessions
                 where class_id = {classId} and conducted = 1 and quran_recitation_surah > 0
                 order by conducted_on desc, id desc
                 limit 1
-                """)
-            .ToListAsync(ct);
+                """,
+            row => row.Int("Value"),
+            ct);
         return Results.Json(new FormData(
-            await ConductionData.HeaderAsync(db, classId, ct),
+            await ConductionData.HeaderAsync(source, classId, ct),
             last is null ? null : ConductionData.DayText(last.Value),
             ConductionData.DayText(next),
             next > today ? ConductionData.DayText(next) : null,
-            await LatestTopicsAsync(db, classId, ct),
+            await LatestTopicsAsync(source, classId, ct),
             latestSurah.Count == 0 ? null : latestSurah[0],
-            await ConductionData.HolyQuranAsync(db, ct)));
+            await ConductionData.HolyQuranAsync(source, ct)), ClassesJson.Answers.ConductionFormData);
     }
 
-    private static async Task<DateOnly?> LastSessionDayAsync(ClassesContext db, int classId, CancellationToken ct)
+    private static async Task<DateOnly?> LastSessionDayAsync(NpgsqlDataSource source, int classId, CancellationToken ct)
     {
-        var days = await db.Database
-            .SqlQuery<DateOnly>($"""select conducted_on as "Value" from classes.class_sessions where class_id = {classId} order by conducted_on desc limit 1""")
-            .ToListAsync(ct);
+        var days = await source.ListAsync(
+            $"""select conducted_on as "Value" from classes.class_sessions where class_id = {classId} order by conducted_on desc limit 1""",
+            row => row.Date("Value"),
+            ct);
         if (days.Count > 0)
         {
             return days[0];
         }
 
-        var started = await db.Database
-            .SqlQuery<DateOnly?>($"""select started_on as "Value" from classes.classes where id = {classId}""")
-            .SingleAsync(ct);
-        return started;
+        var started = await source.ListAsync(
+            $"""select started_on::text as "Value" from classes.classes where id = {classId}""",
+            row => ClassesRows.DateOrNull(row.TextOrNull("Value")),
+            ct);
+        return started.Single();
     }
 
-    private static async Task<Topics> LatestTopicsAsync(ClassesContext db, int classId, CancellationToken ct)
+    private static async Task<Topics> LatestTopicsAsync(NpgsqlDataSource source, int classId, CancellationToken ct)
     {
-        var rows = await db.Database
-            .SqlQuery<TopicRow>($"""
+        var rows = await source.ListAsync(
+            $"""
                 select arabic_topic as "Arabic", aqaed_topic as "Aqaed", ahkam_topic as "Ahkam", akhlaq_topic as "Akhlaq", other_topic as "Other"
                 from classes.class_sessions
                 where class_id = {classId} and conducted = 1
                 order by conducted_on desc, id desc
                 limit {MaxSessions}
-                """)
-            .ToListAsync(ct);
+                """,
+            row => new TopicRow(row.TextOrNull("Arabic"), row.TextOrNull("Aqaed"), row.TextOrNull("Ahkam"), row.TextOrNull("Akhlaq"), row.TextOrNull("Other")),
+            ct);
         return new Topics(
             Newest(rows.Select(r => r.Arabic)),
             Newest(rows.Select(r => r.Aqaed)),

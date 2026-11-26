@@ -45,13 +45,13 @@ This domain's SQL reads `classes.v_enrolments`, `classes.v_classes` (children's 
 
 ## Published commands (`api/MembershipCommands.cs`)
 
-Each runs on the caller's transaction and throws outside one. The two that take a name and a mobile validate them and throw (`MaxNameLength` 200, `MaxMobileLength` 100). The doc comment of each says what it writes.
+Each takes the caller's `DbTx` and runs on its transaction; one that is already committed is refused. The two that take a name and a mobile validate them and throw (`MaxNameLength` 200, `MaxMobileLength` 100). The doc comment of each says what it writes.
 
 | Command | Used by | Proved by |
 |---|---|---|
-| `RecordAcceptedRegistrationAsync(db, token, classId, ct)`: PHP `writeEnrolment`'s first step | `classes` (add, join, place) | `db/tests/EnrolmentWritesTests.cs` |
-| `ChangeContactAsync(db, token, name, mobile, clock, ct)`: PHP `updateStudentInClass`'s write of name and mobile | `classes` (edit a student) | `db/tests/StudentEditTests.cs` |
-| `CreateProfileAsync(db, token, name, gender, mobile, clock, ct)`: the profile of a member just created by identity's `CreateMemberAsync` | `classes` (bulk add) | `db/tests/BulkAddTests.cs` |
+| `RecordAcceptedRegistrationAsync(tx, token, classId, ct)`: PHP `writeEnrolment`'s first step | `classes` (add, join, place) | `db/tests/EnrolmentWritesTests.cs` |
+| `ChangeContactAsync(tx, token, name, mobile, clock, ct)`: PHP `updateStudentInClass`'s write of name and mobile | `classes` (edit a student) | `db/tests/StudentEditTests.cs` |
+| `CreateProfileAsync(tx, token, name, gender, mobile, clock, ct)`: the profile of a member just created by identity's `CreateMemberAsync` | `classes` (bulk add) | `db/tests/BulkAddTests.cs` |
 
 ## Rules for this domain
 

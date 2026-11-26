@@ -36,6 +36,14 @@ Schema `identity`: `users` (identity columns only; the profile columns, `gender`
 - `UserDirectory` with `UserRef`: `ByTokenAsync` (every user of a token, because a token is not unique, at most 50), `ByIdsAsync` (at most 500 ids, more throws), `ByTokensAsync` (at most 500 tokens, every holder in id order, at most 2000 rows).
 - The port `IProfileSink`: name and picture from the token, handed on in the same request when a create route makes a member or a verified email claims one; default no-op, `membership` supplies the real one. The token claims `name` and `picture` are read in both verifier modes, as PHP does.
 
+## Data access and JSON (rules 6 and 7 of `domains/CLAUDE.md`)
+
+- No Entity Framework at run time. Every read and write runs on the `NpgsqlDataSource` or a `DbTx`. `IdentityContext` and the migrations stay for the schema: `IdentityModule.AddIdentityTables` registers the context for the migrate job only, and the API starts with `AddIdentity`, which does not register it.
+- One connection at a time. A request never holds two connections of the data source, and no connection is held across a call to the account service (`IFirebaseAccounts`): the completion reads on short transactions, checks and deletes in Firebase with none open, then opens the write transaction. The sign-in judgement uses the same rule (`db/tests/IdentityPoolTests.cs` runs every route and sign-in path on a pool of one).
+- `api/domain/IdentityJson.cs` is the one source-generated JSON context: the answers (`IdentityJson.Answers`), the events (`IdentityJson.Default`) and the account-service wire records of `GoogleFirebaseAccounts`. A type behind an `object` value of an answer must be listed there; `IdentityJson.Tests.cs` writes each with reflection off.
+- A claim whose write fails is not caught: the host answers 500, nothing of the claim is stored and the profile sink is not called (`IdentityFailureTests`).
+- Every read returns a row in some test: `docs/specs/aot-migration/issue-102-reads.md`.
+
 ## Account deletion
 
 Order of checks, every refusal and the events: the header and comments of
@@ -56,10 +64,10 @@ An endpoint opts in with `.RequireMember()` (`.RequireMember(createsMember: true
 
 `TSR_FIREBASE_PROJECT_ID` is required everywhere. `TSR_AUTH_EMULATOR_HOST` (unsigned tokens) is accepted only in Development, with a `demo-` project and a host in the allow list; otherwise the API does not start.
 
-## Published commands (`api/IdentityCommands.cs`; each runs on the caller's transaction)
+## Published commands (`api/IdentityCommands.cs`; each takes the caller's `DbTx` and runs on its transaction)
 
-- `ChangeEmailAsync(db, token, email, clock, ct)`: only a placeholder (blank or `<token>@thestrongrope.com`) with no Firebase link may be given another address; an address another member already has is refused (PHP has no such check; `EmailTakenAsync` lets the caller ask first for its own message; no unique index backs it). Returns false and writes nothing otherwise. Validates its inputs (throws). Event `identity.member_email_changed` (token). Used by `classes` (edit a student); proved by `db/tests/StudentEditTests.cs`.
-- `CreateMemberAsync(db, clock, ct)` returns the token of a new `users` row for a member who is not an app member yet (bulk add): address `<token>@thestrongrope.com`, no Firebase link, no role. The token comes from `domain/TokenAllocation.cs`, the one allocator (sign-in uses it too): highest + 1 under advisory lock 7100001, waiting at most 10 seconds, inside the caller's transaction. Throws without a transaction. Event `identity.member_created` (token). Used by `classes` (bulk add); proved by `db/tests/BulkAddTests.cs`.
+- `ChangeEmailAsync(tx, token, email, clock, ct)`: only a placeholder (blank or `<token>@thestrongrope.com`) with no Firebase link may be given another address; an address another member already has is refused (PHP has no such check; `EmailTakenAsync` lets the caller ask first for its own message; no unique index backs it). Returns false and writes nothing otherwise. Validates its inputs (throws). Event `identity.member_email_changed` (token). Used by `classes` (edit a student); proved by `db/tests/StudentEditTests.cs`.
+- `CreateMemberAsync(tx, clock, ct)` returns the token of a new `users` row for a member who is not an app member yet (bulk add): address `<token>@thestrongrope.com`, no Firebase link, no role. The token comes from `domain/TokenAllocation.cs`, the one allocator (sign-in uses it too): highest + 1 under advisory lock 7100001, waiting at most 10 seconds, inside the caller's transaction. Event `identity.member_created` (token). Used by `classes` (bulk add); proved by `db/tests/BulkAddTests.cs`.
 
 ## Where things are
 
@@ -68,13 +76,15 @@ An endpoint opts in with `.RequireMember()` (`.RequireMember(createsMember: true
 | The HTTP contract | `spec/api.yaml`; Hurl `spec/tests/deletion-*.hurl`, `admin-deletion-*.hurl`, `debug-token.hurl`, `link-account.hurl` |
 | The refusals in order; the marker | `api/CallerMiddleware.cs`; `shared/api/MemberRoute.cs` |
 | What a member with a live deletion may still reach | `api/domain/DeletionGate.cs` |
+| The sign-in's reads and writes; the deletion reads | `api/domain/MemberDirectory.cs`; `api/domain/DeletionRequests.cs` |
+| Answers, events and account-service wire, without reflection | `api/domain/IdentityJson.cs` |
 | Background notes | `docs/specs/initial-build/test-deletion-notes.md`, `lane-identity-notes.md` |
 
 ## Checks
 
 ```
 dotnet test domains/identity/api/tests     # token verification, settings, deletion allow list
-dotnet test db/tests                       # every refusal and success over HTTP, the sign-in write as the limited role (Docker); TestDeletion*Tests.cs, TestDebugTokenTests.cs
+dotnet test db/tests                       # every refusal and success over HTTP, the sign-in write as the limited role (Docker); TestDeletion*Tests.cs, TestDebugTokenTests.cs; IdentityFailureTests, IdentityPoolTests
 tools/identity-contract.sh test            # Hurl contract on the test stack (emulator sign-in; never dev: it may hold real data)
 tools/identity-contract.sh parity          # the same file on PHP (parity stack up, tools/parity-php/README.md)
 tools/contract-deletion.sh test|parity     # the deletion and debug-token Hurl files

@@ -2,6 +2,7 @@ using System.Globalization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Platform.Api.Domain;
 using Tsr.Shared.Api;
@@ -22,7 +23,7 @@ internal static class AdminAccessLogDownloadSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(HttpContext context, PlatformContext db, Permissions permissions, ReportExport export, TimeProvider clock, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(HttpContext context, NpgsqlDataSource source, Permissions permissions, ReportExport export, TimeProvider clock, CancellationToken ct)
     {
         if (!ReportExport.TryGetFormat(context, out var format))
         {
@@ -46,7 +47,7 @@ internal static class AdminAccessLogDownloadSlice
             return refusal!;
         }
 
-        var accesses = await AccessLog.AccessesAsync(db, AccessLog.WindowStart(clock), filters, ct);
+        var accesses = await AccessLog.AccessesAsync(source, AccessLog.WindowStart(clock), filters, ct);
         if (accesses.Count == 0)
         {
             return Problem.Detail(StatusCodes.Status404NotFound, "No accesses match");

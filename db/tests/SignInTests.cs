@@ -2,10 +2,8 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using NUnit.Framework;
-using Tsr.Identity.Api;
 
 namespace Tsr.Db.Tests;
 
@@ -326,6 +324,101 @@ public sealed class SignInTests
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
     }
 
+    // TC-IDN-R9-01 (issue 102): the uid and the address are citext columns, so a comparison ignores letter case; a conversion that compares them as text would make a second member.
+    [Test]
+    public async Task A_uid_that_differs_only_in_case_finds_the_member()
+    {
+        await InsertUserAsync(900001, Member, "UID-Case-1");
+
+        // A lookup route never creates a member, so a uid compared as text would answer 404 here; the create route alone would hide that (its unique-violation re-read finds the member).
+        var lookup = await PostFeedbackAsync(TestApi.SignedInAs("uid-case-1", "someone.else@example.invalid"));
+        Assert.That(lookup.Status, Is.EqualTo(HttpStatusCode.Created));
+
+        var reply = await LinkAsync(TestApi.SignedInAs("uid-case-1", "someone.else@example.invalid"));
+
+        Assert.That(reply.Status, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That(reply.Body.GetProperty("me").GetProperty("token").GetInt32(), Is.EqualTo(900001));
+        Assert.That(await CountUsersAsync(), Is.EqualTo(1));
+    }
+
+    [Test]
+    public async Task The_sign_in_record_reaches_every_row_whose_address_differs_only_in_case()
+    {
+        await InsertUserAsync(900001, "Member@Example.Invalid", "uid-1");
+        await InsertUserAsync(900002, "member@example.invalid");
+        var headers = TestApi.SignedInAs("uid-1", "Member@Example.Invalid").Append(new("User-Agent", "TwinUA/3.0"));
+
+        await PostFeedbackAsync(headers);
+
+        Assert.That((await UserAsync(900001))["lastdevice"], Is.EqualTo("TwinUA/3.0"));
+        Assert.That((await UserAsync(900002))["lastdevice"], Is.EqualTo("TwinUA/3.0"));
+    }
+
+    // TC-IDN-R4-01 and R4-02 (issue 102). The two requests are made to meet at the token lock: a test connection holds it, both requests are seen waiting on it, then it is released.
+    // A burst of requests only usually reaches the path; this one always does. The race has its own scenario copy so the lock never reaches another test.
+    [Test]
+    public async Task Two_first_sign_ins_of_one_account_at_once_make_one_member()
+    {
+        await using var run = await IdentityRun.StartAsync("race-one-account");
+        var headers = IdentityGoldenScenarios.Headers("uid-race", "race.one@example.invalid", true, IdentitySeed.Odd, "https://img.invalid/race");
+
+        var replies = await SendAtTheTokenLockAsync(run, headers, headers);
+
+        Assert.That(replies.Select(r => r.Status), Is.All.EqualTo(HttpStatusCode.OK), replies[0].Body + replies[1].Body);
+        Assert.That(replies[1].Body, Is.EqualTo(replies[0].Body), "both answer as the same member");
+        Assert.That(await run.Run.QueryAsync("select count(*) from identity.users where firebase_uid = 'uid-race'"), Is.EqualTo(["1"]));
+        Assert.That(await run.Run.QueryAsync("select count(*) from membership.member_profiles p join identity.users u on u.id = p.user_id where u.firebase_uid = 'uid-race' and p.picture = 'https://img.invalid/race'"), Is.EqualTo(["1"]));
+    }
+
+    [Test]
+    public async Task Two_first_sign_ins_of_two_accounts_at_once_get_the_next_two_tokens()
+    {
+        await using var run = await IdentityRun.StartAsync("race-two-accounts");
+        var highest = int.Parse((await run.Run.QueryAsync("select max(token) from identity.users")).Single(), System.Globalization.CultureInfo.InvariantCulture);
+
+        var replies = await SendAtTheTokenLockAsync(
+            run,
+            IdentityGoldenScenarios.Headers("uid-race-a", "race.a@example.invalid"),
+            IdentityGoldenScenarios.Headers("uid-race-b", "race.b@example.invalid"));
+
+        Assert.That(replies.Select(r => r.Status), Is.All.EqualTo(HttpStatusCode.OK), replies[0].Body + replies[1].Body);
+        var tokens = await run.Run.QueryAsync("select token from identity.users where firebase_uid in ('uid-race-a', 'uid-race-b') order by token");
+        Assert.That(tokens, Is.EqualTo([(highest + 1).ToString(System.Globalization.CultureInfo.InvariantCulture), (highest + 2).ToString(System.Globalization.CultureInfo.InvariantCulture)]));
+    }
+
+    private static async Task<GoldenReply[]> SendAtTheTokenLockAsync(IdentityRun run, params List<KeyValuePair<string, string>>[] requests)
+    {
+        const string waiting =
+            "select count(*) from pg_locks where locktype = 'advisory' and objid = 7100001 and not granted and database = (select oid from pg_database where datname = current_database())";
+        await using var holder = await run.Run.OpenOwnerConnectionAsync();
+        await using (var take = new Npgsql.NpgsqlCommand("select pg_advisory_lock(7100001)", holder))
+        {
+            await take.ExecuteNonQueryAsync();
+        }
+
+        var sends = requests.Select(headers => run.SendAsync(headers, HttpMethod.Post, "/auth/link")).ToArray();
+        var arrived = false;
+        try
+        {
+            for (var tries = 0; tries < 100 && !arrived; tries++)
+            {
+                arrived = int.Parse((await run.Run.QueryAsync(waiting)).Single(), System.Globalization.CultureInfo.InvariantCulture) >= requests.Length;
+                if (!arrived)
+                {
+                    await Task.Delay(50);
+                }
+            }
+        }
+        finally
+        {
+            await using var release = new Npgsql.NpgsqlCommand("select pg_advisory_unlock(7100001)", holder);
+            await release.ExecuteNonQueryAsync();
+        }
+
+        Assert.That(arrived, Is.True, "every request was to wait for the token lock within 5 seconds");
+        return await Task.WhenAll(sends);
+    }
+
     private static void AssertDetail(Reply reply, HttpStatusCode status, string detail)
     {
         Assert.That(reply.Status, Is.EqualTo(status));
@@ -378,17 +471,4 @@ public sealed class SignInTests
     }
 
     private sealed record Reply(HttpStatusCode Status, JsonElement Body);
-
-    [Test]
-    public async Task An_EF_comparison_of_an_email_matches_a_row_that_differs_only_in_letter_case_LINQ_CHECK()
-    {
-        await TestDatabase.ExecuteAsync("insert into identity.users (token, email) values (924901, 'case.check@example.invalid') on conflict do nothing");
-        using var factory = TestApi.Create();
-        using var scope = factory.Services.CreateScope();
-        var identity = scope.ServiceProvider.GetRequiredService<IdentityContext>();
-
-        var found = await identity.Users.CountAsync(u => u.Email == "CASE.CHECK@EXAMPLE.INVALID");
-
-        Assert.That(found, Is.EqualTo(1), "EF sends the parameter as the column's type (citext)");
-    }
 }

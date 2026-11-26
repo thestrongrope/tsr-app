@@ -18,7 +18,7 @@ Every platform operation is built (`api/Planned.cs` is gone).
 | `geo-countries`, `geo-postal`, `geo-cities` | `GET /geo/countries`, `POST /geo/postal`, `POST /geo/cities` | built; signed in, rate limited |
 | `admin-access-log`, `admin-access-log-download` | `GET /admin/access-log`, `.../download` | built; `audit-log:read`; shared query `api/domain/AccessLog.cs` |
 | `lookups` table, public `Lookups` and `Geo` read interfaces | - | built (no route); `membership` uses them |
-| `ReportExport` (public): xlsx and PDF report downloads for every domain | - | built; no route of its own; used by 9 classes and 3 membership download routes |
+| `ReportExport` (public): xlsx and PDF report downloads for every domain | - | built; no route of its own; 16 `DownloadAsync` callers: 12 classes, 3 membership and 1 platform route (the access log) |
 | Tables `admin_access_log`, `genders`, `languages`, `outbound_messages` | - | built (tables only, no route; migration `AddQueueAndLookupTables`) |
 
 ## What it owns
@@ -51,13 +51,13 @@ memory, per process); `GeoGate` supplies the limit and the wording.
 
 Static methods of `PlatformCommands`; the doc comment of each states its SQL and PHP source.
 
-- `RecordAdminAccessAsync(db, httpContext, userId, token, roleId, ct)` (`api/PlatformCommands.cs`): PHP's `api_log_admin_action`. One `admin_access_log` row for a caller whose role is 1, 3, 4, 5 or 7, written outside a transaction; a failed write is logged and never fails the request. Used by `classes`; proved by `db/tests/AdminAuditTests.cs`.
+- `RecordAdminAccessAsync(httpContext, userId, token, roleId, ct)` (`api/PlatformCommands.cs`): PHP's `api_log_admin_action`. One `admin_access_log` row for a caller whose role is 1, 3, 4, 5 or 7. It finds the `NpgsqlDataSource` in the request's services and commits at once on its own pooled connection, so it is never part of the caller's transaction. A failed write is logged (Warning, no request values) and never fails the request; a cancelled one is not caught. Used by `classes` and `notifications`; proved by `db/tests/AdminAuditTests.cs`.
 - `QueueMessagesAsync` (queues `outbound_messages` rows, sends nothing; used by `notifications`), `EraseFeedbackAsync` and `RedactRecipientsAsync` (account deletion; used by `identity`): same file.
 - `ClaimMessagesAsync`, `MarkSentAsync`, `MarkFailedAsync`, `ReleaseMessageAsync`, `MarkDeadAsync` (`api/PlatformCommands.Queue.cs`): the delivery queue, below. Used by `notifications` (the push drain); proved by `db/tests/TestPushDrainTests.cs`.
 
 **The delivery queue for a worker** (column `outbound_messages.claimed_at`, migration `AddOutboundClaimedAt`). Each
-command is ONE statement on the caller's connection, outside a transaction (a claim commits before anything is sent; a
-claim is two statements); the clock is passed in. Decisions that differ from PHP:
+command takes the `NpgsqlDataSource` and runs ONE statement on its own pooled connection, outside a transaction, so it commits at once (a claim is stored before anything is sent; a
+claim is two statements, each committed); the clock is passed in. Decisions that differ from PHP:
 
 - A row left `sending` with `claimed_at` older than 10 minutes (`ClaimLease`) is reclaimed. PHP leaves a crashed claim stuck for ever; we reclaim it and accept a rare duplicate (the owner's decision). A `sending` row with no `claimed_at`, from before the column, is never reclaimed.
 - A stale `sending` row that has already used its 5 attempts becomes `dead` with `reclaim_exhausted` instead of being claimed again.
@@ -72,7 +72,7 @@ PHP's `ReportExportModel` and `api_send_report_download`, one public class (`api
 
 A download route calls `ReportExport.TryGetFormat` (and passes `ReportExport.FormatRefusal` as `RequireMember(precheck:)`, so a bad `?format=` is 422 BEFORE the sign-in, as PHP), then `export.DownloadAsync(format, title, sections, filenameBase, ct)`, which answers 200 with PHP's headers (`attachment; filename="X.xlsx"`), or 503 `{"detail": ...}` when the PDF renderer is down (PHP has no such answer). A file name is cut to letters, digits, space, `.`, `_`, `-`.
 
-- **xlsx**: ClosedXML 0.105.1 (MIT; the only project that references it). Layout as PHP; ints and floats are numbers, everything else text (so a leading `=` is text, never a formula). The layout and the three differences from PHP (a cell cut at 32767 characters, control characters dropped, an empty sheet name is "Report"): `api/domain/ReportXlsx.cs`.
+- **xlsx**: our own writer, no library (`api/domain/ReportXlsx.cs`, fixed XML texts in `ReportXlsx.Parts.cs`): nine parts into a `ZipArchive` through `XmlWriter`, two passes over the sections. Layout as PHP; ints and floats are numbers, everything else text (so a leading `=` is text, never a formula). Column width = longest line in the column + 2, at most 255 (no font is measured). The three differences from PHP: a cell cut at 32767 characters, control characters dropped, an empty sheet name is "Report". ClosedXML and the Open XML SDK are in the test projects only, as readers; `hosts/api/tests/NoSpreadsheetLibraryTests.cs` fails if the API carries one again (a library raises trim warning IL2090 in a native build).
 - **PDF**: `domain/ReportHtml.cs` builds the page PHP gave Dompdf with every value HTML-encoded and no external resource; `domain/GotenbergRenderer.cs` posts it to Gotenberg (A4 landscape, 60 s, 50 MB) through the one boundary interface `IPdfRenderer` (internal; the db tests swap it for a fake).
 - Setting `TSR_GOTENBERG_URL` is **required**: the API refuses to start without an http(s) URL (the `--migrate` job needs none). The compose service `gotenberg` (image `gotenberg/gotenberg:8`, no published port, curl healthcheck) is in `docker-compose.dev.yml`.
 - Tests: `domain/ReportXlsx.Tests.cs`, `ReportHtml.Tests.cs`, `GotenbergRenderer.Tests.cs`, `GotenbergSettings.Tests.cs`, `api/ReportExport.Tests.cs`; `hosts/api/tests/GotenbergSettingTests.cs`; the real renderer is proved by the Hurl download files on the test stack. Notes: `docs/specs/initial-build/fill-b5d-notes.md`.

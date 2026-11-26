@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Assessment.Api.Domain;
 using Tsr.Shared.Api;
@@ -28,7 +28,7 @@ internal static class ManageOfflineSaveSlice
 
     private sealed record Question(int Id, string? Option1);
 
-    private sealed record Conflict(string Detail, IReadOnlyList<int> Conflicts);
+    internal sealed record Conflict(string Detail, IReadOnlyList<int> Conflicts);
 
     public static IEndpointRouteBuilder MapManageOfflineSave(this IEndpointRouteBuilder routes)
     {
@@ -36,7 +36,7 @@ internal static class ManageOfflineSaveSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string quiz_id, HttpContext context, AssessmentContext db, Permissions permissions, TimeProvider clock, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(string quiz_id, HttpContext context, NpgsqlDataSource source, Permissions permissions, TimeProvider clock, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -44,7 +44,7 @@ internal static class ManageOfflineSaveSlice
             return Problem.Unauthenticated();
         }
 
-        var (quiz, refusal) = await ManageAccess.ResolveQuizAsync(db, PhpValue.IntOfText(quiz_id), ct);
+        var (quiz, refusal) = await ManageAccess.ResolveQuizAsync(source, PhpValue.IntOfText(quiz_id), ct);
         if (refusal is not null)
         {
             return refusal;
@@ -67,10 +67,11 @@ internal static class ManageOfflineSaveSlice
             return Problem.Detail(readRefusal.Status, readRefusal.Message);
         }
 
-        var questions = await db.Database
-            .SqlQuery<Question>($"""select id as "Id", option1::text as "Option1" from assessment.spot_quiz_questions where spot_quiz_id = {quiz.Id} order by id limit 5000""")
-            .ToListAsync(ct);
-        var enrolled = (await ClassStudents.ListAsync(db, quiz.ClassId, ct)).Select(s => (long)s.Token).ToHashSet();
+        var questions = await source.ListAsync(
+            $"""select id as "Id", option1::text as "Option1" from assessment.spot_quiz_questions where spot_quiz_id = {quiz.Id} order by id limit 5000""",
+            row => new Question(row.Int("Id"), row.TextOrNull("Option1")),
+            ct);
+        var enrolled = (await ClassStudents.ListAsync(source, quiz.ClassId, ct)).Select(s => (long)s.Token).ToHashSet();
         var (students, planRefusal) = OfflineBatch.Plan(entries!, questions.Select(q => (long)q.Id).ToHashSet(), enrolled);
         if (planRefusal is not null)
         {
@@ -78,51 +79,53 @@ internal static class ManageOfflineSaveSlice
         }
 
         var tokens = students!.Select(s => s.Token).ToArray();
-        var submitted = (await db.Database
-            .SqlQuery<int>($"""select distinct token as "Value" from assessment.spot_quiz_submissions where spot_quiz_id = {quiz.Id} and token = any({tokens})""")
-            .ToListAsync(ct)).ToHashSet();
+        var submitted = (await source.ListAsync(
+            $"""select distinct token as "Value" from assessment.spot_quiz_submissions where spot_quiz_id = {quiz.Id} and token = any({tokens})""",
+            row => row.Int("Value"),
+            ct)).ToHashSet();
         var conflicts = tokens.Where(submitted.Contains).ToList();
         if (conflicts.Count > 0)
         {
             return Conflicts(conflicts);
         }
 
-        return await SaveAsync(db, clock, quiz, caller.Token, questions, students!, ct);
+        return await SaveAsync(source, clock, quiz, caller.Token, questions, students!, ct);
     }
 
     private static IResult Conflicts(List<int> tokens) =>
         tokens.Count == 0
             ? Problem.Detail(StatusCodes.Status409Conflict, ConflictText)
-            : Results.Json(new Conflict(ConflictText, tokens), statusCode: StatusCodes.Status409Conflict);
+            : Results.Json(new Conflict(ConflictText, tokens), AssessmentJson.Answers.Conflict, contentType: null, statusCode: StatusCodes.Status409Conflict);
 
     private static async Task<IResult> SaveAsync(
-        AssessmentContext db, TimeProvider clock, ManageAccess.QuizRow quiz, int token, IReadOnlyList<Question> questions, IReadOnlyList<OfflineBatch.Student> students, CancellationToken ct)
+        NpgsqlDataSource source, TimeProvider clock, ManageAccess.QuizRow quiz, int token, IReadOnlyList<Question> questions, IReadOnlyList<OfflineBatch.Student> students, CancellationToken ct)
     {
         var at = ManageAccess.NowToSecond(clock);
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        await using var tx = await source.BeginAsync(ct);
         try
         {
-            if (!await QuizLock.ShareUnchangedAsync(db, quiz.Id, questions.Select(q => (long)q.Id).ToList(), ct))
+            if (!await QuizLock.ShareUnchangedAsync(tx, quiz.Id, questions.Select(q => (long)q.Id).ToList(), ct))
             {
                 return Problem.Detail(StatusCodes.Status409Conflict, "This quiz was edited while the answers were being entered. Reload it and enter them again");
             }
 
             foreach (var student in students)
             {
-                var already = await db.Database
-                    .SqlQuery<int>($"""select id as "Value" from assessment.spot_quiz_submissions where spot_quiz_id = {quiz.Id} and token = {student.Token} limit 1""")
-                    .ToListAsync(ct);
+                var already = await tx.ListAsync(
+                    $"""select id as "Value" from assessment.spot_quiz_submissions where spot_quiz_id = {quiz.Id} and token = {student.Token} limit 1""",
+                    row => row.Int("Value"),
+                    ct);
                 if (already.Count > 0)
                 {
                     return Conflicts([student.Token]);
                 }
 
-                await WriteStudentAsync(db, quiz.Id, student, questions, at, ct);
+                await WriteStudentAsync(tx, quiz.Id, student, questions, at, ct);
             }
 
-            await Outbox.WriteAsync(db, "assessment.offline_answers_recorded", new OfflineRecorded(quiz.Id, quiz.ClassId, token, students.Count), clock, ct);
-            await transaction.CommitAsync(ct);
-            return Results.Json(new Body(students.Count));
+            await Outbox.WriteAsync(tx, "assessment.offline_answers_recorded", new OfflineRecorded(quiz.Id, quiz.ClassId, token, students.Count), AssessmentJson.Default.OfflineRecorded, clock, ct);
+            await tx.CommitAsync(ct);
+            return Results.Json(new Body(students.Count), AssessmentJson.Answers.ManageOfflineSave);
         }
         catch (Exception e) when (DuplicateAnswer.IsViolation(e))
         {
@@ -130,9 +133,9 @@ internal static class ManageOfflineSaveSlice
         }
     }
 
-    private static async Task WriteStudentAsync(AssessmentContext db, int quizId, OfflineBatch.Student student, IReadOnlyList<Question> questions, DateTimeOffset at, CancellationToken ct)
+    private static async Task WriteStudentAsync(DbTx tx, int quizId, OfflineBatch.Student student, IReadOnlyList<Question> questions, DateTimeOffset at, CancellationToken ct)
     {
-        await db.Database.ExecuteSqlAsync(
+        await tx.ExecuteAsync(
             $"insert into assessment.spot_quiz_submissions (spot_quiz_id, token, created_at, modified_at) values ({quizId}, {student.Token}, {at}, {at})", ct);
         foreach (var question in questions)
         {
@@ -140,7 +143,7 @@ internal static class ManageOfflineSaveSlice
             var correct = student.Correct.Contains(question.Id);
             string? response = correct ? text : null;
             var flag = correct ? 1 : 0;
-            await db.Database.ExecuteSqlAsync(
+            await tx.ExecuteAsync(
                 $"""
                 insert into assessment.spot_quiz_responses (spot_quiz_id, spot_quiz_question_id, token, response, correct_response, is_correct, created_at)
                 values ({quizId}, {question.Id}, {student.Token}, {response}, {text}, {flag}::smallint, {at})

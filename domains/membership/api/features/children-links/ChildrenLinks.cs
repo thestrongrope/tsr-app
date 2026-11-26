@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Membership.Api.Domain;
 using Tsr.Shared.Api;
@@ -26,7 +26,7 @@ internal static class ChildrenLinksEndpoint
     }
 }
 
-internal sealed class ChildrenLinksHandler(MembershipContext db, Permissions permissions, LinkLister lister)
+internal sealed class ChildrenLinksHandler(NpgsqlDataSource source, Permissions permissions, LinkLister lister)
 {
     public async Task<IResult> HandleAsync(Caller? caller, CancellationToken ct)
     {
@@ -41,11 +41,7 @@ internal sealed class ChildrenLinksHandler(MembershipContext db, Permissions per
         }
 
         var token = caller.Token;
-        var rows = await db.UserGuardians.AsNoTracking()
-            .Where(g => g.ParentToken == token)
-            .OrderByDescending(g => g.CreatedAt).ThenBy(g => g.Id)
-            .Take(LinkLister.MaxRows)
-            .ToListAsync(ct);
-        return Results.Json(await lister.ShowAsync(rows, LinkRowView.ChildName, g => g.ChildToken, ct));
+        var rows = await source.ListAsync(GuardianRows.OfParent(token, LinkLister.MaxRows), GuardianRows.Read, ct);
+        return Results.Json(await lister.ShowAsync(rows, LinkRowView.ChildName, g => g.ChildToken, ct), MembershipJson.Answers.JsonArray);
     }
 }

@@ -41,6 +41,6 @@ internal static class WhatsappRunSlice
         }
 
         var (messages, messagesFailed) = NotifierAsk.Interpret(await notifier.RunMessagesAsync(id, ct));
-        return messagesFailed ?? Results.Json(new Detail(NotifierRows.Run(run), NotifierRows.Rows(messages).Select(NotifierRows.Message).ToList()));
+        return messagesFailed ?? Results.Json(new Detail(NotifierRows.Run(run), NotifierRows.Rows(messages).Select(NotifierRows.Message).ToList()), NotificationsJson.Answers.Detail);
     }
 }

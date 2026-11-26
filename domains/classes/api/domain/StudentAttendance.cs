@@ -1,4 +1,5 @@
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
+using Tsr.Shared.Api;
 
 namespace Tsr.Classes.Api.Domain;
 
@@ -23,12 +24,12 @@ internal static class StudentAttendance
     private sealed record QuizRow(int Correct, int Answered);
 
     /// <summary>The conducted sessions of the class newest first, each with the member's attendance (absent when there is no row).</summary>
-    public static async Task<IReadOnlyList<Session>> HistoryAsync(ClassesContext db, int classId, int token, string? from, string? to, CancellationToken ct)
+    public static async Task<IReadOnlyList<Session>> HistoryAsync(NpgsqlDataSource source, int classId, int token, string? from, string? to, CancellationToken ct)
     {
-        var start = PhpDateBound.Bound(from);
-        var end = PhpDateBound.Bound(to);
-        var rows = await db.Database
-            .SqlQuery<Row>($"""
+        var start = ClassesRows.Bound(from);
+        var end = ClassesRows.Bound(to);
+        var rows = await source.ListAsync(
+            $"""
                 select cs.id as "SessionId", cs.conducted_on as "ConductedOn", coalesce(cs.duration, 0) as "Duration",
                        coalesce(ca.present, 0)::int as "Present", coalesce(ca.recitation, 0) as "Recitation"
                 from classes.class_sessions cs
@@ -38,8 +39,9 @@ internal static class StudentAttendance
                   and ({end}::timestamptz is null or cs.conducted_on::timestamp at time zone 'UTC' <= {end}::timestamptz)
                 order by cs.conducted_on desc, cs.id
                 limit {MaxSessions}
-                """)
-            .ToListAsync(ct);
+                """,
+            row => new Row(row.Int("SessionId"), row.Date("ConductedOn"), row.Int("Duration"), row.Int("Present"), row.Int("Recitation")),
+            ct);
         return rows.Select(r => new Session(r.SessionId, r.ConductedOn, r.Duration, r.Present != 0, r.Recitation, r.Present == 1)).ToList();
     }
 
@@ -54,19 +56,20 @@ internal static class StudentAttendance
     /// The quizzes of the class the member answered and the mean of their per-quiz percent correct (assessment's published view). PHP bounds each
     /// response by its own time; the view carries the time of the first one per quiz, so a quiz is in or out as a whole (recorded in fill-b1-notes.md).
     /// </summary>
-    public static async Task<Quiz> QuizAsync(ClassesContext db, int classId, int token, string? from, string? to, CancellationToken ct)
+    public static async Task<Quiz> QuizAsync(NpgsqlDataSource source, int classId, int token, string? from, string? to, CancellationToken ct)
     {
-        var start = PhpDateBound.Bound(from);
-        var end = PhpDateBound.Bound(to);
-        var rows = await db.Database
-            .SqlQuery<QuizRow>($"""
+        var start = ClassesRows.Bound(from);
+        var end = ClassesRows.Bound(to);
+        var rows = await source.ListAsync(
+            $"""
                 select coalesce(correct, 0) as "Correct", answered as "Answered" from assessment.v_quiz_results
                 where class_id = {classId} and token = {token}
                   and ({start}::timestamptz is null or answered_at >= {start}::timestamptz)
                   and ({end}::timestamptz is null or answered_at <= {end}::timestamptz)
                 limit {MaxSessions}
-                """)
-            .ToListAsync(ct);
+                """,
+            row => new QuizRow(row.Int("Correct"), row.Int("Answered")),
+            ct);
         if (rows.Count == 0)
         {
             return new Quiz(0, 0);

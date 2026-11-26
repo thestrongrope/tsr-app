@@ -1,6 +1,6 @@
 using System.Globalization;
 using Microsoft.AspNetCore.Http;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Shared.Api;
 
@@ -48,7 +48,7 @@ internal static class TsrReport
 
     private sealed record RecitationRow(string Level, string Code, string? Teacher, long Total);
 
-    public static async Task<(Answer? Report, IResult? Refusal)> OpenAsync(HttpContext context, ClassesContext db, Permissions permissions, Caller caller, DateOnly today, CancellationToken ct)
+    public static async Task<(Answer? Report, IResult? Refusal)> OpenAsync(HttpContext context, NpgsqlDataSource db, Permissions permissions, Caller caller, DateOnly today, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(context);
         var (scope, refusal) = await ReportScope.OpenAsync(context, permissions, caller, ct);
@@ -101,14 +101,14 @@ internal static class TsrReport
     private static string? Time(DateTimeOffset? time) => time?.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
 
     // PHP getSummaryConduction, getSummaryMCQs, attendanceSummary and recitationSummary in one pass over the classes of the caller's reach (every gender): per class whether it held a session and set an MCQ in the range and its marks, then per level.
-    private static async Task<List<LevelRow>> LevelsAsync(ClassesContext db, int[] ids, DateRange range, CancellationToken ct)
+    private static async Task<List<LevelRow>> LevelsAsync(NpgsqlDataSource db, int[] ids, DateRange range, CancellationToken ct)
     {
         var from = range.FromDay;
         var to = range.ToDay;
-        var fromTime = range.FromDay.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
-        var toTime = range.ToDay.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
-        return await db.Database
-            .SqlQuery<LevelRow>($"""
+        var fromTime = new DateTimeOffset(range.FromDay.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
+        var toTime = new DateTimeOffset(range.ToDay.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
+        return await db.ListAsync(
+            $"""
                 with pc as (
                     select c.id, c.class_level_id, c.gender,
                            exists (select 1 from classes.class_sessions s where s.class_id = c.id and s.conducted = 1 and s.conducted_on between {from} and {to}) as held,
@@ -132,23 +132,37 @@ internal static class TsrReport
                 join classes.class_levels cl on cl.id = pc.class_level_id
                 group by cl.id, cl.code, cl.sort_order
                 order by cl.sort_order, cl.id
-                """)
-            .ToListAsync(ct);
+                """,
+            r => new LevelRow(
+                r.Int("Id"), r.Text("Code"), r.Int("GentsTotal"), r.Int("GentsHeld"), r.Int("GentsQuiz"), r.Int("LadiesTotal"), r.Int("LadiesHeld"), r.Int("LadiesQuiz"),
+                r.Decimal("GentsPerSum"), r.Int("GentsPerN"), r.Decimal("LadiesPerSum"), r.Int("LadiesPerN"), r.Int("Marks"), r.Long("GentsRecitation"), r.Long("LadiesRecitation")),
+            ct);
+    }
+
+    // The last held day comes as text and the quotient with a flag: DbRow has no nullable date or decimal reader.
+    private static ClassRow ReadClass(DbRow r)
+    {
+        var last = r.TextOrNull("LastConducted");
+        var hasPer = r.Bool("HasPer");
+        var per = r.Decimal("Per");
+        return new ClassRow(
+            r.Text("Level"), r.Text("Code"), r.TextOrNull("Teacher"), last is null ? null : DateOnly.ParseExact(last, "yyyy-MM-dd", CultureInfo.InvariantCulture),
+            r.InstantOrNull("LastPublished"), hasPer ? per : null);
     }
 
     // PHP getConductionReport, getMCQReport and getAttendanceReport: per class of the asked gender (level, teacher and gender must exist), its last held day, its last publish time in the range and its attendance quotient.
-    private static async Task<List<ClassRow>> ClassesAsync(ClassesContext db, int[] ids, DateRange range, CancellationToken ct)
+    private static async Task<List<ClassRow>> ClassesAsync(NpgsqlDataSource db, int[] ids, DateRange range, CancellationToken ct)
     {
         var from = range.FromDay;
         var to = range.ToDay;
-        var fromTime = range.FromDay.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
-        var toTime = range.ToDay.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
-        return await db.Database
-            .SqlQuery<ClassRow>($"""
+        var fromTime = new DateTimeOffset(range.FromDay.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
+        var toTime = new DateTimeOffset(range.ToDay.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
+        return await db.ListAsync(
+            $"""
                 select cl.code::text as "Level", c.code::text as "Code", u.name::text as "Teacher",
-                       (select max(s.conducted_on) from classes.class_sessions s where s.class_id = c.id and s.conducted = 1 and s.conducted_on between {from} and {to}) as "LastConducted",
+                       (select to_char(max(s.conducted_on), 'YYYY-MM-DD') from classes.class_sessions s where s.class_id = c.id and s.conducted = 1 and s.conducted_on between {from} and {to}) as "LastConducted",
                        (select max(q.published_at) from assessment.v_quizzes q where q.class_id = c.id and q.published_at between {fromTime} and {toTime}) as "LastPublished",
-                       case when a.marks > 0 then round(a.present::numeric / a.marks, 4) end as "Per"
+                       (a.marks > 0) as "HasPer", coalesce(round(a.present::numeric / nullif(a.marks, 0), 4), 0) as "Per"
                 from classes.classes c
                 join classes.class_levels cl on cl.id = c.class_level_id
                 join platform.v_genders g on g.id = c.gender
@@ -159,17 +173,18 @@ internal static class TsrReport
                     join classes.class_attendance ca on ca.session_id = s.id
                     where s.class_id = c.id and s.conducted = 1 and s.conducted_on between {from} and {to}) a on true
                 where c.id = any({ids})
-                """)
-            .ToListAsync(ct);
+                """,
+            ReadClass,
+            ct);
     }
 
     // PHP getQuranRecitationSummary: the recitation marked in the held sessions of the range, per class (no status condition in PHP: the ids may hold a closed class).
-    private static async Task<List<RecitationRow>> RecitationAsync(ClassesContext db, int[] ids, DateRange range, CancellationToken ct)
+    private static async Task<List<RecitationRow>> RecitationAsync(NpgsqlDataSource db, int[] ids, DateRange range, CancellationToken ct)
     {
         var from = range.FromDay;
         var to = range.ToDay;
-        return await db.Database
-            .SqlQuery<RecitationRow>($"""
+        return await db.ListAsync(
+            $"""
                 select cl.code::text as "Level", c.code::text as "Code", u.name::text as "Teacher", coalesce(sum(ca.recitation), 0)::bigint as "Total"
                 from classes.class_attendance ca
                 join classes.class_sessions s on s.id = ca.session_id
@@ -181,7 +196,8 @@ internal static class TsrReport
                 group by c.id, cl.code, c.code, u.name
                 order by c.id
                 limit 20000
-                """)
-            .ToListAsync(ct);
+                """,
+            r => new RecitationRow(r.Text("Level"), r.Text("Code"), r.TextOrNull("Teacher"), r.Long("Total")),
+            ct);
     }
 }

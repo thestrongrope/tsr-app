@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Npgsql;
 using Tsr.Access.Api;
+using Tsr.Identity.Api.Domain;
 using Tsr.Shared.Api;
 
 namespace Tsr.Identity.Api.Features.DeletionRequestGet;
@@ -17,7 +19,7 @@ internal static class DeletionRequestGetSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(HttpContext context, IdentityContext db, Permissions permissions, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(HttpContext context, NpgsqlDataSource source, Permissions permissions, CancellationToken ct)
     {
         var caller = context.GetCaller();
         var refusal = await DeletionRequests.RefuseAsync(caller, permissions, "account:delete", ct);
@@ -26,7 +28,12 @@ internal static class DeletionRequestGetSlice
             return refusal;
         }
 
-        var row = await DeletionRequests.ActiveForAsync(db, caller!.Token, ct);
-        return Results.Json(DeletionViews.MemberView(row));
+        DeletionRow? row;
+        await using (var read = await source.BeginAsync(ct))
+        {
+            row = await DeletionRequests.ActiveForAsync(read, caller!.Token, ct);
+        }
+
+        return Results.Json(DeletionViews.MemberView(row), IdentityJson.Answers.Answer);
     }
 }

@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
 using Tsr.Shared.Api;
@@ -22,7 +22,7 @@ internal static class AdminSyllabusCreateSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(HttpContext context, ClassesContext db, Permissions permissions, TimeProvider clock, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(HttpContext context, NpgsqlDataSource source, Permissions permissions, TimeProvider clock, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -30,7 +30,7 @@ internal static class AdminSyllabusCreateSlice
             return Problem.Unauthenticated();
         }
 
-        var refusal = await AdminGuards.SyllabusAdminAsync(context, db, permissions, caller, ct);
+        var refusal = await AdminGuards.SyllabusAdminAsync(context, permissions, caller, ct);
         if (refusal is not null)
         {
             return refusal;
@@ -49,22 +49,28 @@ internal static class AdminSyllabusCreateSlice
         }
 
         var input = parsed.Value!;
-        var levels = await db.Database.SqlQuery<int>($"""select id as "Value" from classes.class_levels where id = {input.LevelId} limit 1""").ToListAsync(ct);
+        var levels = await source.ListAsync($"""select id as "Value" from classes.class_levels where id = {input.LevelId} limit 1""", row => row.Int("Value"), ct);
         if (levels.Count == 0)
         {
             return Problem.Detail(StatusCodes.Status400BadRequest, "Invalid level_id");
         }
 
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        var ids = await db.Database
-            .SqlQuery<int>($"""
+        int id;
+        await using (var tx = await source.BeginAsync(ct))
+        {
+            var ids = await tx.ListAsync(
+                $"""
                 insert into classes.syllabus (level_id, subject_name, description, link_type, url, sort_order, created_by)
                 values ({input.LevelId}, {input.SubjectName}, {input.Description}, {input.LinkType}, {input.Url}, {input.SortOrder}, {caller.Token})
                 returning id as "Value"
-                """)
-            .ToListAsync(ct);
-        await Outbox.WriteAsync(db, "classes.syllabus_item_created", new SyllabusItemCreated(ids[0], levels[0], caller.Token), clock, ct);
-        await transaction.CommitAsync(ct);
-        return Results.Json(await SyllabusItems.LiveByIdAsync(db, ids[0], ct), statusCode: StatusCodes.Status201Created);
+                """,
+                row => row.Int("Value"),
+                ct);
+            id = ids[0];
+            await Outbox.WriteAsync(tx, "classes.syllabus_item_created", new SyllabusItemCreated(id, levels[0], caller.Token), ClassesJson.Default.SyllabusItemCreated, clock, ct);
+            await tx.CommitAsync(ct);
+        }
+
+        return Results.Json(await SyllabusItems.LiveByIdAsync(source, id, ct), ClassesJson.Answers.SyllabusItem, statusCode: StatusCodes.Status201Created);
     }
 }

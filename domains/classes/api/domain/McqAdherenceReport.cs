@@ -1,5 +1,6 @@
 using System.Globalization;
 using Microsoft.AspNetCore.Http;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Shared.Api;
 
@@ -20,7 +21,7 @@ internal static class McqAdherenceReport
     /// <summary>One class's figures and every standard MCQ of it (all zero and none for a class the caller does not reach or one with no standard MCQ).</summary>
     internal sealed record ClassView(int Expected, int Conducted, int Pending, int Skipped, PhpFloat AdherencePercent, IReadOnlyList<McqAdherence.Item> Items);
 
-    public static async Task<(Loaded? Report, IResult? Refusal)> OpenAsync(HttpContext context, ClassesContext db, Permissions permissions, Caller caller, long classId, CancellationToken ct)
+    public static async Task<(Loaded? Report, IResult? Refusal)> OpenAsync(HttpContext context, NpgsqlDataSource db, Permissions permissions, Caller caller, long classId, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(context);
         var (scope, refusal) = await ReportScope.OpenAsync(context, permissions, caller, ct);
@@ -41,7 +42,7 @@ internal static class McqAdherenceReport
     }
 
     /// <summary>The first class of the report with its MCQs (PHP <c>$r['report'][0]</c>); the empty class when there is none.</summary>
-    public static async Task<ClassView> FirstClassAsync(ClassesContext db, Loaded report, CancellationToken ct)
+    public static async Task<ClassView> FirstClassAsync(NpgsqlDataSource db, Loaded report, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(report);
         var first = report.Lines.Count == 0 ? null : report.Lines[0];
@@ -55,7 +56,7 @@ internal static class McqAdherenceReport
     }
 
     /// <summary>PHP <c>mcqAdherenceCsv</c>: a row per standard MCQ of every class (or only those of <paramref name="asked"/> when it is not empty), or null when there is none.</summary>
-    public static async Task<string?> CsvAsync(ClassesContext db, Loaded report, IReadOnlyCollection<long> asked, CancellationToken ct)
+    public static async Task<string?> CsvAsync(NpgsqlDataSource db, Loaded report, IReadOnlyCollection<long> asked, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(report);
         var lines = report.Lines.Where(l => asked.Count == 0 || asked.Contains(l.ClassId)).ToList();

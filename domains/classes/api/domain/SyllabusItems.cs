@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json.Serialization;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
+using Tsr.Shared.Api;
 
 namespace Tsr.Classes.Api.Domain;
 
@@ -49,53 +50,69 @@ internal static class SyllabusItems
         r.CreatedAt.ToString(Naive, CultureInfo.InvariantCulture),
         r.ModifiedAt?.ToString(Naive, CultureInfo.InvariantCulture));
 
+    private static Row ReadRow(DbRow row) =>
+        new(
+            row.Int("Id"),
+            row.Int("LevelId"),
+            row.Text("SubjectName"),
+            row.TextOrNull("Description"),
+            row.Text("LinkType"),
+            row.Text("Url"),
+            row.Int("SortOrder"),
+            row.Bool("IsActive"),
+            row.Instant("CreatedAt").UtcDateTime,
+            row.InstantOrNull("ModifiedAt")?.UtcDateTime);
+
     /// <summary>The live (not deleted) items of one level, active only, in PHP's order.</summary>
-    public static async Task<List<Item>> ActiveOfLevelAsync(ClassesContext db, long levelId, CancellationToken ct)
+    public static async Task<List<Item>> ActiveOfLevelAsync(NpgsqlDataSource source, long levelId, CancellationToken ct)
     {
-        var rows = await db.Database
-            .SqlQuery<Row>($"""
+        var rows = await source.ListAsync(
+            $"""
                 select id as "Id", level_id as "LevelId", subject_name as "SubjectName", description as "Description", link_type as "LinkType",
                        url as "Url", coalesce(sort_order, 0) as "SortOrder", is_active <> 0 as "IsActive",
-                       created_at at time zone 'UTC' as "CreatedAt", modified_at at time zone 'UTC' as "ModifiedAt"
+                       created_at as "CreatedAt", modified_at as "ModifiedAt"
                 from classes.syllabus
                 where level_id = {levelId} and is_active = 1 and deleted_at is null
                 order by sort_order nulls first, subject_name
                 limit {MaxRows}
-                """)
-            .ToListAsync(ct);
+                """,
+            ReadRow,
+            ct);
         return rows.Select(ToItem).ToList();
     }
 
     /// <summary>Every live item (inactive ones too when asked), in PHP's order.</summary>
-    public static async Task<List<Item>> LiveAsync(ClassesContext db, bool includeInactive, CancellationToken ct)
+    public static async Task<List<Item>> LiveAsync(NpgsqlDataSource source, bool includeInactive, CancellationToken ct)
     {
-        var rows = await db.Database
-            .SqlQuery<Row>($"""
+        var rows = await source.ListAsync(
+            $"""
                 select id as "Id", level_id as "LevelId", subject_name as "SubjectName", description as "Description", link_type as "LinkType",
                        url as "Url", coalesce(sort_order, 0) as "SortOrder", is_active <> 0 as "IsActive",
-                       created_at at time zone 'UTC' as "CreatedAt", modified_at at time zone 'UTC' as "ModifiedAt"
+                       created_at as "CreatedAt", modified_at as "ModifiedAt"
                 from classes.syllabus
                 where deleted_at is null and ({includeInactive} or is_active = 1)
                 order by sort_order nulls first, subject_name
                 limit {MaxRows}
-                """)
-            .ToListAsync(ct);
+                """,
+            ReadRow,
+            ct);
         return rows.Select(ToItem).ToList();
     }
 
     /// <summary>One live item by id, or null (PHP syllabus->exists / get).</summary>
-    public static async Task<Item?> LiveByIdAsync(ClassesContext db, long id, CancellationToken ct)
+    public static async Task<Item?> LiveByIdAsync(NpgsqlDataSource source, long id, CancellationToken ct)
     {
-        var rows = await db.Database
-            .SqlQuery<Row>($"""
+        var rows = await source.ListAsync(
+            $"""
                 select id as "Id", level_id as "LevelId", subject_name as "SubjectName", description as "Description", link_type as "LinkType",
                        url as "Url", coalesce(sort_order, 0) as "SortOrder", is_active <> 0 as "IsActive",
-                       created_at at time zone 'UTC' as "CreatedAt", modified_at at time zone 'UTC' as "ModifiedAt"
+                       created_at as "CreatedAt", modified_at as "ModifiedAt"
                 from classes.syllabus
                 where id = {id} and deleted_at is null
                 limit 1
-                """)
-            .ToListAsync(ct);
+                """,
+            ReadRow,
+            ct);
         return rows.Count == 0 ? null : ToItem(rows[0]);
     }
 }

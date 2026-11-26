@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Logging;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Assessment.Api.Domain;
 using Tsr.Shared.Api;
@@ -26,7 +27,7 @@ internal static partial class AdminQuizDownloadSlice
     }
 
     private static async Task<IResult> HandleAsync(
-        HttpContext context, AssessmentContext db, Permissions permissions, ISheets sheets, TimeProvider clock, ILoggerFactory loggers, CancellationToken ct)
+        HttpContext context, NpgsqlDataSource source, Permissions permissions, ISheets sheets, TimeProvider clock, ILoggerFactory loggers, CancellationToken ct)
     {
         var (caller, refusal) = await QuizAdmin.GuardAsync(context, permissions, ct);
         if (refusal is not null)
@@ -34,14 +35,14 @@ internal static partial class AdminQuizDownloadSlice
             return refusal;
         }
 
-        var settings = await QuizAdmin.SettingsAsync(db, ct);
+        var settings = await QuizAdmin.SettingsAsync(source, ct);
         if (QuizAdmin.RequireSettings(settings) is { } blocked)
         {
             return blocked;
         }
 
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        if (!await AssessmentLocks.TryTakeAsync(db, AssessmentLocks.QuizAdmin, ct))
+        await using var tx = await source.BeginAsync(ct);
+        if (!await AssessmentLocks.TryTakeAsync(tx, AssessmentLocks.QuizAdmin, ct))
         {
             return QuizAdmin.Busy();
         }
@@ -54,8 +55,8 @@ internal static partial class AdminQuizDownloadSlice
         }
 
         var curTime = settings.IsMega ? QuizAdmin.NowOrOverride(settings, clock) : QuizAdmin.Wall(clock);
-        var timestamps = await QuizStateStore.LoadObjectAsync(db, QuizStateStore.Timestamps, ct);
-        timestamps["scoreboard_downloaded_by"] = await QuizAdmin.ActorLabelAsync(db, caller!, ct);
+        var timestamps = await QuizStateStore.LoadObjectAsync(tx, QuizStateStore.Timestamps, ct);
+        timestamps["scoreboard_downloaded_by"] = await QuizAdmin.ActorLabelAsync(tx, caller!, ct);
         timestamps["last_run"] = QuizAdmin.Stamp(curTime);
         var day = participants.Values.Count(rows => rows.Count > 0);
         var summary = new JsonObject();
@@ -66,27 +67,29 @@ internal static partial class AdminQuizDownloadSlice
 
         timestamps["scoreboard_downloaded_at"] = QuizAdmin.Stamp(curTime);
         timestamps["download_summary"] = new JsonObject { ["by_day"] = summary, ["completed_days"] = day, ["total_quizzes"] = settings.TotalQuizzes };
-        await QuizStateStore.SaveAsync(db, QuizStateStore.Participants, ParticipantsDocument(participants), clock, ct);
-        await QuizStateStore.SaveAsync(db, QuizStateStore.QuizDay, JsonValue.Create(day)!, clock, ct);
+        await QuizStateStore.SaveAsync(tx, QuizStateStore.Participants, ParticipantsDocument(participants), clock, ct);
+        await QuizStateStore.SaveAsync(tx, QuizStateStore.QuizDay, JsonValue.Create(day)!, clock, ct);
         if (day > 0)
         {
-            var feasibility = await QuizAdmin.FeasibilityAsync(db, settings, ct);
+            var feasibility = await QuizAdmin.FeasibilityAsync(tx, settings, ct);
             timestamps["last_validated"] = QuizAdmin.Stamp(curTime);
-            await QuizStateStore.SaveAsync(db, QuizStateStore.Scoreboard, QuizEligibility.BuildScoreboard(feasibility), clock, ct);
+            await QuizStateStore.SaveAsync(tx, QuizStateStore.Scoreboard, QuizEligibility.BuildScoreboard(feasibility), clock, ct);
             timestamps["scoreboard_generated_at"] = QuizAdmin.Stamp(curTime);
         }
 
-        await QuizStateStore.SaveAsync(db, QuizStateStore.Timestamps, timestamps, clock, ct);
-        await QuizAdmin.EventAsync(db, "download", clock, ct);
-        await transaction.CommitAsync(ct);
-        return Results.Json(new JsonObject
-        {
-            ["outcome"] = "complete",
-            ["message"] = day > 0 ? $"Downloaded the submissions. Quiz day {day}." : "Downloaded the submissions. No episode has started yet.",
-            ["changed"] = true,
-            ["quiz_day"] = day,
-            ["submissions"] = QuizOverview.SubmissionsPerEpisode(timestamps),
-        });
+        await QuizStateStore.SaveAsync(tx, QuizStateStore.Timestamps, timestamps, clock, ct);
+        await QuizAdmin.EventAsync(tx, "download", clock, ct);
+        await tx.CommitAsync(ct);
+        return Results.Json(
+            new JsonObject
+            {
+                ["outcome"] = "complete",
+                ["message"] = day > 0 ? $"Downloaded the submissions. Quiz day {day}." : "Downloaded the submissions. No episode has started yet.",
+                ["changed"] = true,
+                ["quiz_day"] = day,
+                ["submissions"] = QuizOverview.SubmissionsPerEpisode(timestamps),
+            },
+            AssessmentJson.Answers.JsonObject);
     }
 
     private static JsonObject ParticipantsDocument(IReadOnlyDictionary<int, List<Submission>> participants)

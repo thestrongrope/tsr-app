@@ -2,8 +2,11 @@ using System.Net;
 using System.Text.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.Routing;
 using Npgsql;
+using Microsoft.Extensions.DependencyInjection;
 using NUnit.Framework;
+using Tsr.Content.Api.Domain;
 
 namespace Tsr.Db.Tests;
 
@@ -56,5 +59,21 @@ public sealed class V1FailureTests
         Assert.That(response.Headers.Contains("ETag") || response.Headers.Contains("Cache-Control") || response.Content.Headers.Contains("Last-Modified"), Is.False);
         // Nothing of the failure reaches the caller.
         Assert.That(text, Does.Not.Contain("Npgsql").And.Not.Contain("no_such_database").And.Not.Contain("   at "));
+    }
+
+    [Test]
+    public void Every_v1_endpoint_answers_failures_in_the_v1_shape()
+    {
+        var endpoints = factory.Services.GetServices<EndpointDataSource>()
+            .SelectMany(source => source.Endpoints)
+            .OfType<RouteEndpoint>()
+            .Where(endpoint => endpoint.RoutePattern.RawText!.StartsWith("/api/v1/", StringComparison.Ordinal))
+            .ToList();
+
+        Assert.That(endpoints, Has.Count.EqualTo(6));
+        Assert.That(
+            endpoints.Where(endpoint => endpoint.Metadata.GetMetadata<V1.FailureShape>() is null).Select(endpoint => endpoint.RoutePattern.RawText),
+            Is.Empty,
+            "map every /api/v1/ route with .WithV1Failures()");
     }
 }

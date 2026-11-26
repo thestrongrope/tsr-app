@@ -2,7 +2,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
 using Tsr.Shared.Api;
@@ -33,7 +33,7 @@ internal static class ClassStudentTransferSlice
         string class_id,
         string token,
         HttpContext context,
-        ClassesContext db,
+        NpgsqlDataSource dataSource,
         Permissions permissions,
         TimeProvider clock,
         CancellationToken ct)
@@ -44,7 +44,7 @@ internal static class ClassStudentTransferSlice
             return Problem.Unauthenticated();
         }
 
-        var source = await ClassGuards.FindActiveClassAsync(db, ClassGuards.IdOf(class_id), ct);
+        var source = await ClassGuards.FindActiveClassAsync(dataSource, ClassGuards.IdOf(class_id), ct);
         if (source is null)
         {
             return Refusals.ClassNotFound();
@@ -56,7 +56,7 @@ internal static class ClassStudentTransferSlice
         }
 
         var student = ClassGuards.TokenOf(token);
-        if (!await ClassRoster.IsActiveAsync(db, source.Id, student, ct))
+        if (!await ClassRoster.IsActiveAsync(dataSource, source.Id, student, ct))
         {
             return Problem.Detail(StatusCodes.Status404NotFound, "Student not found in this class");
         }
@@ -73,7 +73,7 @@ internal static class ClassStudentTransferSlice
             return Problem.Detail(StatusCodes.Status422UnprocessableEntity, input.Error!);
         }
 
-        var destination = await ClassGuards.FindActiveClassAsync(db, input.Value!.ToClassId, ct);
+        var destination = await ClassGuards.FindActiveClassAsync(dataSource, input.Value!.ToClassId, ct);
         if (destination is null)
         {
             return Refusals.ClassNotFound();
@@ -84,13 +84,13 @@ internal static class ClassStudentTransferSlice
             return Problem.Detail(StatusCodes.Status422UnprocessableEntity, "A student can only move to a class of the same gender");
         }
 
-        var failure = await SaveAsync(db, clock, source.Id, destination.Id, student, input.Value, caller.Token, ct);
+        var failure = await SaveAsync(dataSource, clock, source.Id, destination.Id, student, input.Value, caller.Token, ct);
         if (failure is not null)
         {
             return Problem.Detail(StatusCodes.Status422UnprocessableEntity, failure);
         }
 
-        return Results.Json(await ClassRoster.BuildAsync(db, permissions, caller, source.Id, ct));
+        return Results.Json(await ClassRoster.BuildAsync(dataSource, permissions, caller, source.Id, ct), ClassesJson.Answers.Answer);
     }
 
     private sealed record Input(long ToClassId, string Type, string Reason);
@@ -120,13 +120,13 @@ internal static class ClassStudentTransferSlice
     }
 
     // Null when moved; else the refusal text (PHP's exception message).
-    private static async Task<string?> SaveAsync(ClassesContext db, TimeProvider clock, int from, int to, int student, Input input, int by, CancellationToken ct)
+    private static async Task<string?> SaveAsync(NpgsqlDataSource dataSource, TimeProvider clock, int from, int to, int student, Input input, int by, CancellationToken ct)
     {
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        var already = await db.Database
-            .SqlQuery<int>($"""select 1 as "Value" from classes.class_students where class_id = {to} and token_no = {student} and removed_at is null and status = 'A' limit 1""")
-            .ToListAsync(ct);
-        if (already.Count > 0)
+        await using var tx = await dataSource.BeginAsync(ct);
+        var already = await tx.AnyAsync(
+            $"""select 1 as "Value" from classes.class_students where class_id = {to} and token_no = {student} and removed_at is null and status = 'A' limit 1""",
+            ct);
+        if (already)
         {
             return $"Student {student} is already enrolled in destination class #{to}";
         }
@@ -137,8 +137,8 @@ internal static class ClassStudentTransferSlice
             return "reason must be at most 500 characters";
         }
 
-        await StudentMove.WriteAsync(db, clock, from, to, student, input.Type, input.Reason, by, removeFromSource: true, ct);
-        await transaction.CommitAsync(ct);
+        await StudentMove.WriteAsync(tx, clock, from, to, student, input.Type, input.Reason, by, removeFromSource: true, ct);
+        await tx.CommitAsync(ct);
         return null;
     }
 }

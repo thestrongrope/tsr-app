@@ -2,8 +2,8 @@ using System.Data.Common;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Npgsql;
 using Tsr.Access.Api.Domain;
 using Tsr.Shared.Api;
 
@@ -21,6 +21,8 @@ internal static class ClassAccessRevokeSlice
 {
     internal sealed record RuleRevoked(int RuleId, int Token, int RevokedBy);
 
+    private sealed record RuleRow(int Token, int? Gender, int? GrantedBy, DateTimeOffset? RevokedAt);
+
     private sealed record Revocation(int RuleId, int? RuleGender, int? GrantedBy, string Reason, string Version);
 
     public static IEndpointRouteBuilder MapClassAccessRevoke(this IEndpointRouteBuilder routes)
@@ -30,7 +32,7 @@ internal static class ClassAccessRevokeSlice
     }
 
     private static async Task<IResult> HandleAsync(
-        string id, HttpContext context, AccessContext db, Permissions permissions, IClassScopes classes, TimeProvider clock, ILoggerFactory loggers, CancellationToken ct)
+        string id, HttpContext context, NpgsqlDataSource source, Permissions permissions, IClassScopes classes, TimeProvider clock, ILoggerFactory loggers, CancellationToken ct)
     {
         var (op, refusal) = await ClassAccessOperator.RequireAsync(context, permissions, ct);
         if (op is null)
@@ -55,19 +57,19 @@ internal static class ClassAccessRevokeSlice
         var logger = loggers.CreateLogger("Tsr.Access.ClassAccess");
         try
         {
-            var (failure, token) = await RevokeAsync(db, op, clock, AdminMembers.IdOf(id), typed.Value!, version.Value!, ct);
+            var (failure, token) = await RevokeAsync(source, op, clock, AdminMembers.IdOf(id), typed.Value!, version.Value!, ct);
             return failure is not null
                 ? failure.ToResult()
-                : await ClassAccessStore.SavedAsync(db, permissions, classes, op, token, logger, ct);
+                : await ClassAccessStore.SavedAsync(source, permissions, classes, op, token, logger, ct);
         }
-        catch (Exception e) when (e is DbException or DbUpdateException)
+        catch (Exception e) when (e is DbException)
         {
             return ClassAccessStore.NothingChanged(logger, e);
         }
     }
 
     private static async Task<(Refusal? Failure, int Token)> RevokeAsync(
-        AccessContext db, ClassAccessOperator op, TimeProvider clock, int ruleId, string rawReason, string version, CancellationToken ct)
+        NpgsqlDataSource source, ClassAccessOperator op, TimeProvider clock, int ruleId, string rawReason, string version, CancellationToken ct)
     {
         var reason = GrantRules.CheckedReason(rawReason);
         if (reason.Failed)
@@ -75,46 +77,69 @@ internal static class ClassAccessRevokeSlice
             return (reason.Refusal, 0);
         }
 
-        var rule = ruleId > 0 ? await db.ClassAccessRules.AsNoTracking().FirstOrDefaultAsync(r => r.Id == ruleId, ct) : null;
-        var found = rule is null ? null : await ClassAccessStore.MemberAsync(db, rule.Token, ct);
-        if (rule is null || found is null)
+        var (rule, refusal) = await ReadGuardAsync(source, op, ruleId, ct);
+        if (refusal is not null)
         {
-            return (new Refusal(StatusCodes.Status404NotFound, "Rule not found"), 0);
+            return (refusal, 0);
         }
 
-        var guard = await GuardAsync(op, found.Value.Member, found.Value.RoleId, rule.Gender, rule.GrantedBy, ct);
-        if (guard is not null)
-        {
-            return (guard, 0);
-        }
-
-        if (rule.RevokedAt is not null)
-        {
-            return (AlreadyRemoved(), 0);
-        }
-
-        var revocation = new Revocation(ruleId, rule.Gender, rule.GrantedBy, reason.Value!, version);
-        return (await WriteAsync(db, op, clock, rule.Token, revocation, ct), rule.Token);
+        var revocation = new Revocation(ruleId, rule!.Gender, rule.GrantedBy, reason.Value!, version);
+        return (await WriteAsync(source, op, clock, rule.Token, revocation, ct), rule.Token);
     }
 
-    private static async Task<Refusal?> WriteAsync(AccessContext db, ClassAccessOperator op, TimeProvider clock, int token, Revocation revocation, CancellationToken ct)
+    // The rule, its member and the guards on a short read transaction, ended before the port is called. The guards call Permissions.CanAsync while it is open: that reads
+    // only the operator RequireAsync already resolved (a gender target looks no class up), so it opens no second connection; AccessPoolTests fails if that changes.
+    private static async Task<(RuleRow? Rule, Refusal? Refusal)> ReadGuardAsync(NpgsqlDataSource source, ClassAccessOperator op, int ruleId, CancellationToken ct)
     {
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        await MemberLock.TakeAsync(db, token, ct);
-        var locked = await ClassAccessStore.MemberAsync(db, token, ct);
+        await using var read = await source.BeginAsync(ct);
+        var rule = ruleId > 0 ? await FindAsync(read, ruleId, ct) : null;
+        var found = rule is null ? null : await ClassAccessStore.MemberAsync(read, rule.Token, ct);
+        if (rule is null || found is null)
+        {
+            return (null, new Refusal(StatusCodes.Status404NotFound, "Rule not found"));
+        }
+
+        var guard = await GuardAsync(read, op, found.Value.Member, found.Value.RoleId, rule.Gender, rule.GrantedBy, ct);
+        if (guard is not null)
+        {
+            return (null, guard);
+        }
+
+        return rule.RevokedAt is not null ? (null, AlreadyRemoved()) : (rule, null);
+    }
+
+    private static async Task<RuleRow?> FindAsync(DbTx tx, int ruleId, CancellationToken ct)
+    {
+        var rows = await tx.ListAsync(
+            $"""
+            select c.gender as "Gender", c.granted_by as "GrantedBy", c.revoked_at as "RevokedAt", c.token as "Token"
+            from access.class_access_rules as c
+            where c.id = {ruleId}
+            limit 1
+            """,
+            row => new RuleRow(row.Int("Token"), row.IntOrNull("Gender"), row.IntOrNull("GrantedBy"), row.InstantOrNull("RevokedAt")),
+            ct);
+        return rows.Count == 0 ? null : rows[0];
+    }
+
+    private static async Task<Refusal?> WriteAsync(NpgsqlDataSource source, ClassAccessOperator op, TimeProvider clock, int token, Revocation revocation, CancellationToken ct)
+    {
+        await using var tx = await source.BeginAsync(ct);
+        await MemberLock.TakeAsync(tx, token, ct);
+        var locked = await ClassAccessStore.MemberAsync(tx, token, ct);
         if (locked is null)
         {
             return new Refusal(StatusCodes.Status404NotFound, "Member not found");
         }
 
         var (member, roleId) = locked.Value;
-        var guard = await GuardAsync(op, member, roleId, revocation.RuleGender, revocation.GrantedBy, ct);
+        var guard = await GuardAsync(tx, op, member, roleId, revocation.RuleGender, revocation.GrantedBy, ct);
         if (guard is not null)
         {
             return guard;
         }
 
-        var rules = await ClassAccessStore.LiveRulesAsync(db, token, ct);
+        var rules = await ClassAccessStore.LiveRulesAsync(tx, token, ct);
         if (ClassAccessRules.VersionOf(roleId, rules.Select(r => r.Id)) != revocation.Version)
         {
             return ClassAccessMessages.MemberChanged();
@@ -122,29 +147,29 @@ internal static class ClassAccessRevokeSlice
 
         var now = clock.GetUtcNow();
         var operatorId = op.Caller.UserId;
-        var changed = await db.ClassAccessRules
-            .Where(r => r.Id == revocation.RuleId && r.RevokedAt == null)
-            .ExecuteUpdateAsync(set => set.SetProperty(r => r.RevokedAt, now).SetProperty(r => r.RevokedBy, operatorId).SetProperty(r => r.RevokeReason, revocation.Reason), ct);
+        var changed = await tx.ExecuteAsync(
+            $"update access.class_access_rules set revoked_at = {now}, revoked_by = {operatorId}, revoke_reason = {revocation.Reason} where id = {revocation.RuleId} and revoked_at is null",
+            ct);
         if (changed != 1)
         {
             return AlreadyRemoved();
         }
 
         // The last live rule of a class admin: the member goes back to role 0 (no row). Any other role stays.
-        await db.Database.ExecuteSqlAsync(
+        await tx.ExecuteAsync(
             $"""
             delete from access.user_roles
             where user_id = {member.UserId} and roleid = {ClassAccessRules.RoleClassAdmin}
               and not exists (select 1 from access.class_access_rules r where r.token = {token} and r.revoked_at is null)
             """,
             ct);
-        await Outbox.WriteAsync(db, "access.class_access_rule_revoked", new RuleRevoked(revocation.RuleId, token, operatorId), clock, ct);
-        await transaction.CommitAsync(ct);
+        await Outbox.WriteAsync(tx, "access.class_access_rule_revoked", new RuleRevoked(revocation.RuleId, token, operatorId), AccessJson.Default.RuleRevoked, clock, ct);
+        await tx.CommitAsync(ct);
         return null;
     }
 
-    private static async Task<Refusal?> GuardAsync(ClassAccessOperator op, MemberRow member, int roleId, int? ruleGender, int? grantedBy, CancellationToken ct) =>
-        await op.GuardAsync(member, roleId, ruleGender, ct) ?? await op.RevokeGuardAsync(grantedBy, ct);
+    private static async Task<Refusal?> GuardAsync(DbTx tx, ClassAccessOperator op, MemberRow member, int roleId, int? ruleGender, int? grantedBy, CancellationToken ct) =>
+        await op.GuardAsync(tx, member, roleId, ruleGender, ct) ?? await op.RevokeGuardAsync(tx, grantedBy, ct);
 
     private static Refusal AlreadyRemoved() => new(StatusCodes.Status409Conflict, "That access was already removed");
 }

@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Assessment.Api.Domain;
 using Tsr.Shared.Api;
@@ -32,7 +32,7 @@ internal static class ChildScoresSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string child_token, string class_id, HttpContext context, AssessmentContext db, Permissions permissions, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(string child_token, string class_id, HttpContext context, NpgsqlDataSource source, Permissions permissions, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -47,42 +47,44 @@ internal static class ChildScoresSlice
 
         var childToken = PhpValue.IntOfText(child_token);
         var classId = PhpValue.IntOfText(class_id);
-        if (!await IsActiveGuardianAsync(db, caller.Token, childToken, ct) || !await IsChildEnrolledAsync(db, childToken, classId, ct))
+        if (!await IsActiveGuardianAsync(source, caller.Token, childToken, ct) || !await IsChildEnrolledAsync(source, childToken, classId, ct))
         {
             return Problem.Detail(StatusCodes.Status404NotFound, "Child or class not found");
         }
 
         var from = context.Request.Query["start_date"].LastOrDefault();
         var to = context.Request.Query["end_date"].LastOrDefault();
-        var rows = await ScoreRows.ForAsync(db, classId, (int)childToken, from, to, ct);
-        return Results.Json(rows.Select(ToItem).ToList());
+        var rows = await ScoreRows.ForAsync(source, classId, (int)childToken, from, to, ct);
+        return Results.Json(rows.Select(ToItem).ToList(), AssessmentJson.Answers.ChildScores);
     }
 
     /// <summary>PHP isActiveGuardian: tokens above zero and an active link from the parent to the child.</summary>
-    private static async Task<bool> IsActiveGuardianAsync(AssessmentContext db, int parentToken, long childToken, CancellationToken ct)
+    private static async Task<bool> IsActiveGuardianAsync(NpgsqlDataSource source, int parentToken, long childToken, CancellationToken ct)
     {
         if (parentToken <= 0 || childToken <= 0)
         {
             return false;
         }
 
-        var rows = await db.Database
-            .SqlQuery<int>($"""select 1 as "Value" from membership.v_guardian_links where parent_token = {parentToken} and child_token = {childToken} and status = 'active' limit 1""")
-            .ToListAsync(ct);
+        var rows = await source.ListAsync(
+            $"""select 1 as "Value" from membership.v_guardian_links where parent_token = {parentToken} and child_token = {childToken} and status = 'active' limit 1""",
+            row => row.Int("Value"),
+            ct);
         return rows.Count > 0;
     }
 
     /// <summary>PHP isChildEnrolled: any enrolment row of the child in the class, removed or not.</summary>
-    private static async Task<bool> IsChildEnrolledAsync(AssessmentContext db, long childToken, long classId, CancellationToken ct)
+    private static async Task<bool> IsChildEnrolledAsync(NpgsqlDataSource source, long childToken, long classId, CancellationToken ct)
     {
         if (childToken <= 0 || classId <= 0)
         {
             return false;
         }
 
-        var rows = await db.Database
-            .SqlQuery<int>($"""select 1 as "Value" from classes.v_enrolments where token_no = {childToken} and class_id = {classId} limit 1""")
-            .ToListAsync(ct);
+        var rows = await source.ListAsync(
+            $"""select 1 as "Value" from classes.v_enrolments where token_no = {childToken} and class_id = {classId} limit 1""",
+            row => row.Int("Value"),
+            ct);
         return rows.Count > 0;
     }
 

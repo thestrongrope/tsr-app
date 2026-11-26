@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Shared.Api;
 
@@ -18,7 +19,7 @@ internal sealed class ClassScheduleWorker(IServiceScopeFactory scopes, ILogger<C
 
     protected override async Task TickAsync(IServiceProvider services, CancellationToken ct) =>
         await ClassScheduleSend.TickAsync(
-            services.GetRequiredService<NotificationsContext>(),
+            services.GetRequiredService<NpgsqlDataSource>(),
             services.GetRequiredService<Permissions>(),
             services.GetRequiredService<TimeProvider>(),
             Log,

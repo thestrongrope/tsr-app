@@ -2,7 +2,7 @@ using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Membership.Api.Domain;
 using Tsr.Platform.Api;
 using Tsr.Shared.Api;
@@ -28,7 +28,7 @@ internal static class RegistrationSaveEndpoint
     }
 }
 
-internal sealed class RegistrationSaveHandler(MembershipContext db, Lookups lookups, TimeProvider clock)
+internal sealed class RegistrationSaveHandler(NpgsqlDataSource source, Lookups lookups, TimeProvider clock)
 {
     public async Task<IResult> HandleAsync(Caller? caller, HttpRequest request, CancellationToken ct)
     {
@@ -59,7 +59,7 @@ internal sealed class RegistrationSaveHandler(MembershipContext db, Lookups look
         await SaveFormAsync(caller.Token, input, ct);
         await SaveLanguagesAsync(caller.Token, body, ct);
         await SaveInterestsAsync(caller.Token, body, ct);
-        return Results.Json(new JsonObject { ["success"] = true, ["message"] = "Class request submitted successfully" });
+        return Results.Json(new JsonObject { ["success"] = true, ["message"] = "Class request submitted successfully" }, MembershipJson.Answers.JsonObject);
     }
 
     // PHP reads all seven lists whether or not the body names them; an unseeded type throws (a 500).
@@ -76,64 +76,41 @@ internal sealed class RegistrationSaveHandler(MembershipContext db, Lookups look
     {
         var birthYear = checked((int)input.BirthYear);
         var studyYears = checked((int)input.IslamicStudyYears);
-        if (await db.ClassRegistrations.AnyAsync(r => r.Token == token, ct))
+        var existing = await source.ListAsync($"select 1 as \"Value\" from membership.class_registrations where token = {token} limit 1", row => row.Int("Value"), ct);
+        if (existing.Count > 0)
         {
             await UpdateAllRowsAsync(token, input, birthYear, studyYears, ct);
             return;
         }
 
-        db.ClassRegistrations.Add(new ClassRegistration
-        {
-            Token = token,
-            PreferredLocation = input.PreferredLocation,
-            ResidenceLocation = input.ResidenceLocation,
-            WorkLocation = input.WorkLocation,
-            BirthYear = birthYear,
-            IslamicStudyYears = studyYears,
-            OtherInterests = input.OtherInterests,
-            Education = input.Education,
-            FieldOfStudy = input.FieldOfStudy,
-            FieldOfStudyOther = input.FieldOfStudyOther,
-            ProfessionalCourses = input.ProfessionalCourses,
-            ProfessionalCoursesOther = input.ProfessionalCoursesOther,
-            OccupationType = input.OccupationType,
-            FieldOfWork = input.FieldOfWork,
-            YearsExperience = input.YearsExperience,
-            RoleLevel = input.RoleLevel,
-            LinkedinUrl = input.LinkedinUrl,
-        });
-        await db.SaveChangesAsync(ct);
+        await source.ExecuteAsync(
+            $"""
+            insert into membership.class_registrations (
+                token, preferred_location, residence_location, work_location, birth_year, islamic_study_years, other_interests, education, field_of_study, field_of_study_other,
+                professional_courses, professional_courses_other, occupation_type, field_of_work, years_experience, role_level, linkedin_url)
+            values (
+                {token}, {input.PreferredLocation}, {input.ResidenceLocation}, {input.WorkLocation}, {birthYear}, {studyYears}, {input.OtherInterests}, {input.Education}, {input.FieldOfStudy}::jsonb, {input.FieldOfStudyOther},
+                {input.ProfessionalCourses}::jsonb, {input.ProfessionalCoursesOther}, {input.OccupationType}, {input.FieldOfWork}, {input.YearsExperience}, {input.RoleLevel}, {input.LinkedinUrl})
+            """,
+            ct);
     }
 
     // PHP: UPDATE ... WHERE token = :token, every row of the token, and for_classid, profession and the legacy interests set are set to NULL.
     private async Task UpdateAllRowsAsync(int token, RegistrationInput input, int birthYear, int studyYears, CancellationToken ct)
     {
         var now = clock.GetUtcNow();
-        await db.ClassRegistrations
-            .Where(r => r.Token == token)
-            .ExecuteUpdateAsync(
-                set => set
-                    .SetProperty(r => r.PreferredLocation, input.PreferredLocation)
-                    .SetProperty(r => r.ResidenceLocation, input.ResidenceLocation)
-                    .SetProperty(r => r.WorkLocation, input.WorkLocation)
-                    .SetProperty(r => r.ForClassId, (int?)null)
-                    .SetProperty(r => r.BirthYear, birthYear)
-                    .SetProperty(r => r.Profession, (string?)null)
-                    .SetProperty(r => r.IslamicStudyYears, studyYears)
-                    .SetProperty(r => r.Interests, (string?)null)
-                    .SetProperty(r => r.OtherInterests, input.OtherInterests)
-                    .SetProperty(r => r.Education, input.Education)
-                    .SetProperty(r => r.FieldOfStudy, input.FieldOfStudy)
-                    .SetProperty(r => r.FieldOfStudyOther, input.FieldOfStudyOther)
-                    .SetProperty(r => r.ProfessionalCourses, input.ProfessionalCourses)
-                    .SetProperty(r => r.ProfessionalCoursesOther, input.ProfessionalCoursesOther)
-                    .SetProperty(r => r.OccupationType, input.OccupationType)
-                    .SetProperty(r => r.FieldOfWork, input.FieldOfWork)
-                    .SetProperty(r => r.YearsExperience, input.YearsExperience)
-                    .SetProperty(r => r.RoleLevel, input.RoleLevel)
-                    .SetProperty(r => r.LinkedinUrl, input.LinkedinUrl)
-                    .SetProperty(r => r.ModifiedAt, now),
-                ct);
+        await source.ExecuteAsync(
+            $"""
+            update membership.class_registrations set
+                preferred_location = {input.PreferredLocation}, residence_location = {input.ResidenceLocation}, work_location = {input.WorkLocation}, for_classid = null,
+                birth_year = {birthYear}, profession = null, islamic_study_years = {studyYears}, interests = null, other_interests = {input.OtherInterests},
+                education = {input.Education}, field_of_study = {input.FieldOfStudy}::jsonb, field_of_study_other = {input.FieldOfStudyOther},
+                professional_courses = {input.ProfessionalCourses}::jsonb, professional_courses_other = {input.ProfessionalCoursesOther},
+                occupation_type = {input.OccupationType}, field_of_work = {input.FieldOfWork}, years_experience = {input.YearsExperience}, role_level = {input.RoleLevel},
+                linkedin_url = {input.LinkedinUrl}, modified_at = {now}
+            where token = {token}
+            """,
+            ct);
     }
 
     private async Task SaveLanguagesAsync(int token, JsonBody body, CancellationToken ct)
@@ -144,26 +121,35 @@ internal sealed class RegistrationSaveHandler(MembershipContext db, Lookups look
             return;
         }
 
-        await db.RegistrationLanguages.Where(l => l.Token == token).ExecuteDeleteAsync(ct);
-        db.RegistrationLanguages.AddRange(entries.Select(e => new RegistrationLanguage { Token = token, Language = e.Language, Skill = e.Skill, Proficiency = e.Proficiency }));
-        await db.SaveChangesAsync(ct);
+        await source.ExecuteAsync($"delete from membership.class_registrations_languages where token = {token}", ct);
+
+        // The new rows go in together, as one save did.
+        await using var tx = await source.BeginAsync(ct);
+        foreach (var entry in entries)
+        {
+            await tx.ExecuteAsync(
+                $"insert into membership.class_registrations_languages (token, language, skill, proficiency) values ({token}, {entry.Language}, {entry.Skill}, {entry.Proficiency})",
+                ct);
+        }
+
+        await tx.CommitAsync(ct);
     }
 
     private async Task SaveInterestsAsync(int token, JsonBody body, CancellationToken ct)
     {
-        var activeIds = (await db.InterestOptions.AsNoTracking().Where(o => o.IsActive).Select(o => o.Id).ToListAsync(ct)).ToHashSet();
+        var activeIds = (await source.ListAsync($"select id from membership.interest_options where is_active", row => row.Int("id"), ct)).ToHashSet();
         var ids = RegistrationParts.InterestIds(body.Get("interestIds"), activeIds);
         if (ids is null)
         {
             return;
         }
 
-        await db.StudentInterests.Where(s => s.Token == token).ExecuteDeleteAsync(ct);
+        await source.ExecuteAsync($"delete from membership.student_interests where token = {token}", ct);
 
         // One insert each, as PHP does: a repeated id breaks the unique key and the request fails with the earlier copies kept.
         foreach (var id in ids)
         {
-            await db.Database.ExecuteSqlAsync($"insert into membership.student_interests (token, interest_id) values ({token}, {id})", ct);
+            await source.ExecuteAsync($"insert into membership.student_interests (token, interest_id) values ({token}, {id})", ct);
         }
     }
 }

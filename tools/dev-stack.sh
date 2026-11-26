@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Bring the local DEV stack (project tsr-app-dev, gateway :8088) up to this checkout's code. Use this instead of a plain
+# Bring the local DEV stack (project tsr-app-dev, gateway https://gateway.tsr-app-dev.orb.local, an OrbStack name) up to this checkout's code. Use this instead of a plain
 # `docker compose up` once the dev database holds real member data, because it NEVER runs the seed service (seed.sql inserts
 # synthetic members and resets fixture rows; the root CLAUDE.md forbids that on real data).
 #
@@ -27,10 +27,10 @@ case "${1:?usage: dev-stack.sh up|status}" in
     dc up -d --no-deps gateway
     dc restart gateway > /dev/null
     for _ in $(seq 1 60); do
-      if curl -fsS --max-time 3 -o /dev/null http://localhost:8088/health; then echo "dev stack up on http://localhost:8088 (no seed was run)"; exit 0; fi
+      if curl -fsS --max-time 3 -o /dev/null https://gateway.tsr-app-dev.orb.local/health; then echo "dev stack up on https://gateway.tsr-app-dev.orb.local (no seed was run)"; exit 0; fi
       sleep 2
     done
-    echo "the dev stack did not answer on http://localhost:8088 within 2 minutes" >&2; exit 1 ;;
+    echo "the dev stack did not answer on https://gateway.tsr-app-dev.orb.local within 2 minutes" >&2; exit 1 ;;
   status) dc ps ;;
   *) echo "usage: dev-stack.sh up|status" >&2; exit 1 ;;
 esac

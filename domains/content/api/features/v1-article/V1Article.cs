@@ -2,8 +2,9 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Content.Api.Domain;
+using Tsr.Shared.Api;
 
 namespace Tsr.Content.Api.Features.V1Article;
 
@@ -48,13 +49,13 @@ internal static class V1ArticleSlice
 
     public static IEndpointRouteBuilder MapV1Article(this IEndpointRouteBuilder routes)
     {
-        V1.MapGet(routes, "/api/v1/articles/{slug}", HandleAsync);
+        routes.MapGet("/api/v1/articles/{slug}", HandleAsync).WithV1Failures();
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string slug, ContentContext db, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(string slug, NpgsqlDataSource source, CancellationToken ct)
     {
-        var rows = await ReadAsync(db, slug, ct);
+        var rows = await ReadAsync(source, slug, ct);
         if (rows.Count == 0)
         {
             return V1.Error(StatusCodes.Status404NotFound, V1.NotFound, "Article not found: " + slug);
@@ -65,9 +66,9 @@ internal static class V1ArticleSlice
         return V1.Ok(json => Write(json, article, related), MaxAgeSeconds, StaleWhileRevalidateSeconds, lastModified: article.LastModified);
     }
 
-    private static Task<List<Row>> ReadAsync(ContentContext db, string slug, CancellationToken ct) =>
-        db.Database
-            .SqlQuery<Row>($"""
+    private static Task<List<Row>> ReadAsync(NpgsqlDataSource source, string slug, CancellationToken ct) =>
+        source.ListAsync(
+            $"""
                 with asked as (
                     select * from content.published_articles where slug_decoded = {slug}::text
                 ),
@@ -94,8 +95,25 @@ internal static class V1ArticleSlice
                        null, null
                 from related
                 order by "Position"
-                """)
-            .ToListAsync(ct);
+                """,
+            Read,
+            ct);
+
+    private static Row Read(DbRow row) => new(
+        row.Int("Position"),
+        row.Text("Slug"),
+        row.IntOrNull("LegacyId"),
+        row.Text("Title"),
+        row.TextOrNull("Excerpt"),
+        row.Text("PublishedDateText"),
+        row.TextOrNull("ModifiedDateText"),
+        row.Text("Author"),
+        row.TextArray("Categories"),
+        row.TextArray("Tags"),
+        row.Text("Language"),
+        row.Int("ReadingMinutes"),
+        row.TextOrNull("Content"),
+        row.InstantOrNull("LastModified"));
 
     /// <summary>tsr-web <c>getArticleBySlug</c>, in its field order.</summary>
     private static void Write(Utf8JsonWriter json, Row article, List<Row> related)

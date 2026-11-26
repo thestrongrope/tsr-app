@@ -1,5 +1,5 @@
 using Microsoft.AspNetCore.Http;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Identity.Api;
 using Tsr.Shared.Api;
@@ -31,10 +31,8 @@ internal static class GuardianChecks
 
     private const string ManageParents = "parents:manage";
 
-    private sealed record GenderRow(string? Gender);
-
     /// <summary>A token of 0 or less is a guest, none holding it is unknown, two or more is ambiguous (the lookup stops at two).</summary>
-    public static async Task<CheckedMember> ValidateMemberAsync(MembershipContext db, UserDirectory users, long token, CancellationToken ct)
+    public static async Task<CheckedMember> ValidateMemberAsync(NpgsqlDataSource source, UserDirectory users, long token, CancellationToken ct)
     {
         if (token <= 0)
         {
@@ -58,7 +56,7 @@ internal static class GuardianChecks
         }
 
         var userId = holders[0].Id;
-        var gender = await db.MemberProfiles.AsNoTracking().Where(p => p.UserId == userId).Select(p => p.Gender).FirstOrDefaultAsync(ct);
+        var gender = (await source.ListAsync($"select gender from membership.member_profiles where user_id = {userId}", row => row.TextOrNull("gender"), ct)).FirstOrDefault();
         return new CheckedMember(MemberCheck.Ok, userId, gender);
     }
 
@@ -66,7 +64,7 @@ internal static class GuardianChecks
     /// PHP staffMayAddFor: the student must exist (the first member holding the token gives the gender); the action's reach covers every
     /// class or the student's gender (a gender of 0 never matches); otherwise the action must be allowed on one of the student's active classes.
     /// </summary>
-    public static async Task<bool> StaffMayAddForAsync(MembershipContext db, Permissions permissions, Caller caller, long childToken, bool direct, CancellationToken ct)
+    public static async Task<bool> StaffMayAddForAsync(NpgsqlDataSource source, Permissions permissions, Caller caller, long childToken, bool direct, CancellationToken ct)
     {
         if (childToken is <= 0 or > int.MaxValue)
         {
@@ -74,34 +72,36 @@ internal static class GuardianChecks
         }
 
         var token = (int)childToken;
-        var rows = await db.Database
-            .SqlQuery<GenderRow>($"""
-                select p.gender as "Gender" from identity.v_users u
-                left join membership.member_profiles p on p.user_id = u.id
-                where u.token = {token} order by u.id limit 1
-                """)
-            .ToListAsync(ct);
+        var rows = await source.ListAsync(
+            $"""
+            select p.gender as "Gender" from identity.v_users u
+            left join membership.member_profiles p on p.user_id = u.id
+            where u.token = {token} order by u.id limit 1
+            """,
+            row => row.TextOrNull("Gender"),
+            ct);
         if (rows.Count == 0)
         {
             return false;
         }
 
         var action = direct ? "parents:add-direct" : "parents:add";
-        var gender = PhpValue.IntOfText(rows[0].Gender ?? string.Empty);
+        var gender = PhpValue.IntOfText(rows[0] ?? string.Empty);
         var reach = await permissions.ReachAsync(caller, action, ct);
         if (reach.All || (gender > 0 && reach.Gender == gender))
         {
             return true;
         }
 
-        var classIds = await db.Database
-            .SqlQuery<int>($"""
-                select distinct c.id as "Value" from classes.v_enrolments cs
-                join classes.v_classes c on c.id = cs.class_id
-                where cs.token_no = {token} and cs.status = 'A' and cs.removed_at is null and c.status = 'A'
-                limit {MaxClasses}
-                """)
-            .ToListAsync(ct);
+        var classIds = await source.ListAsync(
+            $"""
+            select distinct c.id as "Value" from classes.v_enrolments cs
+            join classes.v_classes c on c.id = cs.class_id
+            where cs.token_no = {token} and cs.status = 'A' and cs.removed_at is null and c.status = 'A'
+            limit {MaxClasses}
+            """,
+            row => row.Int("Value"),
+            ct);
         foreach (var classId in classIds)
         {
             if (await permissions.CanAsync(caller, action, AccessTarget.ForClass(classId), ct))
@@ -114,27 +114,37 @@ internal static class GuardianChecks
     }
 
     /// <summary>
-    /// A parent the child ended returns only through someone who manages parents for the child's gender: true when the child ended
-    /// this pair and <paramref name="actor"/> lacks that permission (PHP revokedByChildBlocks).
+    /// A parent the child ended returns only through someone who manages parents for the child's gender (PHP revokedByChildBlocks). Read
+    /// this before the guardian transaction opens: the permission read takes its own connection, so it cannot run inside it.
     /// </summary>
-    public static async Task<bool> RemovedByChildBlocksAsync(
-        MembershipContext db, UserDirectory users, Permissions permissions, int parentToken, int childToken, int childUserId, Caller actor, CancellationToken ct)
+    public static Task<bool> MayManageParentsAsync(Permissions permissions, Caller actor, string? childGender, CancellationToken ct) =>
+        permissions.CanAsync(actor, ManageParents, AccessTarget.ForGender((int)PhpValue.IntOfText(childGender ?? string.Empty)), ct);
+
+    /// <summary>The gender text of a member's profile as stored, null when there is none.</summary>
+    public static async Task<string?> GenderOfAsync(NpgsqlDataSource source, int userId, CancellationToken ct) =>
+        (await source.ListAsync($"select gender from membership.member_profiles where user_id = {userId}", row => row.TextOrNull("gender"), ct)).FirstOrDefault();
+
+    /// <summary>
+    /// True when the child ended this pair (a revoked row whose revoked_by is the child's user) and <paramref name="actorMayManage"/> is false.
+    /// One read on the caller's transaction (identity's published view), under the guardian lock; no second connection.
+    /// </summary>
+    public static async Task<bool> RemovedByChildBlocksAsync(DbTx tx, int parentToken, int childToken, bool actorMayManage, CancellationToken ct)
     {
-        var revokers = await db.UserGuardians.AsNoTracking()
-            .Where(g => g.ParentToken == parentToken && g.ChildToken == childToken && g.Status == "revoked" && g.RevokedBy != null)
-            .Select(g => g.RevokedBy!.Value)
-            .Distinct()
-            .Take(UserDirectory.MaxBatch)
-            .ToListAsync(ct);
-        var endedByChild = (await users.ByIdsAsync(revokers, ct)).Any(u => u.Token == childToken);
-        if (!endedByChild)
+        if (actorMayManage)
         {
             return false;
         }
 
-        var gender = await db.MemberProfiles.AsNoTracking().Where(p => p.UserId == childUserId).Select(p => p.Gender).FirstOrDefaultAsync(ct);
-        var target = AccessTarget.ForGender((int)PhpValue.IntOfText(gender ?? string.Empty));
-        return !await permissions.CanAsync(actor, ManageParents, target, ct);
+        var ended = await tx.ListAsync(
+            $"""
+            select 1 as "Value" from membership.user_guardians g
+            join identity.v_users u on u.id = g.revoked_by
+            where g.parent_token = {parentToken} and g.child_token = {childToken} and g.status = 'revoked' and u.token = {childToken}
+            limit 1
+            """,
+            row => row.Int("Value"),
+            ct);
+        return ended.Count > 0;
     }
 
     /// <summary>PHP tokenOfUser(): the user's token, 0 when there is no such user.</summary>
@@ -148,10 +158,10 @@ internal static class GuardianChecks
     /// PHP api_require_parent_link_create (routes 2 to 4): null when the caller may act for this child, else the refusal. The checks are
     /// <see cref="ParentLinkRules.Decide"/>'s; a student acting for themselves is not checked for existence, as in PHP.
     /// </summary>
-    public static async Task<IResult?> RequireParentLinkAsync(MembershipContext db, Permissions permissions, Caller caller, long childToken, CancellationToken ct)
+    public static async Task<IResult?> RequireParentLinkAsync(NpgsqlDataSource source, Permissions permissions, Caller caller, long childToken, CancellationToken ct)
     {
         var holdsManage = childToken > 0 && caller.Token == childToken && await permissions.CanAsync(caller, ManageParents, AccessTarget.None, ct);
-        var staffMay = childToken > 0 && !holdsManage && await StaffMayAddForAsync(db, permissions, caller, childToken, direct: false, ct);
+        var staffMay = childToken > 0 && !holdsManage && await StaffMayAddForAsync(source, permissions, caller, childToken, direct: false, ct);
         var holdsAdd = childToken > 0 && !holdsManage && !staffMay && await permissions.CanAsync(caller, "parents:add", AccessTarget.None, ct);
         return ParentLinkRules.Decide(childToken, caller.Token, holdsManage, staffMay, holdsAdd) switch
         {

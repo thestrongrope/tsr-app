@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Logging;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Notifications.Api.Domain;
 
@@ -26,7 +27,7 @@ internal static class ClassNotificationSendSlice
     private static async Task<IResult> HandleAsync(
         string class_id,
         HttpContext context,
-        NotificationsContext db,
+        NpgsqlDataSource source,
         Permissions permissions,
         MemberRateLimit limiter,
         IPushSender sender,
@@ -41,7 +42,7 @@ internal static class ClassNotificationSendSlice
         }
 
         var classId = NotifyGuards.IdOf(class_id);
-        var refusal = await NotifyGuards.ClassAccessAsync(db, permissions, caller, classId, ct);
+        var refusal = await NotifyGuards.ClassAccessAsync(source, permissions, caller, classId, ct);
         if (refusal is not null)
         {
             return refusal;
@@ -64,8 +65,8 @@ internal static class ClassNotificationSendSlice
             return Problem.Detail(StatusCodes.Status429TooManyRequests, "Too many class notifications; try again later");
         }
 
-        var students = await Audience.ClassStudentsAsync(db, classId, ct);
-        var devices = Audience.TooLarge(students.Count) ? [] : await Audience.MemberDevicesAsync(db, [.. students], ct);
+        var students = await Audience.ClassStudentsAsync(source, classId, ct);
+        var devices = Audience.TooLarge(students.Count) ? [] : await Audience.MemberDevicesAsync(source, [.. students], ct);
         var logger = loggers.CreateLogger(NotifyLog.Category);
         if (Audience.TooLarge(students.Count) || Audience.TooLarge(devices.Count))
         {
@@ -75,7 +76,7 @@ internal static class ClassNotificationSendSlice
 
         if (devices.Count == 0)
         {
-            return Results.Json(Outcome("No active student devices found for this class", 0, students.Count, 0, 0, null));
+            return Results.Json(Outcome("No active student devices found for this class", 0, students.Count, 0, 0, null), NotificationsJson.Answers.Answer);
         }
 
         if (!sender.IsConfigured)
@@ -93,8 +94,8 @@ internal static class ClassNotificationSendSlice
         };
         // Not the request's token from here on: a push cannot be unsent, so a caller or gateway that goes away must not cut it short or lose its record (PHP runs on too). PushBatch keeps its own deadline.
         var report = await PushBatch.SendAsync(sender, text.Title, PushBatch.CutBody(text.Body), data, devices, CancellationToken.None);
-        var id = await RecordAsync(db, clock, logger, classId, text, devices.Count, report, students, caller.Token, CancellationToken.None);
-        return Results.Json(Outcome($"Notification sent to {report.Success} devices successfully", devices.Count, students.Count, report.Success, report.Failure, id));
+        var id = await RecordAsync(source, clock, logger, classId, text, devices.Count, report, students, caller.Token, CancellationToken.None);
+        return Results.Json(Outcome($"Notification sent to {report.Success} devices successfully", devices.Count, students.Count, report.Success, report.Failure, id), NotificationsJson.Answers.Answer);
     }
 
     private static Dictionary<string, object?> Outcome(string message, int devices, int students, int success, int failure, int? id) => new()
@@ -109,7 +110,7 @@ internal static class ClassNotificationSendSlice
     };
 
     private static async Task<int?> RecordAsync(
-        NotificationsContext db,
+        NpgsqlDataSource source,
         TimeProvider clock,
         ILogger logger,
         int classId,
@@ -125,7 +126,9 @@ internal static class ClassNotificationSendSlice
             var criteria = "{\"type\":\"CLASS\",\"class_id\":" + classId.ToString(System.Globalization.CultureInfo.InvariantCulture) + "}";
             var link = text.ActionLink ?? $"/classes/{classId}/dashboard";
             var notification = new NewNotification(text.Title, text.Body, criteria, deviceCount, report.Success, report.Failure, link, sender);
-            var written = await NotificationWriter.WriteAsync(db, clock, notification, students, "class", reuseSameCriteria: false, ct);
+            await using var tx = await source.BeginAsync(ct);
+            var written = await NotificationWriter.WriteAsync(tx, clock, notification, students, "class", reuseSameCriteria: false, ct);
+            await tx.CommitAsync(ct);
             return written.NotificationId;
         }
         catch (Exception e) when (e is not OperationCanceledException)

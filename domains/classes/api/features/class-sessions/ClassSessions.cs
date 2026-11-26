@@ -2,7 +2,7 @@ using System.Globalization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
 using Tsr.Shared.Api;
@@ -62,7 +62,7 @@ internal static class ClassSessionsSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string class_id, HttpContext context, ClassesContext db, Permissions permissions, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(string class_id, HttpContext context, NpgsqlDataSource source, Permissions permissions, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -70,12 +70,12 @@ internal static class ClassSessionsSlice
             return Problem.Unauthenticated();
         }
 
-        if (!await ClassGuards.HasNumericGenderAsync(db, caller, ct))
+        if (!await ClassGuards.HasNumericGenderAsync(source, caller, ct))
         {
             return Refusals.GenderNotSet();
         }
 
-        var head = await ClassGuards.FindActiveClassAsync(db, ClassGuards.IdOf(class_id), ct);
+        var head = await ClassGuards.FindActiveClassAsync(source, ClassGuards.IdOf(class_id), ct);
         if (head is null)
         {
             return Refusals.ClassNotFound();
@@ -89,8 +89,8 @@ internal static class ClassSessionsSlice
         var page = Math.Min(MaxPage, Math.Max(1, ClassGuards.QueryInt(context, "page", 1)));
         var pageSize = Math.Min(MaxPageSize, Math.Max(1, ClassGuards.QueryInt(context, "pageSize", DefaultPageSize)));
         var offset = (page - 1) * pageSize;
-        var rows = await db.Database
-            .SqlQuery<Session>($"""
+        var rows = await source.ListAsync(
+            $"""
                 select id as "Id", conducted_on as "ConductedOn", conducted = 1 as "Conducted", duration as "Duration", attendance as "Attendance",
                        arabic_conducted in ('1', 'Y') as "ArabicConducted", aqaed_conducted in ('1', 'Y') as "AqaedConducted", ahkam_conducted in ('1', 'Y') as "AhkamConducted",
                        akhlaq_conducted in ('1', 'Y') as "AkhlaqConducted", other_conducted in ('1', 'Y') as "OtherConducted",
@@ -100,10 +100,29 @@ internal static class ClassSessionsSlice
                 where class_id = {head.Id}
                 order by conducted_on desc, id
                 limit {pageSize} offset {offset}
-                """)
-            .ToListAsync(ct);
-        return Results.Json(rows.Select(ToItem).ToList());
+                """,
+            ReadSession,
+            ct);
+        return Results.Json(rows.Select(ToItem).ToList(), ClassesJson.Answers.ClassSessionList);
     }
+
+    private static Session ReadSession(DbRow row) => new(
+        row.Int("Id"),
+        row.Date("ConductedOn"),
+        row.Bool("Conducted"),
+        row.IntOrNull("Duration"),
+        row.IntOrNull("Attendance"),
+        row.Bool("ArabicConducted"),
+        row.Bool("AqaedConducted"),
+        row.Bool("AhkamConducted"),
+        row.Bool("AkhlaqConducted"),
+        row.Bool("OtherConducted"),
+        row.TextOrNull("ArabicTopic"),
+        row.TextOrNull("AqaedTopic"),
+        row.TextOrNull("AhkamTopic"),
+        row.TextOrNull("AkhlaqTopic"),
+        row.TextOrNull("OtherTopic"),
+        row.TextOrNull("NonConductionReason"));
 
     private static Item ToItem(Session s) => new(
         s.Id,

@@ -47,9 +47,9 @@ internal static class AnnouncementRequest
         var value = body.Get("target").ValueKind == JsonValueKind.Undefined ? default : TargetValue(body.Get("target"));
         var criteria = JsonSerializer.Serialize(new Dictionary<string, JsonElement?>
         {
-            ["type"] = JsonSerializer.SerializeToElement(target.Value!.Type),
+            ["type"] = JsonSerializer.SerializeToElement(target.Value!.Type, NotificationsJson.Default.String),
             ["value"] = value.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null ? null : value,
-        });
+        }, NotificationsJson.Default.AudienceCriteria);
         return Result.Ok(new AnnouncementInput(title, text, target.Value, criteria, link.Value));
     }
 

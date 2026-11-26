@@ -2,8 +2,10 @@ using System.Net;
 using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Npgsql;
 using NUnit.Framework;
 using Tsr.Notifications.Api;
+using Tsr.Shared.Api;
 
 namespace Tsr.Db.Tests;
 
@@ -571,17 +573,31 @@ public sealed class TestCalendarTests
         await SyncAsync(Student, DeviceA, Change("slot:970101", "2026-11-12T09:00:00Z"));
         await SyncAsync(BothClasses, DeviceA, Change("slot:970101", "2026-11-12T09:00:00Z"), Change("slot:970103", "2026-11-12T09:00:00Z"));
         using var factory = TestApi.Create();
-        using var scope = factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<NotificationsContext>();
+        var source = factory.Services.GetRequiredService<NpgsqlDataSource>();
 
-        Assert.That(async () => await NotificationsErasure.EraseEventSettingsAsync(db, BothClasses, CancellationToken.None), Throws.InstanceOf<InvalidOperationException>());
-        await using (var transaction = await db.Database.BeginTransactionAsync())
+        await using (var tx = await source.BeginAsync(CancellationToken.None))
         {
-            Assert.That(await NotificationsErasure.EraseEventSettingsAsync(db, BothClasses, CancellationToken.None), Is.EqualTo(2));
-            await transaction.CommitAsync();
+            Assert.That(await NotificationsErasure.EraseEventSettingsAsync(tx, BothClasses, CancellationToken.None), Is.EqualTo(2));
+            await tx.CommitAsync(CancellationToken.None);
         }
 
         Assert.That(await SettingRowsAsync(), Is.EqualTo(1));
         Assert.That(await SettingRowsAsync($"user_id = {userIds[Student]}"), Is.EqualTo(1));
+    }
+
+    // TC-NTF-R14-01: a setting key stored in one letter case is found by a change in another (the column is citext, the stored read needs its cast); a miss would insert and break the unique key.
+    [Test]
+    public async Task A_setting_key_in_another_letter_case_updates_the_same_row()
+    {
+        var id = await AddEventAsync(9701, Teacher);
+        await TestDatabase.ExecuteAsync(
+            "insert into notifications.member_event_settings (user_id, class_id, event_key, offset_minutes, muted, deleted_for_me, client_updated_at, server_updated_at, device_key) values "
+            + $"({userIds[Student]}, 9701, 'EVENT:{id}', -5, 0, 0, '2026-11-01', '2026-11-01', '{DeviceA}')");
+
+        var reply = await SyncAsync(Student, DeviceB, Change($"event:{id}", "2026-11-12T09:00:00Z", offset: "-30"));
+
+        Assert.That(reply.Status, Is.EqualTo(HttpStatusCode.OK), reply.Body);
+        Assert.That(await SettingRowsAsync(), Is.EqualTo(1));
+        Assert.That(await TextAsync("select concat_ws('|', event_key, offset_minutes, device_key) from notifications.member_event_settings"), Is.EqualTo($"EVENT:{id}|-30|{DeviceB}"));
     }
 }

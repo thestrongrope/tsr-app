@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Notifications.Api.Domain;
 
@@ -30,7 +30,7 @@ internal static class ClassScheduledCreateSlice
     private static async Task<IResult> HandleAsync(
         string class_id,
         HttpContext context,
-        NotificationsContext db,
+        NpgsqlDataSource source,
         Permissions permissions,
         MemberRateLimit limiter,
         TimeProvider clock,
@@ -43,7 +43,7 @@ internal static class ClassScheduledCreateSlice
         }
 
         var classId = NotifyGuards.IdOf(class_id);
-        var refusal = await NotifyGuards.ClassAccessAsync(db, permissions, caller, classId, ct);
+        var refusal = await NotifyGuards.ClassAccessAsync(source, permissions, caller, classId, ct);
         if (refusal is not null)
         {
             return refusal;
@@ -67,13 +67,13 @@ internal static class ClassScheduledCreateSlice
             return Unprocessable(ScheduleInput.KindError);
         }
 
-        if (await ActiveCountAsync(db, classId, ct) >= ScheduleInput.MaxActivePerClass)
+        if (await ActiveCountAsync(source, classId, ct) >= ScheduleInput.MaxActivePerClass)
         {
             return Unprocessable($"A class can have at most {ScheduleInput.MaxActivePerClass} active scheduled notifications");
         }
 
         var now = clock.GetUtcNow();
-        var slots = kind == "REMINDER" ? await LiveSlotsAsync(db, classId, ct) : [];
+        var slots = kind == "REMINDER" ? await LiveSlotsAsync(source, classId, ct) : [];
         var draft = ScheduleInput.Parse(body!, kind, now, slots);
         if (!draft.IsSuccess)
         {
@@ -85,52 +85,48 @@ internal static class ClassScheduledCreateSlice
             return Problem.Detail(StatusCodes.Status429TooManyRequests, "Too many scheduled notifications created; try again later");
         }
 
-        var id = await CreateAsync(db, clock, classId, caller, message.Value!, draft.Value!, ct);
-        var row = (await ScheduledRows.QueryAsync(db, classId, id, ct))[0];
+        var id = await CreateAsync(source, clock, classId, caller, message.Value!, draft.Value!, ct);
+        var row = (await ScheduledRows.QueryAsync(source, classId, id, ct))[0];
         var item = ScheduledRows.Item(row, null, now);
-        return Results.Json(new Dictionary<string, object?> { ["success"] = true, ["item"] = item }, statusCode: StatusCodes.Status201Created);
+        return Results.Json(new Dictionary<string, object?> { ["success"] = true, ["item"] = item }, NotificationsJson.Answers.Answer, contentType: null, statusCode: StatusCodes.Status201Created);
     }
 
     private static IResult Unprocessable(string detail) => Problem.Detail(StatusCodes.Status422UnprocessableEntity, detail);
 
-    private static async Task<long> ActiveCountAsync(NotificationsContext db, int classId, CancellationToken ct) =>
-        (await db.Database
-            .SqlQuery<long>($"""select count(*) as "Value" from notifications.class_scheduled_notifications where class_id = {classId} and status = 'active'""")
-            .ToListAsync(ct))[0];
+    private static async Task<long> ActiveCountAsync(NpgsqlDataSource source, int classId, CancellationToken ct) =>
+        (await source.ListAsync(
+            $"""select count(*) as "Value" from notifications.class_scheduled_notifications where class_id = {classId} and status = 'active'""",
+            row => row.Long("Value"),
+            ct))[0];
 
-    private static async Task<Dictionary<int, string>> LiveSlotsAsync(NotificationsContext db, int classId, CancellationToken ct)
+    private static async Task<Dictionary<int, string>> LiveSlotsAsync(NpgsqlDataSource source, int classId, CancellationToken ct)
     {
-        var rows = await db.Database
-            .SqlQuery<Slot>($"""select id as "Id", coalesce(timezone, '') as "Timezone" from classes.v_class_schedules where class_id = {classId} and deleted_at is null""")
-            .ToListAsync(ct);
+        var rows = await source.ListAsync(
+            $"""select id as "Id", coalesce(timezone, '') as "Timezone" from classes.v_class_schedules where class_id = {classId} and deleted_at is null""",
+            row => new Slot(row.Int("Id"), row.Text("Timezone")),
+            ct);
         return rows.ToDictionary(r => r.Id, r => r.Timezone);
     }
 
-    private static async Task<int> CreateAsync(NotificationsContext db, TimeProvider clock, int classId, Caller caller, ClassMessageText message, ScheduleDraft draft, CancellationToken ct)
+    private static async Task<int> CreateAsync(NpgsqlDataSource source, TimeProvider clock, int classId, Caller caller, ClassMessageText message, ScheduleDraft draft, CancellationToken ct)
     {
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        var entity = new ClassScheduledNotification
-        {
-            ClassId = classId,
-            CreatedBy = caller.Token,
-            CreatedByUserId = caller.UserId,
-            Title = message.Title,
-            Body = message.Body,
-            ActionLink = message.ActionLink,
-            Kind = draft.Kind,
-            SendAt = draft.SendAt,
-            Weekdays = draft.Weekdays,
-            SendTime = draft.SendTime,
-            Tz = draft.Tz,
-            ClassScheduleId = draft.ClassScheduleId,
-            OffsetMinutes = draft.OffsetMinutes,
-            RepeatWeekly = (short)(draft.RepeatWeekly ? 1 : 0),
-            Status = "active",
-        };
-        db.ClassScheduledNotifications.Add(entity);
-        await db.SaveChangesAsync(ct);
-        await Outbox.WriteAsync(db, "notifications.class_schedule_created", new ScheduleCreated(entity.Id, classId, draft.Kind, caller.Token), clock, ct);
-        await transaction.CommitAsync(ct);
-        return entity.Id;
+        await using var tx = await source.BeginAsync(ct);
+        LocalTimestamp? sendAt = draft.SendAt is { } at ? new LocalTimestamp(DateTime.SpecifyKind(at, DateTimeKind.Unspecified)) : null;
+        var repeatWeekly = (short)(draft.RepeatWeekly ? 1 : 0);
+        // created_at and updated_at are left out: the database's own clock stamps them, as it always has.
+        var ids = await tx.ListAsync(
+            $"""
+            insert into notifications.class_scheduled_notifications
+                (class_id, created_by, created_by_user_id, title, body, action_link, kind, send_at, weekdays, send_time, tz, class_schedule_id, offset_minutes, repeat_weekly, status)
+            values ({classId}, {caller.Token}, {caller.UserId}, {message.Title}, {message.Body}, {message.ActionLink}, {draft.Kind}, {sendAt}, {draft.Weekdays}, {draft.SendTime}, {draft.Tz},
+                    {draft.ClassScheduleId}, {draft.OffsetMinutes}, {repeatWeekly}, 'active')
+            returning id
+            """,
+            row => row.Int("id"),
+            ct);
+        var id = ids.Single();
+        await Outbox.WriteAsync(tx, "notifications.class_schedule_created", new ScheduleCreated(id, classId, draft.Kind, caller.Token), NotificationsJson.Default.ScheduleCreated, clock, ct);
+        await tx.CommitAsync(ct);
+        return id;
     }
 }

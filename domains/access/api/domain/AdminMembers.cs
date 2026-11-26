@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Http;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Shared.Api;
 
 namespace Tsr.Access.Api.Domain;
@@ -53,22 +53,25 @@ internal static partial class AdminMembers
     private static readonly string[] GentsTexts = ["1", "Male"];
     private static readonly string[] LadiesTexts = ["2", "Female"];
 
-    public static async Task<MemberRow?> FindAsync(AccessContext db, int token, CancellationToken ct)
+    private static MemberRow ReadMember(DbRow row) => new(row.Int("UserId"), row.Int("Token"), row.Text("Name"), row.TextOrNull("Gender"));
+
+    public static async Task<MemberRow?> FindAsync(DbTx tx, int token, CancellationToken ct)
     {
         if (token <= 0)
         {
             return null;
         }
 
-        var rows = await db.Database
-            .SqlQuery<MemberRow>($"""
+        var rows = await tx.ListAsync(
+            $"""
                 select m.user_id as "UserId", m.token as "Token", coalesce(m.name, '') as "Name", m.gender::text as "Gender"
                 from membership.v_members m
                 where m.token = {token}
                 order by m.user_id
                 limit 1
-                """)
-            .ToListAsync(ct);
+                """,
+            ReadMember,
+            ct);
         return rows.Count == 0 ? null : rows[0];
     }
 
@@ -80,7 +83,7 @@ internal static partial class AdminMembers
         Digits().IsMatch(term) && long.TryParse(term, NumberStyles.None, CultureInfo.InvariantCulture, out var number) ? number : -1;
 
     /// <summary>The grant screen's search: name, token, email or mobile; fewer than two characters finds nobody. Name and token only come back.</summary>
-    public static async Task<IReadOnlyList<MemberRow>> SearchForGrantsAsync(AccessContext db, string term, CancellationToken ct)
+    public static async Task<IReadOnlyList<MemberRow>> SearchForGrantsAsync(NpgsqlDataSource source, string term, CancellationToken ct)
     {
         var q = PhpText.Trim(term);
         if (PhpText.CodePointCount(q) < 2)
@@ -90,8 +93,8 @@ internal static partial class AdminMembers
 
         var like = LikePattern(q);
         var token = TokenOfTerm(q);
-        return await db.Database
-            .SqlQuery<MemberRow>($"""
+        return await source.ListAsync(
+            $"""
                 select m.user_id as "UserId", m.token as "Token", coalesce(m.name, '') as "Name", m.gender::text as "Gender"
                 from membership.v_members m
                 join identity.v_users u on u.id = m.user_id
@@ -102,12 +105,13 @@ internal static partial class AdminMembers
                        or m.token = {token})
                 order by m.name, m.token
                 limit {MaxResults}
-                """)
-            .ToListAsync(ct);
+                """,
+            ReadMember,
+            ct);
     }
 
     /// <summary>The class access screen's search: name or token, among members of the given genders (a member with no recorded gender is found by nobody).</summary>
-    public static async Task<IReadOnlyList<MemberRow>> SearchOfGendersAsync(AccessContext db, string term, IReadOnlyCollection<int> genders, CancellationToken ct)
+    public static async Task<IReadOnlyList<MemberRow>> SearchOfGendersAsync(NpgsqlDataSource source, string term, IReadOnlyCollection<int> genders, CancellationToken ct)
     {
         var q = PhpText.Trim(term);
         if (PhpText.CodePointCount(q) < 2 || genders.Count == 0)
@@ -118,15 +122,16 @@ internal static partial class AdminMembers
         var like = LikePattern(q);
         var token = TokenOfTerm(q);
         var texts = GenderTexts(genders);
-        return await db.Database
-            .SqlQuery<MemberRow>($"""
+        return await source.ListAsync(
+            $"""
                 select m.user_id as "UserId", m.token as "Token", coalesce(m.name, '') as "Name", m.gender::text as "Gender"
                 from membership.v_members m
                 where m.token > 0 and m.gender::text = any({texts})
                   and (lower(m.name) like {like} escape '!' or m.token = {token})
                 order by m.name, m.token
                 limit {MaxResults}
-                """)
-            .ToListAsync(ct);
+                """,
+            ReadMember,
+            ct);
     }
 }

@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
 using Tsr.Shared.Api;
@@ -28,7 +28,7 @@ internal static class ClassStudentRestoreSlice
         string class_id,
         string token,
         HttpContext context,
-        ClassesContext db,
+        NpgsqlDataSource source,
         Permissions permissions,
         TimeProvider clock,
         CancellationToken ct)
@@ -39,7 +39,7 @@ internal static class ClassStudentRestoreSlice
             return Problem.Unauthenticated();
         }
 
-        var head = await ClassGuards.FindActiveClassAsync(db, ClassGuards.IdOf(class_id), ct);
+        var head = await ClassGuards.FindActiveClassAsync(source, ClassGuards.IdOf(class_id), ct);
         if (head is null)
         {
             return Refusals.ClassNotFound();
@@ -51,22 +51,22 @@ internal static class ClassStudentRestoreSlice
         }
 
         var student = ClassGuards.TokenOf(token);
-        if (!await ClassRoster.IsRemovedAsync(db, head.Id, student, ct))
+        if (!await ClassRoster.IsRemovedAsync(source, head.Id, student, ct))
         {
             return Problem.Detail(StatusCodes.Status404NotFound, "Student is not in the removed list");
         }
 
-        await SaveAsync(db, clock, head.Id, student, caller.Token, ct);
-        return Results.Json(await ClassRoster.BuildAsync(db, permissions, caller, head.Id, ct));
+        await SaveAsync(source, clock, head.Id, student, caller.Token, ct);
+        return Results.Json(await ClassRoster.BuildAsync(source, permissions, caller, head.Id, ct), ClassesJson.Answers.Answer);
     }
 
-    private static async Task SaveAsync(ClassesContext db, TimeProvider clock, int classId, int student, int by, CancellationToken ct)
+    private static async Task SaveAsync(NpgsqlDataSource source, TimeProvider clock, int classId, int student, int by, CancellationToken ct)
     {
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        await db.Database.ExecuteSqlAsync(
+        await using var tx = await source.BeginAsync(ct);
+        await tx.ExecuteAsync(
             $"update classes.class_students set status = 'A', removed_at = null, removed_by = null, removed_reason = null where class_id = {classId} and token_no = {student}",
             ct);
-        await Outbox.WriteAsync(db, "classes.student_restored", new StudentRestored(classId, student, by), clock, ct);
-        await transaction.CommitAsync(ct);
+        await Outbox.WriteAsync(tx, "classes.student_restored", new StudentRestored(classId, student, by), ClassesJson.Default.StudentRestored, clock, ct);
+        await tx.CommitAsync(ct);
     }
 }

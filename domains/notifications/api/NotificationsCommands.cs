@@ -1,6 +1,7 @@
 using System.Text.Json;
-using Microsoft.EntityFrameworkCore;
+using Tsr.Notifications.Api.Domain;
 using Tsr.Platform.Api;
+using Tsr.Shared.Api;
 
 namespace Tsr.Notifications.Api;
 
@@ -41,19 +42,18 @@ public static class NotificationsCommands
 
     /// <summary>
     /// The newest notification of the class coordinators' reminder (criteria type <c>CC_NUDGE</c>) to this teacher sent within the last <paramref name="windowHours"/> hours, or null. PHP PendingNudgeModel::lastReminded.
-    /// Read on the caller's connection, so inside its transaction it sees what that transaction wrote.
+    /// Read on the caller's transaction, so it sees what that transaction wrote.
     /// </summary>
-    public static async Task<DateTimeOffset?> LastNudgeAsync(DbContext db, int teacher, int windowHours, CancellationToken ct)
+    public static async Task<DateTimeOffset?> LastNudgeAsync(DbTx tx, int teacher, int windowHours, CancellationToken ct)
     {
-        ArgumentNullException.ThrowIfNull(db);
-        var rows = await db.Database.SqlQuery<DateTimeOffset>($"""
-            select max(sent_at) as "Value" from notifications.notifications
+        ArgumentNullException.ThrowIfNull(tx);
+        return await tx.ScalarAsync<DateTimeOffset>($"""
+            select max(sent_at) from notifications.notifications
             where target_audience_criteria::text::jsonb ->> 'type' = 'CC_NUDGE'
               and target_audience_criteria::text::jsonb ->> 'teacher' = {teacher.ToString(System.Globalization.CultureInfo.InvariantCulture)}
               and sent_at > now() - make_interval(hours => {windowHours})
             having max(sent_at) is not null
-            """).ToListAsync(ct);
-        return rows.Count == 0 ? null : rows[0];
+            """, ct);
     }
 
     /// <summary>
@@ -61,50 +61,43 @@ public static class NotificationsCommands
     /// created with created_by 0 and the audience criteria <c>{"type":"REGISTERED_MEMBERS"}</c> or <c>{"type":"MEMBERS"}</c>, its device counts being the audience's), fanned out to the audience's tokens (a repeat is ignored by the unique index),
     /// then one queued push per device carrying <c>{title, body, data: {type, action_link, title, body}}</c>. Returns the push rows queued.
     /// </summary>
-    public static async Task<int> AnnounceAsync(DbContext db, Announcement announcement, CancellationToken ct) =>
-        (await AnnounceCountedAsync(db, announcement, ct)).Queued;
+    public static async Task<int> AnnounceAsync(DbTx tx, Announcement announcement, CancellationToken ct) =>
+        (await AnnounceCountedAsync(tx, announcement, ct)).Queued;
 
     /// <summary><see cref="AnnounceAsync"/> that also says how many devices the audience has.</summary>
-    public static async Task<AnnounceResult> AnnounceCountedAsync(DbContext db, Announcement announcement, CancellationToken ct)
+    public static async Task<AnnounceResult> AnnounceCountedAsync(DbTx tx, Announcement announcement, CancellationToken ct)
     {
-        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(tx);
         ArgumentNullException.ThrowIfNull(announcement);
-        if (db.Database.CurrentTransaction is null)
-        {
-            throw new InvalidOperationException("An announcement is written inside the caller's transaction.");
-        }
-
         var tokens = announcement.Tokens?.Where(t => t > 0).Distinct().ToArray();
-        var devices = await DevicesAsync(db, tokens, ct);
+        var devices = await DevicesAsync(tx, tokens, ct);
         if (announcement.SkipDemoDevices && tokens is not null)
         {
-            devices = await DevicesAsync(db, await WithoutDemoAsync(db, tokens, ct), ct);
+            devices = await DevicesAsync(tx, await WithoutDemoAsync(tx, tokens, ct), ct);
         }
 
-        var payload = JsonSerializer.Serialize(new
-        {
-            title = announcement.Title,
-            body = announcement.Body,
-            data = PushData(announcement),
-        });
-        var queued = await PlatformCommands.QueueMessagesAsync(db, "push", devices, payload, announcement.DedupeKey, announcement.Sender, ct);
+        var queued = await PlatformCommands.QueueMessagesAsync(tx, "push", devices, PushPayload(announcement), announcement.DedupeKey, announcement.Sender, ct);
 
-        var notificationId = announcement.ReuseExisting ? await FindNotificationAsync(db, announcement, ct) : null;
+        var notificationId = announcement.ReuseExisting ? await FindNotificationAsync(tx, announcement, ct) : null;
         if (notificationId is null)
         {
             var succeeded = announcement.CountsFromQueue ? queued : devices.Count;
-            notificationId = await CreateNotificationAsync(db, announcement, devices.Count, succeeded, tokens is null, ct);
-            await FanOutAsync(db, notificationId.Value, tokens, ct);
+            notificationId = await CreateNotificationAsync(tx, announcement, devices.Count, succeeded, tokens is null, ct);
+            await FanOutAsync(tx, notificationId.Value, tokens, ct);
         }
 
         return new AnnounceResult(devices.Count, queued);
     }
 
-    private static object PushData(Announcement a)
+    /// <summary>The push's JSON: <c>{title, body, data}</c>, the data being the caller's or the default four fields.</summary>
+    internal static string PushPayload(Announcement announcement) =>
+        JsonSerializer.Serialize(new QueuedPush(announcement.Title, announcement.Body, PushData(announcement)), NotificationsJson.Default.QueuedPush);
+
+    private static IReadOnlyDictionary<string, string?> PushData(Announcement a)
     {
         if (a.Data is not null)
         {
-            return a.Data;
+            return (IReadOnlyDictionary<string, string?>)a.Data;
         }
 
         return new Dictionary<string, string?>
@@ -116,48 +109,51 @@ public static class NotificationsCommands
         };
     }
 
-    private static async Task<int[]> WithoutDemoAsync(DbContext db, int[] tokens, CancellationToken ct) =>
-        [.. await db.Database.SqlQuery<int>($"""
-            select t as "Value" from unnest({tokens}) as t
+    private static async Task<int[]> WithoutDemoAsync(DbTx tx, int[] tokens, CancellationToken ct) =>
+        [.. await tx.ListAsync($"""
+            select t from unnest({tokens}) as t
             where t not in (select token from identity.v_users where email like {DemoEmails})
-            """).ToListAsync(ct)];
+            """, row => row.Int("t"), ct)];
 
-    private static async Task<List<string>> DevicesAsync(DbContext db, int[]? tokens, CancellationToken ct) =>
+    private static Task<List<string>> DevicesAsync(DbTx tx, int[]? tokens, CancellationToken ct) =>
         tokens is null
-            ? await db.Database.SqlQuery<string>($"""
-                select distinct ud.device_id as "Value" from notifications.user_devices ud
+            ? tx.ListAsync($"""
+                select distinct ud.device_id from notifications.user_devices ud
                 where ud.token > 0 and ud.device_id <> ''
                   and ud.token not in (select token from identity.v_users where email like {DemoEmails})
-                """).ToListAsync(ct)
-            : await db.Database.SqlQuery<string>($"""
-                select distinct ud.device_id as "Value" from notifications.user_devices ud
+                """, row => row.Text("device_id"), ct)
+            : tx.ListAsync($"""
+                select distinct ud.device_id from notifications.user_devices ud
                 where ud.token = any({tokens}) and ud.device_id <> ''
-                """).ToListAsync(ct);
+                """, row => row.Text("device_id"), ct);
 
-    private static async Task<int?> FindNotificationAsync(DbContext db, Announcement a, CancellationToken ct) =>
-        await db.Database.SqlQuery<int>($"""
-            select notification_id as "Value" from notifications.notifications
+    private static async Task<int?> FindNotificationAsync(DbTx tx, Announcement a, CancellationToken ct)
+    {
+        var ids = await tx.ListAsync($"""
+            select notification_id from notifications.notifications
             where created_by = {a.Sender} and title = {a.Title}::citext and body = {a.Body}::citext and action_link = {a.ActionLink}::citext
             order by notification_id desc limit 1
-            """).Cast<int?>().FirstOrDefaultAsync(ct);
+            """, row => row.Int("notification_id"), ct);
+        return ids.Count == 0 ? null : ids[0];
+    }
 
-    private static async Task<int> CreateNotificationAsync(DbContext db, Announcement a, int devices, int succeeded, bool allRegistered, CancellationToken ct)
+    private static async Task<int> CreateNotificationAsync(DbTx tx, Announcement a, int devices, int succeeded, bool allRegistered, CancellationToken ct)
     {
         var criteria = a.Criteria ?? (allRegistered ? """{"type":"REGISTERED_MEMBERS"}""" : """{"type":"MEMBERS"}""");
-        var ids = await db.Database.SqlQuery<int>($"""
+        var ids = await tx.ListAsync($"""
             insert into notifications.notifications (title, body, target_audience_criteria, created_by, device_count, success_count, failure_count, action_link)
             values ({a.Title}, {a.Body}, {criteria}, {a.Sender}, {devices}, {succeeded}, {devices - succeeded}, {a.ActionLink})
-            returning notification_id as "Value"
-            """).ToListAsync(ct);
+            returning notification_id
+            """, row => row.Int("notification_id"), ct);
         return ids.Single();
     }
 
     /// <summary>One inbox row per audience token (registered members: those with a device, the demo cohort left out); the unique index drops a repeat.</summary>
-    private static async Task FanOutAsync(DbContext db, int notificationId, int[]? tokens, CancellationToken ct)
+    private static async Task FanOutAsync(DbTx tx, int notificationId, int[]? tokens, CancellationToken ct)
     {
         if (tokens is null)
         {
-            await db.Database.ExecuteSqlAsync($"""
+            await tx.ExecuteAsync($"""
                 insert into notifications.user_notifications (notification_id, user_token, is_read, created_at)
                 select distinct {notificationId}, u.token, 0, now() from identity.v_users u
                 join notifications.user_devices ud on ud.token = u.token
@@ -167,7 +163,7 @@ public static class NotificationsCommands
             return;
         }
 
-        await db.Database.ExecuteSqlAsync($"""
+        await tx.ExecuteAsync($"""
             insert into notifications.user_notifications (notification_id, user_token, is_read, created_at)
             select {notificationId}, t, 0, now() from unnest({tokens}) as t
             on conflict do nothing

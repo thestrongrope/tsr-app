@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Assessment.Api.Domain;
 using Tsr.Shared.Api;
@@ -33,7 +33,7 @@ internal static class ManageScoresSlice
         return routes;
     }
 
-    private static async Task<IResult> HandleAsync(string quiz_id, HttpContext context, AssessmentContext db, Permissions permissions, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(string quiz_id, HttpContext context, NpgsqlDataSource source, Permissions permissions, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -41,7 +41,7 @@ internal static class ManageScoresSlice
             return Problem.Unauthenticated();
         }
 
-        var (quiz, refusal) = await ManageAccess.ResolveQuizAsync(db, PhpValue.IntOfText(quiz_id), ct);
+        var (quiz, refusal) = await ManageAccess.ResolveQuizAsync(source, PhpValue.IntOfText(quiz_id), ct);
         if (refusal is not null)
         {
             return refusal;
@@ -52,8 +52,8 @@ internal static class ManageScoresSlice
             return ManageAccess.NotPermitted();
         }
 
-        var rows = await db.Database
-            .SqlQuery<Row>($"""
+        var rows = await source.ListAsync(
+            $"""
                 select coalesce(m.name::text, '') as "Name", max(r.created_at) as "Submitted",
                        coalesce(sum(r.is_correct), 0)::int as "Correct", count(*)::int as "Outof"
                 from assessment.spot_quiz_responses r
@@ -62,9 +62,10 @@ internal static class ManageScoresSlice
                 group by m.name
                 order by max(r.created_at) desc, m.name
                 limit {MaxRows}
-                """)
-            .ToListAsync(ct);
+                """,
+            row => new Row(row.Text("Name"), row.InstantOrNull("Submitted"), row.Int("Correct"), row.Int("Outof")),
+            ct);
         var items = rows.Select(r => new Item(PhpText.HtmlDecode(r.Name), QuizAccess.Stamp(r.Submitted), r.Correct, r.Outof)).ToList();
-        return Results.Json(new Body(new QuizWire(quiz.Id, quiz.Name ?? string.Empty, quiz.Topic, quiz.ClassCode ?? string.Empty), items.Count, items));
+        return Results.Json(new Body(new QuizWire(quiz.Id, quiz.Name ?? string.Empty, quiz.Topic, quiz.ClassCode ?? string.Empty), items.Count, items), AssessmentJson.Answers.ManageScores);
     }
 }

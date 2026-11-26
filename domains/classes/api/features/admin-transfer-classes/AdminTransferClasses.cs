@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Npgsql;
 using Tsr.Access.Api;
 using Tsr.Classes.Api.Domain;
 using Tsr.Shared.Api;
@@ -36,7 +37,7 @@ internal static class AdminTransferClassesSlice
         c.Students,
         c.Status == "A");
 
-    private static async Task<IResult> HandleAsync(HttpContext context, ClassesContext db, Permissions permissions, CancellationToken ct)
+    private static async Task<IResult> HandleAsync(HttpContext context, NpgsqlDataSource source, Permissions permissions, CancellationToken ct)
     {
         var caller = context.GetCaller();
         if (caller is null)
@@ -50,7 +51,7 @@ internal static class AdminTransferClassesSlice
             return refusal;
         }
 
-        var classes = await ClassListing.AllAsync(db, await ClassListing.AssignedAsync(permissions, caller, ct), includeInactive: true, ct);
-        return Results.Json(new Body(classes.Select(ToWire).ToList(), classes.Select(c => c.Level).Distinct().ToList()));
+        var classes = await ClassListing.AllAsync(source, await ClassListing.AssignedAsync(permissions, caller, ct), includeInactive: true, ct);
+        return Results.Json(new Body(classes.Select(ToWire).ToList(), classes.Select(c => c.Level).Distinct().ToList()), ClassesJson.Answers.TransferClassesBody);
     }
 }

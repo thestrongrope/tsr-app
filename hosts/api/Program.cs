@@ -20,15 +20,20 @@ HostLogging.AddDefaults(builder.Configuration);
 // body between the two still gets the slice's 413 with its detail. Production has no proxy of its own that caps the body.
 builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 2L * RequestBodies.MaxBytes);
 
+// The one-off migrate job (below) serves no requests: it registers identity's tables but no caller
+// verifier, so it runs in any environment. Normal start-up still fails closed outside Development.
+// The native build has no Entity Framework: it refuses the migrate job before it reads any other setting (HostServices.CanMigrate).
+var migrating = args.Contains("--migrate");
+if (migrating && !HostServices.CanMigrate)
+{
+    throw new InvalidOperationException(HostServices.NoMigrations);
+}
+
 var connectionString = builder.Configuration["TSR_DB"]
     ?? throw new InvalidOperationException("TSR_DB is not set. Locally it comes from docker-compose.dev.yml.");
 
 builder.Services.AddSingleton(new DbSettings(connectionString));
 builder.Services.AddSingleton(TimeProvider.System);
-
-// The one-off migrate job (below) serves no requests: it registers identity's tables but no caller
-// verifier, so it runs in any environment. Normal start-up still fails closed outside Development.
-var migrating = args.Contains("--migrate");
 
 // The one-off content load (docker-compose.yml "content-load"): copy the content files at TSR_CONTENT_DIR into the database, then exit; no routes. --migrate wins if both are given.
 var loadingContent = args.Contains("--load-content") && !migrating;
@@ -52,7 +57,7 @@ var app = builder.Build();
 // domain's migrations in registration order, then exit without serving.
 if (migrating)
 {
-    await app.Services.MigrateDatabasesAsync(CancellationToken.None);
+    await HostServices.MigrateAsync(app.Services, CancellationToken.None);
     return;
 }
 
@@ -75,7 +80,8 @@ if (loadingContent)
 if (workerMode)
 {
     WorkerMode.Announce(app.Logger, enabledWorkers);
-    app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
+    // Fixed text, not a serialised object: the native build has no reflection writer (the API's own /health is platform's slice).
+    app.MapGet("/health", () => Results.Content("{\"status\":\"ok\"}", "application/json; charset=utf-8"));
     app.Run();
     return;
 }
@@ -102,6 +108,7 @@ app.MapAssessment();
 app.MapNotifications();
 app.MapSearch();
 
+await DatabaseWarmUp.RunAsync(app.Services, CancellationToken.None);
 app.Run();
 
 /// <summary>Entry point, public so tests can host the API in-process.</summary>

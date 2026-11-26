@@ -6,7 +6,7 @@ info:
     The search domain's one action. Forward compatible: a store-live app keeps calling it, so add fields freely but never remove or
     change one without the release process. Every error body is {"detail": "..."}.
 servers:
-  - url: http://localhost:8088
+  - url: https://gateway.tsr-app-dev.orb.local
     description: Local dev stack (gateway)
 paths:
   /search:
