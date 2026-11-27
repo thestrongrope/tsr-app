@@ -5,7 +5,7 @@ using HttpMethod = Elastic.Transport.HttpMethod;
 namespace Tsr.Search.Api.Domain;
 
 /// <summary>The write side (PHP models/searchindex.php: ensureIndex, bulkUpsert, allIds, delete). Raw JSON through the client's transport, because the mapping and the bulk bodies are PHP's, byte for shape.</summary>
-internal sealed partial class ElasticSearchIndex : ISearchIndexWriter
+internal sealed partial class ElasticSearchIndex : ISearchIndexWriter, ILibraryIndex
 {
     /// <summary>The most scroll pages one listing reads (1000 ids each): a stop for a loop that would not end.</summary>
     private const int MaxScrollPages = 2000;
@@ -19,16 +19,19 @@ internal sealed partial class ElasticSearchIndex : ISearchIndexWriter
     // ("compatible-with"), and Elasticsearch refuses a request whose two headers disagree (400 media_type_header_exception).
     private const string JsonType = "application/json";
 
-    public async Task EnsureIndexAsync(CancellationToken ct)
+    public Task EnsureIndexAsync(CancellationToken ct) => EnsureIndexAsync(IndexName, SearchIndexMapping.Json, ct);
+
+    public async Task<bool> EnsureIndexAsync(string index, string mappingJson, CancellationToken ct)
     {
-        var head = await SendAsync(HttpMethod.HEAD, "/" + IndexName, PostData.Empty, null, ct);
+        var head = await SendAsync(HttpMethod.HEAD, "/" + index, PostData.Empty, null, ct);
         if (head.ApiCallDetails.HttpStatusCode != 404)
         {
             Require(head);
-            return;
+            return false;
         }
 
-        Require(await SendAsync(HttpMethod.PUT, "/" + IndexName, PostData.String(SearchIndexMapping.Json), JsonType, ct));
+        Require(await SendAsync(HttpMethod.PUT, "/" + index, PostData.String(mappingJson), JsonType, ct));
+        return true;
     }
 
     public async Task BulkUpsertAsync(IReadOnlyList<SearchDocument> documents, CancellationToken ct)
@@ -55,11 +58,13 @@ internal sealed partial class ElasticSearchIndex : ISearchIndexWriter
         await BulkAsync(lines.ToString(), ct);
     }
 
-    public async Task<IReadOnlyList<string>> ListIdsAsync(CancellationToken ct)
+    public Task<IReadOnlyList<string>> ListIdsAsync(CancellationToken ct) => ListIdsAsync(IndexName, ct);
+
+    public async Task<IReadOnlyList<string>> ListIdsAsync(string index, CancellationToken ct)
     {
         var ids = new List<string>();
         var first = """{"size":1000,"_source":false,"query":{"match_all":{}}}""";
-        var page = await ReadPageAsync(HttpMethod.POST, "/" + IndexName + "/_search?scroll=1m", first, ct);
+        var page = await ReadPageAsync(HttpMethod.POST, "/" + index + "/_search?scroll=1m", first, ct);
         var scrollId = page.ScrollId;
         for (var pages = 0; page.Ids.Count > 0; pages++)
         {
@@ -100,7 +105,7 @@ internal sealed partial class ElasticSearchIndex : ISearchIndexWriter
         _ = await SendAsync(HttpMethod.DELETE, "/_search/scroll", PostData.String(body), JsonType, ct);
     }
 
-    private async Task BulkAsync(string ndjson, CancellationToken ct)
+    public async Task BulkAsync(string ndjson, CancellationToken ct)
     {
         var response = await SendAsync(HttpMethod.POST, "/_bulk", PostData.String(ndjson), "application/x-ndjson", ct);
         Require(response);
@@ -114,9 +119,9 @@ internal sealed partial class ElasticSearchIndex : ISearchIndexWriter
     private static string Action(string verb, string id) =>
         new System.Text.Json.Nodes.JsonObject { [verb] = new System.Text.Json.Nodes.JsonObject { ["_index"] = IndexName, ["_id"] = id } }.ToJsonString();
 
-    private async Task<StringResponse> SendAsync(HttpMethod method, string path, PostData data, string? contentType, CancellationToken ct)
+    private async Task<StringResponse> SendAsync(HttpMethod method, string path, PostData data, string? contentType, CancellationToken ct, TimeSpan? timeout = null)
     {
-        var configuration = new RequestConfiguration { RequestTimeout = WriteTimeout, ContentType = contentType, Accept = "application/json" };
+        var configuration = new RequestConfiguration { RequestTimeout = timeout ?? WriteTimeout, ContentType = contentType, Accept = "application/json" };
         try
         {
             return await _client.Transport.RequestAsync<StringResponse>(new EndpointPath(method, path), data, null, configuration, ct);

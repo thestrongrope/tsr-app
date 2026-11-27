@@ -50,6 +50,18 @@ public sealed class WorkerModeTests
     }
 
     [Test]
+    public void The_library_search_feed_is_a_known_worker_and_is_registered_by_its_name()
+    {
+        var services = new ServiceCollection();
+
+        var enabled = WorkerMode.Register(services, workersMode: true, "library-search-feed");
+
+        Assert.That(WorkerMode.KnownNames, Does.Contain("library-search-feed"));
+        Assert.That(Workers(services), Is.EqualTo(1));
+        Assert.That(enabled, Is.EqualTo(["library-search-feed"]));
+    }
+
+    [Test]
     public void The_content_refresh_is_a_known_worker_and_is_registered_by_its_name()
     {
         var services = new ServiceCollection();
@@ -140,11 +152,11 @@ public sealed class WorkerModeTests
         var environment = new Microsoft.Extensions.Hosting.Internal.HostingEnvironment { EnvironmentName = Environments.Development };
 
         HostServices.AddDomains(services, environment, configuration, RunMode.Workers);
-        var enabled = WorkerMode.Register(services, workersMode: true, "push-drain,class-schedules,search-feed,content-refresh");
+        var enabled = WorkerMode.Register(services, workersMode: true, "push-drain,class-schedules,search-feed,content-refresh,library-search-feed");
 
-        Assert.That(enabled, Has.Count.EqualTo(4));
+        Assert.That(enabled, Has.Count.EqualTo(5));
         using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateOnBuild = true, ValidateScopes = true });
-        Assert.That(provider.GetServices<IHostedService>().OfType<PeriodicWorker>().Select(w => w.Name), Is.EquivalentTo((string[])["push-drain", "class-schedules", "search-feed", "content-refresh"]));
+        Assert.That(provider.GetServices<IHostedService>().OfType<PeriodicWorker>().Select(w => w.Name), Is.EquivalentTo((string[])["push-drain", "class-schedules", "search-feed", "content-refresh", "library-search-feed"]));
     }
 
     private sealed class OneLine : Microsoft.Extensions.Logging.ILogger

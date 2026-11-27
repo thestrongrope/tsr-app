@@ -556,16 +556,16 @@ Ordinary repo checks run on every task: `dotnet build TsrApp.slnx` (zero warning
 
 ## 6. Tasks (one sitting each, in order)
 
-- [ ] **1. Move `V1` to `shared/api/WebsiteV1.cs`.** Content's six slices and `db/tests/V1FailureTests.cs` follow. No behaviour change.
+- [x] **1. Move `V1` to `shared/api/WebsiteV1.cs`.** Content's six slices and `db/tests/V1FailureTests.cs` follow. No behaviour change.
   Test: `dotnet test db/tests --filter V1`, `tools/contract-website.sh test`.
-- [ ] **2. Publish `content.v_published_articles`.** Migration, read grant, content `CLAUDE.md` row. Test: a `db/tests` case that
+- [x] **2. Publish `content.v_published_articles`.** Migration, read grant, content `CLAUDE.md` row. Test: a `db/tests` case that
   the view returns the 12 synthetic articles with their bodies, and only published ones.
-- [ ] **3. Port the query helpers** (`domain/QueryExpansion.cs`). Test: TC-SRCH-R1-04 (expected values computed once from tsr-web with node, stored in the test).
-- [ ] **4. Article query body and hit reading** (`domain/ArticleSearchQuery.cs`). Test: TC-SRCH-R1-02, R1-03, Q3-01.
-- [ ] **5. Rate limit** (`MemberRateLimit.RetryAfterSeconds`, `domain/SearchRateLimit.cs`). Test: TC-SRCH-R14-01 (U), R14-02.
-- [ ] **6. Slice `v1-search` with the SQL fallback** (`features/v1-search/V1Search.cs`, `domain/ArticleFallback.cs`); the gateway block;
+- [x] **3. Port the query helpers** (`domain/QueryExpansion.cs`). Test: TC-SRCH-R1-04 (expected values computed once from tsr-web with node, stored in the test).
+- [x] **4. Article query body and hit reading** (`domain/ArticleSearchQuery.cs`). Test: TC-SRCH-R1-02, R1-03, Q3-01.
+- [x] **5. Rate limit** (`MemberRateLimit.RetryAfterSeconds`, `domain/SearchRateLimit.cs`). Test: TC-SRCH-R14-01 (U), R14-02.
+- [x] **6. Slice `v1-search` with the SQL fallback** (`features/v1-search/V1Search.cs`, `domain/ArticleFallback.cs`); the gateway block;
   `RouteCatalog.NotInPhp`; `api.yaml`; `V1FailureTests` case. Test: TC-SRCH-R2-01, R3-01, R6-01..03, R15-01, R16-01; `dotnet test hosts/api/tests`.
-- [ ] **7. Mappings and the feed for articles** (`domain/LibraryIndexMappings.cs`, `domain/LibraryFeed.cs`, `workers/LibraryFeedWorker.cs`,
+- [x] **7. Mappings and the feed for articles** (`domain/LibraryIndexMappings.cs`, `domain/LibraryFeed.cs`, `workers/LibraryFeedWorker.cs`,
   worker name in `HostServices.cs` and `WorkerModeTests`; `TSR_WORKERS` in the test compose file). Test: TC-SRCH-R17-01..03;
   `v1-search.hurl` on the default test stack (TC-SRCH-R1-01, R4-01, R5-01).
 - [ ] **8. The embedding container** (`hosts/embeddings/`, pinned, `uv.lock`; the three compose files; health check). Test: the default test
@@ -578,6 +578,13 @@ Ordinary repo checks run on every task: `dotnet build TsrApp.slnx` (zero warning
 - [ ] **12. Slice `v1-lecture-search`** with the lecture part of the feed, the settings, the gateway block, the catalog and `api.yaml`.
   Test: `v1-lecture-search.hurl` on the default stack and a lane (TC-SRCH-R7-01, R7-03, R8-01, R9-01, R10-01, R10-03, R11-01, R13-01,
   R14-01 HL); TC-SRCH-R12-01 and Q6-01 in `db/tests`.
+- [ ] **12a. The full lecture file (decision a).** `content/lectures/lectures.ndjson` becomes tsr-web's full file; `tools/content-import.sh`
+  stops trimming; LEC-R8 and LEC-R9, the guard and `content/README.md` are rewritten for the full key set; the static site still builds
+  from it; the image that runs `library-search-feed` carries it. Test: the content guard, `dotnet test hosts/site/tests`, the lecture feed on a lane.
+- [ ] **12b. Analytics (decision b).** The first-page search event from both routes to the index `tsr-analytics`, and the click route
+  `POST /api/v1/events`, as tsr-web's `analytics-service.ts` and `events/route.ts` (fire and forget; no IP, cookie or user agent; its
+  validation and rate limit). Requirements `SRCH-R18` rewritten and new IDs added in section 1 with their test cases. Test: unit tests
+  of the event body and validation; a Hurl file for the click route; a `db/tests` or Hurl case that a search still answers when the event write fails.
 - [ ] **13. Native image run.** Build the native image; run both Hurl files on the default test stack. Test: TC-SRCH-Q4-01.
 - [ ] **14. Parity.** A local tsr-web with its stack reindexed; a lane with the website's content and the full lecture file;
   `tools/search-parity.cases`; allow lines. Write the result as `docs/specs/website-port/search-parity-results.md`. Test: TC-SRCH-Q1-01, Q2-01.

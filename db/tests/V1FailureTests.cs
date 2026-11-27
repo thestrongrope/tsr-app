@@ -7,6 +7,7 @@ using Npgsql;
 using Microsoft.Extensions.DependencyInjection;
 using NUnit.Framework;
 using Tsr.Content.Api.Domain;
+using Tsr.Shared.Api;
 
 namespace Tsr.Db.Tests;
 
@@ -39,6 +40,7 @@ public sealed class V1FailureTests
     [TestCase("/api/v1/taxonomies/categories")]
     [TestCase("/api/v1/taxonomies/tags")]
     [TestCase("/api/v1/publications")]
+    [TestCase("/api/v1/search?q=margin")]
     public async Task An_unexpected_failure_is_a_500_in_the_v1_error_shape_without_cache_headers(string url)
     {
         var response = await client.GetAsync(url);
@@ -61,6 +63,18 @@ public sealed class V1FailureTests
         Assert.That(text, Does.Not.Contain("Npgsql").And.Not.Contain("no_such_database").And.Not.Contain("   at "));
     }
 
+    [TestCase("/api/v1/search?q=patience&offset=10000", "Result window too large")]
+    [TestCase("/api/v1/search?q=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "Query too long")]
+    public async Task A_refused_search_is_a_400_before_the_database_is_asked(string url, string message)
+    {
+        // The database of this fixture does not exist: a 400 proves that no query was run.
+        var response = await client.GetAsync(url);
+        var text = await response.Content.ReadAsStringAsync();
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest), text);
+        Assert.That(text, Does.Contain(message));
+    }
+
     [Test]
     public void Every_v1_endpoint_answers_failures_in_the_v1_shape()
     {
@@ -70,9 +84,9 @@ public sealed class V1FailureTests
             .Where(endpoint => endpoint.RoutePattern.RawText!.StartsWith("/api/v1/", StringComparison.Ordinal))
             .ToList();
 
-        Assert.That(endpoints, Has.Count.EqualTo(6));
+        Assert.That(endpoints, Has.Count.EqualTo(7));
         Assert.That(
-            endpoints.Where(endpoint => endpoint.Metadata.GetMetadata<V1.FailureShape>() is null).Select(endpoint => endpoint.RoutePattern.RawText),
+            endpoints.Where(endpoint => endpoint.Metadata.GetMetadata<WebsiteV1.FailureShape>() is null).Select(endpoint => endpoint.RoutePattern.RawText),
             Is.Empty,
             "map every /api/v1/ route with .WithV1Failures()");
     }

@@ -54,6 +54,44 @@ public sealed class PeriodicWorkerTests
         }
     }
 
+    private sealed class RetryingWorker(IServiceScopeFactory scopes, ILogger log, int retries) : PeriodicWorker(scopes, log)
+    {
+        private int ticks;
+
+        public override string Name => "retrying-worker";
+
+        public int Ticks => Volatile.Read(ref ticks);
+
+        // An hour: only the retry hook can make a second tick happen within this test.
+        protected override TimeSpan Interval => TimeSpan.FromHours(1);
+
+        protected override TimeSpan? DelayBeforeRetry => Ticks <= retries ? TimeSpan.FromMilliseconds(5) : null;
+
+        protected override Task TickAsync(IServiceProvider services, CancellationToken ct)
+        {
+            Interlocked.Increment(ref ticks);
+            return Task.CompletedTask;
+        }
+    }
+
+    [Test]
+    public async Task A_worker_that_asks_for_a_retry_ticks_again_after_the_delay_and_then_waits_for_the_interval()
+    {
+        await using var provider = Services();
+        using var worker = new RetryingWorker(provider.GetRequiredService<IServiceScopeFactory>(), new CaptureLog(), retries: 3);
+
+        await worker.StartAsync(CancellationToken.None);
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (worker.Ticks < 4 && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(10);
+        }
+
+        await Task.Delay(200);
+        await worker.StopAsync(CancellationToken.None);
+        Assert.That(worker.Ticks, Is.EqualTo(4), "one tick, three retries, then the one-hour interval");
+    }
+
     private static ServiceProvider Services() => new ServiceCollection().AddScoped<Scoped>().BuildServiceProvider();
 
     private static async Task WaitAsync(Task task) => await task.WaitAsync(TimeSpan.FromSeconds(10));

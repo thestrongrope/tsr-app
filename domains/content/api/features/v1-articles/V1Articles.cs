@@ -8,7 +8,7 @@ using Tsr.Shared.Api;
 
 namespace Tsr.Content.Api.Features.V1Articles;
 
-// Slice: GET /api/v1/articles -> one page of the published articles, in the answer shape supported app builds read from today's website (domain/V1.cs).
+// Slice: GET /api/v1/articles -> one page of the published articles, in the answer shape supported app builds read from today's website (shared/api/WebsiteV1.cs).
 // Public: no caller, no permission. It reads content.published_articles, which holds published articles only (a draft is never copied there).
 // A port of tsr-web web/src/app/api/v1/articles/route.ts and queryArticles (api/lib/article-service.ts); that code is the rule, quirks kept:
 //   - limit and offset are clamped, never refused; only an unknown sort is refused; an empty option is no option; unknown options are ignored.
@@ -72,7 +72,7 @@ internal static class V1ArticlesSlice
         var request = Parse(context.Request.Query);
         if (!ValidSorts.Contains(request.Sort, StringComparer.Ordinal))
         {
-            return V1.Error(StatusCodes.Status400BadRequest, V1.ValidationError, "Invalid sort parameter. Valid options: " + string.Join(", ", ValidSorts));
+            return WebsiteV1.Error(StatusCodes.Status400BadRequest, WebsiteV1.ValidationError, "Invalid sort parameter. Valid options: " + string.Join(", ", ValidSorts));
         }
 
         var rows = await QueryAsync(source, request, ct);
@@ -80,8 +80,8 @@ internal static class V1ArticlesSlice
     }
 
     private static Request Parse(IQueryCollection query) => new(
-        Limit: V1.Int(First(query, "limit"), DefaultLimit, 1, MaxLimit),
-        Offset: V1.Int(First(query, "offset"), 0, 0),
+        Limit: WebsiteV1.IntParam(First(query, "limit"), DefaultLimit, 1, MaxLimit),
+        Offset: WebsiteV1.IntParam(First(query, "offset"), 0, 0),
         Sort: First(query, "sort") ?? DefaultSort,
         Category: First(query, "category"),
         Tag: First(query, "tag"),
@@ -156,11 +156,11 @@ internal static class V1ArticlesSlice
     {
         var total = rows[0].Total;
         var items = rows.Where(row => row.Slug is not null).ToList();
-        return V1.Ok(
+        return WebsiteV1.Ok(
             json => WriteItems(json, items),
             MaxAgeSeconds,
             StaleWhileRevalidateSeconds,
-            new V1.Pagination(total, request.Limit, request.Offset, HasMore: (long)request.Offset + request.Limit < total),
+            new WebsiteV1.Pagination(total, request.Limit, request.Offset, HasMore: (long)request.Offset + request.Limit < total),
             // tsr-web getLastModifiedDate: with no article at all, now.
             rows[0].LastModified ?? clock.GetUtcNow());
     }

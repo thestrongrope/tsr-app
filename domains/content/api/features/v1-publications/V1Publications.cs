@@ -8,7 +8,7 @@ using Tsr.Shared.Api;
 
 namespace Tsr.Content.Api.Features.V1Publications;
 
-// Slice: GET /api/v1/publications -> the publications of the publications page, in file order, in the answer shape supported app builds read from today's website (domain/V1.cs).
+// Slice: GET /api/v1/publications -> the publications of the publications page, in file order, in the answer shape supported app builds read from today's website (shared/api/WebsiteV1.cs).
 // Public: no caller, no permission. It reads content.publications, which the refresh fills from pages/tsr-publications.md (an entry with neither link is never copied there).
 // A port of tsr-web web/src/app/api/v1/publications/route.ts; that code is the rule, quirks kept:
 //   - "file" and "readOnlineUrl" are sent as the file has them (site-relative; the app joins them to its website address). No PDF is read or served here.
@@ -50,7 +50,7 @@ internal static class V1PublicationsSlice
             ct);
 
         var kept = InLanguage(rows, context.Request.Query["language"].FirstOrDefault());
-        return V1.Ok(json => Write(json, kept), MaxAgeSeconds, StaleWhileRevalidateSeconds, new V1.Pagination(kept.Count, kept.Count, Offset: 0, HasMore: false));
+        return WebsiteV1.Ok(json => Write(json, kept), MaxAgeSeconds, StaleWhileRevalidateSeconds, new WebsiteV1.Pagination(kept.Count, kept.Count, Offset: 0, HasMore: false));
     }
 
     private static Row Read(DbRow row) => new(

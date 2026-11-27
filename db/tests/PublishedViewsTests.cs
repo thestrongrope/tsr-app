@@ -8,7 +8,7 @@ public sealed class PublishedViewsTests
     public static readonly string[] Views =
     [
         "identity.v_users", "membership.v_members", "membership.v_registrations", "membership.v_guardian_links",
-        "classes.v_classes", "classes.v_enrolments", "classes.v_class_schedules", "classes.v_class_levels", "classes.v_teachers", "classes.v_guides","assessment.v_quiz_results", "assessment.v_quizzes", "assessment.v_standard_mcqs", "assessment.v_class_mcq_copies", "content.v_quran", "platform.v_genders",
+        "classes.v_classes", "classes.v_enrolments", "classes.v_class_schedules", "classes.v_class_levels", "classes.v_teachers", "classes.v_guides","assessment.v_quiz_results", "assessment.v_quizzes", "assessment.v_standard_mcqs", "assessment.v_class_mcq_copies", "content.v_quran", "content.v_published_articles", "platform.v_genders",
     ];
 
     [TestCaseSource(nameof(Views))]
@@ -61,6 +61,38 @@ public sealed class PublishedViewsTests
         var levels = await facts.GuideLevelsAsync([2, 3, 4, 6, 99], CancellationToken.None);
 
         Assert.That(levels, Is.EqualTo(new Dictionary<long, string> { [2] = "ABUZAR" }));
+    }
+
+    [Test]
+    public async Task The_published_articles_view_holds_each_article_with_its_markdown_body_and_no_html()
+    {
+        await TestDatabase.ExecuteAsync("""
+            delete from content.published_articles where slug in ('view-article-a', 'view-article-b');
+            insert into content.published_articles
+                (slug, slug_decoded, legacy_id, title, excerpt, body_markdown, body_html, published_at, published_date_text, modified_at, modified_date_text, author, language, reading_minutes, categories, tags)
+            values
+                ('view-article-a', 'view-article-a', 7, 'View A', 'Excerpt A', '# Body A', '<h1>Body A</h1>', timestamptz '2026-01-02 00:00:00+00', '2026-01-02', null, null, 'Author A', 'en', 3, array['cat-one'], array['tag-one', 'tag-two']),
+                ('view-article-b', 'view-article-b', null, 'View B', null, 'Body B', '<p>Body B</p>', timestamptz '2026-01-01 00:00:00+00', '2026-01-01', timestamptz '2026-01-03 00:00:00+00', '2026-01-03', 'Author B', 'en', 1, array[]::text[], array[]::text[]);
+            """);
+
+        var row = await TestDatabase.RowAsync(
+            "select slug, title, excerpt, body_markdown, published_date_text, modified_date_text, author, language, reading_minutes::text as reading_minutes, legacy_id::text as legacy_id, " +
+            "array_to_string(categories, ',') as categories, array_to_string(tags, ',') as tags from content.v_published_articles where slug = 'view-article-a'");
+        var columns = await TestDatabase.ScalarAsync<string>(
+            "select string_agg(column_name, ',' order by ordinal_position) from information_schema.columns where table_schema = 'content' and table_name = 'v_published_articles'",
+            TestDatabase.AppConnection);
+
+        Assert.That(row, Is.Not.Null);
+        Assert.That(row!["title"], Is.EqualTo("View A"));
+        Assert.That(row["excerpt"], Is.EqualTo("Excerpt A"));
+        Assert.That(row["body_markdown"], Is.EqualTo("# Body A"));
+        Assert.That(row["author"], Is.EqualTo("Author A"));
+        Assert.That(row["reading_minutes"], Is.EqualTo("3"));
+        Assert.That(row["legacy_id"], Is.EqualTo("7"));
+        Assert.That(row["categories"], Is.EqualTo("cat-one"));
+        Assert.That(row["tags"], Is.EqualTo("tag-one,tag-two"));
+        Assert.That(columns, Does.Not.Contain("body_html"));
+        Assert.That(columns, Does.Contain("published_at"));
     }
 
     [TestCaseSource(nameof(Views))]

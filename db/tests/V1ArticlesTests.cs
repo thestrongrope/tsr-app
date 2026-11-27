@@ -8,6 +8,7 @@ using Npgsql;
 using NUnit.Framework;
 using Tsr.Content.Api;
 using Tsr.Content.Api.Domain;
+using Tsr.Shared.Api;
 
 namespace Tsr.Db.Tests;
 
@@ -307,9 +308,9 @@ public sealed class V1ArticlesTests
     [TestCase("99999999999999999999999999", 100)]
     [TestCase("-99999999999999999999999999", 1)]
     public void A_number_is_read_as_javascript_reads_it_and_clamped(string? raw, int expected) =>
-        Assert.That(V1.Int(raw, 20, 1, 100), Is.EqualTo(expected));
+        Assert.That(WebsiteV1.IntParam(raw, 20, 1, 100), Is.EqualTo(expected));
 
     [Test]
     public void A_number_without_an_upper_bound_stops_at_the_largest_integer() =>
-        Assert.That(V1.Int("99999999999999999999999999", 0, 0), Is.EqualTo(int.MaxValue));
+        Assert.That(WebsiteV1.IntParam("99999999999999999999999999", 0, 0), Is.EqualTo(int.MaxValue));
 }

@@ -4,7 +4,9 @@ info:
   version: 0.1.0
   description: |
     The search domain's one action. Forward compatible: a store-live app keeps calling it, so add fields freely but never remove or
-    change one without the release process. Every error body is {"detail": "..."}.
+    change one without the release process. Every error body is {"detail": "..."}, with one named exception: the two public paths under /api/v1/
+    (article search and lecture search) keep the website's answer shape, {success, data, meta, pagination}, and its failure shape,
+    {"success": false, "error": {"code", "message"}, "meta"} (root CLAUDE.md rule 7), because supported app builds read it.
 servers:
   - url: https://gateway.tsr-app-dev.orb.local
     description: Local dev stack (gateway)
@@ -57,6 +59,93 @@ paths:
           $ref: "#/components/responses/Problem"
         "422":
           $ref: "#/components/responses/Problem"
+  /api/v1/search:
+    get:
+      operationId: v1Search
+      summary: Search the published articles (the website's route, kept as it is)
+      description: |
+        Public, no sign-in. Answers in the website's shape. The rate limit (60 requests a minute per client) runs first, then q. Elasticsearch answers when it is
+        configured and working (searchEngine "elasticsearch"); otherwise the published articles in the database do (searchEngine "fuse"). pagination.total is the
+        number of results on this page and hasMore is true exactly when it equals limit. A 200 sends Cache-Control public, max-age=60, an ETag and Vary, and is never a 304.
+        Slice: features/v1-search/V1Search.cs.
+      security: []
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: The words to look for. Trimmed; missing or blank is a 400; more than 200 characters is a 400.
+          schema: {type: string}
+        - name: limit
+          in: query
+          required: false
+          description: 20 by default, kept between 1 and 100; a value that is not a number gives the default.
+          schema: {type: string}
+        - name: offset
+          in: query
+          required: false
+          description: 0 by default, never below 0; a value that is not a number gives the default. offset plus limit above 10000 (Elasticsearch's result window) is a 400.
+          schema: {type: string}
+        - name: category
+          in: query
+          required: false
+          description: One category, used as written; only articles in it are returned.
+          schema: {type: string}
+        - name: fields
+          in: query
+          required: false
+          description: Accepted and ignored.
+          schema: {type: string}
+      responses:
+        "200":
+          description: The matching articles, best match first
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data, meta, pagination]
+                properties:
+                  success: {type: boolean, enum: [true]}
+                  data:
+                    type: object
+                    required: [results, query, searchEngine, took]
+                    properties:
+                      results:
+                        type: array
+                        items:
+                          type: object
+                          required: [id, slug, title, publishedDate, author, categories, tags, language, readingTime, score]
+                          properties:
+                            id: {type: integer, description: "Always 0 from the engine; the legacy id (or 0) from the database"}
+                            slug: {type: string}
+                            title: {type: string}
+                            excerpt: {type: string}
+                            publishedDate: {type: string}
+                            modifiedDate: {type: string}
+                            author: {type: string}
+                            categories: {type: array, items: {type: string}}
+                            tags: {type: array, items: {type: string}}
+                            language: {type: string}
+                            readingTime: {type: integer}
+                            score: {type: number}
+                            highlights: {type: object, description: "title, excerpt and content snippets with <em> around the match"}
+                      query: {type: string}
+                      searchEngine: {type: string, enum: [elasticsearch, fuse]}
+                      took: {type: integer, description: Milliseconds}
+                  meta: {type: object}
+                  pagination:
+                    type: object
+                    required: [total, limit, offset, hasMore]
+                    properties:
+                      total: {type: integer}
+                      limit: {type: integer}
+                      offset: {type: integer}
+                      hasMore: {type: boolean}
+        "400":
+          description: q is missing or blank, longer than 200 characters, or offset plus limit is above 10000. {"success": false, "error": {"code": "VALIDATION_ERROR", "message": "Missing required parameter: q"}, "meta": {...}}
+        "429":
+          description: More than 60 requests in a minute from one client. {"success": false, "error": "Too many requests"} with Retry-After, X-RateLimit-Limit and X-RateLimit-Remaining 0.
+        "500":
+          description: An unexpected failure. {"success": false, "error": {"code": "INTERNAL_ERROR", "message": "An unexpected error occurred"}, "meta": {...}}
 components:
   securitySchemes:
     memberToken:
