@@ -30,7 +30,22 @@ internal sealed class ArticleSearchQueryTests
     {
         var expected = (Case)testCase;
 
-        Assert.That(ArticleSearchQuery.Body(expected.Q, expected.Category, expected.Limit, expected.Offset), Is.EqualTo(expected.Body));
+        Assert.That(ArticleSearchQuery.Body(expected.Q, expected.Category, expected.Limit, expected.Offset), Is.EqualTo(WithHtmlEncoder(expected.Body)));
+    }
+
+    // The one deliberate difference from tsr-web (plan 3.10): the highlight asks for HTML-encoded text, so a highlight never carries markup of an article. It is the only change to the stored bodies.
+    private static string WithHtmlEncoder(string websiteBody) =>
+        websiteBody.Replace("\"post_tags\":[\"</em>\"],", "\"post_tags\":[\"</em>\"],\"encoder\":\"html\",", StringComparison.Ordinal);
+
+    [Test]
+    public void The_highlight_asks_the_engine_for_html_encoded_text()
+    {
+        using var body = JsonDocument.Parse(ArticleSearchQuery.Body("patience", null, 20, 0));
+
+        var highlight = body.RootElement.GetProperty("highlight");
+
+        Assert.That(highlight.GetProperty("encoder").GetString(), Is.EqualTo("html"));
+        Assert.That(highlight.GetProperty("pre_tags")[0].GetString(), Is.EqualTo("<em>"));
     }
 
     [Test]

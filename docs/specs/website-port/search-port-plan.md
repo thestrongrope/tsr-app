@@ -432,6 +432,7 @@ Each one is written in the capability document and allowed in the parity file:
 5. Analytics: none (decision 4b).
 6. `X-Content-Type-Options: nosniff` on every answer (already true of `WebsiteV1`).
 7. A missing lecture index is created empty by the feed, so lecture search answers 200 with no results where tsr-web answers 500.
+8. Highlights are HTML-encoded (added 28 Nov 2026): `"encoder": "html"` on the engine's highlight request, and the fallback encodes the text around the match before it adds `<em>`. tsr-web does not encode, so its highlight can carry article markup. Parity: the stored bodies equal tsr-web's except that one field, and a parity run must allow highlight text that differs only by HTML entities (`&amp;`, `&lt;`, `&gt;`, `&quot;`, `&#39;`).
 
 ---
 

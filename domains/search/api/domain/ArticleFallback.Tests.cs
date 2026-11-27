@@ -30,6 +30,34 @@ internal sealed class ArticleFallbackTests
     }
 
     [Test]
+    public void Text_around_and_inside_the_match_is_html_encoded_and_only_the_em_tags_are_markup()
+    {
+        var json = ArticleHighlights.Build(["chips"], "Fish & <script>chips</script> > salt", null, "");
+
+        Assert.That(System.Text.Json.JsonElement.Parse(json!).GetProperty("title")[0].GetString(),
+            Is.EqualTo("Fish &amp; &lt;script&gt;<em>chips</em>&lt;/script&gt; &gt; salt"));
+    }
+
+    [Test]
+    public void A_match_that_is_itself_markup_is_encoded_inside_the_em_tags()
+    {
+        var json = ArticleHighlights.Build(["<script>"], "x <script>alert(1)</script> y", "a & b", "q\"uote's");
+
+        var parsed = System.Text.Json.JsonElement.Parse(json!);
+        Assert.That(parsed.GetProperty("title")[0].GetString(), Is.EqualTo("x <em>&lt;script&gt;</em>alert(1)&lt;/script&gt; y"));
+        Assert.That(parsed.TryGetProperty("excerpt", out _), Is.False);
+    }
+
+    [Test]
+    public void The_context_is_cut_before_encoding_so_thirty_characters_stay_thirty()
+    {
+        var json = ArticleHighlights.Build(["go"], "x", null, new string('&', 40) + " go");
+
+        Assert.That(System.Text.Json.JsonElement.Parse(json!).GetProperty("content")[0].GetString(),
+            Is.EqualTo("..." + string.Concat(Enumerable.Repeat("&amp;", 29)) + " <em>go</em>"));
+    }
+
+    [Test]
     public void A_snippet_has_thirty_characters_of_context_and_dots_where_it_is_cut()
     {
         var body = new string('a', 40) + " karbala " + new string('b', 40);
@@ -53,6 +81,6 @@ internal sealed class ArticleFallbackTests
     {
         var json = ArticleHighlights.Build(["say"], "He said \"hi\" and say", null, "");
 
-        Assert.That(System.Text.Json.JsonElement.Parse(json!).GetProperty("title")[0].GetString(), Is.EqualTo("He said \"hi\" and <em>say</em>"));
+        Assert.That(System.Text.Json.JsonElement.Parse(json!).GetProperty("title")[0].GetString(), Is.EqualTo("He said &quot;hi&quot; and <em>say</em>"));
     }
 }

@@ -15,6 +15,7 @@ namespace Tsr.Search.Api.Features.V1Search;
 //   - limit is 20 by default and kept between 1 and 100, offset 0 by default and never below 0 (WebsiteV1.IntParam); one category, used as written; `fields` is accepted and ignored.
 //   - pagination.total is the number of results on THIS page and hasMore is true exactly when that number equals limit.
 //   - Elasticsearch when configured and answering; otherwise the database fallback (domain/ArticleFallback.cs), searchEngine "fuse". Cache-Control public, max-age=60, an ETag, Vary, and never a 304.
+//   - deliberate difference: highlights are HTML-encoded (Elasticsearch `encoder: html`; the fallback encodes the text around the match before it adds <em>), so no markup of an article reaches an HTML reader. tsr-web does not encode.
 //   - no search event is written here (the analytics port is a later task, plan 12b); the one place that would write it is after the search, before the answer.
 // Contract: spec/api.yaml. Behaviour: spec/tests/v1-search.hurl, db/tests/V1SearchTests.cs.
 

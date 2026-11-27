@@ -7,7 +7,7 @@ namespace Tsr.Search.Api.Domain;
 /// <summary>
 /// The highlights of a database fallback result, by the website's own rule for its fallback (tsr-web <c>extractHighlights</c>, <c>search-service.ts</c>): for each of the title, the excerpt and the body (sent as <c>content</c>), at most
 /// 3 matches, each with 30 characters of context before it and 29 after it, "..." where the text is cut, and the match wrapped in <c>&lt;em&gt;</c>. A match is a word of the search, found without regard to case.
-/// Differences from the website: the match is found by position, not as the first equal text of the snippet; Fuse's fuzzy matches are not found.
+/// Differences from the website: the text is HTML-encoded (the website's is not; deliberate, plan 3.10), the match is found by position, not as the first equal text of the snippet; Fuse's fuzzy matches are not found.
 /// </summary>
 internal static class ArticleHighlights
 {
@@ -83,11 +83,14 @@ internal static class ArticleHighlights
         return snippets;
     }
 
+    // The text is encoded, then the tags are added: a highlight is HTML, and nothing of an article may be markup in it. The same form as the engine's `encoder: html` (ArticleSearchQuery).
+    private static string Encode(string text) => System.Net.WebUtility.HtmlEncode(text);
+
     private static string Snippet(string text, int start, int length)
     {
         var end = start + length;
         var from = Math.Max(0, start - Context);
         var to = Math.Min(text.Length, end + Context - 1);
-        return (from > 0 ? "..." : string.Empty) + text[from..start] + "<em>" + text[start..end] + "</em>" + text[end..to] + (to < text.Length ? "..." : string.Empty);
+        return (from > 0 ? "..." : string.Empty) + Encode(text[from..start]) + "<em>" + Encode(text[start..end]) + "</em>" + Encode(text[end..to]) + (to < text.Length ? "..." : string.Empty);
     }
 }

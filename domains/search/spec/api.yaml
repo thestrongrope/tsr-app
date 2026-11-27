@@ -127,7 +127,7 @@ paths:
                             language: {type: string}
                             readingTime: {type: integer}
                             score: {type: number}
-                            highlights: {type: object, description: "title, excerpt and content snippets with <em> around the match"}
+                            highlights: {type: object, description: "title, excerpt and content snippets with <em> around the match; the text is HTML-encoded (a deliberate difference from the website, which does not encode), so <em> and </em> are the only markup"}
                       query: {type: string}
                       searchEngine: {type: string, enum: [elasticsearch, fuse]}
                       took: {type: integer, description: Milliseconds}

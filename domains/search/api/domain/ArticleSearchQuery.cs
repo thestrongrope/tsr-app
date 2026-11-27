@@ -207,6 +207,7 @@ internal static class ArticleSearchQuery
         json.WriteStartObject("highlight");
         WriteStrings(json, "pre_tags", ["<em>"]);
         WriteStrings(json, "post_tags", ["</em>"]);
+        json.WriteString("encoder", "html");
         json.WriteStartObject("fields");
         json.WriteStartObject("title");
         json.WriteNumber("number_of_fragments", 0);

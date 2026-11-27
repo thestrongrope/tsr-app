@@ -168,6 +168,17 @@ public sealed class V1SearchTests
     }
 
     [Test]
+    public async Task Markup_in_an_article_reaches_the_highlight_only_as_encoded_text()
+    {
+        await InsertAsync("search-test-markup", "Tom & <b>Jerry</b> show", "plain");
+
+        var (_, body) = await GetAsync(Search + "?q=jerry");
+
+        Assert.That(body.GetProperty("data").GetProperty("results")[0].GetProperty("highlights").GetProperty("title")[0].GetString(),
+            Is.EqualTo("Tom &amp; &lt;b&gt;<em>Jerry</em>&lt;/b&gt; show"));
+    }
+
+    [Test]
     public async Task A_hit_in_the_body_is_found_and_highlighted_from_the_body()
     {
         var (_, body) = await GetAsync(Search + "?q=quelmbry");
