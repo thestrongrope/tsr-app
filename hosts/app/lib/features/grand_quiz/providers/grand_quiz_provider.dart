@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod/legacy.dart';
 
+import '../../../core/constants/app_constants.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../models/models.dart';
 import '../repositories/grand_quiz_repository.dart';
@@ -49,10 +50,11 @@ class GrandQuizState {
   /// Check if the quiz is visible (has data and not offline)
   bool get shouldShowBanner => quizInfo?.shouldDisplayBanner ?? false;
 
-  /// Check if data is stale (older than 5 minutes)
+  /// Check if data is stale (older than the quiz info cache duration, 60 seconds)
   bool get isStale {
     if (lastFetch == null) return true;
-    return DateTime.now().difference(lastFetch!) > const Duration(minutes: 5);
+    return DateTime.now().difference(lastFetch!) >
+        AppConstants.quizInfoCacheDuration;
   }
 }
 

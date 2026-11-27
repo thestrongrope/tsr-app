@@ -37,7 +37,7 @@ contract and database tests with fakes at outside services, never a real send.
 | MCQs | write, publish, copy, print, paper answers, take, scores | teachers, students | yes | yes | | built | A printed sheet is a file in the app |
 | Standard MCQ bank | refresh from the spreadsheet | super admin | yes | yes | | built | Real Google Sheets never called |
 | Reports | weekly, monthly, conduction, sessions, subjects, students, MCQ, teachers, leaderboard, This week, pending | report readers | yes (16) | yes (14) | | built | **Dashboard** (17 data calls, "Person 360"), **subject summary**, **all-TSR summary**: web only, no route |
-| Quiz competition (Grand, Mega) | status and schedule, admin, scores, winners, publish | members; quiz admins | yes | yes | | admin routes built | **`quiz_info`**: the app calls it on the account site and it is not in the route catalog. **Settings editing** and the **winners reveal screen**: web only |
+| Quiz competition (Grand, Mega) | status and schedule, admin, scores, winners, publish | members; quiz admins | yes | yes | | admin routes built | **`quiz_info`**: built as `GET /quiz/info` (27 Nov 2026); released builds still call the account site. **Settings editing** and the **winners reveal screen**: web only |
 | Notifications | send a push, inbox, devices, scheduled class notifications, calendar | admins, teachers, members | part (send, browser push) | yes | | built | FCM never called for real. Web push in Flutter is not set up |
 | WhatsApp | link the account, reminders, run now, history | super admin | yes | yes | | admin routes built | **The runner that sends** is not built; the Node notifier uses the old database |
 | Guides and syllabus | read and edit guides, syllabus topics and PDFs | teachers, admins | yes (guides) | yes | | built | Syllabus PDFs come from Google Drive: a browser may not fetch them |
@@ -69,7 +69,7 @@ contract and database tests with fakes at outside services, never a real send.
 **1. The PHP mobile API** (the store apps move to this API)
 - A production deployment, and members' data moved from MariaDB to PostgreSQL.
 - Real FCM, Firebase account deletion and Google Sheets proven once each.
-- `quiz_info` served somewhere the store builds can still reach, or ported.
+- `quiz_info`: ported as `GET /quiz/info` (27 Nov 2026). Store builds already released call the PHP address, so that file stays alive until they are no longer supported.
 - The WhatsApp runner, or the Node notifier pointed at the new database for a while.
 
 **2. The PHP web app** (Flutter Web takes over)
@@ -85,7 +85,7 @@ contract and database tests with fakes at outside services, never a real send.
 
 1. **The web app is mostly a second front end, not a second product.** Of its 86 capabilities, 66 have a route in the mobile API; 20 do not clearly (8 "no", 9 "unsure", 3 "partly"), and most of those are small (sign out, page-view counting, the API reference). The real features without a route are about six, listed under switch-off 2. Replacing the web app is mainly a Flutter Web job, not an API job.
 2. **Flutter Web is the largest unknown now.** Since 26 Nov 2026 the app builds, starts and signs a member in on the web; nothing past profile completion has been checked in a browser, and the inventory lists what cannot work as written.
-3. **`quiz_info` is outside the route catalog** and the store builds depend on it (confirmed in the app's code).
+3. **`quiz_info` was outside the route catalog** and the app depends on it. Built as `GET /quiz/info` on 27 Nov 2026; the app in `hosts/app` reads it from the API. PHP files outside the mobile router have not been audited one by one.
 4. **12 PHP pages look dead.**
 5. **Three documents in tsr-account are stale** (the app's features and roles, the parity document, the roadmap). The three inventories here replace them as the current picture.
 

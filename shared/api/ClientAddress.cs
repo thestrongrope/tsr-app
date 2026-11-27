@@ -6,7 +6,7 @@ namespace Tsr.Shared.Api;
 
 /// <summary>
 /// PHP <c>client_ip()</c> (functions.php): the peer's address, unless the peer is a trusted proxy (loopback, 10/8, 172.16/12, 192.168/16: PHP's default TRUSTED_PROXIES), when it is the last hop of
-/// X-Forwarded-For that is a valid address and not itself trusted. "unknown" when there is no peer address. The one reading of a caller's address: the join-preview rate limit (classes), the sign-in record
+/// X-Forwarded-For that is a valid address and not itself trusted. "unknown" when there is no peer address. The one reading of a caller's address: the join-preview and quiz-info rate limits (classes, assessment), the sign-in record
 /// (identity) and the admin access log (platform). A Client-IP header is never read.
 /// </summary>
 public static class ClientAddress
@@ -19,6 +19,11 @@ public static class ClientAddress
         ArgumentNullException.ThrowIfNull(context);
         return Of(context.Connection.RemoteIpAddress?.ToString(), context.Request.Headers["X-Forwarded-For"].ToString());
     }
+
+    /// <summary>The caller's address as the integer key <see cref="MemberRateLimit"/> wants (the first four bytes of its SHA-256): the key of a limit that applies to a caller who may not be signed in.</summary>
+    public static int RateKey(HttpContext context) => RateKey(Of(context));
+
+    public static int RateKey(string address) => BitConverter.ToInt32(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(address)), 0);
 
     public static string Of(string? remote, string? forwarded)
     {

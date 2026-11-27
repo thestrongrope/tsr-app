@@ -16,6 +16,23 @@ fail until both match; a gateway block per path already exists). Built today (12
 membership 25 (with `POST /auth/link`, moved from identity on 13 Nov 2026: its `me` is the profile), classes 96, assessment 35, notifications 24, content 1, search 1 (213), plus 6 calendar routes in notifications (219), plus the 6 public Library routes under `/api/v1/` in content (13 Nov 2026; they come from the website, not PHP, so they are listed in `RouteCatalog.NotInPhp` and `docs/specs/website-port/operations.csv`, not in this catalog); none is planned (`/me/guides` and `/me/guides/{slug}` were built on 12 Nov 2026 from a fresh PHP copy). **All 213 have contract tests and database tests (test phase, 12 Nov 2026)**: 136 from the earlier batches, 75 from the build-out lanes proven afterwards by seven test lanes (`docs/specs/initial-build/test-*-notes.md`). Not verified against a real service (fakes at the boundary only): Google Sheets, Firebase account deletion, FCM push, the WhatsApp notifier. (Elasticsearch was on this list until 12 Nov 2026; `GET /search` and the feed are now proven against a real one on the test stack.) Open decisions and findings: `docs/specs/initial-build/build-out-findings.md`. The report downloads (xlsx or PDF) all go through platform's `ReportExport` (`domains/platform/CLAUDE.md`). Tables only, besides routes: `notifications`; `assessment` has 9 quiz routes (batch A1: a member takes a quiz and reads scores).
 `search` has routes only. Which owns what: `domains/CLAUDE.md`.
 
+## What the 219 does not cover (27 Nov 2026)
+
+"All 219 built" means the routes of PHP's mobile router (`web/api/mobile/index.php`) and nothing else. It never meant "everything the app calls" or "everything PHP and the website do". Known gaps:
+
+| Gap | Who depends on it | State |
+|---|---|---|
+| Quiz status for the home banner (PHP `web/api/quiz_info.php`, outside the mobile router) | the app | built here as `GET /quiz/info` on 27 Nov 2026 (`domains/assessment`); released app builds still call the PHP address |
+| Article search and lecture search (the website's `/api/v1/search` and `/api/v1/lectures/search`; lecture search runs with the meaning layer on) | the app, the website | not built; plan in `docs/specs/website-port/search-port-plan.md` (issue 22) |
+| The website's search analytics (events, click route, report) | the website | not built; the events and the click route are in the search plan, the report route is not |
+| The join link `account.thestrongrope.com/join/<code>` and the website links the app opens (`/articles/<slug>`, `/donate`, `/about`, `/accreditation`, `/uploads/...`) | the app | not checked against the new stack |
+| `wp-json` calls in the app (`hosts/app/lib/features/wordpress/services/wordpress_service.dart`) | nothing serves them: there has been no WordPress site for over a year | code to delete, not to port; not traced whether a screen still reaches it |
+| PHP web capabilities with no route (the reports dashboard, subject and all-TSR summaries, quiz settings editing, the winners reveal screen, the cross-member parent-links list, the "extra students" clean-up) | the PHP web app | not built (`docs/specs/capability-map/README.md`) |
+| The WhatsApp runner that sends | members | not built |
+| PHP files outside the mobile router, other than `quiz_info.php` | unknown | never audited file by file |
+
+Elasticsearch on the stacks holds one index, `tsr-search` (member and class search for admins). It holds no article or lecture index until the search plan is built.
+
 ## The app
 
 `hosts/app` is the member app (package `the_strong_rope`, 1.6.1+24): the whole of tsr-account `mobile/` at `b2a5fc70`, moved here on 26 Nov 2026 (issue 26, PR 125) in place of the earlier shell, and a member of the root pub workspace. No screen has moved into `domains/*/app` yet. The store builds are still made from tsr-account. `hosts/app/Dockerfile` builds the web copy (Flutter Web behind nginx); the local stacks start it with `TSR_WITH_APP=1` (`docs/testing.md`). The production compose file has no `app` service.
