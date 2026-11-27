@@ -1,6 +1,5 @@
 using System.Text.Json.Nodes;
 using NUnit.Framework;
-using Tsr.Assessment.Api.Features.AdminQuizSettingsRefresh;
 
 namespace Tsr.Assessment.Api.Domain;
 
@@ -137,12 +136,12 @@ internal sealed class QuizCompetitionTests
             [["mode", "live"], ["quiz_title", "T"], ["quiz_type", "MEGA"], ["quiz_registration", "1 Nov"], ["quiz_series", "S"]],
             [["episodes", "start", "stop"], ["1", "5 Nov", "6 Nov"]]);
 
-        var fromUat = AdminQuizSettingsRefreshSlice.AnnouncementFor(new JsonObject { ["mode"] = "UAT" }, live);
+        var fromUat = QuizSettingsRefresh.AnnouncementFor(new JsonObject { ["mode"] = "UAT" }, live);
 
         Assert.That(fromUat!.Body, Is.EqualTo("Mega Quiz: registration opens 1 Nov, starts 5 Nov."));
         Assert.That(fromUat.DedupeKey, Is.EqualTo("quiz-announce:S:T:5 Nov"));
-        Assert.That(AdminQuizSettingsRefreshSlice.AnnouncementFor(new JsonObject { ["mode"] = "live" }, live), Is.Null);
-        Assert.That(AdminQuizSettingsRefreshSlice.AnnouncementFor(null, live), Is.Null);
-        Assert.That(AdminQuizSettingsRefreshSlice.AnnouncementFor(new JsonObject(), live), Is.Null);
+        Assert.That(QuizSettingsRefresh.AnnouncementFor(new JsonObject { ["mode"] = "live" }, live), Is.Null);
+        Assert.That(QuizSettingsRefresh.AnnouncementFor(null, live), Is.Null);
+        Assert.That(QuizSettingsRefresh.AnnouncementFor(new JsonObject(), live), Is.Null);
     }
 }

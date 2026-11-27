@@ -108,6 +108,16 @@ internal sealed class MembershipTestKit : IDisposable
         return new RawReply(response.StatusCode, await response.Content.ReadAsStringAsync(), response.Headers.CacheControl?.ToString());
     }
 
+    /// <summary>A GET as the test API's sign-in stub answers it for <paramref name="outcome"/> ("invalid", "noemail", ...), with the Cache-Control header.</summary>
+    public async Task<RawReply> SendWithOutcomeAsync(string outcome, string path)
+    {
+        using var client = _factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, path);
+        request.Headers.Add(TestApi.Outcome, outcome);
+        using var response = await client.SendAsync(request);
+        return new RawReply(response.StatusCode, await response.Content.ReadAsStringAsync(), response.Headers.CacheControl?.ToString());
+    }
+
     /// <summary>A download as one caller (or, with <paramref name="signedIn"/> false, as nobody): the status, the headers that matter and the raw bytes.</summary>
     public async Task<Download> DownloadAsync(int token, string path, bool signedIn = true)
     {

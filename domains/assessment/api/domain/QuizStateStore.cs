@@ -37,6 +37,13 @@ internal static class QuizStateStore
     public static async Task<long> LoadQuizDayAsync(DbTx tx, CancellationToken ct) =>
         await LoadAsync(tx, QuizDay, ct) is JsonValue value && value.TryGetValue<long>(out var day) ? day : 0;
 
+    /// <summary>When the document was last saved, or null when it does not exist.</summary>
+    public static async Task<DateTimeOffset?> UpdatedAtAsync(DbTx tx, string name, CancellationToken ct)
+    {
+        var times = await tx.ListAsync($"""select updated_at as "Value" from assessment.quiz_state where name = {name}::citext""", row => row.Instant("Value"), ct);
+        return times.Count == 0 ? null : times[0];
+    }
+
     public static async Task<bool> ExistsAsync(DbTx tx, string name, CancellationToken ct) =>
         (await tx.ListAsync($"""select 1 as "Value" from assessment.quiz_state where name = {name}::citext""", row => row.Int("Value"), ct)).Count > 0;
 

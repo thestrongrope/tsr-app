@@ -7,44 +7,63 @@ import 'package:hive_ce/hive.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../core/models/user.dart';
+import '../../../core/network/api_client.dart';
 import '../models/models.dart';
 
 /// Repository for Grand/Mega Quiz API operations
 class GrandQuizRepository {
   static const String _quizInfoCacheKeyPrefix = 'grand_quiz_info';
-  static const Duration _cacheDuration = Duration(minutes: 5);
 
-  final Dio _dio;
+  final ApiClient _apiClient;
   final FlutterSecureStorage _secureStorage;
+  final DateTime Function() _clock;
 
-  GrandQuizRepository({Dio? dio, FlutterSecureStorage? secureStorage})
-    : _dio = dio ?? Dio(),
-      _secureStorage = secureStorage ?? const FlutterSecureStorage();
+  GrandQuizRepository({
+    ApiClient? apiClient,
+    FlutterSecureStorage? secureStorage,
+    DateTime Function()? clock,
+  }) : _apiClient = apiClient ?? ApiClient(),
+       _secureStorage = secureStorage ?? const FlutterSecureStorage(),
+       _clock = clock ?? DateTime.now;
 
-  /// External API URL for quiz info
-  static const String quizInfoUrl =
-      'https://account.thestrongrope.com/api/quiz_info.php';
+  /// The quiz info body from the API (`GET /quiz/info`): the object itself,
+  /// with no `{success, data}` wrapper. Public: the API answers a signed-out
+  /// caller, and the shared client adds the Firebase bearer when there is one
+  /// (the API makes that member the caller). A seam for tests.
+  @visibleForTesting
+  Future<Map<String, dynamic>> fetchQuizInfoJson() =>
+      _apiClient.get<Map<String, dynamic>>(
+        AppConstants.quizInfoEndpoint,
+        options: Options(
+          receiveTimeout: const Duration(seconds: 15),
+          sendTimeout: const Duration(seconds: 10),
+        ),
+      );
 
-  /// Fetch quiz info from the external API
+  /// Whether a Firebase token is stored: it only picks the cache key. A seam
+  /// for tests, which have no secure storage.
+  @visibleForTesting
+  Future<bool> hasFirebaseToken() async {
+    final token = await _secureStorage.read(key: AppConstants.firebaseTokenKey);
+    return token != null && token.isNotEmpty;
+  }
+
+  /// Fetch quiz info from the API.
   ///
-  /// Supports three authentication modes:
-  /// 1. No auth (public access)
-  /// 2. Firebase token only (view personalized data)
-  /// 3. Dual auth - Firebase + User token (required for registration)
+  /// The caller is signed out, or a signed-in member when a Firebase token is
+  /// stored (no other credential is sent). Kept for
+  /// [AppConstants.quizInfoCacheDuration]; on a network error a copy is returned
+  /// only while it is still that fresh (older ones are not).
   Future<QuizInfoResponse> getQuizInfo({
     User? currentUser,
     bool forceRefresh = false,
   }) async {
+    String? cacheKey;
     try {
-      final firebaseToken = await _secureStorage.read(
-        key: AppConstants.firebaseTokenKey,
-      );
-      final cacheKey = _cacheKeyFor(
+      cacheKey = _cacheKeyFor(
         userToken: currentUser?.token,
-        hasFirebaseToken: firebaseToken != null && firebaseToken.isNotEmpty,
+        hasFirebaseToken: await hasFirebaseToken(),
       );
-
-      // Check cache first
       if (!forceRefresh) {
         final cached = await _getCachedQuizInfo(cacheKey);
         if (cached != null) {
@@ -54,62 +73,17 @@ class GrandQuizRepository {
       }
 
       debugPrint('🔄 Fetching quiz info from API...');
-
-      // Build request headers
-      final headers = <String, dynamic>{
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      };
-
-      // Add Firebase token if available (for personalized data)
-      if (firebaseToken != null) {
-        headers['Authorization'] = 'Bearer $firebaseToken';
-      }
-
-      // Build URL with user token if available (for dual auth / registration)
-      String url = quizInfoUrl;
-      if (currentUser != null) {
-        url = '$quizInfoUrl?token=${currentUser.token}';
-      }
-
-      final response = await _dio.get(
-        url,
-        options: Options(
-          headers: headers,
-          receiveTimeout: const Duration(seconds: 15),
-          sendTimeout: const Duration(seconds: 10),
-        ),
+      final quizResponse = QuizInfoResponse(
+        success: true,
+        data: QuizInfo.fromJson(await fetchQuizInfoJson()),
       );
-
-      if (response.statusCode == 200 && response.data != null) {
-        final quizResponse = QuizInfoResponse.fromJson(
-          response.data as Map<String, dynamic>,
-        );
-
-        // Cache the response if successful
-        if (quizResponse.success && quizResponse.data != null) {
-          await _cacheQuizInfo(cacheKey, quizResponse);
-        }
-
-        return quizResponse;
-      }
-
-      return const QuizInfoResponse(
-        success: false,
-        error: 'Failed to fetch quiz info',
-      );
-    } on DioException catch (e) {
+      await _cacheQuizInfo(cacheKey, quizResponse);
+      return quizResponse;
+    } on ApiException catch (e) {
       debugPrint('🔴 Quiz info fetch error: ${e.message}');
-
-      // Try to return cached data on network error
-      final firebaseToken = await _secureStorage.read(
-        key: AppConstants.firebaseTokenKey,
-      );
-      final cacheKey = _cacheKeyFor(
-        userToken: currentUser?.token,
-        hasFirebaseToken: firebaseToken != null && firebaseToken.isNotEmpty,
-      );
-      final cached = await _getCachedQuizInfo(cacheKey);
+      final cached = cacheKey == null
+          ? null
+          : await _getCachedQuizInfo(cacheKey);
       if (cached != null) {
         debugPrint(
           '📦 Returning cached quiz info due to network error ($cacheKey)',
@@ -120,7 +94,7 @@ class GrandQuizRepository {
       return QuizInfoResponse(success: false, error: _getErrorMessage(e));
     } catch (e) {
       debugPrint('🔴 Quiz info fetch error: $e');
-      return QuizInfoResponse(
+      return const QuizInfoResponse(
         success: false,
         error: 'An unexpected error occurred',
       );
@@ -148,7 +122,7 @@ class GrandQuizRepository {
       final box = await Hive.openBox(AppConstants.cacheBoxKey);
       await box.put(cacheKey, {
         'data': _serializeResponse(response),
-        'timestamp': DateTime.now().toIso8601String(),
+        'timestamp': _clock().toIso8601String(),
       });
       debugPrint('✅ Quiz info cached');
     } catch (e) {
@@ -167,7 +141,8 @@ class GrandQuizRepository {
           cached['timestamp'] as String? ?? '',
         );
         if (timestamp != null &&
-            DateTime.now().difference(timestamp) < _cacheDuration) {
+            _clock().difference(timestamp) <
+                AppConstants.quizInfoCacheDuration) {
           return _deserializeResponse(cached['data'] as Map);
         }
       }
@@ -268,22 +243,17 @@ class GrandQuizRepository {
     return QuizInfoResponse.fromJson(Map<String, dynamic>.from(cached));
   }
 
-  /// Get user-friendly error message from DioException
-  String _getErrorMessage(DioException e) {
-    switch (e.type) {
-      case DioExceptionType.connectionTimeout:
-      case DioExceptionType.sendTimeout:
-      case DioExceptionType.receiveTimeout:
+  /// Get user-friendly error message from an [ApiException]
+  String _getErrorMessage(ApiException e) {
+    switch (e.statusCode) {
+      case 408:
         return 'Connection timed out. Please try again.';
-      case DioExceptionType.connectionError:
+      case 0:
         return 'No internet connection. Please check your network.';
-      case DioExceptionType.badResponse:
-        if (e.response?.statusCode == 429) {
-          return 'Too many requests. Please try again later.';
-        }
-        return 'Server error. Please try again later.';
+      case 429:
+        return 'Too many requests. Please try again later.';
       default:
-        return 'Failed to load quiz info. Please try again.';
+        return 'Server error. Please try again later.';
     }
   }
 }

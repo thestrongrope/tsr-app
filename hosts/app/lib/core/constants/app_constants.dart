@@ -521,12 +521,11 @@ class AppConstants {
 
   // ============ Grand/Mega Quiz Constants ============
 
-  /// External API URL for Grand/Mega Quiz info
-  static const String grandQuizInfoUrl =
-      'https://account.thestrongrope.com/api/quiz_info.php';
+  /// Grand/Mega Quiz info: public, a bearer is optional (the API answers a signed-out caller too).
+  static const String quizInfoEndpoint = '/quiz/info';
 
-  /// Cache duration for quiz info (5 minutes)
-  static const Duration quizInfoCacheDuration = Duration(minutes: 5);
+  /// How long quiz info is kept: the API's own settings copy is 60 seconds old at most.
+  static const Duration quizInfoCacheDuration = Duration(seconds: 60);
 
   /// Quiz status values
   static const String quizStatusOffline = 'offline';

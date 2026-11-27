@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -32,8 +30,7 @@ internal static partial class JoinPreviewSlice
 
     private static async Task<IResult> HandleAsync(string code, HttpContext context, NpgsqlDataSource source, MemberRateLimit limit, CancellationToken ct)
     {
-        var address = ClientAddress.Of(context);
-        if (!limit.Allow("join_preview", KeyOf(address), 30, 60))
+        if (!limit.Allow("join_preview", ClientAddress.RateKey(context), 30, 60))
         {
             return Problem.Detail(StatusCodes.Status429TooManyRequests, "Too many requests; try again later");
         }
@@ -70,6 +67,4 @@ internal static partial class JoinPreviewSlice
             ["open"] = row.Status == "A",
         }, ClassesJson.Answers.Answer);
     }
-
-    private static int KeyOf(string address) => BitConverter.ToInt32(SHA256.HashData(Encoding.UTF8.GetBytes(address)), 0);
 }

@@ -29,15 +29,37 @@ internal sealed class CallerMiddleware(RequestDelegate next, ICallerVerifier ver
             return;
         }
 
-        var (refusal, caller) = await AuthenticateAsync(context, members, route.CreatesMember);
+        var (refusal, caller) = route.Optional
+            ? await AuthenticateOptionalAsync(context, members)
+            : await AuthenticateAsync(context, members, route.CreatesMember);
         if (refusal is not null)
         {
             await refusal.ExecuteAsync(context);
             return;
         }
 
-        context.SetCaller(caller!);
+        if (caller is not null)
+        {
+            context.SetCaller(caller);
+        }
+
         await next(context);
+    }
+
+    /// <summary>An optional sign-in (<see cref="MemberRoute.Optional"/>): no credentials is no caller; any other failure is 401 "Authentication failed", as PHP's quiz_info.php.</summary>
+    private async Task<(IResult? Refusal, Caller? Caller)> AuthenticateOptionalAsync(HttpContext context, MemberDirectory members)
+    {
+        var ct = context.RequestAborted;
+        var verification = await verifier.VerifyAsync(context.Request, ct);
+        if (verification.Status == VerifyStatus.NoCredentials)
+        {
+            return (null, null);
+        }
+
+        var user = verification.Status == VerifyStatus.Verified ? await members.FindAsync(verification.Identity!, false, ct) : null;
+        return user is null || user.Token == 0
+            ? (Problem.Detail(StatusCodes.Status401Unauthorized, "Authentication failed"), null)
+            : (null, new Caller(user.Id, user.Token));
     }
 
     private async Task<(IResult? Refusal, Caller? Caller)> AuthenticateAsync(HttpContext context, MemberDirectory members, bool create)

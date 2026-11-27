@@ -67,13 +67,17 @@ internal static class QuizAdmin
     public static DateTimeOffset Wall(TimeProvider clock) => clock.GetUtcNow().ToOffset(WallOffset);
 
     /// <summary>PHP nowOrOverride: the <c>today_override</c> setting when it is a date, else the wall clock. An override that is not a date is ignored (PHP would fail with a 500).</summary>
-    public static DateTimeOffset NowOrOverride(QuizSettings settings, TimeProvider clock)
-    {
-        var text = settings.Str("today_override");
-        return !string.IsNullOrEmpty(text) && DateTimeOffset.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var date)
-            ? date
-            : Wall(clock);
-    }
+    public static DateTimeOffset NowOrOverride(QuizSettings settings, TimeProvider clock) => OverrideDate(settings) ?? Wall(clock);
+
+    /// <summary>A date text of the settings (an episode's start and stop, the registration, the quiz stop, today_override) as PHP's new DateTime reads it for the formats the sheet holds.</summary>
+    public static DateTimeOffset? ParseSettingsDate(string? text) =>
+        !string.IsNullOrEmpty(text) && DateTimeOffset.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var date) ? date : null;
+
+    /// <summary>The <c>today_override</c> setting as a date (+00:00 unless it carries an offset), or null when it is absent or not a date.</summary>
+    public static DateTimeOffset? OverrideDate(QuizSettings settings) => ParseSettingsDate(settings.Str("today_override"));
+
+    /// <summary>The wall clock's numbers labelled +00:00: how PHP's get_current_time() compares with dates read as UTC (it adds the offset and keeps the UTC label).</summary>
+    public static DateTimeOffset WallLabelledUtc(TimeProvider clock) => new(Wall(clock).DateTime, TimeSpan.Zero);
 
     /// <summary>PHP stampFrom: ISO 8601 with the time's own offset (+05:30 for the wall clock, +00:00 for an override date).</summary>
     public static string Stamp(DateTimeOffset time) => time.ToString("yyyy-MM-dd'T'HH:mm:sszzz", CultureInfo.InvariantCulture);

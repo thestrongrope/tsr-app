@@ -50,6 +50,10 @@ internal static class QuizEligibility
         return max != 0 && (double)earned / max * 100 >= minPercent;
     }
 
+    /// <summary>PHP canTakePart (models/quizadmin.php:1286): false for an excluded token or an excluded country (compared trimmed and lower case).</summary>
+    public static bool CanTakePart(QuizSettings settings, int token, string? country) =>
+        !ExcludedTokens(settings).Contains(token) && !ExcludedCountries(settings).Contains(AsciiLower((country ?? string.Empty).Trim(WhitespaceForTrim.ToCharArray())));
+
     public static IReadOnlyList<int> WinnerCounts(QuizSettings settings) =>
         (settings.Str("daily_winner_counts") ?? string.Empty).Split(',').Select(c => (int)Math.Clamp(PhpValue.IntOfText(c), int.MinValue, int.MaxValue)).ToList();
 

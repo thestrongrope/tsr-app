@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// Main quiz info response model from the quiz_info.php API
+/// Main quiz info model: the body of `GET /quiz/info`
 class QuizInfo {
   final String type; // 'mega' or 'grand'
   final String name;

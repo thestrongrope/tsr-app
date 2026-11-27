@@ -13,6 +13,7 @@ One folder per route under `api/features/`; each slice's header comment names it
 | Copy picker | 3: `copy-classes`, `copy-topics`, `copy-quizzes` |
 | Standard MCQs from Google Sheets | 2: `standard-mcq-sources`, `standard-mcq-update` |
 | Quiz competition admin | 7: `admin-quiz*` |
+| Quiz competition status for the app's home banner | 1: `quiz-info` (public, optional bearer) |
 
 Not verified against a real service: the Google client. The sheet routes are proven up to the Google boundary (Hurl on PHP and the new API, database tests with a fake Sheets client; `docs/specs/initial-build/test-sheets-notes.md`).
 
@@ -34,6 +35,7 @@ Read in SQL through published views: `classes.v_enrolments` (enrolment, enrolled
 - **Standard MCQ update:** the saved level is the chosen id + 1, as PHP.
 - **Quiz state.** Table `quiz_state(name pk, document jsonb, updated_at)` replaces PHP's JSON files (the documents and what a reset clears: `domain/QuizStateStore.cs`). Member data (names, tokens, cities) lives only in these documents and the responses; never in logs or events.
 - **The cross-day winners check** is a matching (no cap of 20 started episodes).
+- **GET /quiz/info is public** (domains/CLAUDE.md rule 4): callable signed out because the home banner shows before sign-in. It returns only what the competition shows everyone (the quiz name, dates and status), never a member's data, and a signed-in caller (an optional bearer, `MemberRoute.Optional`: a bad bearer is 401, a member is never created) only adds the participation forms and their own flags. The settings are read from the settings sheet when the saved copy is 60 seconds old (`domain/QuizSettingsRefresh.cs`, shared with the admin refresh); a busy lock or a failing sheet serves the saved copy. 60 calls a minute per client address.
 - **Advisory locks** (transaction-level, single bigint key, `domain/AssessmentLocks.cs`; membership's 3001 is the two-key form): 5001 standard MCQ update, 5002 quiz admin (PHP `quiz_admin`). No other code may use 5001 to 5099.
 - **Fixtures.** `tools/assessment-contract.sh` resets its fixtures on every run (the submit and edit files write rows). No two files answer the same quiz as the same member. Run its prepare LAST, after the classes one (root `CLAUDE.md`). Ids, and what each fixture member is for: the header of each fixture file.
 
@@ -51,7 +53,7 @@ Both optional: the API starts without them, and a sheet route then answers 502 o
 | Need | File |
 |---|---|
 | The HTTP contract | `spec/api.yaml`; behaviour in `spec/tests/<slice>.hurl` (`*-new-api.hurl` run on the new API only, `*-php-only.hurl` on PHP only) |
-| Rules shared by slices (each file's header says what it holds and its PHP source) | `api/domain/`: taking a quiz `QuizRules`, `QuizAccess`, `AnswerBody`, `QuizResult`, `ScoreRows`, `Paging`, `Refusals`; managing `ManageAccess`, `QuizEdit`, `QuizLock`, `QuizCode`, `NewQuiz`, `OptionOrder`, `ClassStudents`, `OfflineBatch`, `QuizSheet`, `DuplicateAnswer`; the competition `QuizSettings`, `QuizEligibility`, `QuizDraw` (the `IQuizRandom` seam), `QuizDrawFlow`, `QuizOverview`, `QuizAdmin`, `QuizStateStore` |
+| Rules shared by slices (each file's header says what it holds and its PHP source) | `api/domain/`: taking a quiz `QuizRules`, `QuizAccess`, `AnswerBody`, `QuizResult`, `ScoreRows`, `Paging`, `Refusals`; managing `ManageAccess`, `QuizEdit`, `QuizLock`, `QuizCode`, `NewQuiz`, `OptionOrder`, `ClassStudents`, `OfflineBatch`, `QuizSheet`, `DuplicateAnswer`; the competition `QuizSettings`, `QuizEligibility`, `QuizDraw` (the `IQuizRandom` seam), `QuizDrawFlow`, `QuizOverview`, `QuizAdmin`, `QuizStateStore`, `QuizSettingsRefresh`, `QuizInfoBody` |
 | Fixtures (the same rows for PHP under the same name in `tools/parity-php/`) | `db/synthetic/assessment-a1-fixtures.sql` (member routes), `assessment-a2-fixtures.sql` (manage and copy) |
 | Database tests | `db/tests/AssessmentA1Tests.cs`, `AssessmentA2Tests.cs`, `TestQuizwritesTests.cs`, `TestSheets*Tests.cs` |
 | PHP facts, quirks, what each route exposes | `docs/specs/initial-build/assessment-a1-notes.md`, `assessment-a2-notes.md`, `lane-quiz-writes-notes.md`, `test-quizwrites-notes.md`, `lane-sheets-notes.md`, `test-sheets-notes.md` |

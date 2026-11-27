@@ -33,6 +33,7 @@ using Tsr.Assessment.Api.Features.ManageUpdate;
 using Tsr.Assessment.Api.Features.OpenQuizzes;
 using Tsr.Assessment.Api.Features.QuizByCode;
 using Tsr.Assessment.Api.Features.QuizDetail;
+using Tsr.Assessment.Api.Features.QuizInfo;
 using Tsr.Assessment.Api.Features.QuizMyScore;
 using Tsr.Assessment.Api.Features.QuizQuestions;
 using Tsr.Assessment.Api.Features.QuizSubmit;
@@ -72,6 +73,7 @@ public static class AssessmentModule
             settings.QuizSettingsSheetId = configuration[GoogleSheetsSettings.QuizSettingsSheetKey];
         });
         services.AddSingleton<IQuizRandom, CryptoQuizRandom>();
+        services.AddSingleton<SheetReadBackoff>();
         services.AddSingleton<ISheets>(provider => new GoogleSheets(
             provider.GetRequiredService<IHttpClientFactory>().CreateClient("google-sheets"),
             provider.GetRequiredService<Microsoft.Extensions.Options.IOptions<GoogleSheetsSettings>>(),
@@ -87,6 +89,7 @@ public static class AssessmentModule
     public static IEndpointRouteBuilder MapAssessment(this IEndpointRouteBuilder routes)
     {
         routes.MapQuizDetail();
+        routes.MapQuizInfo();
         routes.MapQuizQuestions();
         routes.MapQuizMyScore();
         routes.MapChildScores();
