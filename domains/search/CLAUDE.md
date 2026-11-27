@@ -41,6 +41,16 @@ have a page, as PHP's slugs).
 - Every request to Elasticsearch asks for plain JSON, so a body is sent as plain JSON too (`ElasticSearchIndex.Writer.cs`,
   `JsonType`): Elasticsearch refuses a request whose content type and Accept header disagree (400 `media_type_header_exception`).
 
+## The Library article search (issue 22, in progress)
+
+`GET /api/v1/search` is a public route in the website's answer shape (`shared/api/WebsiteV1.cs`; the named exception to `{"detail"}`). Slice `api/features/v1-search/V1Search.cs`; plan `docs/specs/website-port/search-port-plan.md`.
+
+- The request: `domain/ArticleSearchQuery.cs` writes the Elasticsearch body with `Utf8JsonWriter` (the caller's text only as JSON string values) and reads the answer with `JsonDocument`; `domain/QueryExpansion.cs` is tsr-web's transliteration, synonym and term helpers. The boundary is `ILibraryIndex` (raw JSON; `ElasticSearchIndex.Library.cs` and the writer).
+- The engine choice, `domain/ArticleSearch.cs`: Elasticsearch when configured and answering, otherwise `domain/ArticleFallback.cs` (plain SQL over `content.v_published_articles`, `searchEngine` `fuse`).
+- Rate limit: `domain/SearchRateLimit.cs`, 60 a minute per client and route, the 429 in the website's shape.
+- The feed: worker `library-search-feed` (`workers/LibraryFeedWorker.cs`, run mode `--workers`): one full reconcile of the index `tsr-articles` at start and every 10 minutes (`domain/LibraryFeed.cs`, `ArticleFeedSource.cs`, mapping `LibraryIndexMappings.cs`); an unchanged source is not sent again; an empty source changes nothing. The article index holds no body (owner decision c). **Advisory lock key 8100002**; no other code uses it.
+- Not built yet: lecture search, the analytics event (plan tasks 8 to 13).
+
 ## JSON and the native build
 
 Nothing in `search` reads or writes JSON by reflection (`api/domain/SearchJson.cs`, a source-generated context):
@@ -66,6 +76,7 @@ Nothing in `search` reads or writes JSON by reflection (`api/domain/SearchJson.c
 | The answer and the index document, without reflection | `api/domain/SearchJson.cs` |
 | The re-check reads, `ISearchFacts` | `api/domain/SearchFacts.cs` |
 | The write side, `ISearchIndexWriter`; the mapping (identical to PHP's) | `api/domain/ElasticSearchIndex.Writer.cs`, `SearchIndexMapping.cs` |
+| The Library article search: slice, request, fallback, feed | `api/features/v1-search/V1Search.cs`, `api/domain/ArticleSearchQuery.cs`, `ArticleSearch.cs`, `ArticleFallback.cs`, `LibraryFeed.cs` |
 | Facts, flags, PHP references | `docs/specs/initial-build/lane-search-notes.md`, `test-edge-notes.md` |
 
 ## Checks
@@ -79,6 +90,9 @@ rebuilds the index when it starts) and waits for the line "Search feed: upserted
 | `spec/tests/search-new-api.hurl` | `GET /search` end to end, with a real index |
 | `spec/tests/search.hurl` | what is true with or without an index |
 | `spec/tests/search-php-only.hurl` | the no-index answer (the PHP parity stack has none) |
+| `spec/tests/v1-search.hurl` | `GET /api/v1/search` with a real index (a lane: `TSR_LANE_WORKERS=library-search-feed`) |
+| `spec/tests/v1-search-fallback.hurl` | the same route with Elasticsearch stopped: the database answers |
+| `spec/tests/v1-search-rate-limit.hurl` | the 429; run last (it uses up the bucket for a minute) |
 
 The worker host must build with every worker named: `hosts/api/tests/WorkerModeTests.cs`
 (`The_worker_host_builds_a_valid_container_with_every_worker_named`; services for that run mode are in `hosts/api/HostServices.cs`).

@@ -25,6 +25,22 @@ public sealed class MemberRateLimitTests
     private MemberRateLimit Limit() => new(clock);
 
     [Test]
+    public void The_retry_time_is_the_seconds_until_the_oldest_call_leaves_the_window_and_is_never_below_one()
+    {
+        var limit = Limit();
+        Assert.That(limit.RetryAfterSeconds(Geo, 900002, Window), Is.EqualTo(1), "nothing recorded");
+        Assert.That(limit.Allow(Geo, 900002, Max, Window), Is.True);
+        clock.Advance(TimeSpan.FromSeconds(10));
+        Assert.That(limit.Allow(Geo, 900002, Max, Window), Is.True);
+
+        Assert.That(limit.RetryAfterSeconds(Geo, 900002, Window), Is.EqualTo(50));
+
+        clock.Advance(TimeSpan.FromSeconds(49));
+        Assert.That(limit.RetryAfterSeconds(Geo, 900002, Window), Is.EqualTo(1));
+        Assert.That(limit.RetryAfterSeconds("other", 900002, Window), Is.EqualTo(1), "another bucket");
+    }
+
+    [Test]
     public void Sixty_calls_in_a_minute_are_allowed_and_the_61st_is_refused()
     {
         var limit = Limit();

@@ -13,7 +13,7 @@
 #   The ports are written literally into build/test-n/compose.override.yml from the validated integer. The stack builds from
 #   the checkout this script lives in, so a worktree's lane runs that worktree's code. Contract scripts: TSR_STACK=n tools/<x>-contract.sh test.
 # A lane runs no worker unless TSR_LANE_WORKERS names ONE at `up` (content-refresh or search-feed; neither sends anything outward, and a sending
-#   worker is refused). content-refresh: the lane runs the workers service with that worker, still without Elasticsearch, and the api and workers
+#   worker is refused). library-search-feed: the lane runs its own Elasticsearch and the workers content-refresh and library-search-feed (the Library article index; v1-search.hurl). content-refresh: the lane runs the workers service with that worker, still without Elasticsearch, and the api and workers
 #   read the content files mounted at /var/tsr/content (db/synthetic/content, or the directory TSR_CONTENT_SRC names: the parity and timing runs
 #   over the website's own files). search-feed: the lane also runs its own Elasticsearch (about 1 GB; its own container and volume, no host port,
 #   so it cannot clash with another stack's) and the api searches it; tools/patrol-lane.sh up-personas uses it. Every command regenerates the
@@ -88,7 +88,25 @@ YML
       TSR_WORKERS: "search-feed"
 YML
       ;;
-    *) echo "TSR_LANE_WORKERS must be unset, content-refresh or search-feed (never a sending worker)" >&2; exit 1 ;;
+    library-search-feed)
+      # The Library article index: the lane runs its own Elasticsearch and the two workers that fill it (content-refresh copies the synthetic content files, library-search-feed indexes them). Literal names, as above.
+      cat >> "$OVERRIDE" <<YML
+  api:
+    environment:
+      TSR_ELASTICSEARCH_URL: http://elasticsearch:9200
+      TSR_CONTENT_DIR: /var/tsr/content
+      TSR_YOUTUBE_CHANNEL_ID: ""
+  elasticsearch:
+    profiles: !reset []
+  workers:
+    profiles: !reset []
+    environment:
+      TSR_WORKERS: "content-refresh,library-search-feed"
+      TSR_CONTENT_DIR: /var/tsr/content
+      TSR_YOUTUBE_CHANNEL_ID: ""
+YML
+      ;;
+    *) echo "TSR_LANE_WORKERS must be unset, content-refresh, search-feed or library-search-feed (never a sending worker)" >&2; exit 1 ;;
   esac
 elif [ -n "${TSR_LANE_WORKERS:-}" ]; then
   echo "TSR_LANE_WORKERS is for a lane stack (TSR_STACK=n); the default test stack's workers are fixed in docker-compose.test.yml" >&2; exit 1

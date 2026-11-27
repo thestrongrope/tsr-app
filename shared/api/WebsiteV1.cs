@@ -9,7 +9,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
-namespace Tsr.Content.Api.Domain;
+namespace Tsr.Shared.Api;
 
 /// <summary>
 /// The answer shape of the public <c>/api/v1/</c> routes, which supported app builds already read from today's website:
@@ -19,7 +19,7 @@ namespace Tsr.Content.Api.Domain;
 /// The JSON is written with <see cref="Utf8JsonWriter"/>: no reflection, and a field that is absent is left out as JavaScript leaves out <c>undefined</c>.
 /// Every answer also says <c>X-Content-Type-Options: nosniff</c> (not in tsr-web): a failure's message can repeat text of the request, and no browser should read it as a page.
 /// </summary>
-internal static partial class V1
+public static partial class WebsiteV1
 {
     public const string ValidationError = "VALIDATION_ERROR";
 
@@ -38,10 +38,10 @@ internal static partial class V1
     // As JSON.stringify: only what JSON must escape, so text in any script is sent as written.
     private static readonly JsonWriterOptions Json = new() { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 
-    internal sealed record Pagination(int Total, int Limit, int Offset, bool HasMore);
+    public sealed record Pagination(int Total, int Limit, int Offset, bool HasMore);
 
     /// <summary>Endpoint metadata: this endpoint answers failures in the <c>/api/v1/</c> shape. <see cref="WithV1Failures"/> adds it; a test finds it.</summary>
-    internal sealed class FailureShape
+    public sealed class FailureShape
     {
         public static readonly FailureShape Instance = new();
 
@@ -75,7 +75,7 @@ internal static partial class V1
     /// tsr-web <c>parseIntParam</c>: JavaScript's <c>parseInt(raw, 10)</c> (leading white space, one sign, then digits; whatever follows is ignored), clamped to the bounds.
     /// Nothing readable gives <paramref name="fallback"/>, unclamped. A number past the largest integer stops there (JavaScript goes on; no list is that long).
     /// </summary>
-    public static int Int(string? raw, int fallback, int min, int max = int.MaxValue)
+    public static int IntParam(string? raw, int fallback, int min, int max = int.MaxValue)
     {
         var text = raw.AsSpan().TrimStart();
         var negative = text.StartsWith("-", StringComparison.Ordinal);
@@ -105,7 +105,7 @@ internal static partial class V1
         }
         catch (Exception failure) when (!http.RequestAborted.IsCancellationRequested)
         {
-            var log = http.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger(typeof(V1).FullName!);
+            var log = http.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger(typeof(WebsiteV1).FullName!);
             LogFailure(log, http.Request.Path, failure.GetType().Name);
             return Error(StatusCodes.Status500InternalServerError, InternalError, InternalErrorMessage);
         }
@@ -140,7 +140,7 @@ internal static partial class V1
     private static DateTimeOffset Now(HttpContext http) => http.RequestServices.GetRequiredService<TimeProvider>().GetUtcNow();
 
     /// <summary>On every answer, the 304 and the failures too: the cross-origin headers of tsr-web's <c>middleware.ts</c>, and <c>nosniff</c>.</summary>
-    private static void AddFixedHeaders(HttpResponse response)
+    public static void AddFixedHeaders(HttpResponse response)
     {
         response.Headers.XContentTypeOptions = "nosniff";
         response.Headers.AccessControlAllowOrigin = "*";

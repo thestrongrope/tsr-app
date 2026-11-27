@@ -20,6 +20,9 @@ public abstract partial class PeriodicWorker(IServiceScopeFactory scopes, ILogge
     /// <summary>The wait between two ticks.</summary>
     protected abstract TimeSpan Interval { get; }
 
+    /// <summary>Asked after every tick: a delay shorter than <see cref="Interval"/> after which to run another tick at once (for work that was not ready yet), or null to wait for the interval. The worker bounds its own retries.</summary>
+    protected virtual TimeSpan? DelayBeforeRetry => null;
+
     /// <summary>One tick. <paramref name="services"/> is a scope made for this tick and disposed after it.</summary>
     protected abstract Task TickAsync(IServiceProvider services, CancellationToken ct);
 
@@ -46,6 +49,11 @@ public abstract partial class PeriodicWorker(IServiceScopeFactory scopes, ILogge
             do
             {
                 await RunTickAsync(stoppingToken);
+                while (DelayBeforeRetry is { } delay)
+                {
+                    await Task.Delay(delay, stoppingToken);
+                    await RunTickAsync(stoppingToken);
+                }
             }
             while (await timer.WaitForNextTickAsync(stoppingToken));
         }

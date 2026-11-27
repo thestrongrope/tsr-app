@@ -66,9 +66,9 @@ What the product does today and what is still missing: `docs/specs/capability-ma
    (`db/synthetic/seed.sql`, tokens 900000+, emails on `.invalid`). No secrets in git.
 7. **The API stays forward compatible.** A store-live app build keeps calling what it called:
    add fields and routes freely; never remove or change one without the release process.
-   Error bodies are `{"detail": "..."}`. **The named exception:** the six public Library routes under `/api/v1/`
-   (`domains/content`) keep the website's answer shape, `{success, data, meta, pagination}`, and its error shape,
-   `{"success": false, "error": {"code", "message"}, "meta"}` (`domains/content/api/domain/V1.cs`), because supported app builds read it.
+   Error bodies are `{"detail": "..."}`. **The named exception:** the eight public Library routes under `/api/v1/`
+   (six in `domains/content`, article and lecture search in `domains/search`) keep the website's answer shape, `{success, data, meta, pagination}`, and its error shape,
+   `{"success": false, "error": {"code", "message"}, "meta"}` (`shared/api/WebsiteV1.cs`, used by both domains), because supported app builds read it.
 8. **Follow `CODING-GUIDELINES.md`.** Zero warnings: the .NET build treats warnings as errors;
    `flutter analyze` must be clean.
 

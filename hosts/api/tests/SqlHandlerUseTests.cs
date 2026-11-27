@@ -53,6 +53,7 @@ public sealed partial class SqlHandlerUseTests
         ("shared/api/DomainContexts.cs", "the migrate job's role grants: the schema name is checked against a pattern and the role is a constant, identifiers cannot be parameters"),
         ("domains/search/api/domain/SearchFacts.cs", "search's fresh re-check reads on its own connection: fixed SQL over published views, values bound as @parameters (not yet converted)"),
         ("domains/search/api/domain/SearchDocumentSource.cs", "search's feed reads in pages on one connection that holds an advisory lock for the run, fixed SQL over published views with @parameters (not yet converted)"),
+        ("domains/search/api/domain/ArticleFeedSource.cs", "the Library feed reads on one connection that holds an advisory lock for the run, one fixed SQL over a published view with @parameters (same shape as SearchDocumentSource)"),
     ];
 
     [TestCase("await using var c = source.CreateCommand(\"select \" + x);")]

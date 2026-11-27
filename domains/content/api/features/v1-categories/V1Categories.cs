@@ -8,7 +8,7 @@ using Tsr.Shared.Api;
 
 namespace Tsr.Content.Api.Features.V1Categories;
 
-// Slice: GET /api/v1/taxonomies/categories -> the categories with each one's count of published articles, in the answer shape supported app builds read from today's website (domain/V1.cs).
+// Slice: GET /api/v1/taxonomies/categories -> the categories with each one's count of published articles, in the answer shape supported app builds read from today's website (shared/api/WebsiteV1.cs).
 // Public: no caller, no permission. The counts are over content.published_articles, which holds published articles only (a draft is never copied there).
 // A port of tsr-web web/src/app/api/v1/taxonomies/categories/route.ts, getCategoriesWithCounts (api/lib/article-service.ts) and getCategoryWithArticleCount (lib/markdown.ts);
 // that code is the rule, quirks kept:
@@ -59,7 +59,7 @@ internal static class V1CategoriesSlice
             Read,
             ct);
 
-        return V1.Ok(json => Write(json, rows, hierarchical), MaxAgeSeconds, StaleWhileRevalidateSeconds);
+        return WebsiteV1.Ok(json => Write(json, rows, hierarchical), MaxAgeSeconds, StaleWhileRevalidateSeconds);
     }
 
     private static Row Read(DbRow row) => new(

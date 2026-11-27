@@ -84,7 +84,7 @@ Platform-owned tables (no domain): `outbox`, `outbound_messages` (PHP's `schema_
    show more by mistake. Mark it `security: []` in `api.yaml` and say why in the domain `CLAUDE.md`.
 5. Expected failures are `Result<T>` (shared); exceptions are for bugs and infrastructure.
 6. Interfaces only at external boundaries (DB, HTTP, FCM, Firebase). No repository layer, no handler class, no mapping layer (D3).
-   A helper moves to `domain/` only when two slices use it; the PHP-emulation helpers (`PhpValue`, `PhpText`, `JsonBody`) are in `shared/api` (D4).
+   A helper moves to `domain/` only when two slices use it; the PHP-emulation helpers (`PhpValue`, `PhpText`, `JsonBody`) and `WebsiteV1`, the answer shape of the website's `/api/v1/` routes that content and search share, are in `shared/api` (D4).
    PHP is the oracle (D6): a slice is done when its Hurl file passes on PHP and on the new API.
    **No domain uses Entity Framework at run time** (issue 108: the API host is a native image, and Entity Framework runs only in the JIT migrate job). Each domain's context and migrations stay (the schema is still made by them); the context is registered
    for the migrate job only: the module has an `Add<Context>Migrations()` (access: `AddAccessMigrations`, marked JIT only) and `hosts/api/HostServices.cs` calls it in `RunMode.Migrate` just before `Add<Context>()`, so the migration order is unchanged.

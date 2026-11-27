@@ -55,6 +55,25 @@ public sealed class MemberRateLimit(TimeProvider clock)
         }
     }
 
+    /// <summary>Whole seconds until the member's oldest recorded call leaves the window, so that a call is allowed again (at least 1; 1 when nothing is recorded). For a <c>Retry-After</c> header.</summary>
+    public int RetryAfterSeconds(string bucket, int token, int windowSeconds)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(bucket);
+        ArgumentOutOfRangeException.ThrowIfLessThan(windowSeconds, 1);
+
+        var now = clock.GetUtcNow().ToUnixTimeSeconds();
+        lock (gate)
+        {
+            if (!calls.TryGetValue((bucket, token), out var recent))
+            {
+                return 1;
+            }
+
+            recent.Forget(now);
+            return recent.Times.Count == 0 ? 1 : (int)Math.Max(1, recent.Times.Peek() + windowSeconds - now);
+        }
+    }
+
     // Idle members are dropped at most once a minute, so the sweep cost stays small.
     private void SweepIfDue(long now)
     {

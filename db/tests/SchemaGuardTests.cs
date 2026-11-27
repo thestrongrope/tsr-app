@@ -54,6 +54,7 @@ public sealed class SchemaGuardTests
     private static readonly Dictionary<string, string> CaseSensitive = new()
     {
         ["content.published_articles.slug"] = LibraryReason,
+        ["content.v_published_articles.slug"] = LibraryReason,
         ["content.published_articles.slug_decoded"] = LibraryReason,
         ["content.categories.slug"] = LibraryReason,
         ["content.categories.parent_slug"] = LibraryReason,
