@@ -10,9 +10,9 @@ namespace Tsr.Host.Api.Tests;
 public sealed partial class ProductionStackTests
 {
     private static readonly string[] RequiredSettings =
-        ["TSR_DB_OWNER_PASSWORD", "TSR_APP_DB_PASSWORD", "TSR_ELASTICSEARCH_PASSWORD", "TSR_FIREBASE_PROJECT_ID"];
+        ["TSR_DB_OWNER_PASSWORD", "TSR_APP_DB_PASSWORD", "TSR_ELASTICSEARCH_PASSWORD", "TSR_FIREBASE_PROJECT_ID", "TSR_APP_API_BASE_URL"];
 
-    private static readonly string[] LongRunningServices = ["db", "gotenberg", "elasticsearch", "embeddings", "api", "workers", "site"];
+    private static readonly string[] LongRunningServices = ["db", "gotenberg", "elasticsearch", "embeddings", "api", "workers", "site", "app"];
 
     /// <summary>The file without its comments: a comment may name what the stack must not contain.</summary>
     private static readonly string Stack = string.Join(
@@ -309,6 +309,26 @@ public sealed partial class ProductionStackTests
         var block = Regex.Match(stack, @"(?ms)^  " + Regex.Escape(name) + @":\n(?<body>.*?)(?=^  \S|\z)");
         Assert.That(block.Success, Is.True, "no service " + name);
         return block.Groups["body"].Value;
+    }
+
+    /// <summary>
+    /// The web copy of the member app: built from hosts/app/Dockerfile as a release build (no sign-in test double is named), with the API's public
+    /// address compiled in from a required setting. It is reached only through the deployment tool's proxy and is given no setting at run time.
+    /// </summary>
+    [Test]
+    public void The_web_app_is_a_release_build_for_the_api_s_public_address()
+    {
+        var app = Service("app");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(app, Does.Contain("context: ."));
+            Assert.That(app, Does.Contain("dockerfile: hosts/app/Dockerfile"));
+            Assert.That(app, Does.Contain("TSR_API_BASE_URL: ${TSR_APP_API_BASE_URL:?"));
+            Assert.That(app, Does.Not.Contain("TSR_AUTH"));
+            Assert.That(app, Does.Not.Match(@"(?m)^\s*(ports|profiles|environment|volumes|depends_on)\s*:"));
+            Assert.That(app, Does.Contain("healthcheck:"));
+        });
     }
 
     [Test]
