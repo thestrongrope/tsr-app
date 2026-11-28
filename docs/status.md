@@ -23,13 +23,13 @@ membership 25 (with `POST /auth/link`, moved from identity on 13 Nov 2026: its `
 | Gap | Who depends on it | State |
 |---|---|---|
 | Quiz status for the home banner (PHP `web/api/quiz_info.php`, outside the mobile router) | the app | built here as `GET /quiz/info` on 27 Nov 2026 (`domains/assessment`); released app builds still call the PHP address |
-| Article search and lecture search (the website's `/api/v1/search` and `/api/v1/lectures/search`; lecture search runs with the meaning layer on) | the app, the website | not built; plan in `docs/specs/website-port/search-port-plan.md` (issue 22) |
+| Article search and lecture search (the website's `/api/v1/search` and `/api/v1/lectures/search`; lecture search runs with the meaning layer on) | the app, the website | article search built on 28 Nov 2026 (`GET /api/v1/search`, `domains/search`; not compared with the live site, not run as a native image); lecture search not built; plan in `docs/specs/website-port/search-port-plan.md` (issue 22) |
 | The website's search analytics (events, click route, report) | the website | not built; the events and the click route are in the search plan, the report route is not |
 | The join link `account.thestrongrope.com/join/<code>` and the website links the app opens (`/articles/<slug>`, `/donate`, `/about`, `/accreditation`, `/uploads/...`) | the app | not checked against the new stack |
 | `wp-json` calls in the app (`hosts/app/lib/features/wordpress/services/wordpress_service.dart`) | nothing serves them: there has been no WordPress site for over a year | code to delete, not to port; not traced whether a screen still reaches it |
 | PHP web capabilities with no route (the reports dashboard, subject and all-TSR summaries, quiz settings editing, the winners reveal screen, the cross-member parent-links list, the "extra students" clean-up) | the PHP web app | not built (`docs/specs/capability-map/README.md`) |
 | The WhatsApp runner that sends | members | not built |
-| PHP files outside the mobile router, other than `quiz_info.php` | unknown | never audited file by file |
+| PHP files outside the mobile router, other than `quiz_info.php` | members (WhatsApp reminders, app links on the account host, the account deletion page), admins (some reports) | audited file by file on 28 Nov 2026 by reading, nothing run: 163 items, 16 not ported and 14 partly covered; the list by risk is `docs/specs/php-audit/README.md` |
 
 Elasticsearch on the stacks holds one index, `tsr-search` (member and class search for admins). It holds no article or lecture index until the search plan is built.
 
