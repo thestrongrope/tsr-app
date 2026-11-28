@@ -41,6 +41,17 @@ INSERT INTO class_scheduled_notification_runs (id, scheduled_id, class_id, run_a
 VALUES (960001, 960002, (SELECT MIN(id) FROM classes), '2026-11-04 13:15:00', NULL, 10, 8, 7, 1, NULL),
        (960002, 960002, (SELECT MIN(id) FROM classes), '2026-11-11 13:15:00', NULL, 0, 0, 0, 0, '');
 
+-- The calendar's two tables, added by the migrations of 2026_11_10 (empty in the generated data). send_time is wall clock in tz;
+-- the settings' two times are datetime(3).
+INSERT INTO class_scheduled_events (id, class_id, created_by, created_by_user_id, message, description, action_link, weekdays, send_time, tz, status, created_at, updated_at, deleted_at)
+VALUES
+ (960001, (SELECT MIN(id) FROM classes), 960001, 960001, 'Bring your notebook', CONCAT('line one', CHAR(10), 'line two'), NULL, 'TUE,THU', '07:15:00', 'Asia/Kolkata', 'active', '2026-11-12 08:00:00', '2026-11-12 08:00:00', NULL),
+ (960002, (SELECT MIN(id) FROM classes), 960001, 960001, 'Old event', NULL, 'https://example.invalid/e', 'SUN', '20:00:00', 'Europe/London', 'deleted', '2026-11-12 08:00:00', '2026-11-13 09:30:00', '2026-11-13 09:30:00');
+INSERT INTO member_event_settings (id, user_id, class_id, event_key, offset_minutes, muted, deleted_for_me, client_updated_at, server_updated_at, device_key)
+VALUES
+ (960001, 960001, (SELECT MIN(id) FROM classes), 'event:960001', NULL, 1, 0, '2026-11-14 10:11:12.345', '2026-11-14 10:11:13.000', 's2-device-one'),
+ (960002, 960001, (SELECT MIN(id) FROM classes), 'schedule:1', 15, 0, 1, '2026-11-15 01:02:03.004', '2026-11-15 01:02:03.500', 's2-device-one');
+
 -- Orphans, on purpose: a student of a class that does not exist, a device of a member that does not exist,
 -- an attendance row of a session that does not exist. The load reports them; it never fails on them.
 INSERT INTO class_students (id, class_id, token_no, joined_on, created_at, status) VALUES (960001, 987654, 960001, '2026-02-01', '2026-02-01 08:00:00', 'A');

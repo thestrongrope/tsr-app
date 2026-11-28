@@ -6,7 +6,7 @@ data only (`test/prove-synthetic.sh`, `test/prove-guards.sh`). You run it agains
 ## Before you run it
 1. **Migrate the target.** `hosts/api` with `--migrate` on an empty PostgreSQL (eight domain schemas). Do not run the seed.
 2. **Bring the source up to date.** Production is migrated, so it has `class_scheduled_notifications` and
-   `class_scheduled_notification_runs`; a source without a table in `tables.txt` stops the load with its name.
+   `class_scheduled_notification_runs`, and the calendar's `class_scheduled_events` and `member_event_settings`; a source without a table in `tables.txt` stops the load with its name.
 3. **Quiesce the source** (restore a backup into a scratch MariaDB, or stop the writers). The load counts each table, exports it
    and compares: a table written to in between stops the load.
 4. **Clients.** One MariaDB client and one `psql`, on the host or inside a container. Nothing is installed by the script.
@@ -77,6 +77,7 @@ the logical references are counted (`sql/90-orphans.sql`) and the report is prin
   loaded and the rejected row count. Below it: whether staging was kept, and how to retry or drop it.
 
 ## Known gaps
+- Not loaded, with no source table: `assessment.quiz_state` (PHP keeps the quiz competition's state in JSON files, not in MariaDB; it needs its own import).
 - Not loaded: the 15 leave-behind tables, `class_access`, `calendar_table`, `geo_*` (GeoNames load), the 8 unread `users` columns, `account_deletion_requests.active_token`
   (a generated column in PHP; the partial unique index replaces it), `teacher_training*`, `surveys` (not in any dump; unverified in production).
 - PHP triggers and `ON UPDATE CURRENT_TIMESTAMP` are not ported (the load copies the stored values).
