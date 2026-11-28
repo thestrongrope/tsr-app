@@ -32,7 +32,7 @@ Set these in the deployment tool. A missing required setting stops the start and
 | `TSR_APP_DB_PASSWORD` | yes | the API's role. Letters and digits only (it sits inside a connection string). Changing it takes effect at the next start |
 | `TSR_ELASTICSEARCH_PASSWORD` | yes | fixed once the index volume exists |
 | `TSR_FIREBASE_PROJECT_ID` | yes | the Firebase project whose sign-ins the API accepts |
-| `TSR_APP_API_BASE_URL` | yes | the API's public address as a browser reaches it (e.g. `https://api.example.org`, no trailing slash), compiled into the web app at build time: changing it needs a rebuild. For the web app to work, also name the app's origin in `TSR_CORS_ORIGINS` and add the app's host name to the Firebase project's authorized domains |
+| `TSR_APP_API_BASE_URL` | no | the API's public address as a browser reaches it, compiled into the web app at build time (no trailing slash; changing it needs a rebuild). Empty: `https://api.thestrongrope.com`. For the web app to work, also name the app's origin in `TSR_CORS_ORIGINS` and add the app's host name to the Firebase project's authorized domains |
 | `TSR_WORKERS` | no | comma-separated worker names. Empty runs none: a deploy alone sends nothing. `push-drain` and `class-schedules` send to members' phones |
 | `TSR_GOOGLE_SERVICE_ACCOUNT_B64` | no | a service account key in base64: push, Firebase account deletion, sheet reads |
 | `TSR_PUBLIC_WEB_BASE` | no | the base of share links |
