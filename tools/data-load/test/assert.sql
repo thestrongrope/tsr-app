@@ -51,6 +51,16 @@ select pg_temp.expect('skipped_reason: NULL versus empty',
     (select skipped_reason is null from notifications.class_scheduled_notification_runs where id = 960001)
     and (select skipped_reason = '' from notifications.class_scheduled_notification_runs where id = 960002));
 
+select pg_temp.expect('calendar event: wall-clock send_time, text with a newline, NULL kept',
+    (select send_time = time '07:15:00' and weekdays = 'TUE,THU' and tz = 'Asia/Kolkata' and status = 'active' and description = E'line one\nline two'
+        and action_link is null and deleted_at is null and created_at = timestamptz '2026-11-12 08:00:00+00' from notifications.class_scheduled_events where id = 960001));
+select pg_temp.expect('calendar event: a deleted one keeps its status and time',
+    (select status = 'deleted' and deleted_at = timestamptz '2026-11-13 09:30:00+00' and action_link = 'https://example.invalid/e' from notifications.class_scheduled_events where id = 960002));
+select pg_temp.expect('calendar settings: milliseconds kept, flags and NULL offset',
+    (select offset_minutes is null and muted = 1 and deleted_for_me = 0 and event_key = 'event:960001'
+        and client_updated_at = timestamptz '2026-11-14 10:11:12.345+00' and server_updated_at = timestamptz '2026-11-14 10:11:13+00' from notifications.member_event_settings where id = 960001)
+    and (select offset_minutes = 15 and muted = 0 and deleted_for_me = 1 and client_updated_at = timestamptz '2026-11-15 01:02:03.004+00' from notifications.member_event_settings where id = 960002));
+
 -- identity columns continue after the highest id; the orphan rows were loaded, not refused
 select pg_temp.expect('classes.tags next id is max + 1',
     (select last_value = (select max(id) + 1 from classes.tags) and not is_called from classes.tags_id_seq));

@@ -8,4 +8,6 @@ select staging.load_table('notifications', 'notifier_runs', 'notifications.notif
 select staging.load_table('notifications', 'notifier_sent_messages', 'notifications.notifier_sent_messages');
 select staging.load_table('notifications', 'class_scheduled_notifications', 'notifications.class_scheduled_notifications');
 select staging.load_table('notifications', 'class_scheduled_notification_runs', 'notifications.class_scheduled_notification_runs');
+select staging.load_table('notifications', 'class_scheduled_events', 'notifications.class_scheduled_events');
+select staging.load_table('notifications', 'member_event_settings', 'notifications.member_event_settings');
 commit;
