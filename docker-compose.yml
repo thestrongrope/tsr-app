@@ -203,15 +203,15 @@ services:
         condition: service_started
 
   # The web copy of the member app (hosts/app/Dockerfile): Flutter Web as a release build, served by nginx, which forwards nothing. The
-  # deployment tool attaches the app's host name to it, port 80. The API's public address is compiled into the app at build time, so a change
-  # of TSR_APP_API_BASE_URL needs a rebuild. The browser calls the API itself: the API answers it only when TSR_CORS_ORIGINS names the app's
+  # deployment tool attaches the app's host name to it, port 80. The API's public address is compiled into the app at build time (a container name will not do:
+  # the app runs in the member's browser): https://api.thestrongrope.com unless TSR_APP_API_BASE_URL names another, and a change needs a rebuild. The browser calls the API itself: the API answers it only when TSR_CORS_ORIGINS names the app's
   # origin, and sign-in works only when the app's host name is an authorized domain of the Firebase project. The image takes minutes to build.
   app:
     build:
       context: .
       dockerfile: hosts/app/Dockerfile
       args:
-        TSR_API_BASE_URL: ${TSR_APP_API_BASE_URL:?TSR_APP_API_BASE_URL is not set}
+        TSR_API_BASE_URL: ${TSR_APP_API_BASE_URL:-https://api.thestrongrope.com}
     restart: unless-stopped
     healthcheck:
       # Alpine ships BusyBox wget only: no curl, no --spider.
