@@ -17,8 +17,9 @@ and runs the file. It holds no secret and publishes no port; `hosts/api/tests/Pr
 | `elasticsearch` | the search index; data in the volume `es-data` | always |
 | `site-build` | the static site generator (`hosts/site`): reads the API, writes the pages into the volume `site-data` with the publication files (`content/downloads/`, about 187 MB, copied into the site-build image and from it into the volume at `/site/downloads/`) | once per start, after `content-load` has succeeded and `api` has started; retried up to five times |
 | `site` | nginx serving `site-data`, read-only; port 80. It forwards nothing. Its image is the stock one with our configuration file baked in (`hosts/site/nginx.conf`, see "The site server and the old addresses"): an address the site does not publish answers 404 with the site's own `404.html` | always |
+| `app` | the web copy of the member app (`hosts/app/Dockerfile`): Flutter Web as a release build served by nginx, port 80. It forwards nothing; the browser calls the API at the address compiled in (`TSR_APP_API_BASE_URL`). The image takes minutes to build | always |
 
-Two services are reached from outside. Attach the API's host name to `api`, port 8080, and the site's host name to `site`, port 80. The server's proxy (Traefik) is the
+Three services are reached from outside. Attach the API's host name to `api`, port 8080, the site's host name to `site`, port 80, and the app's host name to `app`, port 80. The server's proxy (Traefik) is the
 only proxy: the nginx gateway in `hosts/gateway/` belongs to the dev and test stacks.
 
 ## Settings
@@ -31,6 +32,7 @@ Set these in the deployment tool. A missing required setting stops the start and
 | `TSR_APP_DB_PASSWORD` | yes | the API's role. Letters and digits only (it sits inside a connection string). Changing it takes effect at the next start |
 | `TSR_ELASTICSEARCH_PASSWORD` | yes | fixed once the index volume exists |
 | `TSR_FIREBASE_PROJECT_ID` | yes | the Firebase project whose sign-ins the API accepts |
+| `TSR_APP_API_BASE_URL` | yes | the API's public address as a browser reaches it (e.g. `https://api.example.org`, no trailing slash), compiled into the web app at build time: changing it needs a rebuild. For the web app to work, also name the app's origin in `TSR_CORS_ORIGINS` and add the app's host name to the Firebase project's authorized domains |
 | `TSR_WORKERS` | no | comma-separated worker names. Empty runs none: a deploy alone sends nothing. `push-drain` and `class-schedules` send to members' phones |
 | `TSR_GOOGLE_SERVICE_ACCOUNT_B64` | no | a service account key in base64: push, Firebase account deletion, sheet reads |
 | `TSR_PUBLIC_WEB_BASE` | no | the base of share links |

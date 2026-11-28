@@ -35,7 +35,7 @@ Elasticsearch on the stacks holds one index, `tsr-search` (member and class sear
 
 ## The app
 
-`hosts/app` is the member app (package `the_strong_rope`, 1.6.1+24): the whole of tsr-account `mobile/` at `b2a5fc70`, moved here on 26 Nov 2026 (issue 26, PR 125) in place of the earlier shell, and a member of the root pub workspace. No screen has moved into `domains/*/app` yet. The store builds are still made from tsr-account. `hosts/app/Dockerfile` builds the web copy (Flutter Web behind nginx); the local stacks start it with `TSR_WITH_APP=1` (`docs/testing.md`). The production compose file has no `app` service.
+`hosts/app` is the member app (package `the_strong_rope`, 1.6.1+24): the whole of tsr-account `mobile/` at `b2a5fc70`, moved here on 26 Nov 2026 (issue 26, PR 125) in place of the earlier shell, and a member of the root pub workspace. No screen has moved into `domains/*/app` yet. The store builds are still made from tsr-account. `hosts/app/Dockerfile` builds the web copy (Flutter Web behind nginx); the local stacks start it with `TSR_WITH_APP=1` (`docs/testing.md`). The production compose file has an `app` service (28 Nov 2026; `docs/deployment.md`); it is not deployed.
 
 ## Releases
 
