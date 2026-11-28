@@ -12,7 +12,7 @@ public sealed partial class ProductionStackTests
     private static readonly string[] RequiredSettings =
         ["TSR_DB_OWNER_PASSWORD", "TSR_APP_DB_PASSWORD", "TSR_ELASTICSEARCH_PASSWORD", "TSR_FIREBASE_PROJECT_ID"];
 
-    private static readonly string[] LongRunningServices = ["db", "gotenberg", "elasticsearch", "api", "workers", "site"];
+    private static readonly string[] LongRunningServices = ["db", "gotenberg", "elasticsearch", "embeddings", "api", "workers", "site"];
 
     /// <summary>The file without its comments: a comment may name what the stack must not contain.</summary>
     private static readonly string Stack = string.Join(
@@ -224,6 +224,54 @@ public sealed partial class ProductionStackTests
         var dev = File.ReadAllText(Path.Combine(RouteCatalog.RepoRoot(), "docker-compose.dev.yml"));
 
         Assert.That(dev, Does.Contain(":/var/tsr/content:ro"));
+    }
+
+    /// <summary>TC-SRCH-Q5-01 (the text half): the embedding service is built from hosts/embeddings, is reached only by the other services (no port, no profile, no setting that holds a secret) and may not take more than 1 GB.</summary>
+    [Test]
+    public void The_embedding_service_is_internal_limited_to_one_gigabyte_and_built_from_its_folder()
+    {
+        var embeddings = Service("embeddings");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(embeddings, Does.Contain("context: hosts/embeddings"));
+            Assert.That(embeddings, Does.Not.Contain("image:"));
+            Assert.That(embeddings, Does.Match(@"(?ms)deploy:\s+resources:\s+limits:\s+memory: 1G"));
+            Assert.That(embeddings, Does.Not.Match(@"(?m)^\s*(ports|profiles|environment)\s*:"));
+        });
+    }
+
+    /// <summary>The dev stack (and so the test stack and its lanes) has the same service under the profile "workers": the default test stack runs it, a lane does not unless it asks (tools/test-stack.sh).</summary>
+    [Test]
+    public void The_dev_stack_has_the_embedding_service_under_the_workers_profile()
+    {
+        var lines = File.ReadAllLines(Path.Combine(RouteCatalog.RepoRoot(), "docker-compose.dev.yml")).Where(line => !line.TrimStart().StartsWith('#'));
+        var embeddings = ServiceIn(string.Join('\n', lines), "embeddings");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(embeddings, Does.Contain("context: hosts/embeddings"));
+            Assert.That(embeddings, Does.Contain("profiles: [\"workers\"]"));
+            Assert.That(embeddings, Does.Not.Match(@"(?m)^\s*ports\s*:"));
+        });
+    }
+
+    /// <summary>The image pins what makes a vector: an exact fastembed in the project file and a lock the build may not change.</summary>
+    [Test]
+    public void The_embedding_image_builds_from_the_lock_with_an_exact_fastembed()
+    {
+        var folder = Path.Combine(RouteCatalog.RepoRoot(), "hosts", "embeddings");
+        var dockerfile = File.ReadAllText(Path.Combine(folder, "Dockerfile"));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(File.ReadAllText(Path.Combine(folder, "pyproject.toml")), Does.Match(@"""fastembed==\d+\.\d+\.\d+"""));
+            Assert.That(File.Exists(Path.Combine(folder, "uv.lock")), Is.True);
+            Assert.That(dockerfile, Does.Contain("uv sync --frozen"));
+            Assert.That(dockerfile, Does.Contain("EMBEDDING_MODEL=BAAI/bge-small-en-v1.5"));
+            Assert.That(dockerfile, Does.Not.Contain("pip install"));
+            Assert.That(dockerfile, Does.Contain("HEALTHCHECK").And.Contain("python -c"));
+        });
     }
 
     private static string Service(string name) => ServiceIn(Stack, name);

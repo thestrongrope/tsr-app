@@ -18,6 +18,7 @@
 #   over the website's own files). search-feed: the lane also runs its own Elasticsearch (about 1 GB; its own container and volume, no host port,
 #   so it cannot clash with another stack's) and the api searches it; tools/patrol-lane.sh up-personas uses it. Every command regenerates the
 #   lane's override, so name the same TSR_LANE_WORKERS on a later `up` of that lane.
+# TSR_LANE_EMBEDDINGS=1 at `up` also starts the lane's own embedding container (hosts/embeddings; no host port); name it again on a later `up`.
 # Only the selected tsr-app-test project is touched; every command carries -p <project>. All ports are 127.0.0.1 only.
 set -euo pipefail
 
@@ -107,6 +108,17 @@ YML
 YML
       ;;
     *) echo "TSR_LANE_WORKERS must be unset, content-refresh, search-feed or library-search-feed (never a sending worker)" >&2; exit 1 ;;
+  esac
+  # The embedding service (about 260 MB at rest) is off in a lane; TSR_LANE_EMBEDDINGS=1 at `up` turns it on, to check the service and to embed the lecture fixture (tools/embed-lecture-fixture.sh).
+  case "${TSR_LANE_EMBEDDINGS:-}" in
+    "") ;;
+    1)
+      cat >> "$OVERRIDE" <<YML
+  embeddings:
+    profiles: !reset []
+YML
+      ;;
+    *) echo "TSR_LANE_EMBEDDINGS must be unset or 1" >&2; exit 1 ;;
   esac
 elif [ -n "${TSR_LANE_WORKERS:-}" ]; then
   echo "TSR_LANE_WORKERS is for a lane stack (TSR_STACK=n); the default test stack's workers are fixed in docker-compose.test.yml" >&2; exit 1

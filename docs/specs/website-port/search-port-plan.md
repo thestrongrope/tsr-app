@@ -569,9 +569,9 @@ Ordinary repo checks run on every task: `dotnet build TsrApp.slnx` (zero warning
 - [x] **7. Mappings and the feed for articles** (`domain/LibraryIndexMappings.cs`, `domain/LibraryFeed.cs`, `workers/LibraryFeedWorker.cs`,
   worker name in `HostServices.cs` and `WorkerModeTests`; `TSR_WORKERS` in the test compose file). Test: TC-SRCH-R17-01..03;
   `v1-search.hurl` on the default test stack (TC-SRCH-R1-01, R4-01, R5-01).
-- [ ] **8. The embedding container** (`hosts/embeddings/`, pinned, `uv.lock`; the three compose files; health check). Test: the default test
+- [x] **8. The embedding container** (`hosts/embeddings/`, pinned, `uv.lock`; the three compose files; health check). Test: the default test
   stack starts it healthy; `POST /embed` gives 384 numbers; TC-SRCH-Q5-01.
-- [ ] **9. Lecture fixture** (`db/synthetic/lectures/`, `tools/embed-lecture-fixture.sh`). Test: the content guard style check that the fixture
+- [x] **9. Lecture fixture** (`db/synthetic/lectures/`, `tools/embed-lecture-fixture.sh`). Test: the content guard style check that the fixture
   has the 13 keys and one line without a vector; the script run twice gives the same vectors.
 - [ ] **10. Lecture query bodies** (`domain/LectureSearchQuery.cs`: keyword strict and fuzzy, browse, kNN). Test: TC-SRCH-R7-02, R9-02,
   body comparison with stored tsr-web bodies.
