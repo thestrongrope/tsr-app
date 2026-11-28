@@ -23,5 +23,5 @@ internal sealed class LibraryFeedWorker(IServiceScopeFactory scopes, ILogger<Lib
     protected override TimeSpan? DelayBeforeRetry => feed.RetryDelay;
 
     protected override async Task TickAsync(IServiceProvider services, CancellationToken ct) =>
-        _ = await feed.TickAsync(services.GetRequiredService<ILibraryIndex>(), services.GetRequiredService<ArticleFeedSource>(), Log, ct);
+        _ = await feed.TickAsync(services.GetRequiredService<ILibraryIndex>(), services.GetRequiredService<ArticleFeedSource>(), services.GetRequiredService<LectureSettings>(), Log, ct);
 }

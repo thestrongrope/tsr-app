@@ -2,8 +2,10 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 using Tsr.Search.Api.Domain;
 using Tsr.Search.Api.Features.Search;
+using Tsr.Search.Api.Features.V1LectureSearch;
 using Tsr.Search.Api.Features.V1Search;
 using Tsr.Shared.Api;
 using Tsr.Search.Api.Workers;
@@ -43,6 +45,23 @@ public static class SearchModule
             var settings = provider.GetRequiredService<SearchSettings>();
             return settings.Url is null ? new UnconfiguredSearchIndex() : new ElasticSearchIndex(settings);
         });
+        services.AddSingleton(provider =>
+        {
+            var configuration = provider.GetRequiredService<IConfiguration>();
+            return LectureSettings.From(configuration[LectureSettings.EmbeddingsUrlKey], configuration[LectureSettings.SemanticWeightKey], configuration[LectureSettings.LecturesFileKey]);
+        });
+        // The embedding service is asked only when the meaning layer is on (a weight above 0 and an address); the client gives up after 1.5 seconds.
+        services.AddSingleton<IQueryEmbedder>(provider =>
+        {
+            var settings = provider.GetRequiredService<LectureSettings>();
+            if (!settings.SemanticEnabled)
+            {
+                return NoQueryEmbedder.Instance;
+            }
+
+            var http = new HttpClient { BaseAddress = settings.EmbeddingsUrl, Timeout = TimeSpan.FromSeconds(5) };
+            return new EmbeddingClient(http, provider.GetRequiredService<ILoggerFactory>().CreateLogger("Tsr.Search.Api.Domain.EmbeddingClient"), EmbeddingClient.Timeout);
+        });
         services.TryAddSingleton<MemberRateLimit>();
         services.AddScoped<IArticleFallback, ArticleFallback>();
         services.AddScoped<ISearchFacts, SearchFacts>();
@@ -77,6 +96,7 @@ public static class SearchModule
     {
         routes.MapSearchRoute();
         routes.MapV1Search();
+        routes.MapV1LectureSearch();
         return routes;
     }
 }

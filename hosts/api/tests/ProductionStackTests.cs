@@ -241,6 +241,34 @@ public sealed partial class ProductionStackTests
         });
     }
 
+    /// <summary>Plan 3.5 and 3.7: the API is told where the embedding service is and the evaluated weight (0.25). The lecture file is not set here: production has no lecture data until task 12a puts it in the image (owner decision a).</summary>
+    [Test]
+    public void The_api_is_given_the_embedding_service_and_the_semantic_weight_and_no_lecture_file_yet()
+    {
+        var environment = Regex.Match(Stack, @"(?ms)environment: &api-environment\n(?<body>.*?)(?=^    \S)").Groups["body"].Value;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(environment, Does.Contain("TSR_EMBEDDINGS_URL: http://embeddings:8000"));
+            Assert.That(environment, Does.Contain("TSR_LECTURES_SEMANTIC_WEIGHT: \"0.25\""));
+            Assert.That(environment, Does.Not.Contain("TSR_LECTURES_FILE"));
+        });
+    }
+
+    /// <summary>The dev stack passes the lecture settings through, as it does the Elasticsearch address (empty unless the test stack or a lane sets them), and mounts the lecture folder for the workers.</summary>
+    [Test]
+    public void The_dev_stack_passes_the_lecture_settings_through_and_mounts_the_lecture_folder()
+    {
+        var lines = File.ReadAllLines(Path.Combine(RouteCatalog.RepoRoot(), "docker-compose.dev.yml")).Where(line => !line.TrimStart().StartsWith('#'));
+        var dev = string.Join('\n', lines);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(ServiceIn(dev, "api"), Does.Contain("TSR_EMBEDDINGS_URL: ${TSR_EMBEDDINGS_URL:-}").And.Contain("TSR_LECTURES_SEMANTIC_WEIGHT: ${TSR_LECTURES_SEMANTIC_WEIGHT:-}"));
+            Assert.That(ServiceIn(dev, "workers"), Does.Contain("TSR_LECTURES_FILE: ${TSR_LECTURES_FILE:-}").And.Contain(":/var/tsr/lectures:ro"));
+        });
+    }
+
     /// <summary>The dev stack (and so the test stack and its lanes) has the same service under the profile "workers": the default test stack runs it, a lane does not unless it asks (tools/test-stack.sh).</summary>
     [Test]
     public void The_dev_stack_has_the_embedding_service_under_the_workers_profile()

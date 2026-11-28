@@ -88,7 +88,7 @@ paths:
         - name: category
           in: query
           required: false
-          description: One category, used as written; only articles in it are returned.
+          description: One category, used as written; only articles in it are returned. More than 100 characters is a 400.
           schema: {type: string}
         - name: fields
           in: query
@@ -141,11 +141,101 @@ paths:
                       offset: {type: integer}
                       hasMore: {type: boolean}
         "400":
-          description: q is missing or blank, longer than 200 characters, or offset plus limit is above 10000. {"success": false, "error": {"code": "VALIDATION_ERROR", "message": "Missing required parameter: q"}, "meta": {...}}
+          description: q is missing or blank, longer than 200 characters, the category is longer than 100 characters, or offset plus limit is above 10000. {"success": false, "error": {"code": "VALIDATION_ERROR", "message": "Missing required parameter: q"}, "meta": {...}}
         "429":
           description: More than 60 requests in a minute from one client. {"success": false, "error": "Too many requests"} with Retry-After, X-RateLimit-Limit and X-RateLimit-Remaining 0.
         "500":
           description: An unexpected failure. {"success": false, "error": {"code": "INTERNAL_ERROR", "message": "An unexpected error occurred"}, "meta": {...}}
+  /api/v1/lectures/search:
+    get:
+      operationId: v1LectureSearch
+      summary: Search or browse the lectures (the website's route, kept as it is)
+      description: |
+        Public, no sign-in. Answers in the website's shape. The rate limit (60 requests a minute per client, its own count) runs first. With a q that is not blank: the matching lectures, best first, each with the chapters that matched (`matchedChapters`);
+        without q (or blank): every lecture newest first, `query` empty. q is used as sent, untrimmed. Elasticsearch only: when it is not configured, fails or answers with something unreadable, the answer is a 500 `INTERNAL_ERROR` (there is no fallback).
+        When the meaning layer is on (a semantic weight above 0 and an embedding service), the keyword ranking and the meaning ranking are fused and `searchEngine` is `elasticsearch+semantic`; `total` is then the length of the fused list (at most 100).
+        When the embedding service fails, answers late (over 1.5 seconds) or gives no vector, the answer is the keyword answer with `searchEngine` `elasticsearch`, and no error. pagination.total equals data.total; hasMore is true exactly when offset plus the results on this page is below it.
+        A 200 sends Cache-Control public, max-age=60, an ETag and Vary, and is never a 304. Highlights are HTML-encoded (a deliberate difference from the website, which does not encode).
+        Slice: features/v1-lecture-search/V1LectureSearch.cs.
+      security: []
+      parameters:
+        - name: q
+          in: query
+          required: false
+          description: The words to look for, as sent (more than 200 characters is a 400). Missing or blank browses.
+          schema: {type: string}
+        - name: limit
+          in: query
+          required: false
+          description: 20 by default, kept between 1 and 100; a value that is not a number gives the default.
+          schema: {type: string}
+        - name: offset
+          in: query
+          required: false
+          description: 0 by default, never below 0; a value that is not a number gives the default. offset plus limit above 10000 is a 400.
+          schema: {type: string}
+        - name: language
+          in: query
+          required: false
+          description: One language (hi, en, ar), an exact filter, in the keyword part and the meaning part alike. Empty means none. At most 10 letters and hyphens; anything else is a 400.
+          schema: {type: string}
+      responses:
+        "200":
+          description: The lectures of the page
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data, meta, pagination]
+                properties:
+                  success: {type: boolean, enum: [true]}
+                  data:
+                    type: object
+                    required: [results, query, searchEngine, total, took]
+                    properties:
+                      results:
+                        type: array
+                        items:
+                          type: object
+                          required: [slug, title, url, tags, language, chapters, matchedChapters, key_points, thumbnail, score]
+                          properties:
+                            slug: {type: string}
+                            title: {type: string}
+                            url: {type: string}
+                            excerpt: {type: string}
+                            tags: {type: array, items: {type: string}}
+                            language: {type: string}
+                            publishedDate: {type: string}
+                            durationSec: {type: integer}
+                            chapters: {type: array, items: {type: object}}
+                            matchedChapters:
+                              type: array
+                              items:
+                                type: object
+                                description: "A chapter (start_sec, title, summary, url) and, when it matched, its highlight {title, summary}"
+                            key_points: {type: array, items: {type: string}}
+                            thumbnail: {type: string}
+                            score: {type: number, description: "0 when browsing; the keyword score otherwise, even for a fused list"}
+                            highlights: {type: object, description: "title, excerpt, content, search_phrases and key_points snippets with <em> around the match; HTML-encoded"}
+                      query: {type: string}
+                      searchEngine: {type: string, enum: [elasticsearch, "elasticsearch+semantic"]}
+                      total: {type: integer}
+                      took: {type: integer, description: Milliseconds}
+                  meta: {type: object}
+                  pagination:
+                    type: object
+                    required: [total, limit, offset, hasMore]
+                    properties:
+                      total: {type: integer}
+                      limit: {type: integer}
+                      offset: {type: integer}
+                      hasMore: {type: boolean}
+        "400":
+          description: q is longer than 200 characters, the language is not a short code, or offset plus limit is above 10000. {"success": false, "error": {"code": "VALIDATION_ERROR", "message": "..."}, "meta": {...}}
+        "429":
+          description: More than 60 requests in a minute from one client. {"success": false, "error": "Too many requests"} with Retry-After, X-RateLimit-Limit and X-RateLimit-Remaining 0.
+        "500":
+          description: The engine is not configured, failed, or answered with something unreadable; or any other failure. {"success": false, "error": {"code": "INTERNAL_ERROR", "message": "An unexpected error occurred"}, "meta": {...}}
 components:
   securitySchemes:
     memberToken:

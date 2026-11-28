@@ -433,6 +433,11 @@ Each one is written in the capability document and allowed in the parity file:
 6. `X-Content-Type-Options: nosniff` on every answer (already true of `WebsiteV1`).
 7. A missing lecture index is created empty by the feed, so lecture search answers 200 with no results where tsr-web answers 500.
 8. Highlights are HTML-encoded (added 28 Nov 2026): `"encoder": "html"` on the engine's highlight request, and the fallback encodes the text around the match before it adds `<em>`. tsr-web does not encode, so its highlight can carry article markup. Parity: the stored bodies equal tsr-web's except that one field, and a parity run must allow highlight text that differs only by HTML entities (`&amp;`, `&lt;`, `&gt;`, `&quot;`, `&#39;`).
+9. Both routes refuse a page that ends past Elasticsearch's 10000-result window (offset plus limit above 10000) and a text of more than 200 characters, and a language that is not at most 10 letters and hyphens (lecture search) or a category of more than 100 characters (article search), with a 400 `VALIDATION_ERROR` in the website's error shape, before any outside call. tsr-web has neither bound.
+10. Lecture highlights, the lecture's and its matched chapters', are HTML-encoded (`"encoder": "html"` in each highlight object of the engine requests), as the article ones are (8).
+11. A query vector that is not 384 numbers counts as no vector (or holds a number that is not finite, or is all zeros), so lecture search answers from keywords only; tsr-web would send it to the engine, which refuses it, and answer 500.
+12. `TSR_LECTURES_FILE` unset, missing, too big (64 MB, 5000 lectures) or not whole (a line that is not a lecture, a slug twice): the lecture index is created empty at the first tick and otherwise kept as it is, with one warning of counts. tsr-web has no such file setting (its feed is a manual route).
+13. The feed asks for a short retry (30 seconds, at most 20 in a row) only while the ARTICLES are empty, the start-up race; an empty lecture file is not a race.
 
 ---
 
@@ -573,10 +578,10 @@ Ordinary repo checks run on every task: `dotnet build TsrApp.slnx` (zero warning
   stack starts it healthy; `POST /embed` gives 384 numbers; TC-SRCH-Q5-01.
 - [x] **9. Lecture fixture** (`db/synthetic/lectures/`, `tools/embed-lecture-fixture.sh`). Test: the content guard style check that the fixture
   has the 13 keys and one line without a vector; the script run twice gives the same vectors.
-- [ ] **10. Lecture query bodies** (`domain/LectureSearchQuery.cs`: keyword strict and fuzzy, browse, kNN). Test: TC-SRCH-R7-02, R9-02,
+- [x] **10. Lecture query bodies** (`domain/LectureSearchQuery.cs`: keyword strict and fuzzy, browse, kNN). Test: TC-SRCH-R7-02, R9-02,
   body comparison with stored tsr-web bodies.
-- [ ] **11. Fusion and the embedder** (`domain/ReciprocalRank.cs`, `domain/EmbeddingClient.cs`). Test: TC-SRCH-R10-02, R11-02.
-- [ ] **12. Slice `v1-lecture-search`** with the lecture part of the feed, the settings, the gateway block, the catalog and `api.yaml`.
+- [x] **11. Fusion and the embedder** (`domain/ReciprocalRank.cs`, `domain/EmbeddingClient.cs`). Test: TC-SRCH-R10-02, R11-02.
+- [x] **12. Slice `v1-lecture-search`** with the lecture part of the feed, the settings, the gateway block, the catalog and `api.yaml`.
   Test: `v1-lecture-search.hurl` on the default stack and a lane (TC-SRCH-R7-01, R7-03, R8-01, R9-01, R10-01, R10-03, R11-01, R13-01,
   R14-01 HL); TC-SRCH-R12-01 and Q6-01 in `db/tests`.
 - [ ] **12a. The full lecture file (decision a).** `content/lectures/lectures.ndjson` becomes tsr-web's full file; `tools/content-import.sh`

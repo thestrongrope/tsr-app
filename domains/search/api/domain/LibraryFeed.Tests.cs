@@ -58,8 +58,8 @@ internal sealed class LibraryFeedTests
 
     private static LibraryDocument Doc(string id, string title = "T") => new(id, $$"""{"slug":"{{id}}","title":"{{title}}"}""");
 
-    private static Task<ReconcileReport?> RunAsync(LibraryFeed feed, FakeIndex index, IReadOnlyList<LibraryDocument> documents, ILogger? log = null) =>
-        feed.ReconcileAsync(index, Articles, "{\"mappings\":{}}", documents, log ?? new CaptureLog(), CancellationToken.None);
+    private static Task<ReconcileReport?> RunAsync(LibraryFeed feed, FakeIndex index, IReadOnlyList<LibraryDocument> documents, ILogger? log = null, string indexName = Articles, bool retryWhenEmpty = true) =>
+        feed.ReconcileAsync(index, indexName, "{\"mappings\":{}}", documents, retryWhenEmpty, log ?? new CaptureLog(), CancellationToken.None);
 
     [Test]
     public async Task Each_document_is_written_with_its_slug_as_the_id_and_the_time_of_the_run()
@@ -184,6 +184,23 @@ internal sealed class LibraryFeedTests
     }
 
     [Test]
+    public async Task A_lecture_run_neither_asks_for_a_retry_nor_ends_the_articles_count()
+    {
+        var index = new FakeIndex();
+        var feed = new LibraryFeed(new FixedClock());
+
+        _ = await RunAsync(feed, index, []);
+        _ = await RunAsync(feed, index, [], indexName: "tsr-lectures", retryWhenEmpty: false);
+        Assert.That(feed.RetryDelay, Is.EqualTo(TimeSpan.FromSeconds(30)), "an empty lecture file is not a start-up race");
+        _ = await RunAsync(feed, index, [Doc("l")], indexName: "tsr-lectures", retryWhenEmpty: false);
+
+        Assert.That(feed.RetryDelay, Is.EqualTo(TimeSpan.FromSeconds(30)), "a lecture run does not end the articles' retries");
+        var onlyLectures = new LibraryFeed(new FixedClock());
+        _ = await RunAsync(onlyLectures, index, [], indexName: "tsr-lectures", retryWhenEmpty: false);
+        Assert.That(onlyLectures.RetryDelay, Is.Null);
+    }
+
+    [Test]
     public async Task A_source_that_was_empty_at_start_is_written_in_full_when_the_articles_arrive()
     {
         var index = new FakeIndex();
@@ -221,6 +238,18 @@ internal sealed class LibraryFeedTests
 
         Assert.That(report, Is.Null);
         Assert.That(index.Ensured, Is.Empty);
+    }
+
+    [Test]
+    public void The_lecture_mapping_is_the_websites_with_a_flat_384_dimension_cosine_vector_and_nested_chapters()
+    {
+        using var mapping = JsonDocument.Parse(LibraryIndexMappings.Lectures);
+
+        var properties = mapping.RootElement.GetProperty("mappings").GetProperty("properties");
+        Assert.That(properties.EnumerateObject().Select(p => p.Name), Is.EqualTo((string[])["slug", "title", "excerpt", "content", "search_phrases", "key_points", "tags", "language", "publishedDate", "durationSec", "url", "chapters", "embedding", "indexed_at"]));
+        Assert.That(properties.GetProperty("chapters").GetProperty("type").GetString(), Is.EqualTo("nested"));
+        Assert.That(properties.GetProperty("embedding").GetRawText().Replace(" ", string.Empty, StringComparison.Ordinal),
+            Is.EqualTo("""{"type":"dense_vector","dims":384,"index":true,"similarity":"cosine","index_options":{"type":"flat"}}"""));
     }
 
     [Test]

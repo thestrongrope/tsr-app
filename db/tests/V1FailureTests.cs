@@ -41,6 +41,8 @@ public sealed class V1FailureTests
     [TestCase("/api/v1/taxonomies/tags")]
     [TestCase("/api/v1/publications")]
     [TestCase("/api/v1/search?q=margin")]
+    [TestCase("/api/v1/lectures/search?q=patience")]
+    [TestCase("/api/v1/lectures/search")]
     public async Task An_unexpected_failure_is_a_500_in_the_v1_error_shape_without_cache_headers(string url)
     {
         var response = await client.GetAsync(url);
@@ -64,6 +66,11 @@ public sealed class V1FailureTests
     }
 
     [TestCase("/api/v1/search?q=patience&offset=10000", "Result window too large")]
+    [TestCase("/api/v1/lectures/search?offset=10000", "Result window too large")]
+    [TestCase("/api/v1/lectures/search?language=abcdefghijk", "Invalid language")]
+    [TestCase("/api/v1/lectures/search?q=x&language=hi%22%7D", "Invalid language")]
+    [TestCase("/api/v1/search?q=x&category=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "Category too long")]
+    [TestCase("/api/v1/lectures/search?q=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "Query too long")]
     [TestCase("/api/v1/search?q=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "Query too long")]
     public async Task A_refused_search_is_a_400_before_the_database_is_asked(string url, string message)
     {
@@ -84,7 +91,7 @@ public sealed class V1FailureTests
             .Where(endpoint => endpoint.RoutePattern.RawText!.StartsWith("/api/v1/", StringComparison.Ordinal))
             .ToList();
 
-        Assert.That(endpoints, Has.Count.EqualTo(7));
+        Assert.That(endpoints, Has.Count.EqualTo(8));
         Assert.That(
             endpoints.Where(endpoint => endpoint.Metadata.GetMetadata<WebsiteV1.FailureShape>() is null).Select(endpoint => endpoint.RoutePattern.RawText),
             Is.Empty,

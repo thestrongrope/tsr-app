@@ -21,10 +21,14 @@ services:
       TSR_ELASTICSEARCH_PASSWORD: local-only-es
       TSR_CONTENT_DIR: /var/tsr/content
       TSR_YOUTUBE_CHANNEL_ID: ""
+      # Lecture search: the embedding service of this stack and the evaluated weight (the meaning layer is on).
+      TSR_EMBEDDINGS_URL: http://embeddings:8000
+      TSR_LECTURES_SEMANTIC_WEIGHT: "0.25"
   workers:
     environment:
       TSR_WORKERS: search-feed,content-refresh,library-search-feed
       TSR_CONTENT_DIR: /var/tsr/content
+      TSR_LECTURES_FILE: /var/tsr/lectures/lectures.ndjson
       TSR_YOUTUBE_CHANNEL_ID: ""
   # The web app of the test stack (TSR_WITH_APP=1 tools/test-stack.sh up): built for this stack's gateway and Auth emulator.
   app:

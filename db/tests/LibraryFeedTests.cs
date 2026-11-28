@@ -22,11 +22,17 @@ public sealed class LibraryFeedTests
 
         public List<string> Bulks { get; } = [];
 
+        public List<string> Ensured { get; } = [];
+
         public Task<string> SearchAsync(string index, string body, CancellationToken ct) => throw new NotSupportedException();
 
         public bool Created { get; set; }
 
-        public Task<bool> EnsureIndexAsync(string index, string mappingJson, CancellationToken ct) => Task.FromResult(Created);
+        public Task<bool> EnsureIndexAsync(string index, string mappingJson, CancellationToken ct)
+        {
+            Ensured.Add(index);
+            return Task.FromResult(Created);
+        }
 
         public Task<IReadOnlyList<string>> ListIdsAsync(string index, CancellationToken ct) =>
             Task.FromResult<IReadOnlyList<string>>(["the-zorvath-timetable", "ghost-article"]);
@@ -37,6 +43,8 @@ public sealed class LibraryFeedTests
             return Task.CompletedTask;
         }
     }
+
+    private static readonly LectureSettings NoLectures = LectureSettings.From(null, null, null);
 
     [OneTimeSetUp]
     public async Task LoadAsync()
@@ -55,7 +63,7 @@ public sealed class LibraryFeedTests
         var index = new FakeIndex();
         var feed = new LibraryFeed(TimeProvider.System);
 
-        var report = await feed.TickAsync(index, new ArticleFeedSource(new DbSettings(TestDatabase.AppConnection)), NullLogger.Instance, CancellationToken.None);
+        var report = await feed.TickAsync(index, new ArticleFeedSource(new DbSettings(TestDatabase.AppConnection)), NoLectures, NullLogger.Instance, CancellationToken.None);
 
         Assert.That(report, Is.EqualTo(new ReconcileReport(12, 1, false)));
         var lines = index.Bulks[0].Split('\n', StringSplitOptions.RemoveEmptyEntries);
@@ -78,14 +86,45 @@ public sealed class LibraryFeedTests
         var index = new FakeIndex();
         var feed = new LibraryFeed(TimeProvider.System);
         var source = new ArticleFeedSource(new DbSettings(TestDatabase.AppConnection));
-        _ = await feed.TickAsync(index, source, NullLogger.Instance, CancellationToken.None);
-        var unchanged = await feed.TickAsync(index, source, NullLogger.Instance, CancellationToken.None);
+        _ = await feed.TickAsync(index, source, NoLectures, NullLogger.Instance, CancellationToken.None);
+        var unchanged = await feed.TickAsync(index, source, NoLectures, NullLogger.Instance, CancellationToken.None);
 
         index.Created = true;
-        var rebuilt = await feed.TickAsync(index, source, NullLogger.Instance, CancellationToken.None);
+        var rebuilt = await feed.TickAsync(index, source, NoLectures, NullLogger.Instance, CancellationToken.None);
 
         Assert.That(unchanged!.Upserted, Is.Zero);
         Assert.That(rebuilt!.Upserted, Is.EqualTo(12));
+    }
+
+    [Test]
+    public async Task A_tick_also_indexes_the_lecture_file_line_for_line_with_the_vectors_exactly_as_the_file_has_them()
+    {
+        var fixture = Path.Combine(TestDatabase.RepoRoot(), "db", "synthetic", "lectures", "lectures.ndjson");
+        var index = new FakeIndex();
+
+        var report = await new LibraryFeed(TimeProvider.System).TickAsync(index, new ArticleFeedSource(new DbSettings(TestDatabase.AppConnection)), LectureSettings.From(null, null, fixture), NullLogger.Instance, CancellationToken.None);
+
+        Assert.That(report, Is.EqualTo(new ReconcileReport(12, 1, false)), "the report is the articles'");
+        var lectureBulk = index.Bulks.Single(b => b.Contains("\"_index\":\"tsr-lectures\"", StringComparison.Ordinal) && b.Contains("\"index\"", StringComparison.Ordinal)).Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        var lines = File.ReadAllLines(fixture).Where(line => line.Length > 0).ToArray();
+        Assert.That(lectureBulk, Has.Length.EqualTo(24));
+        for (var i = 0; i < lines.Length; i++)
+        {
+            Assert.That(lectureBulk[(2 * i) + 1], Does.StartWith(lines[i][..^1] + ",\"indexed_at\":\""), "line " + (i + 1));
+        }
+    }
+
+    [TestCase(null)]
+    [TestCase("/no/such/folder/lectures.ndjson")]
+    public async Task The_lecture_index_is_created_empty_and_nothing_is_written_to_it_when_the_file_is_unset_or_missing(string? file)
+    {
+        var index = new FakeIndex();
+
+        var report = await new LibraryFeed(TimeProvider.System).TickAsync(index, new ArticleFeedSource(new DbSettings(TestDatabase.AppConnection)), LectureSettings.From(null, null, file), NullLogger.Instance, CancellationToken.None);
+
+        Assert.That(report, Is.EqualTo(new ReconcileReport(12, 1, false)), "the articles are indexed as ever");
+        Assert.That(index.Ensured, Is.EqualTo((string[])["tsr-articles", "tsr-lectures"]));
+        Assert.That(index.Bulks.Where(b => b.Contains("tsr-lectures", StringComparison.Ordinal)), Is.Empty, "no lecture is written and none is deleted");
     }
 
     [Test]
@@ -103,7 +142,7 @@ public sealed class LibraryFeedTests
         ReconcileReport? report;
         try
         {
-            report = await new LibraryFeed(TimeProvider.System).TickAsync(index, new ArticleFeedSource(new DbSettings(TestDatabase.AppConnection)), NullLogger.Instance, CancellationToken.None);
+            report = await new LibraryFeed(TimeProvider.System).TickAsync(index, new ArticleFeedSource(new DbSettings(TestDatabase.AppConnection)), NoLectures, NullLogger.Instance, CancellationToken.None);
         }
         finally
         {

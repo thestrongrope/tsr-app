@@ -101,6 +101,15 @@ public sealed class V1SearchTests
     }
 
     [Test]
+    public async Task A_category_longer_than_100_characters_is_a_400_validation_error()
+    {
+        var (response, body) = await GetAsync(Search + "?q=study&category=" + new string('a', 101));
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+        Assert.That(body.GetProperty("error").GetRawText(), Is.EqualTo("""{"code":"VALIDATION_ERROR","message":"Category too long: at most 100 characters"}"""));
+    }
+
+    [Test]
     public async Task A_text_longer_than_200_characters_is_a_400_validation_error()
     {
         var (response, body) = await GetAsync(Search + "?q=" + new string('a', 201));

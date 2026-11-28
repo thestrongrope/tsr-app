@@ -20,6 +20,12 @@ internal static class ArticleSearchQuery
     /// <summary>Elasticsearch's own <c>index.max_result_window</c>: a page that ends past it is refused by the engine, and would make the database fallback skip that many rows.</summary>
     public const int MaxResultWindow = 10000;
 
+    /// <summary>The longest category the filter takes. A category is a slug the content files name; no charset is imposed (it may be in any script), but a megabyte of it is not one.</summary>
+    public const int MaxCategoryLength = 100;
+
+    public static string? ValidateCategory(string? category) =>
+        category is null || category.Length <= MaxCategoryLength ? null : "Category too long: at most 100 characters";
+
     /// <summary>The reason a request must be refused with a 400, or null. Checked before any engine or database call.</summary>
     public static string? Validate(string q, int limit, int offset)
     {
