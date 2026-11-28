@@ -100,6 +100,17 @@ services:
       retries: 12
       start_period: 60s
 
+  # The embedding service of lecture search (hosts/embeddings: BAAI/bge-small-en-v1.5, the model that made the stored document vectors). Reached by the other services only: no port, no setting.
+  # About 260 MB at rest; the 1 GB limit stops a runaway request, not a normal one. The model is in the image, so it starts offline; the image has its own Python health check (no curl in it).
+  embeddings:
+    build:
+      context: hosts/embeddings
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
   # The native image (target native: one binary, no .NET runtime), as are content-load and workers. Reached from outside: the deployment tool
   # attaches the API's host name to it, port 8080. It answers unknown paths itself and reads the caller's address from the proxy's
   # X-Forwarded-For (shared/api/ClientAddress.cs).
