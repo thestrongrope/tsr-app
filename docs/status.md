@@ -23,7 +23,7 @@ membership 25 (with `POST /auth/link`, moved from identity on 13 Nov 2026: its `
 | Gap | Who depends on it | State |
 |---|---|---|
 | Quiz status for the home banner (PHP `web/api/quiz_info.php`, outside the mobile router) | the app | built here as `GET /quiz/info` on 27 Nov 2026 (`domains/assessment`); released app builds still call the PHP address |
-| Article search and lecture search (the website's `/api/v1/search` and `/api/v1/lectures/search`; lecture search runs with the meaning layer on) | the app, the website | article search built on 28 Nov 2026 (`GET /api/v1/search`, `domains/search`; not compared with the live site, not run as a native image); lecture search not built; plan in `docs/specs/website-port/search-port-plan.md` (issue 22) |
+| Article search and lecture search (the website's `/api/v1/search` and `/api/v1/lectures/search`; lecture search runs with the meaning layer on) | the app, the website | both built on 28 Nov 2026 in `domains/search` (`GET /api/v1/search`, `GET /api/v1/lectures/search`), with the website's full lecture file in `content/lectures/` (spoken phone numbers masked); neither is compared with the live site, and the native image ran them on a lane only; plan in `docs/specs/website-port/search-port-plan.md` (issue 22) |
 | The website's search analytics (events, click route, report) | the website | not built; the events and the click route are in the search plan, the report route is not |
 | The join link `account.thestrongrope.com/join/<code>` and the website links the app opens (`/articles/<slug>`, `/donate`, `/about`, `/accreditation`, `/uploads/...`) | the app | not checked against the new stack |
 | `wp-json` calls in the app (`hosts/app/lib/features/wordpress/services/wordpress_service.dart`) | nothing serves them: there has been no WordPress site for over a year | code to delete, not to port; not traced whether a screen still reaches it |
@@ -31,15 +31,17 @@ membership 25 (with `POST /auth/link`, moved from identity on 13 Nov 2026: its `
 | The WhatsApp runner that sends | members | not built |
 | PHP files outside the mobile router, other than `quiz_info.php` | members (WhatsApp reminders, app links on the account host, the account deletion page), admins (some reports) | audited file by file on 28 Nov 2026 by reading, nothing run: 163 items, 16 not ported and 14 partly covered; the list by risk is `docs/specs/php-audit/README.md` |
 
-Elasticsearch on the stacks holds one index, `tsr-search` (member and class search for admins). It holds no article or lecture index until the search plan is built.
+Elasticsearch on the stacks holds one index, `tsr-search` (member and class search for admins). The worker `library-search-feed` adds the article and lecture indexes.
 
 ## The app
 
-`hosts/app` is the member app (package `the_strong_rope`, 1.6.1+24): the whole of tsr-account `mobile/` at `b2a5fc70`, moved here on 26 Nov 2026 (issue 26, PR 125) in place of the earlier shell, and a member of the root pub workspace. No screen has moved into `domains/*/app` yet. The store builds are still made from tsr-account. `hosts/app/Dockerfile` builds the web copy (Flutter Web behind nginx); the local stacks start it with `TSR_WITH_APP=1` (`docs/testing.md`). The production compose file has an `app` service (28 Nov 2026; `docs/deployment.md`); it is not deployed.
+`hosts/app` is the member app (package `the_strong_rope`, 1.6.1+24): the whole of tsr-account `mobile/` at `b2a5fc70`, moved here on 26 Nov 2026 (issue 26, PR 125) in place of the earlier shell, and a member of the root pub workspace. No screen has moved into `domains/*/app` yet. The store builds are still made from tsr-account. `hosts/app/Dockerfile` builds the web copy (Flutter Web behind nginx); the local stacks start it with `TSR_WITH_APP=1` (`docs/testing.md`). The production compose file has an `app` service (28 Nov 2026; `docs/deployment.md`); deployed with 0.11.0 (see Releases).
 
 ## Releases
 
-0.9.0 (26 Nov 2026): `main` at `b465aaa`, tag `v0.9.0`, deployed to production (the API answered healthy after the deploy; the migrate job's exit code and the image serving were not confirmed in Dokploy). The production database holds no members' data yet, and the store apps still call the PHP API.
+0.11.0 (28 Nov 2026): `main` at `122c17a`, tag `v0.11.0`, deployed to production (checked from outside the same day: `https://api.thestrongrope.com/health` answers ok and `https://app.thestrongrope.com` serves the web app 1.6.1+24; the API allows the web app's origin and no other (`TSR_CORS_ORIGINS`); not checked: a sign-in on the web app, the `embeddings` service, either search with data, which workers `TSR_WORKERS` names). It carries, since 0.9.0: the `app` service (the web copy of the member app, built for `https://api.thestrongrope.com`), article search and lecture search with the embedding service, the full lecture file, `GET /quiz/info` and the app's code in `hosts/app`. 0.10.0 (`4202002`) was never deployed: its deploy was refused for a missing setting, which 0.10.1 (`8275ae4`) gave a default. The production database holds no members' data yet, and the store apps still call the PHP API.
+
+0.9.0 (26 Nov 2026): `main` at `b465aaa`, tag `v0.9.0`, deployed to production (the API answered healthy after the deploy; the migrate job's exit code and the image serving were not confirmed in Dokploy).
 
 ## Workers and outside services
 
