@@ -592,7 +592,9 @@ Ordinary repo checks run on every task: `dotnet build TsrApp.slnx` (zero warning
   `POST /api/v1/events`, as tsr-web's `analytics-service.ts` and `events/route.ts` (fire and forget; no IP, cookie or user agent; its
   validation and rate limit). Requirements `SRCH-R18` rewritten and new IDs added in section 1 with their test cases. Test: unit tests
   of the event body and validation; a Hurl file for the click route; a `db/tests` or Hurl case that a search still answers when the event write fails.
-- [ ] **13. Native image run.** Build the native image; run both Hurl files on the default test stack. Test: TC-SRCH-Q4-01.
+- [x] **13. Native image run.** Build the native image; run both Hurl files on the default test stack. Test: TC-SRCH-Q4-01.
+  Done 28 Nov 2026 on `develop` at `2a359af`: the default test stack rebuilt as the native image (146 MB, with the lecture file); `v1-search.hurl` 23 requests and
+  `v1-lecture-search.hurl` 18 requests (meaning layer on, synthetic fixture) passed.
 - [ ] **14. Parity.** A local tsr-web with its stack reindexed; a lane with the website's content and the full lecture file;
   `tools/search-parity.cases`; allow lines. Write the result as `docs/specs/website-port/search-parity-results.md`. Test: TC-SRCH-Q1-01, Q2-01.
 - [ ] **15. Documents.** `domains/search/capabilities/library-search.md` (requirements linked to their tests), `domains/search/CLAUDE.md`,
