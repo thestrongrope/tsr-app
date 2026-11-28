@@ -1,0 +1,12 @@
+{
+  "name": "tsr-web-smoke",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Sign-in check of the web copy of the member app (Playwright, Chromium only)",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.65.1"
+  }
+}
