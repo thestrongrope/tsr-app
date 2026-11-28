@@ -12,7 +12,7 @@ services:
     ports: !override
       - "127.0.0.1:8089:8080"
   # The test stack runs the profile "workers" (tools/test-stack.sh): its API searches the stack's own Elasticsearch, and the
-  # two workers that send nothing outward run: search-feed feeds that index, content-refresh copies the content files mounted at
+  # three workers that send nothing outward run: search-feed and library-search-feed feed its two indexes, content-refresh copies the content files mounted at
   # /var/tsr/content (the synthetic set of db/synthetic/content). Literal, so no shell variable can switch a sending worker on,
   # and the channel id is empty, so no test stack calls the video feed.
   api:
@@ -21,8 +21,20 @@ services:
       TSR_ELASTICSEARCH_PASSWORD: local-only-es
       TSR_CONTENT_DIR: /var/tsr/content
       TSR_YOUTUBE_CHANNEL_ID: ""
+      # Lecture search: the embedding service of this stack and the evaluated weight (the meaning layer is on).
+      TSR_EMBEDDINGS_URL: http://embeddings:8000
+      TSR_LECTURES_SEMANTIC_WEIGHT: "0.25"
   workers:
     environment:
-      TSR_WORKERS: search-feed,content-refresh
+      TSR_WORKERS: search-feed,content-refresh,library-search-feed
       TSR_CONTENT_DIR: /var/tsr/content
+      TSR_LECTURES_FILE: /var/tsr/lectures/lectures.ndjson
       TSR_YOUTUBE_CHANNEL_ID: ""
+  # The web app of the test stack (TSR_WITH_APP=1 tools/test-stack.sh up): built for this stack's gateway and Auth emulator.
+  app:
+    build:
+      args:
+        TSR_API_BASE_URL: http://localhost:8089
+        TSR_AUTH_EMULATOR_HOST: 127.0.0.1:19100
+    ports: !override
+      - "127.0.0.1:8079:80"

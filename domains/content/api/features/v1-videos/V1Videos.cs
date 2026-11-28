@@ -5,10 +5,11 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
 using Tsr.Content.Api.Domain;
+using Tsr.Shared.Api;
 
 namespace Tsr.Content.Api.Features.V1Videos;
 
-// Slice: GET /api/v1/youtube -> the channel's latest videos, newest first as the feed orders them, in the answer shape supported app builds read from today's website (domain/V1.cs).
+// Slice: GET /api/v1/youtube -> the channel's latest videos, newest first as the feed orders them, in the answer shape supported app builds read from today's website (shared/api/WebsiteV1.cs).
 // Public: no caller, no permission, no database. The videos come from domain/LatestVideos.cs (the feed, kept in memory for 30 minutes, the last good list when the feed fails).
 // A port of tsr-web web/src/app/api/v1/youtube/route.ts; that code is the rule, quirks kept:
 //   - "limit" 1 to 50 (10), "offset" from 0; at most the 50 newest videos are ever kept.
@@ -41,8 +42,8 @@ internal static class V1VideosSlice
 
     private static async Task<IResult> HandleAsync(HttpContext context, LatestVideos latest, IConfiguration configuration, CancellationToken ct)
     {
-        var limit = V1.Int(context.Request.Query["limit"].FirstOrDefault(), DefaultLimit, min: 1, max: YouTubeFeed.MaxEntries);
-        var offset = V1.Int(context.Request.Query["offset"].FirstOrDefault(), fallback: 0, min: 0);
+        var limit = WebsiteV1.IntParam(context.Request.Query["limit"].FirstOrDefault(), DefaultLimit, min: 1, max: YouTubeFeed.MaxEntries);
+        var offset = WebsiteV1.IntParam(context.Request.Query["offset"].FirstOrDefault(), fallback: 0, min: 0);
         var end = (long)offset + limit;
 
         // tsr-web takes the first limit + offset videos and counts those.
@@ -51,11 +52,11 @@ internal static class V1VideosSlice
         var page = taken.Videos.Skip(offset).Take(limit).ToList();
         var channelId = YouTubeFeed.Channel(configuration).Trim();
 
-        return V1.OkAlways(
+        return WebsiteV1.OkAlways(
             json => Write(json, page, taken, channelId),
             MaxAgeSeconds,
             StaleWhileRevalidateSeconds,
-            new V1.Pagination(total, limit, offset, HasMore: end < total));
+            new WebsiteV1.Pagination(total, limit, offset, HasMore: end < total));
     }
 
     private static void Write(Utf8JsonWriter json, List<FeedVideo> page, LatestVideos.Taken taken, string channelId)
@@ -73,7 +74,7 @@ internal static class V1VideosSlice
         json.WriteString("channelId", channelId);
         json.WriteString("channelName", ChannelName);
         json.WriteString("channelUrl", ChannelUrl);
-        json.WriteString("lastUpdated", V1.Iso(taken.ReadAt));
+        json.WriteString("lastUpdated", WebsiteV1.Iso(taken.ReadAt));
         json.WriteBoolean("cacheHit", taken.FromKept);
         json.WriteEndObject();
         json.WriteEndObject();

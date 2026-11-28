@@ -116,6 +116,8 @@ services:
       # Where GET /search asks. Empty (the default) means no index: every search answers "unavailable". tools/dev-stack.sh sets it together with the
       # compose profile "workers", which starts the elasticsearch service below.
       TSR_ELASTICSEARCH_URL: ${TSR_ELASTICSEARCH_URL:-}
+      TSR_EMBEDDINGS_URL: ${TSR_EMBEDDINGS_URL:-}
+      TSR_LECTURES_SEMANTIC_WEIGHT: ${TSR_LECTURES_SEMANTIC_WEIGHT:-}
       TSR_ELASTICSEARCH_PASSWORD: local-only-es
       # The content files the Library reads are copied from (content's content-refresh worker reads this directory; empty, the default, reads nothing),
       # and the channel whose public feed GET /api/v1/youtube reads (empty: no outside call, an empty list).
@@ -155,6 +157,12 @@ services:
       retries: 12
       start_period: 60s
 
+  # The embedding service of lecture search, as production builds it (hosts/embeddings). In the profile "workers": the default test stack runs it; a lane does not unless it asks (TSR_LANE_EMBEDDINGS=1, tools/test-stack.sh).
+  embeddings:
+    build:
+      context: hosts/embeddings
+    profiles: ["workers"]
+
   # The API image in its second run mode: it serves only /health and runs the workers named in TSR_WORKERS (none by default).
   workers:
     build:
@@ -173,9 +181,12 @@ services:
       TSR_ELASTICSEARCH_URL: http://elasticsearch:9200
       TSR_ELASTICSEARCH_PASSWORD: local-only-es
       TSR_WORKERS: ${TSR_WORKERS:-}
+      TSR_LECTURES_FILE: ${TSR_LECTURES_FILE:-}
       TSR_CONTENT_DIR: ${TSR_CONTENT_DIR:-}
     volumes:
       - ${TSR_CONTENT_SRC:-./db/synthetic/content}:/var/tsr/content:ro
+      # The lecture data of the Library feed (TSR_LECTURES_FILE names the file in it): the invented fixture, or the directory TSR_LECTURES_SRC names.
+      - ${TSR_LECTURES_SRC:-./db/synthetic/lectures}:/var/tsr/lectures:ro
     depends_on:
       seed:
         condition: service_completed_successfully
@@ -196,6 +207,23 @@ services:
       interval: 10s
       timeout: 3s
       retries: 5
+
+  # The web copy of the member app (hosts/app/Dockerfile). It starts only with the compose profile "app", because the image
+  # takes minutes to build. The API address and the Auth emulator's address are compiled in, as the BROWSER reaches them, so
+  # the literal values here are the dev stack's; the test stack and the lanes override them with their own. The API answers
+  # the app only when TSR_CORS_ORIGINS names the app's origin (here http://localhost:8078).
+  app:
+    profiles: ["app"]
+    build:
+      context: .
+      dockerfile: hosts/app/Dockerfile
+      args:
+        TSR_API_BASE_URL: http://localhost:8088
+        TSR_AUTH_EMULATOR_HOST: 127.0.0.1:19099
+    ports:
+      - "127.0.0.1:8078:80"
+    depends_on:
+      - gateway
 
 volumes:
   db-data:

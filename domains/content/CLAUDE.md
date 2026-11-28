@@ -42,7 +42,7 @@ Each is marked `security: []` in `spec/api.yaml`. Why each is public, and why it
 | `GET /articles` (stub) | it was the site spike's list; no reader today | the published rule is in the query of `ListPublishedArticles` |
 
 The six `/api/v1/` routes answer in the website's shape, `{success, data, meta, pagination}`, and fail as
-`{success: false, error: {code, message}, meta}` (`api/domain/V1.cs`): the named exception to the `{"detail"}` rule
+`{success: false, error: {code, message}, meta}` (`shared/api/WebsiteV1.cs`): the named exception to the `{"detail"}` rule
 (root `CLAUDE.md` rule 7). Map a new one in its own slice with `routes.MapGet(pattern, HandleAsync).WithV1Failures()` (see `api/features/v1-tags/V1Tags.cs`), so an unexpected failure is answered in that shape too. `db/tests/V1FailureTests.cs` fails when a `/api/v1/` endpoint lacks it.
 
 ## The worker: `content-refresh`, and the job `content-load`
@@ -79,7 +79,7 @@ None is required: the API starts without them.
 | Behaviour over HTTP | `spec/tests/v1-*.hurl` (test stack; `tools/contract-website.sh test`), `list-published-articles.hurl`, `holy-quran.hurl` |
 | Module: registration, routes, workers, dependencies | `api/ContentModule.cs` |
 | One Library slice end to end | `api/features/v1-articles/V1Articles.cs` (the others: `v1-article`, `v1-categories`, `v1-tags`, `v1-publications`, `v1-videos`) |
-| The `/api/v1/` answer shape, ETag, 304, number clamps | `api/domain/V1.cs` |
+| The `/api/v1/` answer shape, ETag, 304, number clamps | `shared/api/WebsiteV1.cs` (shared with search) |
 | The fields of an article in a list | `api/domain/ArticleListItem.cs` |
 | Reading the content files, their bounds and failures | `api/domain/ContentFiles.cs`, `FrontMatter.cs` |
 | Markdown to safe HTML (CommonMark with footnotes, pipe tables and bare web addresses as links, LIB-D18), reading time | `api/domain/ArticleHtml.cs` |
@@ -137,5 +137,6 @@ None left (`api/Planned.cs` is gone). The two recitation leaderboard routes the 
 | View | Columns | Known readers |
 |---|---|---|
 | `v_quran` | id, surah, arabic, verses | classes (conduction) |
+| `v_published_articles` | slug, title, excerpt, body_markdown, published_at, published_date_text, modified_date_text, author, language, reading_minutes, legacy_id, categories, tags (no HTML body); migration `PublishedArticlesView` | search (the article feed and the database fallback of article search) |
 
 `GET /holy-quran` reads `content.holy_quran` itself (this domain's table: the 114 surahs and verse counts); classes' conduction screens read the same rows through `v_quran`.

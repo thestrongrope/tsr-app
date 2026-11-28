@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+	Release builds — the ones Codemagic's ios-release workflow ships. Kept
+	identical to Runner.entitlements except for aps-environment, which is the
+	one value that legitimately differs between a development and a production
+	build. Every entitlement here must also be enabled on the com.thestrongrope
+	App ID: signing is automatic, so the provisioning profile has to match this
+	file or the build fails.
+-->
+<plist version="1.0">
+<dict>
+	<!-- Push Notifications (Production) -->
+	<key>aps-environment</key>
+	<string>production</string>
+
+	<!-- Sign in with Apple -->
+	<key>com.apple.developer.applesignin</key>
+	<array>
+		<string>Default</string>
+	</array>
+
+	<!-- Keychain Sharing (for credentials storage) -->
+	<key>keychain-access-groups</key>
+	<array>
+		<string>$(AppIdentifierPrefix)com.thestrongrope</string>
+	</array>
+
+	<!-- Associated Domains (Universal Links / deep linking) -->
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<!-- Firebase Dynamic Links (legacy; the service is being shut down) -->
+		<string>applinks:the-strong-rope.firebaseapp.com</string>
+		<string>applinks:the-strong-rope.page.link</string>
+		<!-- App links: class joins and MCQs (AASA on each host) -->
+		<string>applinks:account.thestrongrope.com</string>
+		<string>applinks:thestrongrope.com</string>
+		<string>applinks:www.thestrongrope.com</string>
+	</array>
+</dict>
+</plist>

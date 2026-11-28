@@ -9,7 +9,7 @@ using Tsr.Shared.Api;
 
 namespace Tsr.Content.Api.Features.V1Tags;
 
-// Slice: GET /api/v1/taxonomies/tags -> every tag of the published articles with its count, most used first, in the answer shape supported app builds read from today's website (domain/V1.cs).
+// Slice: GET /api/v1/taxonomies/tags -> every tag of the published articles with its count, most used first, in the answer shape supported app builds read from today's website (shared/api/WebsiteV1.cs).
 // Public: no caller, no permission. It reads content.published_articles, which holds published articles only (a draft is never copied there).
 // A port of tsr-web web/src/app/api/v1/taxonomies/tags/route.ts and getAllTags (api/lib/article-service.ts); that code is the rule, quirks kept:
 //   - a tag is its exact name, case and all; a name written twice on one article counts twice.
@@ -57,7 +57,7 @@ internal static partial class V1TagsSlice
             Read,
             ct);
 
-        return V1.Ok(json => Write(json, rows), MaxAgeSeconds, StaleWhileRevalidateSeconds);
+        return WebsiteV1.Ok(json => Write(json, rows), MaxAgeSeconds, StaleWhileRevalidateSeconds);
     }
 
     private static Row Read(DbRow row) => new(row.Text("Name"), row.Int("ArticleCount"));

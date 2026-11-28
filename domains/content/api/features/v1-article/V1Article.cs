@@ -8,7 +8,7 @@ using Tsr.Shared.Api;
 
 namespace Tsr.Content.Api.Features.V1Article;
 
-// Slice: GET /api/v1/articles/{slug} -> one published article with its HTML and five related articles (the Markdown is not sent), in the answer shape supported app builds read from today's website (domain/V1.cs).
+// Slice: GET /api/v1/articles/{slug} -> one published article with its HTML and five related articles (the Markdown is not sent), in the answer shape supported app builds read from today's website (shared/api/WebsiteV1.cs).
 // Public: no caller, no permission. It reads content.published_articles, which holds published articles only, so a draft's slug is an unknown slug.
 // A port of tsr-web web/src/app/api/v1/articles/[slug]/route.ts, getArticleBySlug (api/lib/article-service.ts) and getRelatedPosts (lib/markdown.ts); that code is the rule, quirks kept:
 //   - related: every OTHER article scores 2 for each of this article's categories it shares and 1 for each tag; the five highest, equal scores newest first (then by slug).
@@ -58,12 +58,12 @@ internal static class V1ArticleSlice
         var rows = await ReadAsync(source, slug, ct);
         if (rows.Count == 0)
         {
-            return V1.Error(StatusCodes.Status404NotFound, V1.NotFound, "Article not found: " + slug);
+            return WebsiteV1.Error(StatusCodes.Status404NotFound, WebsiteV1.NotFound, "Article not found: " + slug);
         }
 
         var article = rows[0];
         var related = rows.Skip(1).ToList();
-        return V1.Ok(json => Write(json, article, related), MaxAgeSeconds, StaleWhileRevalidateSeconds, lastModified: article.LastModified);
+        return WebsiteV1.Ok(json => Write(json, article, related), MaxAgeSeconds, StaleWhileRevalidateSeconds, lastModified: article.LastModified);
     }
 
     private static Task<List<Row>> ReadAsync(NpgsqlDataSource source, string slug, CancellationToken ct) =>

@@ -10,9 +10,9 @@ namespace Tsr.Host.Api.Tests;
 public sealed partial class ProductionStackTests
 {
     private static readonly string[] RequiredSettings =
-        ["TSR_DB_OWNER_PASSWORD", "TSR_APP_DB_PASSWORD", "TSR_ELASTICSEARCH_PASSWORD", "TSR_FIREBASE_PROJECT_ID"];
+        ["TSR_DB_OWNER_PASSWORD", "TSR_APP_DB_PASSWORD", "TSR_ELASTICSEARCH_PASSWORD", "TSR_FIREBASE_PROJECT_ID", "TSR_APP_API_BASE_URL"];
 
-    private static readonly string[] LongRunningServices = ["db", "gotenberg", "elasticsearch", "api", "workers", "site"];
+    private static readonly string[] LongRunningServices = ["db", "gotenberg", "elasticsearch", "embeddings", "api", "workers", "site", "app"];
 
     /// <summary>The file without its comments: a comment may name what the stack must not contain.</summary>
     private static readonly string Stack = string.Join(
@@ -226,6 +226,82 @@ public sealed partial class ProductionStackTests
         Assert.That(dev, Does.Contain(":/var/tsr/content:ro"));
     }
 
+    /// <summary>TC-SRCH-Q5-01 (the text half): the embedding service is built from hosts/embeddings, is reached only by the other services (no port, no profile, no setting that holds a secret) and may not take more than 1 GB.</summary>
+    [Test]
+    public void The_embedding_service_is_internal_limited_to_one_gigabyte_and_built_from_its_folder()
+    {
+        var embeddings = Service("embeddings");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(embeddings, Does.Contain("context: hosts/embeddings"));
+            Assert.That(embeddings, Does.Not.Contain("image:"));
+            Assert.That(embeddings, Does.Match(@"(?ms)deploy:\s+resources:\s+limits:\s+memory: 1G"));
+            Assert.That(embeddings, Does.Not.Match(@"(?m)^\s*(ports|profiles|environment)\s*:"));
+        });
+    }
+
+    /// <summary>Plan 3.5 and 3.7: the API is told where the embedding service is and the evaluated weight (0.25). The lecture file is not set here: production has no lecture data until task 12a puts it in the image (owner decision a).</summary>
+    [Test]
+    public void The_api_is_given_the_embedding_service_and_the_semantic_weight_and_no_lecture_file_yet()
+    {
+        var environment = Regex.Match(Stack, @"(?ms)environment: &api-environment\n(?<body>.*?)(?=^    \S)").Groups["body"].Value;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(environment, Does.Contain("TSR_EMBEDDINGS_URL: http://embeddings:8000"));
+            Assert.That(environment, Does.Contain("TSR_LECTURES_SEMANTIC_WEIGHT: \"0.25\""));
+            Assert.That(environment, Does.Not.Contain("TSR_LECTURES_FILE"));
+        });
+    }
+
+    /// <summary>The dev stack passes the lecture settings through, as it does the Elasticsearch address (empty unless the test stack or a lane sets them), and mounts the lecture folder for the workers.</summary>
+    [Test]
+    public void The_dev_stack_passes_the_lecture_settings_through_and_mounts_the_lecture_folder()
+    {
+        var lines = File.ReadAllLines(Path.Combine(RouteCatalog.RepoRoot(), "docker-compose.dev.yml")).Where(line => !line.TrimStart().StartsWith('#'));
+        var dev = string.Join('\n', lines);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(ServiceIn(dev, "api"), Does.Contain("TSR_EMBEDDINGS_URL: ${TSR_EMBEDDINGS_URL:-}").And.Contain("TSR_LECTURES_SEMANTIC_WEIGHT: ${TSR_LECTURES_SEMANTIC_WEIGHT:-}"));
+            Assert.That(ServiceIn(dev, "workers"), Does.Contain("TSR_LECTURES_FILE: ${TSR_LECTURES_FILE:-}").And.Contain(":/var/tsr/lectures:ro"));
+        });
+    }
+
+    /// <summary>The dev stack (and so the test stack and its lanes) has the same service under the profile "workers": the default test stack runs it, a lane does not unless it asks (tools/test-stack.sh).</summary>
+    [Test]
+    public void The_dev_stack_has_the_embedding_service_under_the_workers_profile()
+    {
+        var lines = File.ReadAllLines(Path.Combine(RouteCatalog.RepoRoot(), "docker-compose.dev.yml")).Where(line => !line.TrimStart().StartsWith('#'));
+        var embeddings = ServiceIn(string.Join('\n', lines), "embeddings");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(embeddings, Does.Contain("context: hosts/embeddings"));
+            Assert.That(embeddings, Does.Contain("profiles: [\"workers\"]"));
+            Assert.That(embeddings, Does.Not.Match(@"(?m)^\s*ports\s*:"));
+        });
+    }
+
+    /// <summary>The image pins what makes a vector: an exact fastembed in the project file and a lock the build may not change.</summary>
+    [Test]
+    public void The_embedding_image_builds_from_the_lock_with_an_exact_fastembed()
+    {
+        var folder = Path.Combine(RouteCatalog.RepoRoot(), "hosts", "embeddings");
+        var dockerfile = File.ReadAllText(Path.Combine(folder, "Dockerfile"));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(File.ReadAllText(Path.Combine(folder, "pyproject.toml")), Does.Match(@"""fastembed==\d+\.\d+\.\d+"""));
+            Assert.That(File.Exists(Path.Combine(folder, "uv.lock")), Is.True);
+            Assert.That(dockerfile, Does.Contain("uv sync --frozen"));
+            Assert.That(dockerfile, Does.Contain("EMBEDDING_MODEL=BAAI/bge-small-en-v1.5"));
+            Assert.That(dockerfile, Does.Not.Contain("pip install"));
+            Assert.That(dockerfile, Does.Contain("HEALTHCHECK").And.Contain("python -c"));
+        });
+    }
+
     private static string Service(string name) => ServiceIn(Stack, name);
 
     private static string ServiceIn(string stack, string name)
@@ -233,6 +309,26 @@ public sealed partial class ProductionStackTests
         var block = Regex.Match(stack, @"(?ms)^  " + Regex.Escape(name) + @":\n(?<body>.*?)(?=^  \S|\z)");
         Assert.That(block.Success, Is.True, "no service " + name);
         return block.Groups["body"].Value;
+    }
+
+    /// <summary>
+    /// The web copy of the member app: built from hosts/app/Dockerfile as a release build (no sign-in test double is named), with the API's public
+    /// address compiled in from a required setting. It is reached only through the deployment tool's proxy and is given no setting at run time.
+    /// </summary>
+    [Test]
+    public void The_web_app_is_a_release_build_for_the_api_s_public_address()
+    {
+        var app = Service("app");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(app, Does.Contain("context: ."));
+            Assert.That(app, Does.Contain("dockerfile: hosts/app/Dockerfile"));
+            Assert.That(app, Does.Contain("TSR_API_BASE_URL: ${TSR_APP_API_BASE_URL:?"));
+            Assert.That(app, Does.Not.Contain("TSR_AUTH"));
+            Assert.That(app, Does.Not.Match(@"(?m)^\s*(ports|profiles|environment|volumes|depends_on)\s*:"));
+            Assert.That(app, Does.Contain("healthcheck:"));
+        });
     }
 
     [Test]

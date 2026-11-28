@@ -126,7 +126,7 @@ public sealed partial class TestSheetsTests
             ReadStarted.TrySetResult();
             if (OnRead is not null)
             {
-                await OnRead(key);
+                await OnRead(key).WaitAsync(ct);
             }
 
             if (FailReads.Contains(key))

@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
-# Runs tsr-account's Patrol journeys against the NEW API on a lane stack: the reviewer journeys
-# (mobile/integration_test/journeys) or, with the -personas commands, the persona journeys (mobile/integration_test/personas).
-# Usage: TSR_STACK=n tools/patrol-lane.sh up | reset | run [journey file, relative to tsr-account/mobile]
+# Runs the Patrol journeys of hosts/app against the NEW API on a lane stack: the reviewer journeys
+# (hosts/app/integration_test/journeys) or, with the -personas commands, the persona journeys (hosts/app/integration_test/personas).
+# Usage: TSR_STACK=n tools/patrol-lane.sh up | reset | run [journey files, relative to hosts/app]
 #        TSR_STACK=n tools/patrol-lane.sh up-personas | reset-personas | run-personas [persona journey files...]
 #   up     starts lane n (tools/test-stack.sh up), gives its API tsr-account's real app-version catalog (the synthetic
 #          contract catalog demands a build the app does not have, so the app would show its update gate), and builds
 #          the cohort source.
 #   reset  puts the lane's database back to the reviewer demo cohort and nothing else, and makes sure the reviewer can
 #          sign in at the lane's Auth emulator. The runner calls it before every journey.
-#   run    calls tsr-account's scripts/patrol-android.sh, pointed at the lane (it resets before each journey).
+#   run    calls tools/patrol/run.sh, pointed at the lane (it resets before each journey).
 #   The -personas commands do the same for the six personas: the reset adds tsr-account's persona fixture
 #   (scripts/persona-cohort-teardown.sql, the reviewer cohort, scripts/persona-cohort.sql) and the run calls
-#   scripts/patrol-personas.sh. Use a lane of their own (lane 4 by convention), so a persona run and a reviewer run never
+#   tools/patrol/run.sh personas. Use a lane of their own (lane 4 by convention), so a persona run and a reviewer run never
 #   reset each other; they also have a scratch database each, so both can run at once.
 #   The persona lane also runs its own Elasticsearch with the search-feed worker (TSR_LANE_WORKERS=search-feed: the search
 #   journeys need an index; no sending worker), and its reset loads the place rows the location journey reads
@@ -51,7 +51,7 @@ EMULATOR="http://127.0.0.1:$TSR_TEST_EMULATOR_PORT/identitytoolkit.googleapis.co
 # The persona commands have a scratch database of their own, so they never collide with a reviewer run on another lane.
 PERSONA_MODE=0
 SOURCE_DB=tsr_patrol
-case "$COMMAND" in *-personas|enrol-token) PERSONA_MODE=1; SOURCE_DB=tsr_patrol_personas ;; esac
+case "$COMMAND" in *-personas|enrol-token|link-token) PERSONA_MODE=1; SOURCE_DB=tsr_patrol_personas ;; esac
 # Tables with no member data that the cohort and the app's screens read (levels, syllabus, standard MCQs, lookups).
 REFERENCE_TABLES="class_levels genders languages lookups permissions role_permissions interest_options syllabus topics subjects standard_mcqs standard_mcq_questions guides holy_quran tags age_ranges book_chapters"
 VARS="$TSR_TEST_VARS_DIR/patrol-reviewer.vars"
@@ -79,7 +79,7 @@ build_source() {
   maria_dump --no-create-info tsr_synth_s2 $REFERENCE_TABLES | maria "$SOURCE_DB"
 }
 
-# The persona fixture, in the order scripts/patrol-personas.sh applies it on PHP: its teardown first (the cohort reset
+# The persona fixture, in the order tsr-account's scripts/patrol-personas.sh applies it on PHP: its teardown first (the cohort reset
 # deletes @demo.invalid users but not the persona classes or rule), then the cohort, then the personas with their uids.
 seed_personas() {
   local name
@@ -179,10 +179,8 @@ YML
     export TSR_PATROL_API_URL="http://127.0.0.1:$TSR_TEST_GATEWAY_PORT"
     export TSR_PATROL_AUTH_EMULATOR_PORT="$TSR_TEST_EMULATOR_PORT"
     export TSR_PATROL_RESET_CMD="$ROOT/tools/patrol-lane.sh reset"
-    # The reset before the next journey is the cleanup; nothing of a journey outlives it.
-    export TSR_PATROL_CLEANUP_CMD=true
     shift
-    exec "$ACCOUNT_DIR/scripts/patrol-android.sh" "$@"
+    exec tools/patrol/run.sh journeys "$@"
     ;;
   run-personas)
     require_files
@@ -192,13 +190,17 @@ YML
     # The whole per-journey setup: teardown, cohort, personas, load into the lane, emulator accounts.
     export TSR_PATROL_RESET_CMD="$ROOT/tools/patrol-lane.sh reset-personas"
     export TSR_PATROL_ENROL_TOKEN_CMD="$ROOT/tools/patrol-lane.sh enrol-token"
-    export TSR_PATROL_CLEANUP_CMD=true
+    export TSR_PATROL_LINK_TOKEN_CMD="$ROOT/tools/patrol-lane.sh link-token"
     shift
-    exec "$ACCOUNT_DIR/scripts/patrol-personas.sh" "$@"
+    exec tools/patrol/run.sh personas "$@"
     ;;
   enrol-token)
-    # For scripts/patrol-personas.sh only (it hands the number to the enrol-by-token journey): the invented registrant's token.
+    # For tools/patrol/run.sh only (it hands the number to the enrol-by-token journey): the invented registrant's token.
     echo "select token from users where email = 'persona-reg.gentsplace@demo.invalid'" | maria -N -B "$SOURCE_DB"
+    ;;
+  link-token)
+    # For tools/patrol/run.sh only: the token of the member the link-student journey links to; nothing when the fixture has none.
+    echo "select token from users where email = 'persona-link.member@demo.invalid'" | maria -N -B "$SOURCE_DB"
     ;;
   *) echo "$USAGE" >&2; exit 1 ;;
 esac

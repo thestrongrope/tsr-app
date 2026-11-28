@@ -8,6 +8,7 @@
 # Neither side has Google credentials and no request goes to Google: PHP answers "not configured" from its own code and the new API likewise.
 # Hurl runs files in parallel and the advisory locks are global: every case that reaches a lock sits in ONE file per lock (standard-mcq-update.hurl: 5001; admin-quiz-locked.hurl: 5002);
 # the other files only test refusals that happen before any lock.
+# quiz-info-new-api.hurl (GET /quiz/info, public) runs on its own after the batch (a request tries lock 5002).
 # Files named *-new-api.hurl hold what only the new API answers; they run on the new API only. Needs docker, curl, jq, hurl. Prints no secret.
 set -euo pipefail
 
@@ -83,3 +84,7 @@ if [ "$PREPARE_ONLY" = 1 ]; then
 fi
 
 hurl --test --variable "base_url=$BASE" --variables-file "$VARS" "$@" "${FILES[@]}"
+# GET /quiz/info tries the quiz admin lock for a request, so its file (new API only) runs alone, after the parallel batch.
+if [ "$SIDE" = test ]; then
+  hurl --test --variable "base_url=$BASE" --variables-file "$VARS" "$@" domains/assessment/spec/tests/quiz-info-new-api.hurl
+fi

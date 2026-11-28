@@ -4,6 +4,7 @@
 # the project name, and the published ports differ. The internal-only gotenberg PDF renderer has no host port.
 # Usage: [TSR_STACK=n] tools/test-stack.sh up | down | remove | status
 #   up      build and start (migrate and seed run once); waits for the API through the gateway
+#           TSR_WITH_APP=1 also builds and starts the web app (8079; a lane: 8110+n)
 #   down    stop and delete the containers, KEEP the volume
 #   remove  stop and delete the containers AND the volume (a clean database next time)
 # Default (TSR_STACK unset): project tsr-app-test, gateway :8089, database :5434, Auth emulator :19100, docker-compose.test.yml.
@@ -12,11 +13,12 @@
 #   The ports are written literally into build/test-n/compose.override.yml from the validated integer. The stack builds from
 #   the checkout this script lives in, so a worktree's lane runs that worktree's code. Contract scripts: TSR_STACK=n tools/<x>-contract.sh test.
 # A lane runs no worker unless TSR_LANE_WORKERS names ONE at `up` (content-refresh or search-feed; neither sends anything outward, and a sending
-#   worker is refused). content-refresh: the lane runs the workers service with that worker, still without Elasticsearch, and the api and workers
+#   worker is refused). library-search-feed: the lane runs its own Elasticsearch and the workers content-refresh and library-search-feed (the Library article index; v1-search.hurl). content-refresh: the lane runs the workers service with that worker, still without Elasticsearch, and the api and workers
 #   read the content files mounted at /var/tsr/content (db/synthetic/content, or the directory TSR_CONTENT_SRC names: the parity and timing runs
 #   over the website's own files). search-feed: the lane also runs its own Elasticsearch (about 1 GB; its own container and volume, no host port,
 #   so it cannot clash with another stack's) and the api searches it; tools/patrol-lane.sh up-personas uses it. Every command regenerates the
 #   lane's override, so name the same TSR_LANE_WORKERS on a later `up` of that lane.
+# TSR_LANE_EMBEDDINGS=1 at `up` also starts the lane's own embedding container (hosts/embeddings; no host port); name it again on a later `up`.
 # Only the selected tsr-app-test project is touched; every command carries -p <project>. All ports are 127.0.0.1 only.
 set -euo pipefail
 
@@ -41,6 +43,13 @@ services:
   gateway:
     ports: !override
       - "127.0.0.1:$TSR_TEST_GATEWAY_PORT:8080"
+  app:
+    build:
+      args:
+        TSR_API_BASE_URL: http://localhost:$TSR_TEST_GATEWAY_PORT
+        TSR_AUTH_EMULATOR_HOST: 127.0.0.1:$TSR_TEST_EMULATOR_PORT
+    ports: !override
+      - "127.0.0.1:$TSR_TEST_APP_PORT:80"
 YML
   case "${TSR_LANE_WORKERS:-}" in
     "") ;;
@@ -80,7 +89,42 @@ YML
       TSR_WORKERS: "search-feed"
 YML
       ;;
-    *) echo "TSR_LANE_WORKERS must be unset, content-refresh or search-feed (never a sending worker)" >&2; exit 1 ;;
+    library-search-feed)
+      # The Library indexes: the lane runs its own Elasticsearch and the two workers that fill them (content-refresh copies the synthetic content files, library-search-feed indexes them and the lecture fixture). Literal names, as above.
+      # The meaning layer is on in the settings (weight 0.25) but has no service unless the lane also has TSR_LANE_EMBEDDINGS=1: without it lecture search answers from keywords only (SRCH-R11).
+      EMBEDDINGS_API_ENV=""
+      if [ "${TSR_LANE_EMBEDDINGS:-}" = 1 ]; then EMBEDDINGS_API_ENV="      TSR_EMBEDDINGS_URL: http://embeddings:8000"; fi
+      cat >> "$OVERRIDE" <<YML
+  api:
+    environment:
+      TSR_ELASTICSEARCH_URL: http://elasticsearch:9200
+      TSR_CONTENT_DIR: /var/tsr/content
+      TSR_YOUTUBE_CHANNEL_ID: ""
+      TSR_LECTURES_SEMANTIC_WEIGHT: "0.25"
+${EMBEDDINGS_API_ENV}
+  elasticsearch:
+    profiles: !reset []
+  workers:
+    profiles: !reset []
+    environment:
+      TSR_WORKERS: "content-refresh,library-search-feed"
+      TSR_CONTENT_DIR: /var/tsr/content
+      TSR_LECTURES_FILE: /var/tsr/lectures/lectures.ndjson
+      TSR_YOUTUBE_CHANNEL_ID: ""
+YML
+      ;;
+    *) echo "TSR_LANE_WORKERS must be unset, content-refresh, search-feed or library-search-feed (never a sending worker)" >&2; exit 1 ;;
+  esac
+  # The embedding service (about 260 MB at rest) is off in a lane; TSR_LANE_EMBEDDINGS=1 at `up` turns it on, to check the service and to embed the lecture fixture (tools/embed-lecture-fixture.sh).
+  case "${TSR_LANE_EMBEDDINGS:-}" in
+    "") ;;
+    1)
+      cat >> "$OVERRIDE" <<YML
+  embeddings:
+    profiles: !reset []
+YML
+      ;;
+    *) echo "TSR_LANE_EMBEDDINGS must be unset or 1" >&2; exit 1 ;;
   esac
 elif [ -n "${TSR_LANE_WORKERS:-}" ]; then
   echo "TSR_LANE_WORKERS is for a lane stack (TSR_STACK=n); the default test stack's workers are fixed in docker-compose.test.yml" >&2; exit 1
@@ -91,7 +135,13 @@ fi
 # lane names the profile too, so a workers or Elasticsearch container started with TSR_LANE_WORKERS is removed whether or not the variable is set now.
 PROFILE=()
 if [ -z "${TSR_STACK:-}" ]; then PROFILE=(--profile workers); fi
-case "${1:-}" in down|remove) PROFILE=(--profile workers) ;; esac
+case "${1:-}" in down|remove) PROFILE=(--profile workers --profile app) ;; esac
+# TSR_WITH_APP=1 at `up` also builds and starts the web app (compose profile "app", several minutes the first time) on
+# http://localhost:$TSR_TEST_APP_PORT, and lets that origin call the API unless TSR_CORS_ORIGINS already names others.
+if [ "${1:-}" = up ] && [ "${TSR_WITH_APP:-}" = 1 ]; then
+  PROFILE+=(--profile app)
+  export TSR_CORS_ORIGINS="${TSR_CORS_ORIGINS:-http://localhost:$TSR_TEST_APP_PORT}"
+fi
 stack() { docker compose -p "$TSR_TEST_PROJECT" -f docker-compose.dev.yml -f "$OVERRIDE" ${PROFILE[@]+"${PROFILE[@]}"} "$@"; }
 
 case "${1:?usage: test-stack.sh up|down|remove|status}" in

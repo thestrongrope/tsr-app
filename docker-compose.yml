@@ -3,7 +3,7 @@
 #
 # What it must never hold (hosts/api/tests/ProductionStackTests.cs fails the build otherwise):
 #   - test members or the sign-in test double of the local stacks;
-#   - a published port: only api and site are reached from outside, through the deployment tool's proxy (Traefik);
+#   - a published port: only api, site and app are reached from outside, through the deployment tool's proxy (Traefik);
 #   - a proxy of its own: the route table of hosts/gateway is for the dev and test stacks;
 #   - a secret's value: every secret is a ${NAME} the deployment tool supplies, and a required one stops the start when it is missing.
 #
@@ -100,6 +100,17 @@ services:
       retries: 12
       start_period: 60s
 
+  # The embedding service of lecture search (hosts/embeddings: BAAI/bge-small-en-v1.5, the model that made the stored document vectors). Reached by the other services only: no port, no setting.
+  # About 260 MB at rest; the 1 GB limit stops a runaway request, not a normal one. The model is in the image, so it starts offline; the image has its own Python health check (no curl in it).
+  embeddings:
+    build:
+      context: hosts/embeddings
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
   # The native image (target native: one binary, no .NET runtime), as are content-load and workers. Reached from outside: the deployment tool
   # attaches the API's host name to it, port 8080. It answers unknown paths itself and reads the caller's address from the proxy's
   # X-Forwarded-For (shared/api/ClientAddress.cs).
@@ -116,6 +127,10 @@ services:
       TSR_GOTENBERG_URL: http://gotenberg:3000
       TSR_ELASTICSEARCH_URL: http://elasticsearch:9200
       TSR_ELASTICSEARCH_PASSWORD: ${TSR_ELASTICSEARCH_PASSWORD:?TSR_ELASTICSEARCH_PASSWORD is not set}
+      # Lecture search: the embedding service (the meaning layer is on at the evaluated weight; the service being down only turns it off for that request).
+      # TSR_LECTURES_FILE is not set here: the lecture data goes into the image with task 12a (owner decision a), and until then the lecture index is created empty.
+      TSR_EMBEDDINGS_URL: http://embeddings:8000
+      TSR_LECTURES_SEMANTIC_WEIGHT: "0.25"
       # Optional. Empty: no push, no account deletion at Firebase, no sheet refresh (each answers as its slice documents).
       TSR_GOOGLE_SERVICE_ACCOUNT_B64: ${TSR_GOOGLE_SERVICE_ACCOUNT_B64:-}
       TSR_PUBLIC_WEB_BASE: ${TSR_PUBLIC_WEB_BASE:-}
@@ -186,6 +201,26 @@ services:
         condition: service_completed_successfully
       api:
         condition: service_started
+
+  # The web copy of the member app (hosts/app/Dockerfile): Flutter Web as a release build, served by nginx, which forwards nothing. The
+  # deployment tool attaches the app's host name to it, port 80. The API's public address is compiled into the app at build time, so a change
+  # of TSR_APP_API_BASE_URL needs a rebuild. The browser calls the API itself: the API answers it only when TSR_CORS_ORIGINS names the app's
+  # origin, and sign-in works only when the app's host name is an authorized domain of the Firebase project. The image takes minutes to build.
+  app:
+    build:
+      context: .
+      dockerfile: hosts/app/Dockerfile
+      args:
+        TSR_API_BASE_URL: ${TSR_APP_API_BASE_URL:?TSR_APP_API_BASE_URL is not set}
+    restart: unless-stopped
+    healthcheck:
+      # Alpine ships BusyBox wget only: no curl, no --spider.
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:80/"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+      start_interval: 1s
 
   # Serves the generated pages, read-only, with the image's own settings: it forwards nothing. The deployment tool attaches the site's
   # host name to it, port 80. Until the first build has written a home page it answers 403 and is reported unhealthy.

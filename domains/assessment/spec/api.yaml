@@ -6,7 +6,7 @@ info:
     The assessment domain's actions (batch A1: a member takes a quiz and reads scores; batch A2: a teacher or class admin manages a class's quizzes and the copy pickers). Behaviour: tests/ (run against any base URL).
     Forward compatible: a store-live app keeps calling these, so add fields and routes freely but
     never remove or change one without the release process. Every error body is {"detail": "..."}.
-    Every route signs the caller in with PHP's member-creating sign-in (api_authenticate(true)).
+    Every route but GET /quiz/info signs the caller in with PHP's member-creating sign-in (api_authenticate(true)); quiz info is public with an optional bearer.
 servers:
   - url: https://gateway.tsr-app-dev.orb.local
     description: Local dev stack (gateway)
@@ -232,6 +232,25 @@ paths:
         "403": {$ref: "#/components/responses/Problem"}
         "409": {$ref: "#/components/responses/Problem"}
         "422": {$ref: "#/components/responses/Problem"}
+  /quiz/info:
+    get:
+      operationId: quizInfo
+      summary: The Grand or Mega quiz status the app's home banner reads
+      description: |
+        Public: callable signed out (the banner shows before sign-in), so it is the one route of this domain that does not require a member. A valid Firebase bearer makes the caller the member (it never creates one): auth.method is "firebase", can_register true,
+        auth.user_token the member's token, the episodes carry participation {form_id, form_base_url}, is_superuser is the permission quiz:admin and can_take_part the draw's rules (excluded token or country). Signed out: auth.method "none", can_register false, user_token null,
+        participation null, can_take_part true. An invalid or expired bearer, or one that names no member, is 401 "Authentication failed". 60 calls a minute per client address (429).
+        The body is the object PHP puts under `data`, whole (no {success, data} wrapper): {type: grand or mega, name, series, description, status (upcoming, registered, live, ended), message, is_superuser, timing, episode (grand) or episodes (mega: total, current_day,
+        current_episode, next_episode, list[]), banner (the banner_url setting or null), colors, mode, youtube_url, admin_url, auth, can_take_part}; or only {status: "offline", message} when no quiz is configured, the settings have no mode, the mode is Offline, or it is UAT and the caller is not a quiz admin.
+        Always Cache-Control: no-store. The settings are read from the settings sheet when the saved copy is 60 seconds old or more; if another refresh is running or the sheet fails or takes over 5 seconds, the saved copy is served. Slice: features/quiz-info/QuizInfo.cs.
+      security:
+        - {}
+        - memberToken: []
+      responses:
+        "200":
+          description: See the description
+        "401": {$ref: "#/components/responses/Problem"}
+        "429": {$ref: "#/components/responses/Problem"}
   /admin/quiz:
     get:
       operationId: adminQuiz

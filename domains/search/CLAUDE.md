@@ -41,6 +41,18 @@ have a page, as PHP's slugs).
 - Every request to Elasticsearch asks for plain JSON, so a body is sent as plain JSON too (`ElasticSearchIndex.Writer.cs`,
   `JsonType`): Elasticsearch refuses a request whose content type and Accept header disagree (400 `media_type_header_exception`).
 
+## The Library article search (issue 22, in progress)
+
+`GET /api/v1/search` is a public route in the website's answer shape (`shared/api/WebsiteV1.cs`; the named exception to `{"detail"}`). Slice `api/features/v1-search/V1Search.cs`; plan `docs/specs/website-port/search-port-plan.md`.
+
+- The request: `domain/ArticleSearchQuery.cs` writes the Elasticsearch body with `Utf8JsonWriter` (the caller's text only as JSON string values) and reads the answer with `JsonDocument`; `domain/QueryExpansion.cs` is tsr-web's transliteration, synonym and term helpers. The boundary is `ILibraryIndex` (raw JSON; `ElasticSearchIndex.Library.cs` and the writer).
+- The engine choice, `domain/ArticleSearch.cs`: Elasticsearch when configured and answering, otherwise `domain/ArticleFallback.cs` (plain SQL over `content.v_published_articles`, `searchEngine` `fuse`).
+- Rate limit: `domain/SearchRateLimit.cs`, 60 a minute per client and route, the 429 in the website's shape.
+- The feed: worker `library-search-feed` (`workers/LibraryFeedWorker.cs`, run mode `--workers`): one full reconcile of the index `tsr-articles` at start and every 10 minutes (`domain/LibraryFeed.cs`, `ArticleFeedSource.cs`, mapping `LibraryIndexMappings.cs`); an unchanged source is not sent again; an empty source changes nothing. The article index holds no body (owner decision c). **Advisory lock key 8100002**; no other code uses it.
+- Lecture search `GET /api/v1/lectures/search` (slice `api/features/v1-lecture-search/V1LectureSearch.cs`): Elasticsearch only, no fallback (a failure is the website's 500). `domain/LectureSearchQuery.cs` writes the bodies (keyword strict and fuzzy, browse, kNN), `LectureResult.cs` reads the hits, `LectureSearch.cs` is the engine work (the fuzzy retry below 3 hits in total, the meaning layer), `ReciprocalRank.cs` the rank fusion, `EmbeddingClient.cs` the embedding service client (1.5 s timeout, null on any failure, a vector must be 384 numbers). The meaning layer is on when `TSR_LECTURES_SEMANTIC_WEIGHT` is above 0 (0.25 in the compose files) and `TSR_EMBEDDINGS_URL` is set. Both routes refuse offset plus limit above 10000 and a text over 200 characters (400), and HTML-encode highlights.
+- The lecture index `tsr-lectures` is fed by the same worker from `TSR_LECTURES_FILE` (`domain/LectureFile.cs`, each line indexed as it is; unset, missing or not whole: an empty index is created, nothing is written or deleted). The stacks: the default test stack runs the embeddings container and the fixture `db/synthetic/lectures`; a lane gets the fixture with `library-search-feed` and the service with `TSR_LANE_EMBEDDINGS=1`.
+- Not built yet: the analytics event (plan tasks 12a, 12b), the native image run and parity (13, 14).
+
 ## JSON and the native build
 
 Nothing in `search` reads or writes JSON by reflection (`api/domain/SearchJson.cs`, a source-generated context):
@@ -66,6 +78,7 @@ Nothing in `search` reads or writes JSON by reflection (`api/domain/SearchJson.c
 | The answer and the index document, without reflection | `api/domain/SearchJson.cs` |
 | The re-check reads, `ISearchFacts` | `api/domain/SearchFacts.cs` |
 | The write side, `ISearchIndexWriter`; the mapping (identical to PHP's) | `api/domain/ElasticSearchIndex.Writer.cs`, `SearchIndexMapping.cs` |
+| The Library article search: slice, request, fallback, feed | `api/features/v1-search/V1Search.cs`, `api/domain/ArticleSearchQuery.cs`, `ArticleSearch.cs`, `ArticleFallback.cs`, `LibraryFeed.cs` |
 | Facts, flags, PHP references | `docs/specs/initial-build/lane-search-notes.md`, `test-edge-notes.md` |
 
 ## Checks
@@ -79,6 +92,12 @@ rebuilds the index when it starts) and waits for the line "Search feed: upserted
 | `spec/tests/search-new-api.hurl` | `GET /search` end to end, with a real index |
 | `spec/tests/search.hurl` | what is true with or without an index |
 | `spec/tests/search-php-only.hurl` | the no-index answer (the PHP parity stack has none) |
+| `spec/tests/v1-search.hurl` | `GET /api/v1/search` with a real index (a lane: `TSR_LANE_WORKERS=library-search-feed`) |
+| `spec/tests/v1-search-fallback.hurl` | the same route with Elasticsearch stopped: the database answers |
+| `spec/tests/v1-search-rate-limit.hurl` | the 429; run last (it uses up the bucket for a minute) |
+| `spec/tests/v1-lecture-search.hurl` | `GET /api/v1/lectures/search` with the meaning layer on (a lane with `TSR_LANE_EMBEDDINGS=1`; the default test stack) |
+| `spec/tests/v1-lecture-search-keywords.hurl` | the same route without the embedding service: keyword answers only |
+| `spec/tests/v1-lecture-search-rate-limit.hurl` | the 429 of lecture search (its own count); run last, it uses up the bucket for a minute |
 
 The worker host must build with every worker named: `hosts/api/tests/WorkerModeTests.cs`
 (`The_worker_host_builds_a_valid_container_with_every_worker_named`; services for that run mode are in `hosts/api/HostServices.cs`).

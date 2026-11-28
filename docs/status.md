@@ -16,6 +16,31 @@ fail until both match; a gateway block per path already exists). Built today (12
 membership 25 (with `POST /auth/link`, moved from identity on 13 Nov 2026: its `me` is the profile), classes 96, assessment 35, notifications 24, content 1, search 1 (213), plus 6 calendar routes in notifications (219), plus the 6 public Library routes under `/api/v1/` in content (13 Nov 2026; they come from the website, not PHP, so they are listed in `RouteCatalog.NotInPhp` and `docs/specs/website-port/operations.csv`, not in this catalog); none is planned (`/me/guides` and `/me/guides/{slug}` were built on 12 Nov 2026 from a fresh PHP copy). **All 213 have contract tests and database tests (test phase, 12 Nov 2026)**: 136 from the earlier batches, 75 from the build-out lanes proven afterwards by seven test lanes (`docs/specs/initial-build/test-*-notes.md`). Not verified against a real service (fakes at the boundary only): Google Sheets, Firebase account deletion, FCM push, the WhatsApp notifier. (Elasticsearch was on this list until 12 Nov 2026; `GET /search` and the feed are now proven against a real one on the test stack.) Open decisions and findings: `docs/specs/initial-build/build-out-findings.md`. The report downloads (xlsx or PDF) all go through platform's `ReportExport` (`domains/platform/CLAUDE.md`). Tables only, besides routes: `notifications`; `assessment` has 9 quiz routes (batch A1: a member takes a quiz and reads scores).
 `search` has routes only. Which owns what: `domains/CLAUDE.md`.
 
+## What the 219 does not cover (27 Nov 2026)
+
+"All 219 built" means the routes of PHP's mobile router (`web/api/mobile/index.php`) and nothing else. It never meant "everything the app calls" or "everything PHP and the website do". Known gaps:
+
+| Gap | Who depends on it | State |
+|---|---|---|
+| Quiz status for the home banner (PHP `web/api/quiz_info.php`, outside the mobile router) | the app | built here as `GET /quiz/info` on 27 Nov 2026 (`domains/assessment`); released app builds still call the PHP address |
+| Article search and lecture search (the website's `/api/v1/search` and `/api/v1/lectures/search`; lecture search runs with the meaning layer on) | the app, the website | article search built on 28 Nov 2026 (`GET /api/v1/search`, `domains/search`; not compared with the live site, not run as a native image); lecture search not built; plan in `docs/specs/website-port/search-port-plan.md` (issue 22) |
+| The website's search analytics (events, click route, report) | the website | not built; the events and the click route are in the search plan, the report route is not |
+| The join link `account.thestrongrope.com/join/<code>` and the website links the app opens (`/articles/<slug>`, `/donate`, `/about`, `/accreditation`, `/uploads/...`) | the app | not checked against the new stack |
+| `wp-json` calls in the app (`hosts/app/lib/features/wordpress/services/wordpress_service.dart`) | nothing serves them: there has been no WordPress site for over a year | code to delete, not to port; not traced whether a screen still reaches it |
+| PHP web capabilities with no route (the reports dashboard, subject and all-TSR summaries, quiz settings editing, the winners reveal screen, the cross-member parent-links list, the "extra students" clean-up) | the PHP web app | not built (`docs/specs/capability-map/README.md`) |
+| The WhatsApp runner that sends | members | not built |
+| PHP files outside the mobile router, other than `quiz_info.php` | members (WhatsApp reminders, app links on the account host, the account deletion page), admins (some reports) | audited file by file on 28 Nov 2026 by reading, nothing run: 163 items, 16 not ported and 14 partly covered; the list by risk is `docs/specs/php-audit/README.md` |
+
+Elasticsearch on the stacks holds one index, `tsr-search` (member and class search for admins). It holds no article or lecture index until the search plan is built.
+
+## The app
+
+`hosts/app` is the member app (package `the_strong_rope`, 1.6.1+24): the whole of tsr-account `mobile/` at `b2a5fc70`, moved here on 26 Nov 2026 (issue 26, PR 125) in place of the earlier shell, and a member of the root pub workspace. No screen has moved into `domains/*/app` yet. The store builds are still made from tsr-account. `hosts/app/Dockerfile` builds the web copy (Flutter Web behind nginx); the local stacks start it with `TSR_WITH_APP=1` (`docs/testing.md`). The production compose file has an `app` service (28 Nov 2026; `docs/deployment.md`); it is not deployed.
+
+## Releases
+
+0.9.0 (26 Nov 2026): `main` at `b465aaa`, tag `v0.9.0`, deployed to production (the API answered healthy after the deploy; the migrate job's exit code and the image serving were not confirmed in Dokploy). The production database holds no members' data yet, and the store apps still call the PHP API.
+
 ## Workers and outside services
 
 Built workers, what is not built and what is unverified are in "Background workers on the stacks" of `docs/testing.md` (one text, kept there because it also says which stack may run which worker).
@@ -34,5 +59,7 @@ Built workers, what is not built and what is unverified are in "Background worke
 | Database tests | 1,534 passed | 25 Nov 2026 |
 | Host tests | 314 passed | 25 Nov 2026 |
 | Website parity | 67 cases and 501 articles, none failed | 13 Nov 2026 (`docs/specs/website-port/parity-results.md`) |
-| Patrol on Android against the new API | reviewer 20 of 20 (24 Nov 2026, the JIT build before the native switch); personas 33 of 36 on 14 Nov 2026, and incomplete on 24 Nov 2026: 18 passed, 1 failed, 17 not run (the emulator stalled) | 24 Nov 2026 |
+| Patrol on Android against the new API (the journeys of `hosts/app`, built from it and run by `tools/patrol-lane.sh`; native image on a lane; the cohort and persona fixtures still come from a tsr-account checkout) | reviewer 20 of 20; personas 35 of 38: `persona_ladies_admin_test` does not find the text "Managing" (cause not found), `persona_super_admin_whatsapp_link_test` fails because a lane has no WhatsApp sender, and `persona_super_admin_link_student_test` was run only on a fixture without its member (it needs tsr-account's `develop` fixture). | 26 Nov 2026 |
+| The app in `hosts/app` | `flutter analyze` clean; `flutter test` 1,889 passed | 26 Nov 2026 |
+| The web copy of the app on lane 2 | profile image (Auth emulator) 113 MB: Home loads and a synthetic member signs in by email and reaches profile completion; release image 97.7 MB: Home loads signed out. Not checked: any screen past profile completion, Google sign-in, exports, other browsers | 26 Nov 2026 |
 | Load test | `docs/specs/load-test/results.md` | 14 Nov 2026 |
