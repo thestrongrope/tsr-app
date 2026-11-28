@@ -1,6 +1,6 @@
 # domains/search/
 
-The read model behind `GET /search`, the domain's only operation. No tables. The index is Elasticsearch (index `tsr-search`,
+The read model behind `GET /search` (members and classes, for admins) and the two public Library searches below. No tables. The index is Elasticsearch (index `tsr-search`,
 official client `Elastic.Clients.Elasticsearch` 9.5.3).
 
 ## Status
@@ -41,7 +41,9 @@ have a page, as PHP's slugs).
 - Every request to Elasticsearch asks for plain JSON, so a body is sent as plain JSON too (`ElasticSearchIndex.Writer.cs`,
   `JsonType`): Elasticsearch refuses a request whose content type and Accept header disagree (400 `media_type_header_exception`).
 
-## The Library article search (issue 22, in progress)
+## The Library searches (issue 22)
+
+What both routes do today, as requirements with their tests: `capabilities/library-search.md`.
 
 `GET /api/v1/search` is a public route in the website's answer shape (`shared/api/WebsiteV1.cs`; the named exception to `{"detail"}`). Slice `api/features/v1-search/V1Search.cs`; plan `docs/specs/website-port/search-port-plan.md`.
 
@@ -51,7 +53,7 @@ have a page, as PHP's slugs).
 - The feed: worker `library-search-feed` (`workers/LibraryFeedWorker.cs`, run mode `--workers`): one full reconcile of the index `tsr-articles` at start and every 10 minutes (`domain/LibraryFeed.cs`, `ArticleFeedSource.cs`, mapping `LibraryIndexMappings.cs`); an unchanged source is not sent again; an empty source changes nothing. The article index holds no body (owner decision c). **Advisory lock key 8100002**; no other code uses it.
 - Lecture search `GET /api/v1/lectures/search` (slice `api/features/v1-lecture-search/V1LectureSearch.cs`): Elasticsearch only, no fallback (a failure is the website's 500). `domain/LectureSearchQuery.cs` writes the bodies (keyword strict and fuzzy, browse, kNN), `LectureResult.cs` reads the hits, `LectureSearch.cs` is the engine work (the fuzzy retry below 3 hits in total, the meaning layer), `ReciprocalRank.cs` the rank fusion, `EmbeddingClient.cs` the embedding service client (1.5 s timeout, null on any failure, a vector must be 384 numbers). The meaning layer is on when `TSR_LECTURES_SEMANTIC_WEIGHT` is above 0 (0.25 in the compose files) and `TSR_EMBEDDINGS_URL` is set. Both routes refuse offset plus limit above 10000 and a text over 200 characters (400), and HTML-encode highlights.
 - The lecture index `tsr-lectures` is fed by the same worker from `TSR_LECTURES_FILE` (`domain/LectureFile.cs`, each line indexed as it is; unset, missing or not whole: an empty index is created, nothing is written or deleted). Production: the workers image carries the full file `content/lectures/lectures.ndjson` at `/var/tsr/lectures/lectures.ndjson` (`hosts/api/Dockerfile`; `docker-compose.yml` sets the path on `workers` only; name `library-search-feed` in `TSR_WORKERS`); the 19 lectures without `embedding` are indexed too. Phone numbers in its text keys are masked at import (LEC-R10), the vectors are tsr-web's. The stacks: the default test stack runs the embeddings container and the fixture `db/synthetic/lectures`; a lane gets the fixture with `library-search-feed` and the service with `TSR_LANE_EMBEDDINGS=1`, or the real file with `TSR_LECTURES_SRC=$PWD/content/lectures` at `up`.
-- Not built yet: the analytics event (plan tasks 12a, 12b), the native image run and parity (13, 14).
+- Not built yet: the analytics event (plan task 12b) and the parity run against the live site (task 14). Both routes pass their Hurl files on the native image (28 Nov 2026).
 
 ## JSON and the native build
 
@@ -78,6 +80,7 @@ Nothing in `search` reads or writes JSON by reflection (`api/domain/SearchJson.c
 | The answer and the index document, without reflection | `api/domain/SearchJson.cs` |
 | The re-check reads, `ISearchFacts` | `api/domain/SearchFacts.cs` |
 | The write side, `ISearchIndexWriter`; the mapping (identical to PHP's) | `api/domain/ElasticSearchIndex.Writer.cs`, `SearchIndexMapping.cs` |
+| What the two Library searches do today (requirements, tests, decisions) | `capabilities/library-search.md` |
 | The Library article search: slice, request, fallback, feed | `api/features/v1-search/V1Search.cs`, `api/domain/ArticleSearchQuery.cs`, `ArticleSearch.cs`, `ArticleFallback.cs`, `LibraryFeed.cs` |
 | Facts, flags, PHP references | `docs/specs/initial-build/lane-search-notes.md`, `test-edge-notes.md` |
 

@@ -19,7 +19,7 @@ Read from code, not run, on 15 Nov 2026. **Updated 26 Nov 2026** for what has be
 | PHP web app | 110 pages, 86 capabilities | Flutter Web (the same app) on this API | Started. The app builds for the web from `hosts/app` and runs in a browser against a synthetic lane: Home loads and a member signs in by email (26 Nov 2026). A web image exists for the local stacks. Not hosted: that waits for the members' data to move. Screens past profile completion not checked |
 | Flutter app | 104 capabilities, Android and iOS | the same app, pointed at this API | Patrol journeys pass against this API on Android (reviewer 20 of 20, personas 34 of 36; 26 Nov 2026). iOS not run |
 | Scheduler (cron, 6 jobs) and notifier (WhatsApp) | sends and index upkeep | this API's worker mode | 4 workers built; the WhatsApp runner is not |
-| Public website (Next.js) | pages, search, lectures, CMS, JSON API | static site and API routes here | 6 Library routes ported and compared. No page, no search |
+| Public website (Next.js) | pages, search, lectures, CMS, JSON API | static site and API routes here | 6 Library routes ported and compared. Article search and lecture search built (28 Nov 2026, [`library-search.md`](../../../domains/search/capabilities/library-search.md); not compared with the live site). No page |
 
 ## The map
 
@@ -45,7 +45,7 @@ contract and database tests with fakes at outside services, never a real send.
 | Parent links | link a child, revoke; list across members | parents, admins | yes | yes (per child) | | per-child routes built | The cross-member admin list has no route |
 | Donors, access log, deletion queue | lists, downloads, work the queue | super admin, finance | yes | yes | | built | Firebase account deletion never called for real |
 | Search (members, classes) | search across records | admins | part (dashboard) | yes | | built | Proven on a real Elasticsearch on the test stack |
-| Library | articles, categories, tags, publications, videos | everyone, guests | | yes | yes | built (6 routes) | The app also calls the website's **article search** and **lecture search**, and the old WordPress API: not ported |
+| Library | articles, categories, tags, publications, videos | everyone, guests | | yes | yes | built (6 routes, plus article search and lecture search built 28 Nov 2026: [`library-search.md`](../../../domains/search/capabilities/library-search.md)) | The app also calls the old WordPress API: not ported. The two searches are not compared with the live site |
 | Website pages | home, articles, pages, publications, lectures, self-reflection, donate, about | the public | | | yes | no | Every page; old-link redirects; app-link files; the privacy policy page the stores link to |
 | Website editing | Decap CMS, GitHub sign-in | editors | | | yes | no | Owner: Decap is unused. Content arrives by commit |
 | Website search analytics | record searches and clicks, report | editors | | | yes | no | Decide whether to keep |
@@ -79,7 +79,7 @@ contract and database tests with fakes at outside services, never a real send.
 
 **3. The public website**
 - Every page as static pages, the redirects, the app-link files, the privacy policy.
-- Article search and lecture search as API routes (the owner's direction: blended into the app's API).
+- Article search and lecture search as API routes: built on 28 Nov 2026. Left: the comparison with the live site, search analytics.
 
 ## Findings worth a decision
 

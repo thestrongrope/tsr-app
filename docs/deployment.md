@@ -15,6 +15,7 @@ and runs the file. It holds no secret and publishes no port; `hosts/api/tests/Pr
 | `workers` | the native API image with `--workers`: runs the workers named in `TSR_WORKERS` | always |
 | `gotenberg` | PDF rendering for report downloads | always |
 | `elasticsearch` | the search index; data in the volume `es-data` | always |
+| `embeddings` | the embedding service of lecture search (`hosts/embeddings`, model `BAAI/bge-small-en-v1.5`, in the image, so it starts offline): reached by `api` and `workers` only, no port; memory limit 1 GB, about 260 MB at rest. Down: lecture search answers from keywords only | always |
 | `site-build` | the static site generator (`hosts/site`): reads the API, writes the pages into the volume `site-data` with the publication files (`content/downloads/`, about 187 MB, copied into the site-build image and from it into the volume at `/site/downloads/`) | once per start, after `content-load` has succeeded and `api` has started; retried up to five times |
 | `site` | nginx serving `site-data`, read-only; port 80. It forwards nothing. Its image is the stock one with our configuration file baked in (`hosts/site/nginx.conf`, see "The site server and the old addresses"): an address the site does not publish answers 404 with the site's own `404.html` | always |
 | `app` | the web copy of the member app (`hosts/app/Dockerfile`): Flutter Web as a release build served by nginx, port 80. It forwards nothing; the browser calls the API at the address compiled in (`TSR_APP_API_BASE_URL`). The image takes minutes to build | always |
@@ -33,12 +34,14 @@ Set these in the deployment tool. A missing required setting stops the start and
 | `TSR_ELASTICSEARCH_PASSWORD` | yes | fixed once the index volume exists |
 | `TSR_FIREBASE_PROJECT_ID` | yes | the Firebase project whose sign-ins the API accepts |
 | `TSR_APP_API_BASE_URL` | no | the API's public address as a browser reaches it, compiled into the web app at build time (no trailing slash; changing it needs a rebuild). Empty: `https://api.thestrongrope.com`. For the web app to work, also name the app's origin in `TSR_CORS_ORIGINS` and add the app's host name to the Firebase project's authorized domains |
-| `TSR_WORKERS` | no | comma-separated worker names. Empty runs none: a deploy alone sends nothing. `push-drain` and `class-schedules` send to members' phones |
+| `TSR_WORKERS` | no | comma-separated worker names. Empty runs none: a deploy alone sends nothing. `push-drain` and `class-schedules` send to members' phones. `library-search-feed` fills both Library search indexes (articles and lectures) and sends nothing outward |
 | `TSR_GOOGLE_SERVICE_ACCOUNT_B64` | no | a service account key in base64: push, Firebase account deletion, sheet reads |
 | `TSR_PUBLIC_WEB_BASE` | no | the base of share links |
 | `TSR_CORS_ORIGINS` | no | the browser origins that may call the API, comma-separated (for a web build of the app, e.g. `https://app.thestrongrope.com`). Empty allows none. An entry with a path, a trailing slash or a wildcard stops the start |
 | `TSR_QUIZ_SETTINGS_SHEET_ID`, `TSR_NOTIFIER_URL` | no | each empty switches its feature off |
 | `TSR_YOUTUBE_CHANNEL_ID` | no | not in the stack: the API reads the channel in the code. Do not set it empty, that switches the Home videos off |
+| `TSR_EMBEDDINGS_URL` | fixed | `http://embeddings:8000` in `docker-compose.yml`: the embedding service. Empty or unreachable: the meaning layer of lecture search is off |
+| `TSR_LECTURES_SEMANTIC_WEIGHT` | fixed | `0.25` in `docker-compose.yml`: above 0 switches the meaning layer on; 0 switches it off |
 | `TSR_LECTURES_FILE` | fixed | `/var/tsr/lectures/lectures.ndjson`, set on `workers` only: the full lecture file copied into the image from `content/lectures/`; the feed `library-search-feed` (name it in `TSR_WORKERS`) indexes it. A change of the file reaches production by a deploy |
 | `TSR_CONTENT_DIR` | fixed | `/var/tsr/content` in `docker-compose.yml`: the published text content (`articles/`, `categories/`, `pages/`) copied into the image from `content/`; the publication files are not in the API image. Not a setting to change |
 

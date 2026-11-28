@@ -597,7 +597,7 @@ Ordinary repo checks run on every task: `dotnet build TsrApp.slnx` (zero warning
   `v1-lecture-search.hurl` 18 requests (meaning layer on, synthetic fixture) passed.
 - [ ] **14. Parity.** A local tsr-web with its stack reindexed; a lane with the website's content and the full lecture file;
   `tools/search-parity.cases`; allow lines. Write the result as `docs/specs/website-port/search-parity-results.md`. Test: TC-SRCH-Q1-01, Q2-01.
-- [ ] **15. Documents.** `domains/search/capabilities/library-search.md` (requirements linked to their tests), `domains/search/CLAUDE.md`,
+- [x] **15. Documents.** `domains/search/capabilities/library-search.md` (requirements linked to their tests), `domains/search/CLAUDE.md`,
   `lectures.md`, the capability map, `docs/status.md`, `docs/deployment.md` (the `embeddings` service, the settings and the lecture file step).
 - [ ] **16. (After decision 4c)** switch the article body on, if chosen, as its own change, with the parity allowances it needs.
 

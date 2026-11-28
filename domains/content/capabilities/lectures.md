@@ -10,7 +10,7 @@ of its chapters, on YouTube. The page is built from one data file in the reposit
 
 ## 2. Actors and scope
 - **Actors:** a visitor; the maintainer (runs the content import); the system (the site build).
-- **In scope:** `/lectures/`; the data file `content/lectures/lectures.ndjson` (the full file, which the search feed also reads: `domains/search/CLAUDE.md`); its import, its mask and its guard.
+- **In scope:** `/lectures/`; the data file `content/lectures/lectures.ndjson` (the full file, which the search feed also reads: `domains/search/capabilities/library-search.md`); its import, its mask and its guard.
 - **Out of scope:** keyword search and the search box; the lecture search route the app calls (issue 22); the home page's search form, which still sends `?q=` to `/lectures` where it is ignored; checking that a video is still public (a video made private stays listed until the next import); producing the data (the lecture pipeline stays in the website repository).
 
 ## 3. Requirements (current behaviour)
