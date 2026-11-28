@@ -10,7 +10,7 @@ namespace Tsr.Host.Api.Tests;
 public sealed partial class ProductionStackTests
 {
     private static readonly string[] RequiredSettings =
-        ["TSR_DB_OWNER_PASSWORD", "TSR_APP_DB_PASSWORD", "TSR_ELASTICSEARCH_PASSWORD", "TSR_FIREBASE_PROJECT_ID", "TSR_APP_API_BASE_URL"];
+        ["TSR_DB_OWNER_PASSWORD", "TSR_APP_DB_PASSWORD", "TSR_ELASTICSEARCH_PASSWORD", "TSR_FIREBASE_PROJECT_ID"];
 
     private static readonly string[] LongRunningServices = ["db", "gotenberg", "elasticsearch", "embeddings", "api", "workers", "site", "app"];
 
@@ -313,7 +313,7 @@ public sealed partial class ProductionStackTests
 
     /// <summary>
     /// The web copy of the member app: built from hosts/app/Dockerfile as a release build (no sign-in test double is named), with the API's public
-    /// address compiled in from a required setting. It is reached only through the deployment tool's proxy and is given no setting at run time.
+    /// address compiled in: api.thestrongrope.com unless the setting names another. It is reached only through the deployment tool's proxy and is given no setting at run time.
     /// </summary>
     [Test]
     public void The_web_app_is_a_release_build_for_the_api_s_public_address()
@@ -324,7 +324,7 @@ public sealed partial class ProductionStackTests
         {
             Assert.That(app, Does.Contain("context: ."));
             Assert.That(app, Does.Contain("dockerfile: hosts/app/Dockerfile"));
-            Assert.That(app, Does.Contain("TSR_API_BASE_URL: ${TSR_APP_API_BASE_URL:?"));
+            Assert.That(app, Does.Contain("TSR_API_BASE_URL: ${TSR_APP_API_BASE_URL:-https://api.thestrongrope.com}"));
             Assert.That(app, Does.Not.Contain("TSR_AUTH"));
             Assert.That(app, Does.Not.Match(@"(?m)^\s*(ports|profiles|environment|volumes|depends_on)\s*:"));
             Assert.That(app, Does.Contain("healthcheck:"));
