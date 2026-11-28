@@ -233,23 +233,32 @@ public sealed class ContentGuardTests
         Assert.That(ContentGuard.Problems(root.FullName), Is.Not.Empty);
     }
 
+    private const string FullLecture =
+        "{\"slug\":\"abcdefghijk\",\"title\":\"T\",\"url\":\"https://example.invalid/v\",\"excerpt\":\"E\",\"content\":\"words\",\"search_phrases\":[\"p\"],\"key_points\":[\"k\"],\"tags\":[],\"language\":\"en\",\"publishedDate\":\"2026-01-02T03:04:05Z\",\"durationSec\":78,"
+        + "\"chapters\":[{\"start_sec\":3,\"title\":\"C\",\"summary\":\"S\",\"url\":\"https://example.invalid/c\"}],\"embedding\":[0.1,1.5E-05]}";
+
     [Test]
-    public void A_lecture_with_a_key_outside_the_eight_is_a_problem_that_names_it()
+    public void A_lecture_with_the_thirteen_keys_of_the_full_file_is_not_a_problem()
+    {
+        GoodFolder();
+        Write("lectures/lectures.ndjson", FullLecture + "\n" + LectureLine("bcdefghijkl") + "\n");
+
+        Assert.That(ContentGuard.Problems(root.FullName), Is.Empty);
+    }
+
+    [Test]
+    public void A_lecture_with_a_key_outside_the_thirteen_is_a_problem_that_names_it()
     {
         GoodFolder();
         var good = LectureLine("abcdefghijk");
-        var withContent = good.Replace("\"title\"", "\"content\":\"words\",\"title\"", StringComparison.Ordinal);
-        var withEmbedding = good.Replace("\"title\"", "\"embedding\":[0.1],\"title\"", StringComparison.Ordinal);
-        var chapterSummary = LectureLine("cdefghijklm", ",\"summary\":\"S\"");
+        var extraKey = good.Replace("\"title\"", "\"secret\":\"words\",\"title\"", StringComparison.Ordinal);
+        var chapterKey = LectureLine("cdefghijklm", ",\"note\":\"S\"");
 
-        Write("lectures/lectures.ndjson", good + "\n" + withContent + "\n");
-        Assert.That(ContentGuard.Problems(root.FullName), Has.Some.Contain("line 2").And.Contain("abcdefghijk").And.Contain("content"));
+        Write("lectures/lectures.ndjson", good + "\n" + extraKey + "\n");
+        Assert.That(ContentGuard.Problems(root.FullName), Has.Some.Contain("line 2").And.Contain("abcdefghijk").And.Contain("secret").And.Contain("thirteen"));
 
-        Write("lectures/lectures.ndjson", good + "\n" + withEmbedding + "\n");
-        Assert.That(ContentGuard.Problems(root.FullName), Has.Some.Contain("line 2").And.Contain("embedding"));
-
-        Write("lectures/lectures.ndjson", good + "\n" + chapterSummary + "\n");
-        Assert.That(ContentGuard.Problems(root.FullName), Has.Some.Contain("line 2").And.Contain("cdefghijklm").And.Contain("summary"));
+        Write("lectures/lectures.ndjson", good + "\n" + chapterKey + "\n");
+        Assert.That(ContentGuard.Problems(root.FullName), Has.Some.Contain("line 2").And.Contain("cdefghijklm").And.Contain("note"));
 
         Write("lectures/lectures.ndjson", good + "\nnot json\n");
         Assert.That(ContentGuard.Problems(root.FullName), Has.Some.Contain("line 2").And.Contain("not a JSON object"));
@@ -260,5 +269,84 @@ public sealed class ContentGuardTests
         Write("lectures/lectures.ndjson", good + "\n");
         Write("lectures/other.ndjson", good + "\n");
         Assert.That(ContentGuard.Problems(root.FullName), Has.Some.Contain("lectures/other.ndjson"));
+    }
+
+    [TestCase("title", "\"title\":\"T\"", "\"title\":\"Call +00 0000 000000 now\"")]
+    [TestCase("excerpt", "\"excerpt\":\"E\"", "\"excerpt\":\"Number +00 0000 0000\"")]
+    [TestCase("content", "\"content\":\"words\"", "\"content\":\"at 00000 000000 or 000.000.0000\"")]
+    [TestCase("search_phrases", "\"search_phrases\":[\"p\"]", "\"search_phrases\":[\"p\",\"(000)000-0000\"]")]
+    [TestCase("key_points", "\"key_points\":[\"k\"]", "\"key_points\":[\"0000000000\"]")]
+    [TestCase("tags", "\"tags\":[]", "\"tags\":[\"+0000000000000\"]")]
+    [TestCase("chapters", "\"title\":\"C\",\"summary\":\"S\"", "\"title\":\"C\",\"summary\":\"+00 000 000000\"")]
+    [TestCase("title", "\"title\":\"T\"", "\"title\":\"WhatsApp number is 0000\"")]
+    [TestCase("excerpt", "\"excerpt\":\"E\"", "\"excerpt\":\"Contact no. 00 00\"")]
+    [TestCase("content", "\"content\":\"words\"", "\"content\":\"The phone number, in words: +00 000. Again, 0000\"")]
+    [TestCase("key_points", "\"key_points\":[\"k\"]", "\"key_points\":[\"MOBILE NUMBER 00000\"]")]
+    [TestCase("chapters", "\"title\":\"C\",\"summary\":\"S\"", "\"title\":\"C\",\"summary\":\"WhatsApp number, 0000\"")]
+    [TestCase("content", "\"content\":\"words\"", "\"content\":\"WhatsApp number 1111, 2222, 3333, 4444, 5555, 6666\"")]
+    public void A_phone_like_run_in_a_text_key_is_a_problem_that_names_the_line_the_lecture_and_the_key(string key, string from, string to)
+    {
+        GoodFolder();
+        Write("lectures/lectures.ndjson", FullLecture + "\n" + FullLecture.Replace("abcdefghijk", "bcdefghijkl", StringComparison.Ordinal).Replace(from, to, StringComparison.Ordinal) + "\n");
+
+        var problems = ContentGuard.Problems(root.FullName);
+
+        Assert.That(problems, Has.Some.Contain("line 2").And.Contain("bcdefghijkl").And.Contain(key).And.Contain("phone"));
+        Assert.That(problems, Has.None.Contain("000"), "a problem must not repeat the number");
+    }
+
+    [Test]
+    public void A_masked_run_and_figures_that_are_not_phone_like_are_not_a_problem()
+    {
+        GoodFolder();
+        var line = FullLecture.Replace("\"content\":\"words\"", "\"content\":\"In 2026-11-28, 1445 and 123456789, 1,234,567,890 or 12345678901234. Call [number removed].\"", StringComparison.Ordinal);
+        Write("lectures/lectures.ndjson", line + "\n");
+
+        Assert.That(ContentGuard.Problems(root.FullName), Is.Empty);
+    }
+
+    [Test]
+    public void Short_figures_and_figures_far_from_the_words_are_not_a_problem_after_a_number_word()
+    {
+        GoodFolder();
+        var far = new string('x', 81);
+        var gap = new string('y', 100);
+        var text = $"WhatsApp number 000 and a 5-minute call {gap} WhatsApp 0000 has no word number {gap} contact number {far} 0000 {gap} phone numbers 0000 {gap} [number removed]";
+        var line = FullLecture.Replace("\"content\":\"words\"", $"\"content\":\"{text}\"", StringComparison.Ordinal);
+        Write("lectures/lectures.ndjson", line + "\n");
+
+        Assert.That(ContentGuard.Problems(root.FullName), Is.Empty);
+    }
+
+    [Test]
+    public void A_figure_after_a_masked_run_is_a_problem_when_it_begins_within_80_characters_of_the_mask()
+    {
+        GoodFolder();
+        var near = new string('x', 60);
+        var chained = $"WhatsApp number [number removed], {near} [number removed], {near} 1111";
+        Write("lectures/lectures.ndjson", FullLecture.Replace("\"content\":\"words\"", $"\"content\":\"{chained}\"", StringComparison.Ordinal) + "\n");
+
+        Assert.That(ContentGuard.Problems(root.FullName), Has.Some.Contain("content").And.Contain("phone"));
+    }
+
+    [Test]
+    public void A_figure_more_than_80_characters_after_the_last_mask_is_not_a_problem()
+    {
+        GoodFolder();
+        var far = new string('x', 81);
+        var text = $"WhatsApp number [number removed], {far} 1111";
+        Write("lectures/lectures.ndjson", FullLecture.Replace("\"content\":\"words\"", $"\"content\":\"{text}\"", StringComparison.Ordinal) + "\n");
+
+        Assert.That(ContentGuard.Problems(root.FullName), Is.Empty);
+    }
+
+    [Test]
+    public void The_embedding_is_not_read_for_phone_like_runs()
+    {
+        GoodFolder();
+        var line = FullLecture.Replace("[0.1,1.5E-05]", "[0.1234567890123,-0.0123456789012,1.2345678901234E-05]", StringComparison.Ordinal);
+        Write("lectures/lectures.ndjson", line + "\n");
+
+        Assert.That(ContentGuard.Problems(root.FullName), Is.Empty);
     }
 }

@@ -13,7 +13,22 @@ internal static partial class ContentGuard
     private const string PublicationsPage = "tsr-publications.md";
     private const string LecturesFile = "lectures.ndjson";
 
-    private static readonly HashSet<string> LectureKeys = new(["slug", "title", "excerpt", "tags", "language", "publishedDate", "durationSec", "chapters"], StringComparer.Ordinal);
+    private static readonly HashSet<string> LectureKeys = new(["slug", "title", "url", "excerpt", "content", "search_phrases", "key_points", "tags", "language", "publishedDate", "durationSec", "chapters", "embedding"], StringComparer.Ordinal);
+
+    private static readonly HashSet<string> ChapterKeys = new(["start_sec", "title", "summary", "url"], StringComparer.Ordinal);
+
+    /// <summary>The text keys of a lecture: the keys whose words a phone number could be spoken in (LEC-R10). Not slug, url, chapters[].url, publishedDate, durationSec, language or embedding.</summary>
+    private static readonly string[] ChapterTextKeys = ["title", "summary"];
+
+    private static readonly string[] TextKeys = ["title", "excerpt", "content", "search_phrases", "key_points", "tags"];
+
+    /// <summary>A phone-like run (LEC-R10, the same pattern as tools/content-import.sh): an optional +, then 10 to 13 digits in all, single spaces, dots, hyphens or parentheses allowed between digits, no digit before or after. It cannot cross a letter.</summary>
+    [GeneratedRegex(@"(?<![0-9])\+?[0-9]([ .()-]?[0-9]){9,12}(?![0-9])")]
+    private static partial Regex PhoneLikeRun();
+
+    /// <summary>Rule 2 of LEC-R10 (the same pattern as tools/content-import.sh): after whatsapp, phone, mobile or contact and then number or no (any case), or after a [number removed], a run of 4 or more digits in all (an optional +, single spaces, dots, hyphens or parentheses between digits) that begins within the next 80 characters. 1 to 3 digits stay.</summary>
+    [GeneratedRegex(@"(\b(whatsapp|phone|mobile|contact)\s+(number|no)\b|\[number removed\])(.|\n){0,80}?(?<![0-9])\+?[0-9]([ .()-]?[0-9]){3,}(?![0-9])", RegexOptions.IgnoreCase)]
+    private static partial Regex NumberWordThenDigits();
 
     public static IReadOnlyList<string> Problems(string contentDirectory)
     {
@@ -78,7 +93,7 @@ internal static partial class ContentGuard
         }
     }
 
-    /// <summary>Rule 11 (LEC-R9): the file exists, every line is a JSON object of the eight keys, and every chapter holds start_sec and title only.</summary>
+    /// <summary>Rule 11 (LEC-R9, LEC-R10): the file exists, every line is a JSON object of the thirteen keys, every chapter holds start_sec, title, summary and url only, and no text key holds a phone-like run.</summary>
     private static List<string> LectureProblems(string root)
     {
         var path = Path.Combine(root, "lectures", LecturesFile);
@@ -124,20 +139,32 @@ internal static partial class ContentGuard
 
             var lecture = document.RootElement;
             var slug = lecture.TryGetProperty("slug", out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : "?";
+            var where = $"lectures/lectures.ndjson line {number}, lecture {slug}";
             var problems = new List<string>();
             problems.AddRange(lecture.EnumerateObject().Select(property => property.Name).Where(name => !LectureKeys.Contains(name))
-                .Select(name => $"lectures/lectures.ndjson line {number}, lecture {slug}: key {name} is not one of the eight"));
+                .Select(name => $"{where}: key {name} is not one of the thirteen"));
+            problems.AddRange(TextKeys.Where(key => lecture.TryGetProperty(key, out var text) && HoldsPhoneLikeRun(text))
+                .Select(key => $"{where}: key {key} holds a phone-like run"));
             if (lecture.TryGetProperty("chapters", out var chapters) && chapters.ValueKind == JsonValueKind.Array)
             {
-                problems.AddRange(chapters.EnumerateArray().Where(chapter => chapter.ValueKind == JsonValueKind.Object)
-                    .SelectMany(chapter => chapter.EnumerateObject().Select(property => property.Name))
-                    .Where(name => name is not ("start_sec" or "title"))
-                    .Select(name => $"lectures/lectures.ndjson line {number}, lecture {slug}: chapter key {name} is not start_sec or title"));
+                var chapterObjects = chapters.EnumerateArray().Where(chapter => chapter.ValueKind == JsonValueKind.Object).ToList();
+                problems.AddRange(chapterObjects.SelectMany(chapter => chapter.EnumerateObject().Select(property => property.Name))
+                    .Where(name => !ChapterKeys.Contains(name))
+                    .Select(name => $"{where}: chapter key {name} is not start_sec, title, summary or url"));
+                problems.AddRange(chapterObjects.SelectMany(chapter => ChapterTextKeys.Where(key => chapter.TryGetProperty(key, out var text) && HoldsPhoneLikeRun(text)))
+                    .Distinct().Select(key => $"{where}: key chapters.{key} holds a phone-like run"));
             }
 
             return problems;
         }
     }
+
+    private static bool HoldsPhoneLikeRun(JsonElement element) => element.ValueKind switch
+    {
+        JsonValueKind.String => PhoneLikeRun().IsMatch(element.GetString()!) || NumberWordThenDigits().IsMatch(element.GetString()!),
+        JsonValueKind.Array => element.EnumerateArray().Any(HoldsPhoneLikeRun),
+        _ => false,
+    };
 
     private static IEnumerable<string> InFolder(DirectoryInfo folder)
     {

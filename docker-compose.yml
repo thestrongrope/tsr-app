@@ -128,7 +128,7 @@ services:
       TSR_ELASTICSEARCH_URL: http://elasticsearch:9200
       TSR_ELASTICSEARCH_PASSWORD: ${TSR_ELASTICSEARCH_PASSWORD:?TSR_ELASTICSEARCH_PASSWORD is not set}
       # Lecture search: the embedding service (the meaning layer is on at the evaluated weight; the service being down only turns it off for that request).
-      # TSR_LECTURES_FILE is not set here: the lecture data goes into the image with task 12a (owner decision a), and until then the lecture index is created empty.
+      # TSR_LECTURES_FILE is set on the workers service only, the one that runs the feed: the lecture file is in the image.
       TSR_EMBEDDINGS_URL: http://embeddings:8000
       TSR_LECTURES_SEMANTIC_WEIGHT: "0.25"
       # Optional. Empty: no push, no account deletion at Firebase, no sheet refresh (each answers as its slice documents).
@@ -173,6 +173,8 @@ services:
     environment:
       <<: *api-environment
       TSR_WORKERS: ${TSR_WORKERS:-}
+      # The full lecture file baked into the image (hosts/api/Dockerfile): the lecture index is fed from it by library-search-feed.
+      TSR_LECTURES_FILE: /var/tsr/lectures/lectures.ndjson
     depends_on:
       migrate:
         condition: service_completed_successfully

@@ -39,6 +39,7 @@ Set these in the deployment tool. A missing required setting stops the start and
 | `TSR_CORS_ORIGINS` | no | the browser origins that may call the API, comma-separated (for a web build of the app, e.g. `https://app.thestrongrope.com`). Empty allows none. An entry with a path, a trailing slash or a wildcard stops the start |
 | `TSR_QUIZ_SETTINGS_SHEET_ID`, `TSR_NOTIFIER_URL` | no | each empty switches its feature off |
 | `TSR_YOUTUBE_CHANNEL_ID` | no | not in the stack: the API reads the channel in the code. Do not set it empty, that switches the Home videos off |
+| `TSR_LECTURES_FILE` | fixed | `/var/tsr/lectures/lectures.ndjson`, set on `workers` only: the full lecture file copied into the image from `content/lectures/`; the feed `library-search-feed` (name it in `TSR_WORKERS`) indexes it. A change of the file reaches production by a deploy |
 | `TSR_CONTENT_DIR` | fixed | `/var/tsr/content` in `docker-compose.yml`: the published text content (`articles/`, `categories/`, `pages/`) copied into the image from `content/`; the publication files are not in the API image. Not a setting to change |
 
 Not wired yet: the app-version catalog file (`TSR_APP_VERSIONS_FILE`; without it the version check allows every build).
