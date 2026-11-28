@@ -17,12 +17,13 @@ article() {
   { printf -- '---\ntitle: T\nslug: %s\n' "$1"; [ -z "$2" ] || printf '%s\n' "$2"; printf -- '---\nBody.\n'; } > "$SRC/articles/$1.md"
 }
 
-# lectures <file>: an invented lecture file of two lines, each carrying the keys the import must drop (content, embedding, and a chapter's summary and url).
+# lectures <file>: an invented lecture file of two lines in the full form of the website's file: 13 keys (the second line has no embedding, as 19 real lectures have none),
+# chapters of start_sec, title, summary and url, and a vector with an E exponent, which a JSON tool would print as e.
 lectures() {
   mkdir -p "$(dirname "$1")"
   {
-    printf '%s\n' '{"slug":"abcdefghijk","title":"First","url":"https://example.invalid/a","excerpt":"E","content":"words","embedding":[0.1],"tags":["t"],"language":"en","publishedDate":"2026-01-02T03:04:05Z","durationSec":78,"chapters":[{"start_sec":3,"title":"C","summary":"S","url":"https://example.invalid/c"}]}'
-    printf '%s\n' '{"slug":"bcdefghijkl","title":"Second","excerpt":"","content":"words","embedding":[0.2],"tags":[],"language":"hi","publishedDate":"2025-01-02T03:04:05Z","durationSec":0,"chapters":[]}'
+    printf '%s\n' '{"slug":"abcdefghijk","title":"First","url":"https://example.invalid/a","excerpt":"E","content":"words","search_phrases":["p"],"key_points":["k"],"tags":["t"],"language":"en","publishedDate":"2026-01-02T03:04:05Z","durationSec":78,"chapters":[{"start_sec":3,"title":"C","summary":"S","url":"https://example.invalid/c"}],"embedding":[0.1,1.5E-05,-0.25]}'
+    printf '%s\n' '{"slug":"bcdefghijkl","title":"Second","url":"https://example.invalid/b","excerpt":"","content":"words","search_phrases":[],"key_points":[],"tags":[],"language":"hi","publishedDate":"2025-01-02T03:04:05Z","durationSec":0,"chapters":[]}'
   } > "$1"
 }
 
@@ -205,12 +206,11 @@ run "$W/content" "$WORK/out8/content" || fail "case 11: exit code $?"
 ./pages/tsr-publications.md" ] || fail "case 11: the destination holds $(listing "$WORK/out8/content")"
 [ "$(cat "$OUT")" = "copied 1 articles, 0 categories, 2 pages, 2 files, 2 lectures; left out 0 articles" ] || fail "case 11: output was: $(cat "$OUT")"
 echo "ok 11: the PDFs a page links arrive, a retired page's link is not needed, a missing one refuses"
-# Case 12: the lectures file is trimmed to the eight keys (and each chapter to start_sec and title), a source without it is refused, so is one that is not JSON, and the destination stays as it was.
+# Case 12: the lectures file arrives whole, every line byte for byte (13 keys, the E exponent, a chapter's summary and url); a source without it is refused, so is one that is not JSON, and the destination stays as it was.
 LEC="$DEST/lectures/lectures.ndjson"
 run "$SRC" "$DEST" || fail "case 12: exit code $?"
 [ "$(wc -l < "$LEC" | tr -d ' ')" = 2 ] || fail "case 12: the copied file does not have two lines"
-[ "$(jq -c 'keys' "$LEC" | sort -u)" = '["chapters","durationSec","excerpt","language","publishedDate","slug","tags","title"]' ] || fail "case 12: the keys are not the eight: $(jq -c keys "$LEC")"
-[ "$(jq -c '.chapters[] | keys' "$LEC" | sort -u)" = '["start_sec","title"]' ] || fail "case 12: a chapter holds other keys than start_sec and title"
+cmp -s "$SRC/lectures/lectures.ndjson" "$LEC" || fail "case 12: the copied file is not the source file byte for byte"
 NOLEC="$WORK/nolec"
 cp -R "$SRC" "$NOLEC"
 rm "$NOLEC/lectures/lectures.ndjson"
@@ -225,7 +225,7 @@ status=0
 run "$NOLEC" "$DEST" || status=$?
 [ "$status" = 2 ] || fail "case 12: a file that is not JSON gave exit code $status, expected 2"
 [ "$(listing "$DEST")" = "$before" ] || fail "case 12: the destination changed after a bad file"
-echo "ok 12: the lectures are trimmed to eight keys, a missing or broken file is refused, destination unchanged"
+echo "ok 12: the lectures arrive whole, a missing or broken file is refused, destination unchanged"
 # Case 13: a text file written with CRLF line endings arrives with LF only (the repository stores LF, so a CRLF copy would show as modified with no change in it); a file with LF arrives byte for byte.
 CRLF="$WORK/crlf"
 cp -R "$SRC" "$CRLF"
@@ -240,4 +240,73 @@ done
 [ "$(cat "$DEST/pages/windows.md")" = "$(printf -- '---\ntitle: W\n---\nLine one.\nLine two.')" ] || fail "case 13: the page's text changed: $(cat "$DEST/pages/windows.md")"
 cmp -s "$CRLF/articles/published-bare.md" "$DEST/articles/published-bare.md" || fail "case 13: a file with LF endings did not arrive byte for byte"
 echo "ok 13: CRLF line endings arrive as LF, an LF file arrives unchanged"
-echo "content import proven: 13 cases"
+# Case 14 (LEC-R10): a phone-like run in a TEXT key (title, excerpt, content, search_phrases, key_points, tags, a chapter's title and summary) becomes [number removed]; slug, url, a chapter's url,
+# language, publishedDate, durationSec and the embedding are never touched (the vector line is byte for byte); a run of 14 digits, one of 9, a year list with commas, and a run split by a letter stay as they are when no number word or mask is near.
+MASK="$WORK/mask"
+mkdir -p "$MASK/lectures"
+cp -R "$SRC/articles" "$SRC/categories" "$SRC/pages" "$MASK/"
+EMB='[0.123456789012,-0.012345678901,1.234567890123E-05]'
+{
+  printf '%s\n' '{"slug":"abcdefghijk","title":"Call +00 0000 000000 now","url":"https://example.invalid/0000000000000","excerpt":"Or +00 000 0000000","content":"In 1445, 1446 and 1447, 12345678901234, 123456789, 000 0000 x 000 0000. Write to (000)000-0000 or 000.000.0000.","search_phrases":["00000 000000"],"key_points":["0000000000"],"tags":["+0000000000000"],"language":"en","publishedDate":"2026-01-02T03:04:05Z","durationSec":1234567890,"chapters":[{"start_sec":3,"title":"Chapter 0000-0000-00","summary":"+00 0000 0000","url":"https://example.invalid/c?t=00000000000"}],"embedding":'"$EMB"'}'
+  printf '%s\n' '{"slug":"bcdefghijkl","title":"Plain","url":"https://example.invalid/b","excerpt":"","content":"nothing","search_phrases":[],"key_points":[],"tags":[],"language":"hi","publishedDate":"2025-01-02T03:04:05Z","durationSec":0,"chapters":[]}'
+} > "$MASK/lectures/lectures.ndjson"
+run "$MASK" "$DEST" || fail "case 14: exit code $?"
+[ "$(wc -l < "$LEC" | tr -d ' ')" = 2 ] || fail "case 14: the copied file does not have two lines"
+first="$(sed -n 1p "$LEC")"
+[ "$(jq -r '.title, .excerpt, .search_phrases[0], .key_points[0], .tags[0], .chapters[0].summary' <<< "$first" | sort -u)" = "Call [number removed] now
+Or [number removed]
+[number removed]" ] || fail "case 14: a text key was not masked: $(jq -c '[.title,.excerpt,.search_phrases,.key_points,.tags,.chapters]' <<< "$first")"
+[ "$(jq -r '.chapters[0].title' <<< "$first")" = "Chapter [number removed]" ] || fail "case 14: the chapter title was not masked"
+[ "$(jq -r '.content' <<< "$first")" = "In 1445, 1446 and 1447, 12345678901234, 123456789, 000 0000 x 000 0000. Write to ([number removed] or [number removed]." ] || fail "case 14: the content is not as expected: $(jq -r .content <<< "$first")"
+[ "$(jq -r '.url, .chapters[0].url, .slug, .language, .publishedDate, .durationSec' <<< "$first")" = "https://example.invalid/0000000000000
+https://example.invalid/c?t=00000000000
+abcdefghijk
+en
+2026-01-02T03:04:05Z
+1234567890" ] || fail "case 14: a key that must not be masked was changed"
+case "$first" in *',"embedding":'"$EMB"'}') ;; *) fail "case 14: the embedding is not kept byte for byte" ;; esac
+[ "$(sed -n 2p "$LEC")" = "$(sed -n 2p "$MASK/lectures/lectures.ndjson")" ] || fail "case 14: a line without a number changed"
+printf '{"slug":"abcdefghijk","embedding":[0.1],"title":"T"}\n' > "$MASK/lectures/lectures.ndjson"
+status=0
+run "$MASK" "$DEST" || status=$?
+[ "$status" = 2 ] || fail "case 14: an embedding that is not the last key gave exit code $status, expected 2"
+printf '{"slug":"abcdefghijk","title":"T"}\n\n{"slug":"bcdefghijkl","title":"T"}\n' > "$MASK/lectures/lectures.ndjson"
+status=0
+run "$MASK" "$DEST" || status=$?
+[ "$status" = 2 ] || fail "case 14: a blank line gave exit code $status, expected 2"
+echo "ok 14: phone-like runs in the text keys are masked, nothing else changes, the vector is byte for byte"
+# Case 15 (LEC-R10, rule 2): after whatsapp, phone, mobile or contact and then number or no (any case), a run of 4 or more digits in all that begins within 80 characters becomes [number removed], and so does each repeat of it, up to 5 in a row;
+# a run of 1 to 3 digits, a figure after the words without "number", and one more than 80 characters away stay.
+FILL="$(printf 'z%.0s' $(seq 1 90))"
+printf '%s\n' '{"slug":"abcdefghijk","title":"T","url":"https://example.invalid/a","excerpt":"","content":"WhatsApp number is 0000 000, repeat, 0000 000 again. '"$FILL"' CONTACT NO. +00 0000 '"$FILL"' phone number 123 and a 5-minute call '"$FILL"' WhatsApp 0000 stays.","search_phrases":[],"key_points":["Mobile number 0000"],"tags":[],"language":"en","publishedDate":"2026-01-02T03:04:05Z","durationSec":78,"chapters":[{"start_sec":3,"title":"C","summary":"Phone no 00-0000","url":"https://example.invalid/c"}],"embedding":[0.1]}' > "$MASK/lectures/lectures.ndjson"
+run "$MASK" "$DEST" || fail "case 15: exit code $?"
+line="$(sed -n 1p "$LEC")"
+[ "$(jq -r '.content' <<< "$line")" = "WhatsApp number is [number removed], repeat, [number removed] again. $FILL CONTACT NO. [number removed] $FILL phone number 123 and a 5-minute call $FILL WhatsApp 0000 stays." ] || fail "case 15: the content is not as expected: $(jq -r .content <<< "$line" | cut -c1-120)"
+[ "$(jq -r '.key_points[0], .chapters[0].summary' <<< "$line")" = "Mobile number [number removed]
+Phone no [number removed]" ] || fail "case 15: a key point or a chapter summary was not masked"
+case "$line" in *',"embedding":[0.1]}') ;; *) fail "case 15: the embedding changed" ;; esac
+echo "ok 15: a figure of 4 or more digits after a number word is masked, repeats too, short figures and distant ones stay"
+# Case 16 (LEC-R10, rule 2 chained): the window also opens after a [number removed], so a spoken number said in groups is masked whole; more groups than the passes allow (10) refuse.
+CHAIN='WhatsApp number 1111, 2222, 3333, 4444, 5555, 6666'
+printf '%s\n' '{"slug":"abcdefghijk","title":"T","url":"u","excerpt":"","content":"'"$CHAIN"'","search_phrases":[],"key_points":[],"tags":[],"language":"en","publishedDate":"2026-01-02T03:04:05Z","durationSec":78,"chapters":[],"embedding":[0.1]}' > "$MASK/lectures/lectures.ndjson"
+run "$MASK" "$DEST" || fail "case 16: exit code $?"
+[ "$(jq -r '.content' "$LEC")" = "WhatsApp number [number removed], [number removed], [number removed], [number removed], [number removed], [number removed]" ] || fail "case 16: the groups were not all masked: $(jq -r .content "$LEC")"
+printf '%s\n' '{"slug":"abcdefghijk","title":"T","url":"u","excerpt":"","content":"WhatsApp number 1111, 1111, 1111, 1111, 1111, 1111, 1111, 1111, 1111, 1111, 1111, 1111","search_phrases":[],"key_points":[],"tags":[],"language":"en","publishedDate":"2026-01-02T03:04:05Z","durationSec":78,"chapters":[],"embedding":[0.1]}' > "$MASK/lectures/lectures.ndjson"
+before="$(listing "$DEST")"
+status=0
+run "$MASK" "$DEST" || status=$?
+[ "$status" = 2 ] || fail "case 16: a number that needs more than 10 passes gave exit code $status, expected 2"
+[ "$(listing "$DEST")" = "$before" ] || fail "case 16: the destination changed after the refusal"
+echo "ok 16: the groups of a spoken number are masked whole, and a number the passes cannot finish refuses"
+# Case 17: every source line must be one complete JSON object, or the masked text could be paired with the wrong vector: an object over two lines, and two objects on one line, refuse.
+printf '%s\n' '{"slug":"abcdefghijk","title":"T",' '"embedding":[0.1]}' > "$MASK/lectures/lectures.ndjson"
+status=0
+run "$MASK" "$DEST" || status=$?
+[ "$status" = 2 ] || fail "case 17: an object over two lines gave exit code $status, expected 2"
+printf '%s\n' '{"slug":"abcdefghijk","title":"T"}{"slug":"bcdefghijkl","title":"U"}' > "$MASK/lectures/lectures.ndjson"
+status=0
+run "$MASK" "$DEST" || status=$?
+[ "$status" = 2 ] || fail "case 17: two objects on a line gave exit code $status, expected 2"
+grep -q "not one complete JSON object" "$OUT" || fail "case 17: the output does not say why: $(cat "$OUT")"
+echo "ok 17: a line that is not one complete JSON object refuses"
+echo "content import proven: 17 cases"

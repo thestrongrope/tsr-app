@@ -234,6 +234,38 @@ public sealed partial class LecturesTests
     }
 
     [Test]
+    public void A_file_of_the_full_form_larger_than_twenty_megabytes_is_read_and_its_other_keys_are_ignored()
+    {
+        var padding = new string('x', 30_000_000);
+        var full = Line("abcdefghijk", "Full", chapters: """[{"start_sec":3,"title":"C"}]""")
+            .Replace("\"excerpt\":\"\"", $"\"excerpt\":\"\",\"url\":\"https://example.invalid/v\",\"content\":\"{padding}\",\"key_points\":[\"k\"],\"search_phrases\":[]", StringComparison.Ordinal)
+            .Replace("\"title\":\"C\"", "\"title\":\"C\",\"summary\":\"S\",\"url\":\"https://example.invalid/c\"", StringComparison.Ordinal)
+            .TrimEnd('}') + ",\"embedding\":[0.1,1.5E-05]}";
+        var file = Write(full);
+
+        var lectures = Lectures.Read(file);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(new FileInfo(file).Length, Is.GreaterThan(20_000_000));
+            Assert.That(lectures.Select(l => l.Slug), Is.EqualTo(["abcdefghijk"]));
+            Assert.That(lectures[0].Chapters.Select(c => c.Title), Is.EqualTo(["C"]));
+        });
+    }
+
+    [Test]
+    public void A_file_over_the_bound_stops_the_build()
+    {
+        var file = Path.Combine(folder.FullName, "big.ndjson");
+        using (var stream = File.Create(file))
+        {
+            stream.SetLength(64_000_001);
+        }
+
+        Assert.That(Assert.Throws<SiteBuildException>(() => Lectures.Read(file))!.Message, Does.Contain("larger than 64000000 bytes").And.EndWith("; the site is not built."));
+    }
+
+    [Test]
     public void A_missing_or_empty_lecture_file_stops_the_build()
     {
         var missing = Path.Combine(folder.FullName, "no-such-file.ndjson");

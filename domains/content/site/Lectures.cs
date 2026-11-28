@@ -8,7 +8,7 @@ namespace Tsr.Content.Site;
 /// <summary>One chapter of a lecture: where it starts, in seconds, and its title.</summary>
 public sealed record LectureChapter(int StartSec, string Title);
 
-/// <summary>One lecture of the library: the eight fields of content/lectures/lectures.ndjson.</summary>
+/// <summary>One lecture of the library: the eight fields of content/lectures/lectures.ndjson the page shows (the file holds five more keys the page ignores).</summary>
 public sealed record Lecture(
     string Slug,
     string Title,
@@ -22,8 +22,8 @@ public sealed record Lecture(
 /// <summary>
 /// The lecture library: public data only the site shows (capabilities/lectures.md, LEC-D1), read at build time from
 /// <c>content/lectures/lectures.ndjson</c> of the repository (copied beside the program as <c>content-lectures/</c>,
-/// hosts/site/Tsr.Host.Site.csproj) and shown at <c>/lectures/</c>. One JSON object per line; keys outside the eight are
-/// ignored here (the content guard refuses them). Any fault in the file stops the build (LEC-R7).
+/// hosts/site/Tsr.Host.Site.csproj) and shown at <c>/lectures/</c>. One JSON object per line; the other keys of the file are
+/// ignored here (the content guard checks the file). Any fault in the file stops the build (LEC-R7).
 /// </summary>
 public static partial class Lectures
 {
@@ -31,10 +31,10 @@ public static partial class Lectures
 
     public const int TagsShown = 4;
 
-    /// <summary>Bounds (MUST 2): the file holds 917 lectures in 1.1 MB.</summary>
+    /// <summary>Bounds (MUST 2): the file holds 917 lectures in 22.7 MB (the transcripts and vectors too; the page reads eight keys); the same limit as the search feed's.</summary>
     private const int MaxLectures = 5_000;
 
-    private const long MaxFileBytes = 20_000_000;
+    private const long MaxFileBytes = 64_000_000;
 
     private const string DateFormat = "yyyy-MM-dd'T'HH:mm:ss'Z'";
 

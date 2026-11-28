@@ -177,7 +177,7 @@ public sealed partial class ProductionStackTests
         return stage.Value;
     }
 
-    /// <summary>TC-LIB-D10-01: the API image holds the three text folders and never the publication files (187 MB the API does not read).</summary>
+    /// <summary>TC-LIB-D10-01: the API image holds the three text folders and the lecture file, and never the publication files (187 MB the API does not read).</summary>
     [Test]
     public void The_api_image_carries_the_text_content_and_not_the_files()
     {
@@ -187,7 +187,7 @@ public sealed partial class ProductionStackTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(copies, Has.Count.EqualTo(3));
+            Assert.That(copies, Has.Count.EqualTo(4));
             Assert.That(copies, Has.None.Match(@"^COPY content/? "), "the whole content folder");
             Assert.That(copies, Has.None.Contain("downloads"));
         });
@@ -241,19 +241,25 @@ public sealed partial class ProductionStackTests
         });
     }
 
-    /// <summary>Plan 3.5 and 3.7: the API is told where the embedding service is and the evaluated weight (0.25). The lecture file is not set here: production has no lecture data until task 12a puts it in the image (owner decision a).</summary>
+    /// <summary>Plan 3.5 and 3.7: the API is told where the embedding service is and the evaluated weight (0.25). The lecture file is named for the workers only (the one service that runs the feed), and the native image they run carries it (12a, owner decision a): no mount.</summary>
     [Test]
-    public void The_api_is_given_the_embedding_service_and_the_semantic_weight_and_no_lecture_file_yet()
+    public void The_api_is_given_the_embedding_service_and_the_semantic_weight_and_the_workers_the_lecture_file_in_the_image()
     {
         var environment = Regex.Match(Stack, @"(?ms)environment: &api-environment\n(?<body>.*?)(?=^    \S)").Groups["body"].Value;
+        var workers = Service("workers");
+        var native = Stage(File.ReadAllText(Path.Combine(RouteCatalog.RepoRoot(), "hosts", "api", "Dockerfile")), "native");
 
         Assert.Multiple(() =>
         {
             Assert.That(environment, Does.Contain("TSR_EMBEDDINGS_URL: http://embeddings:8000"));
             Assert.That(environment, Does.Contain("TSR_LECTURES_SEMANTIC_WEIGHT: \"0.25\""));
             Assert.That(environment, Does.Not.Contain("TSR_LECTURES_FILE"));
+            Assert.That(workers, Does.Contain("TSR_LECTURES_FILE: /var/tsr/lectures/lectures.ndjson"));
+            Assert.That(workers, Does.Not.Contain("volumes:"));
+            Assert.That(native, Does.Match(@"(?m)^COPY content/lectures/lectures\.ndjson /var/tsr/lectures/lectures\.ndjson\s*$"));
         });
     }
+
 
     /// <summary>The dev stack passes the lecture settings through, as it does the Elasticsearch address (empty unless the test stack or a lane sets them), and mounts the lecture folder for the workers.</summary>
     [Test]

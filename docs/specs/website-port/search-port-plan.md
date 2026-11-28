@@ -438,6 +438,7 @@ Each one is written in the capability document and allowed in the parity file:
 11. A query vector that is not 384 numbers counts as no vector (or holds a number that is not finite, or is all zeros), so lecture search answers from keywords only; tsr-web would send it to the engine, which refuses it, and answer 500.
 12. `TSR_LECTURES_FILE` unset, missing, too big (64 MB, 5000 lectures) or not whole (a line that is not a lecture, a slug twice): the lecture index is created empty at the first tick and otherwise kept as it is, with one warning of counts. tsr-web has no such file setting (its feed is a manual route).
 13. The feed asks for a short retry (30 seconds, at most 20 in a row) only while the ARTICLES are empty, the start-up race; an empty lecture file is not a race.
+14. The lecture file in tsr-app (12a) is tsr-web's, except that each phone-like run in a text key (10 to 13 digits, or 4 or more digits within 80 characters after whatsapp, phone, mobile or contact and then number or no, or after a `[number removed]`) (`title`, `excerpt`, `content`, `search_phrases`, `key_points`, `tags`, a chapter's `title` and `summary`) is replaced by `[number removed]` at import (LEC-R10, regex in `tools/content-import.sh`). The vectors are tsr-web's, computed from the unmasked text. A phrase search for a spoken number finds nothing here; parity cases must not use one.
 
 ---
 
@@ -584,7 +585,7 @@ Ordinary repo checks run on every task: `dotnet build TsrApp.slnx` (zero warning
 - [x] **12. Slice `v1-lecture-search`** with the lecture part of the feed, the settings, the gateway block, the catalog and `api.yaml`.
   Test: `v1-lecture-search.hurl` on the default stack and a lane (TC-SRCH-R7-01, R7-03, R8-01, R9-01, R10-01, R10-03, R11-01, R13-01,
   R14-01 HL); TC-SRCH-R12-01 and Q6-01 in `db/tests`.
-- [ ] **12a. The full lecture file (decision a).** `content/lectures/lectures.ndjson` becomes tsr-web's full file; `tools/content-import.sh`
+- [x] **12a. The full lecture file (decision a).** `content/lectures/lectures.ndjson` becomes tsr-web's full file; `tools/content-import.sh`
   stops trimming; LEC-R8 and LEC-R9, the guard and `content/README.md` are rewritten for the full key set; the static site still builds
   from it; the image that runs `library-search-feed` carries it. Test: the content guard, `dotnet test hosts/site/tests`, the lecture feed on a lane.
 - [ ] **12b. Analytics (decision b).** The first-page search event from both routes to the index `tsr-analytics`, and the click route

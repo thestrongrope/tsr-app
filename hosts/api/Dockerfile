@@ -32,6 +32,8 @@ COPY --from=build-native /out/Tsr.Host.Api .
 COPY content/articles/ /var/tsr/content/articles/
 COPY content/categories/ /var/tsr/content/categories/
 COPY content/pages/ /var/tsr/content/pages/
+# The full lecture file the search feed reads (TSR_LECTURES_FILE of the workers service in docker-compose.yml): transcripts and vectors, owner decision a of issue 22. Not under /var/tsr/content: the content load does not read it.
+COPY content/lectures/lectures.ndjson /var/tsr/lectures/lectures.ndjson
 ENV ASPNETCORE_HTTP_PORTS=8080
 USER app
 ENTRYPOINT ["/app/Tsr.Host.Api"]
