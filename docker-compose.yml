@@ -127,6 +127,10 @@ services:
       TSR_GOTENBERG_URL: http://gotenberg:3000
       TSR_ELASTICSEARCH_URL: http://elasticsearch:9200
       TSR_ELASTICSEARCH_PASSWORD: ${TSR_ELASTICSEARCH_PASSWORD:?TSR_ELASTICSEARCH_PASSWORD is not set}
+      # Lecture search: the embedding service (the meaning layer is on at the evaluated weight; the service being down only turns it off for that request).
+      # TSR_LECTURES_FILE is not set here: the lecture data goes into the image with task 12a (owner decision a), and until then the lecture index is created empty.
+      TSR_EMBEDDINGS_URL: http://embeddings:8000
+      TSR_LECTURES_SEMANTIC_WEIGHT: "0.25"
       # Optional. Empty: no push, no account deletion at Firebase, no sheet refresh (each answers as its slice documents).
       TSR_GOOGLE_SERVICE_ACCOUNT_B64: ${TSR_GOOGLE_SERVICE_ACCOUNT_B64:-}
       TSR_PUBLIC_WEB_BASE: ${TSR_PUBLIC_WEB_BASE:-}

@@ -103,6 +103,20 @@ internal sealed class ArticleSearchQueryTests
     public void Offset_plus_limit_may_not_pass_the_engines_result_window(int limit, int offset, string? refusal) =>
         Assert.That(ArticleSearchQuery.Validate("patience", limit, offset), Is.EqualTo(refusal));
 
+    [TestCase(null, null)]
+    [TestCase("", null)]
+    [TestCase("note-taking", null)]
+    [TestCase("\u0639\u0631\u0628\u064a", null)]
+    public void A_category_of_up_to_100_characters_is_accepted(string? category, string? refusal) =>
+        Assert.That(ArticleSearchQuery.ValidateCategory(category), Is.EqualTo(refusal));
+
+    [Test]
+    public void A_category_of_101_characters_is_refused_and_one_of_100_is_not()
+    {
+        Assert.That(ArticleSearchQuery.ValidateCategory(new string('a', 100)), Is.Null);
+        Assert.That(ArticleSearchQuery.ValidateCategory(new string('a', 101)), Is.EqualTo("Category too long: at most 100 characters"));
+    }
+
     [Test]
     public void A_text_of_200_characters_is_accepted_and_one_more_is_refused()
     {

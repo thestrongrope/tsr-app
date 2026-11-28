@@ -29,8 +29,8 @@ internal sealed partial class LibraryFeed(TimeProvider clock)
     /// <summary>How long to wait before another run: after a run whose source was empty (the articles may not be copied yet), <see cref="ShortRetry"/>, for at most <see cref="MaxShortRetries"/> runs in a row; otherwise null, the normal interval.</summary>
     public TimeSpan? RetryDelay => emptyRuns is > 0 and <= MaxShortRetries ? ShortRetry : null;
 
-    /// <summary>The report of the run; null when the engine is not configured or failed (the next run starts over).</summary>
-    public async Task<ReconcileReport?> ReconcileAsync(ILibraryIndex index, string indexName, string mappingJson, IReadOnlyList<LibraryDocument> documents, ILogger log, CancellationToken ct)
+    /// <summary>The report of the run (<paramref name="retryWhenEmpty"/>: an empty source asks for a short retry, as the articles do while they are still being copied; the lecture file is there from the start). Null when the engine is not configured or failed (the next run starts over).</summary>
+    public async Task<ReconcileReport?> ReconcileAsync(ILibraryIndex index, string indexName, string mappingJson, IReadOnlyList<LibraryDocument> documents, bool retryWhenEmpty, ILogger log, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(index);
         ArgumentNullException.ThrowIfNull(documents);
@@ -49,13 +49,13 @@ internal sealed partial class LibraryFeed(TimeProvider clock)
             // An index that was just created (never there, or lost) is written in full, whatever the last run saw.
             if (!created && lastDone.TryGetValue(indexName, out var done) && done == hash)
             {
-                emptyRuns = 0;
+                emptyRuns = retryWhenEmpty ? 0 : emptyRuns;
                 return new ReconcileReport(0, 0, false);
             }
 
             if (documents.Count == 0)
             {
-                emptyRuns++;
+                emptyRuns += retryWhenEmpty ? 1 : 0;
                 LogEmpty(log, indexName);
                 return new ReconcileReport(0, 0, true);
             }
@@ -75,7 +75,7 @@ internal sealed partial class LibraryFeed(TimeProvider clock)
                 await index.BulkAsync(DeleteLines(indexName, batch), ct);
             }
 
-            emptyRuns = 0;
+            emptyRuns = retryWhenEmpty ? 0 : emptyRuns;
             lastDone[indexName] = hash;
             var seconds = System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalSeconds;
             LogDone(log, indexName, upserted, stale.Count, seconds);
@@ -83,18 +83,22 @@ internal sealed partial class LibraryFeed(TimeProvider clock)
         }
         catch (SearchUnavailableException unavailable)
         {
-            emptyRuns = 0;
+            emptyRuns = retryWhenEmpty ? 0 : emptyRuns;
             // The message is a status code, an exception type or a fixed phrase, never data (ElasticSearchIndex.Writer.cs).
             LogFailed(log, indexName, unavailable.Message, upserted);
             return null;
         }
     }
 
-    /// <summary>One tick of the article feed: take the lock, read the published articles, reconcile the index. Null when the engine is not configured, another instance holds the lock, or the engine failed.</summary>
-    public async Task<ReconcileReport?> TickAsync(ILibraryIndex index, ArticleFeedSource source, ILogger log, CancellationToken ct)
+    /// <summary>
+    /// One tick of the Library feed: take the lock, reconcile the article index from the published articles, then the lecture index from the lecture file. Each index is created at the first tick even when its source is empty or missing.
+    /// The report is the article index's: null when the engine is not configured, another instance holds the lock, or the engine failed.
+    /// </summary>
+    public async Task<ReconcileReport?> TickAsync(ILibraryIndex index, ArticleFeedSource articleSource, LectureSettings lectures, ILogger log, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(index);
-        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(articleSource);
+        ArgumentNullException.ThrowIfNull(lectures);
         ArgumentNullException.ThrowIfNull(log);
         if (!index.IsConfigured)
         {
@@ -102,7 +106,7 @@ internal sealed partial class LibraryFeed(TimeProvider clock)
             return null;
         }
 
-        await using var run = await source.TryOpenAsync(ct);
+        await using var run = await articleSource.TryOpenAsync(ct);
         if (run is null)
         {
             LogLocked(log);
@@ -110,7 +114,10 @@ internal sealed partial class LibraryFeed(TimeProvider clock)
         }
 
         var articles = await run.ArticlesAsync(ct);
-        return await ReconcileAsync(index, ArticleSearchQuery.IndexName, LibraryIndexMappings.Articles, articles, log, ct);
+        var report = await ReconcileAsync(index, ArticleSearchQuery.IndexName, LibraryIndexMappings.Articles, articles, retryWhenEmpty: true, log, ct);
+        var documents = await LectureFile.ReadAsync(lectures.LecturesFile, log, ct);
+        _ = await ReconcileAsync(index, LectureSearchQuery.IndexName, LibraryIndexMappings.Lectures, documents, retryWhenEmpty: false, log, ct);
+        return report;
     }
 
     private static string Fingerprint(IReadOnlyList<LibraryDocument> documents)

@@ -12,7 +12,7 @@ namespace Tsr.Search.Api.Features.V1Search;
 // Slice: GET /api/v1/search?q=&limit=&offset=&category= -> the published articles that match q, best match first, in the answer shape supported app builds read from today's website (shared/api/WebsiteV1.cs).
 // Public: no caller, no permission. A port of tsr-web web/src/app/api/v1/search/route.ts and search() (api/lib/search-service.ts); that code is the rule, quirks kept:
 //   - the rate limit runs first, then q (trimmed; missing or blank is a 400 VALIDATION_ERROR), then the search.
-//   - limit is 20 by default and kept between 1 and 100, offset 0 by default and never below 0 (WebsiteV1.IntParam); one category, used as written; `fields` is accepted and ignored.
+//   - limit is 20 by default and kept between 1 and 100, offset 0 by default and never below 0 (WebsiteV1.IntParam); one category, used as written (at most 100 characters: a bound the website does not have); `fields` is accepted and ignored.
 //   - pagination.total is the number of results on THIS page and hasMore is true exactly when that number equals limit.
 //   - Elasticsearch when configured and answering; otherwise the database fallback (domain/ArticleFallback.cs), searchEngine "fuse". Cache-Control public, max-age=60, an ETag, Vary, and never a 304.
 //   - deliberate difference: highlights are HTML-encoded (Elasticsearch `encoder: html`; the fallback encodes the text around the match before it adds <em>), so no markup of an article reaches an HTML reader. tsr-web does not encode.
@@ -49,12 +49,12 @@ internal static class V1SearchSlice
 
         var limit = WebsiteV1.IntParam(query["limit"].FirstOrDefault(), DefaultLimit, 1, MaxLimit);
         var offset = WebsiteV1.IntParam(query["offset"].FirstOrDefault(), 0, 0);
-        if (ArticleSearchQuery.Validate(q, limit, offset) is { } reason)
+        var category = query["category"].FirstOrDefault();
+        if ((ArticleSearchQuery.Validate(q, limit, offset) ?? ArticleSearchQuery.ValidateCategory(category)) is { } reason)
         {
             return WebsiteV1.Error(StatusCodes.Status400BadRequest, WebsiteV1.ValidationError, reason);
         }
 
-        var category = query["category"].FirstOrDefault();
         var request = new ArticleSearchRequest(q, string.IsNullOrEmpty(category) ? null : category, limit, offset);
 
         var started = Stopwatch.GetTimestamp();

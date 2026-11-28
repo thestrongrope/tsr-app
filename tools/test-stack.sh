@@ -90,13 +90,18 @@ YML
 YML
       ;;
     library-search-feed)
-      # The Library article index: the lane runs its own Elasticsearch and the two workers that fill it (content-refresh copies the synthetic content files, library-search-feed indexes them). Literal names, as above.
+      # The Library indexes: the lane runs its own Elasticsearch and the two workers that fill them (content-refresh copies the synthetic content files, library-search-feed indexes them and the lecture fixture). Literal names, as above.
+      # The meaning layer is on in the settings (weight 0.25) but has no service unless the lane also has TSR_LANE_EMBEDDINGS=1: without it lecture search answers from keywords only (SRCH-R11).
+      EMBEDDINGS_API_ENV=""
+      if [ "${TSR_LANE_EMBEDDINGS:-}" = 1 ]; then EMBEDDINGS_API_ENV="      TSR_EMBEDDINGS_URL: http://embeddings:8000"; fi
       cat >> "$OVERRIDE" <<YML
   api:
     environment:
       TSR_ELASTICSEARCH_URL: http://elasticsearch:9200
       TSR_CONTENT_DIR: /var/tsr/content
       TSR_YOUTUBE_CHANNEL_ID: ""
+      TSR_LECTURES_SEMANTIC_WEIGHT: "0.25"
+${EMBEDDINGS_API_ENV}
   elasticsearch:
     profiles: !reset []
   workers:
@@ -104,6 +109,7 @@ YML
     environment:
       TSR_WORKERS: "content-refresh,library-search-feed"
       TSR_CONTENT_DIR: /var/tsr/content
+      TSR_LECTURES_FILE: /var/tsr/lectures/lectures.ndjson
       TSR_YOUTUBE_CHANNEL_ID: ""
 YML
       ;;

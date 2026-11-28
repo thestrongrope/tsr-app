@@ -10,7 +10,7 @@ HTTP *
 GET {{base_url}}/api/v1/search?q=zorvath
 HTTP 429
 [Asserts]
-header "Retry-After" matches /^[0-9]+$/
+header "Retry-After" matches /^([1-9]|[1-5][0-9]|60)$/
 header "X-RateLimit-Limit" == "60"
 header "X-RateLimit-Remaining" == "0"
 header "Access-Control-Allow-Origin" == "*"

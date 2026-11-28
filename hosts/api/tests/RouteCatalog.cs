@@ -25,6 +25,7 @@ internal static class RouteCatalog
         "GET /api/v1/taxonomies/categories",
         "GET /api/v1/taxonomies/tags",
         "GET /api/v1/publications",
+        "GET /api/v1/lectures/search",
         "GET /api/v1/search",
         "GET /api/v1/youtube",
         "GET /quiz/info",
